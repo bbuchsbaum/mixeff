@@ -1,0 +1,282 @@
+---
+title: Why mixeff?
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Why mixeff?}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+If you fit mixed-effects models in R, you most likely use
+`lme4::lmer()`. `mixeff::lmm()` is, in everyday terms, a drop-in
+replacement: the formula language is the same, and the extractors —
+`fixef()`, `ranef()`, `VarCorr()`, `predict()`, `simulate()`,
+`anova()`, `summary()` — do what you expect. Statistical answers
+agree with `lme4` within documented tolerances on the parity datasets
+shipped with the package.
+
+The reason to switch is what `mixeff` does around the fit. It is
+faster on most designs — typically by a factor of two to five — and
+it makes four things explicit that `lme4` leaves implicit:
+
+1.  **The formula stays familiar.** Anything you would hand to
+    `lmer()` you can hand to `lmm()`.
+2.  **Singular fits become labelled facts.** A reduced-rank
+    random-effect covariance is reported with codes, severity, and
+    effective rank, instead of a single warning that scrolls off the
+    screen.
+3.  **Inference labels what asymptotics can and cannot do.** Each
+    p-value carries the method that produced it; where Wald,
+    Satterthwaite, and Kenward-Roger are unavailable in principle,
+    a parametric bootstrap is offered as a labelled first-class peer.
+4.  **The fitted object is a record.** A model saved today reopens
+    six months later with the same coefficients, the same audit
+    trail, and the same method labels — without depending on the
+    original Rust handle.
+
+This page demonstrates each of the four on one small dataset.
+
+## The dataset
+
+A small repeated-measures study: 18 subjects, 10 daily reaction-time
+measurements each, intercepts and slopes that are nearly perfectly
+correlated by construction. This is the kind of design that produces a
+singular fit in any modern engine.
+
+```{r make-data}
+set.seed(3)
+n_subj <- 18L
+days   <- 0:9
+b0     <- rnorm(n_subj, sd = 30)
+b1     <- 0.5 * b0 / 30 * 10 + rnorm(n_subj, sd = 0.5)
+
+sleep_like <- do.call(rbind, lapply(seq_len(n_subj), function(i) {
+  data.frame(
+    subj = factor(i),
+    days = days,
+    rt   = 250 + b0[i] + (10 + b1[i]) * days +
+           rnorm(length(days), sd = 20)
+  )
+}))
+
+head(sleep_like, 4)
+```
+
+## A. The formula stays familiar
+
+`mixeff` keeps the lme4 random-effects syntax. If you can read `(x | g)`, you
+can read `mixeff`.
+
+```{r fit-model}
+fit <- lmm(
+  rt ~ days + (1 + days | subj),
+  sleep_like,
+  control = mm_control(verbose = -1)
+)
+fit
+```
+
+```{r familiar-checks, include = FALSE}
+stopifnot(inherits(fit, "mm_lmm"))
+stopifnot(all(is.finite(fixef(fit))))
+stopifnot(length(fitted(fit)) == nrow(sleep_like))
+```
+
+`fixef()`, `ranef()`, `VarCorr()`, `predict()`, `simulate()`, `anova()`, and
+`summary()` all do what you expect.
+
+## B. When a fit is degenerate, you find out *which* part
+
+`lme4::lmer()` fits this model and reports the situation in one
+parsimonious line: `boundary (singular) fit`. The fact is correct.
+What it leaves implicit is *which* variance component reached the
+boundary, what the effective rank of the random-effect covariance
+is, and which downstream inference methods are no longer defined.
+
+```{r lme4-side, eval = requireNamespace("lme4", quietly = TRUE)}
+m <- suppressMessages(lme4::lmer(
+  rt ~ days + (1 + days | subj),
+  data = sleep_like
+))
+m
+lme4::isSingular(m)
+```
+
+`mixeff` reports the same fact, and then unpacks it. `fit_status()` names
+the convergence outcome, `changes()` shows the requested-to-effective
+transition, and `diagnostics()` returns stable codes.
+
+```{r mixeff-side}
+fit_status(fit)
+is_singular(fit)
+changes(fit)
+diagnostics(fit)$table[, c("code", "severity", "stage", "message")]
+```
+
+```{r diag-checks, include = FALSE}
+stopifnot(identical(fit_status(fit), "converged_reduced_rank"))
+stopifnot(isTRUE(is_singular(fit)))
+diag_codes <- diagnostics(fit)$table$code
+stopifnot("covariance_reduced" %in% diag_codes)
+stopifnot("boundary_parameter" %in% diag_codes)
+ch <- changes(fit)$table
+stopifnot("design_time_reduction" %in% ch$stage ||
+          "covariance_transition" %in% ch$stage)
+```
+
+A reduced-rank covariance is now a *labelled* fact about the fit, not a
+warning that scrolls off the screen.
+
+## C. Expose when asymptotics are weak, then offer bootstrap
+
+`mixeff` has two jobs on the inference side. First, it tells you when
+the asymptotic methods (Wald z, Satterthwaite, Kenward-Roger) are
+unreliable on your fit. Then, when bootstrap is the defensible route,
+it offers it as a labelled, first-class peer to the asymptotic methods
+— not a fallback trick.
+
+`inference_options()` is the audit verb for that judgment. It
+enumerates the inference methods available on the current fit, gives
+each one a closed-enum *reason* for its status, and names the verb
+you would call to invoke it.
+
+```{r inference-options}
+opt <- inference_options(fit, "days", nsim = 200)
+opt$table[, c("method", "expected_status",
+              "expected_reliability_reason", "current")]
+```
+
+```{r options-checks, include = FALSE}
+stopifnot(inherits(opt, "mm_inference_options"))
+satt_row <- opt$table[opt$table$method == "satterthwaite", ]
+stopifnot(identical(satt_row$expected_status, "not_assessed"))
+stopifnot(identical(satt_row$expected_reliability_reason,
+                    "satterthwaite_unavailable_at_boundary"))
+```
+
+Two routes are available on this fit: asymptotic Wald z (immediate, but
+labelled `low` reliability), and bootstrap (~seconds, labelled by
+replicate count and Monte-Carlo SE). Satterthwaite and Kenward-Roger
+refuse with a stable reason — `*_unavailable_at_boundary` — because at
+a boundary fit the variance-parameter derivative they need is not
+defined. That is a fact about the math, not a bug.
+
+The asymptotic Wald row carries its own warrant. `summary()` now
+prints `reliability_reason` next to `reliability`:
+
+```{r summary-status}
+inf <- inference_table(fit)$table
+inf[, c("term", "method", "status", "reliability", "reliability_reason")]
+```
+
+```{r summary-status-checks, include = FALSE}
+stopifnot("reliability_reason" %in% names(inf))
+stopifnot(all(inf$reliability[inf$status == "available"] == "low"))
+stopifnot(all(nzchar(inf$reliability_reason)))
+```
+
+`degrees_of_freedom_unavailable_so_z_substituted` is the closed-enum
+warrant: a t reference distribution was the requested target but the
+df could not be computed at this boundary fit, so a standard normal
+was substituted. The number is real; the *grade* is calibrated.
+
+For a defensible p-value on this same fit, route through `contrast()`
+with `method = "bootstrap"`. The Rust engine simulates from the
+constrained null, refits each replicate, and returns a labelled
+inference row plus a run payload (boundary rate, MCSE, replicate
+count) for audit.
+
+```{r bootstrap-answer}
+ct <- contrast(fit, c(0, 1), method = "bootstrap",
+               bootstrap = bootstrap_control(nsim = 200, seed = 1))
+ct$table[, c("contrast", "estimate", "p_value",
+             "method", "status", "reliability")]
+
+run <- ct$table$details[[1]]$bootstrap
+data.frame(
+  successful_replicates = run$successful_replicates,
+  boundary_rate         = round(run$boundary_rate, 3),
+  mcse                  = round(run$mcse, 4)
+)
+```
+
+```{r bootstrap-checks, include = FALSE}
+stopifnot(identical(ct$table$status, "available"))
+stopifnot(is.finite(ct$table$p_value))
+stopifnot(run$successful_replicates >= 100)
+```
+
+The bootstrap p-value is `available`, the method is named, the run
+payload makes the simulation provenance explicit. The boundary rate is
+visible because singular fits propagate boundary behaviour into their
+own bootstrap replicates — that is honest, not a bug. `mcse` quantifies
+the Monte-Carlo uncertainty of the p-value estimate; raise `nsim` for
+a tighter MCSE.
+
+There are three states for any reported quantity: *available with a
+named method and a closed-enum warrant*, *unavailable with a stable
+reason code*, or *typed error*. There is no fourth state where the
+package guesses.
+
+## D. The fit is the record
+
+The fitted object is a serialisable record. `saveRDS()` followed by
+`readRDS()` and `revive()` reproduces the audit trail and the extractors
+without depending on the original Rust handle.
+
+```{r round-trip}
+path <- tempfile(fileext = ".rds")
+saveRDS(fit, path)
+restored <- revive(readRDS(path))
+
+identical(fixef(restored),               fixef(fit))
+identical(changes(restored)$table,       changes(fit)$table)
+identical(diagnostics(restored)$table,   diagnostics(fit)$table)
+```
+
+```{r round-trip-checks, include = FALSE}
+stopifnot(identical(fixef(restored), fixef(fit)))
+stopifnot(identical(changes(restored)$table, changes(fit)$table))
+stopifnot(identical(diagnostics(restored)$table, diagnostics(fit)$table))
+```
+
+A reviewer reading the `.rds` six months from now sees the same
+convergence status, the same reduced-rank diagnostic, the same method
+labels on the same coefficients.
+
+## What this page did not show
+
+`mixeff` does not (yet, by design):
+
+- match `lme4` numerics bit-for-bit; statistical equivalence within
+  documented tolerances on parity datasets is the bar.
+- fit GLMMs end-to-end; `glmm()` is a typed boundary today
+  (`vignette("glmm", package = "mixeff")`).
+- ship Kenward-Roger or profile-likelihood confidence intervals in v0.
+
+Each of those is a stable boundary with a name, not a missing feature
+hidden behind a fallback.
+
+## Where to read next
+
+- `vignette("lmm-basics", package = "mixeff")` — fitting and the standard
+  extractors at a slower pace.
+- `vignette("inference", package = "mixeff")` — coefficient tests,
+  contrasts, term tests, and model comparisons.
+- `vignette("demystifying-formulas", package = "mixeff")` — what
+  `(1 | g)`, `(x | g)`, split blocks, and `||` actually mean.
+- `vignette("saving-and-reviving", package = "mixeff")` — the round-trip
+  story in detail.

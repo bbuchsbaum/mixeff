@@ -1,0 +1,183 @@
+---
+title: Inference You Can Report
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Inference You Can Report}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+Mixed-model users want p-values. They also want to know what those
+p-values mean: which method produced them, and how trustworthy that
+method is for this particular fit. `lme4` reports the number;
+`mixeff` reports the number alongside its provenance.
+
+When a coefficient, contrast, or term test has an available method,
+the p-value is printed with the method name. When the requested
+method is unavailable on this fit, the row says so, with a stable
+reason rather than an apologetic substitute.
+
+## What model are we fitting?
+
+```{r clinic-data, include = FALSE}
+set.seed(42)
+n_clinic <- 12L
+n_per_clinic <- 6L
+clinic <- factor(rep(seq_len(n_clinic), each = n_per_clinic))
+week <- rep(0:(n_per_clinic - 1L), n_clinic)
+treatment <- factor(
+  rep(rep(c("usual", "coached"), each = n_per_clinic), length.out = length(week)),
+  levels = c("usual", "coached")
+)
+clinic_shift <- rnorm(n_clinic, sd = 0.45)
+score <- 7.2 - 0.28 * week - 0.55 * (treatment == "coached") +
+  clinic_shift[as.integer(clinic)] + rnorm(length(week), sd = 0.35)
+clinic_visits <- data.frame(score, week, treatment, clinic)
+```
+
+```{r fit-model}
+fit <- lmm(
+  score ~ week + treatment + (1 | clinic),
+  clinic_visits,
+  control = mm_control(verbose = -1)
+)
+```
+
+```{r fit-checks, include = FALSE}
+stopifnot(inherits(fit, "mm_lmm"))
+stopifnot(all(is.finite(fixef(fit))))
+```
+
+The fixed effects ask whether scores change across weeks and whether the
+coached program differs from usual care, while clinic baselines are allowed to
+vary.
+
+## Coefficient p-values
+
+Start with the ordinary coefficient table.
+
+```{r coefficient-summary}
+coef_table <- summary(fit, tests = "coefficients", method = "auto")$coefficients
+knitr::kable(coef_table, digits = 4)
+```
+
+The last column tells you the method used for each available p-value.
+
+```{r inference-table}
+inference_table(fit)
+```
+
+```{r inference-checks, include = FALSE}
+inf <- inference_table(fit)$table
+stopifnot(any(inf$status == "available"))
+stopifnot(all(is.finite(inf$p_value[inf$status == "available"])))
+```
+
+## Contrasts
+
+`contrast()` is the direct route when you know the fixed-effect comparison you
+want. This contrast asks whether the coached program differs from usual care.
+
+```{r contrast-test}
+L <- c(0, 0, 1)
+names(L) <- names(fixef(fit))
+
+contrast(fit, L, method = "satterthwaite")
+```
+
+```{r contrast-checks, include = FALSE}
+ct <- contrast(fit, L, method = "satterthwaite")
+stopifnot(identical(ct$table$status, "available"))
+stopifnot(is.finite(ct$table$p_value))
+```
+
+## Term tests
+
+Use `test_effect()` for a named fixed-effect term.
+
+```{r term-test}
+test_effect(fit, "treatment", method = "kenward_roger")
+```
+
+Single-model `anova()` gives the same kind of term-level table.
+
+```{r anova-test}
+anova(fit, type = "III", method = "kenward_roger")
+```
+
+```{r term-checks, include = FALSE}
+te <- test_effect(fit, "treatment", method = "kenward_roger")
+av <- anova(fit, type = "III", method = "kenward_roger")
+stopifnot(identical(te$table$status, "available"))
+stopifnot(any(av$table$status == "available"))
+stopifnot(is.finite(te$table$p_value))
+```
+
+## Model comparisons
+
+For nested fixed-effect comparisons, fit the reduced model and compare it with
+the full model.
+
+```{r model-comparison}
+reduced <- lmm(
+  score ~ week + (1 | clinic),
+  clinic_visits,
+  control = mm_control(verbose = -1)
+)
+
+compare(reduced, fit)
+```
+
+`compare()` records that likelihood-ratio p-values are asymptotic. If you want
+a simulation-based check for a small example, use the bootstrap path.
+
+```{r bootstrap-comparison}
+compare(reduced, fit, method = "bootstrap", nsim = 10, seed = 7)
+```
+
+```{r comparison-checks, include = FALSE}
+cmp <- compare(reduced, fit)
+boot <- compare(reduced, fit, method = "bootstrap", nsim = 10, seed = 7)
+stopifnot(is.finite(cmp$table$p_value[[2L]]))
+stopifnot(is.finite(boot$table$p_value[[2L]]))
+stopifnot(identical(boot$table$status[[2L]], "parametric_bootstrap"))
+```
+
+## Unavailable is still useful information
+
+Not every uncertainty request is available. Prediction standard errors are a
+current boundary, so `predict(se.fit = TRUE)` returns the fitted values plus
+`NA` standard errors and a reason.
+
+```{r prediction-se}
+pred <- predict(fit, se.fit = TRUE)
+head(pred$fit)
+head(pred$se.fit)
+attr(pred, "mm_unavailable_reason")
+```
+
+Asking for a prediction interval raises a typed error because an interval would
+look more certain than the fitted object can justify.
+
+```{r prediction-interval-error, error = TRUE}
+predict(fit, interval = "confidence")
+```
+
+```{r unavailable-checks, include = FALSE}
+stopifnot(all(is.na(pred$se.fit)))
+stopifnot(identical(attr(pred, "mm_unavailable_reason"),
+                    "prediction_se_unavailable_phase_2"))
+```

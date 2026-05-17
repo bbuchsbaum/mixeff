@@ -1,0 +1,38 @@
+[package]
+name = 'mixeff'
+publish = false
+version = '0.1.0'
+edition = '2021'
+rust-version = '1.78'
+
+[lib]
+crate-type = [ 'rlib', 'staticlib' ]
+name = 'mixeff'
+
+[[bin]]
+name = 'document'
+path = 'document.rs'
+
+[dependencies]
+extendr-api = '0.9.0'
+
+# `serde_json` is the wire format for every artifact crossing the bridge.
+# The upstream `mixeff-rs` crate already pins `serde` and `serde_json`, so
+# adding the dep here only adds a feature surface for our own glue (no new
+# version pinning is introduced for transitive crates).
+serde_json = '1'
+nalgebra = '0.33'
+
+# rand is transitively pulled in by mixeff_rs::parametricbootstrap; we
+# instantiate StdRng for seed-reproducible bootstrap runs.
+rand = '0.8'
+
+# During active R-layer integration, depend directly on the peer upstream
+# checkout so mixeff sees the current inference-table and random-term-card
+# contracts without repeated vendoring. Release packaging can re-vendor a
+# pinned snapshot separately.
+mixeff-rs = { path = 'upstream/mixeff-rs', default-features = false }
+
+[profile.release]
+lto = true
+codegen-units = 1

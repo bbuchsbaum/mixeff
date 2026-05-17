@@ -1,0 +1,192 @@
+---
+title: Fitting Linear Mixed Models
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Fitting Linear Mixed Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+You use a linear mixed model when observations are not independent:
+visits within clinics, trials within people, students within
+classrooms. The standard R answer is `lme4::lmer()`. `mixeff::lmm()`
+accepts the same formula language — `(1 | group)`, `(x | group)`,
+`(1 + x || group)`, `(1 | a/b)` — and the fitted object answers to
+`fixef()`, `ranef()`, `VarCorr()`, `predict()`, `summary()`, and the
+rest of the generics you already use.
+
+What it adds, and the reason to use it for a walkthrough like this
+one, is that the fitted object also carries the design, the
+convergence status, and the inference labels with it. You can audit,
+summarize, save, and reload without recomputing.
+
+This vignette fits one clinic-visit model and reads the pieces an
+analyst usually reaches for first: fixed effects, p-values, variance
+components, fitted values, residuals, and a compact design report.
+
+## What data are we fitting?
+
+```{r clinic-data, include = FALSE}
+set.seed(42)
+n_clinic <- 12L
+n_per_clinic <- 6L
+clinic <- factor(rep(seq_len(n_clinic), each = n_per_clinic))
+week <- rep(0:(n_per_clinic - 1L), n_clinic)
+treatment <- factor(
+  rep(rep(c("usual", "coached"), each = n_per_clinic), length.out = length(week)),
+  levels = c("usual", "coached")
+)
+clinic_shift <- rnorm(n_clinic, sd = 0.45)
+score <- 7.2 - 0.28 * week - 0.55 * (treatment == "coached") +
+  clinic_shift[as.integer(clinic)] + rnorm(length(week), sd = 0.35)
+clinic_visits <- data.frame(score, week, treatment, clinic)
+```
+
+```{r show-data}
+head(clinic_visits)
+```
+
+`score` is the response, `week` is a numeric predictor, `treatment` is a
+fixed-effect factor, and `clinic` identifies repeated visits from the same
+clinic.
+
+## What happens when you call `lmm()`?
+
+The model estimates average week and treatment effects while allowing clinics
+to have different baselines.
+
+```{r fit-model}
+fit <- lmm(
+  score ~ week + treatment + (1 | clinic),
+  clinic_visits,
+  control = mm_control(verbose = -1)
+)
+```
+
+```{r fit-checks, include = FALSE}
+stopifnot(inherits(fit, "mm_lmm"))
+stopifnot(all(is.finite(fixef(fit))))
+stopifnot(length(predict(fit)) == nrow(clinic_visits))
+```
+
+Printing the fit gives the formula, convergence status, likelihood summary,
+residual scale, and fixed effects.
+
+```{r print-fit}
+fit
+```
+
+## How do you read the coefficient table?
+
+`summary()` gives estimates, standard errors, degrees of freedom, test
+statistics, p-values, and method labels when those inference rows are
+available.
+
+```{r summarize-fit}
+coef_table <- summary(fit, method = "auto")$coefficients
+knitr::kable(coef_table, digits = 4)
+```
+
+```{r summary-checks, include = FALSE}
+p_col <- grep("^Pr\\(|^p\\.value$", names(coef_table), value = TRUE)
+stopifnot(length(p_col) == 1L)
+stopifnot(any(is.finite(coef_table[[p_col]])))
+```
+
+For a focused term-level test, use `test_effect()`.
+
+```{r term-test}
+test_effect(fit, "treatment", method = "kenward_roger")
+```
+
+## Which familiar extractors work?
+
+The usual fixed-effect and fit-statistic extractors are available.
+
+```{r fixed-effects}
+fixef(fit)
+sigma(fit)
+logLik(fit)
+```
+
+`VarCorr()` reports fitted variance components, and `ranef()` returns
+conditional random effects by grouping factor.
+
+```{r random-effects}
+VarCorr(fit)
+head(ranef(fit)$clinic)
+```
+
+```{r extractor-checks, include = FALSE}
+stopifnot(nrow(ranef(fit)$clinic) == length(unique(clinic_visits$clinic)))
+stopifnot(is.finite(as.numeric(logLik(fit))))
+stopifnot(is.finite(deviance(fit)))
+```
+
+## How do prediction and residuals line up?
+
+For fitted data, `predict()` returns in-sample fitted values. Use
+`re.form = NA` for the fixed-effect part only.
+
+```{r predictions}
+prediction_check <- data.frame(
+  score = clinic_visits$score,
+  fitted = predict(fit),
+  fixed_only = predict(fit, re.form = NA),
+  residual = residuals(fit)
+)
+head(prediction_check)
+```
+
+```{r prediction-checks, include = FALSE}
+stopifnot(all(is.finite(prediction_check$fitted)))
+stopifnot(all(is.finite(prediction_check$residual)))
+stopifnot(max(abs(prediction_check$score -
+                    prediction_check$fitted -
+                    prediction_check$residual)) < 1e-8)
+```
+
+## Where is the design audit?
+
+Use reporting tables when you want a compact, data-frame result for a report or
+review. The data-design table is often the first one to inspect.
+
+```{r data-design}
+reporting_table(fit, "data_design")
+```
+
+The random-term table translates the random-effects part of the formula into
+rows.
+
+```{r random-term-report}
+reporting_table(fit, "random_terms")
+```
+
+For lower-level checks, use `diagnostics()`, `fit_status()`, and
+`parameterization()`.
+
+```{r diagnostics}
+fit_status(fit)
+diagnostics(fit)
+parameterization(fit)
+```
+
+## What should you read next?
+
+Use `vignette("inference", package = "mixeff")` for p-values, contrasts, term
+tests, and model comparisons. Use `vignette("demystifying-formulas", package =
+"mixeff")` when you want to understand how `(1 | clinic)`, `(week | clinic)`,
+split blocks, and `||` change the random-effects structure.

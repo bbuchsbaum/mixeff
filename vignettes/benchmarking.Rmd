@@ -1,0 +1,278 @@
+---
+title: Benchmarking mixeff
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Benchmarking mixeff}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+Speed matters most when a workflow repeats the same fit many times.
+Parametric bootstrap is the canonical case: a 1,000-replicate
+bootstrap means roughly 1,000 refits, plus the original fit and
+summary work. The same logic applies to cluster bootstrap,
+simulation studies, multi-seed reanalysis, and anything whose inner
+loop is "fit the same model again with new data". A small per-refit
+speedup compounds into the difference between an overnight run and
+a coffee break.
+
+`mixeff` is roughly two to five times faster than `lme4` on the
+parity benchmark — enough to make bootstrap a routine option rather
+than a special-occasion calculation. This vignette shows the figures
+from a single run of that benchmark and then documents the harness
+used to make them. The numbers themselves are machine- and
+model-dependent, so the scripts also write CSV files that you can
+re-plot and rerun on the designs you actually care about.
+
+## What does the benchmark show?
+
+The benchmark sweeps five mixed-model designs — varying rows,
+varying subject levels, adding random slopes, crossing subject and
+item, and combining crossed grouping with a random slope — across a
+log-spaced grid of scale values. At each cell, `mixeff::lmm()` and
+`lme4::lmer()` fit the same model three times. The summary table
+records median elapsed seconds and speedup over `lme4` per cell.
+
+```{r benchmark-data}
+benchmark_path <- system.file(
+  "extdata", "lme4-scaling-summary.csv",
+  package = "mixeff"
+)
+benchmark <- read.csv(benchmark_path, stringsAsFactors = FALSE)
+
+benchmark$scenario_label <- factor(
+  benchmark$scenario,
+  levels = c("rows", "groups", "slopes", "crossed", "crossed_slope"),
+  labels = c(
+    "vary rows (1 | subject)",
+    "vary subject levels (1 | subject)",
+    "add random slope (1 + x | subject)",
+    "crossed (1 | subject) + (1 | item)",
+    "crossed + slope (1 + x | subject) + (1 | item)"
+  )
+)
+
+head(benchmark[, c("scenario", "scale_value", "engine",
+                   "median_sec", "speedup_vs_lme4")])
+```
+
+```{r benchmark-checks, include = FALSE}
+stopifnot(nrow(benchmark) > 0L)
+stopifnot(all(c("rows", "groups", "slopes", "crossed",
+                "crossed_slope") %in% benchmark$scenario))
+stopifnot(all(c("lme4", "mixeff") %in% benchmark$engine))
+```
+
+The first figure plots the median fit time against design scale, on
+log-log axes, with one panel per scenario. `mixeff` runs below
+`lme4` everywhere on the grid; the gap widens as design complexity
+grows.
+
+```{r fit-time-plot, eval = requireNamespace("ggplot2", quietly = TRUE), fig.width = 7, fig.height = 4.5, fig.alt = "Median fit time vs design scale, log-log, by scenario, for mixeff and lme4."}
+library(ggplot2)
+
+ggplot(benchmark,
+       aes(scale_value, median_sec * 1000, colour = engine,
+           group = engine)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ scenario_label, scales = "free_x", ncol = 2) +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_colour_manual(values = c(lme4 = "#888888", mixeff = "#3366cc")) +
+  labs(
+    x = "design scale (rows, subject levels, etc.)",
+    y = "median fit time (ms, log scale)",
+    colour = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "top",
+        panel.grid.minor = element_blank())
+```
+
+The second figure folds the same data into one panel: the speedup
+of `mixeff` over `lme4` at each cell. The dashed reference line at
+1× would mean the two engines are equally fast.
+
+```{r speedup-plot, eval = requireNamespace("ggplot2", quietly = TRUE), fig.width = 7, fig.height = 4, fig.alt = "Speedup of mixeff over lme4 vs design scale, by scenario."}
+mixeff_rows <- subset(benchmark, engine == "mixeff")
+
+ggplot(mixeff_rows,
+       aes(scale_value, speedup_vs_lme4,
+           colour = scenario_label, group = scenario_label)) +
+  geom_hline(yintercept = 1, linetype = 2, colour = "grey50") +
+  geom_line() +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_continuous(breaks = seq(0, 8, by = 1)) +
+  labs(
+    x = "design scale",
+    y = "speedup over lme4 (×)",
+    colour = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        legend.direction = "vertical",
+        panel.grid.minor = element_blank()) +
+  guides(colour = guide_legend(ncol = 1))
+```
+
+Read the speedup figure with the caveats it deserves. Three
+replications per cell give a stable median but a wide envelope; the
+absolute timings are sub-15 ms throughout, so an extra millisecond
+of system noise moves the ratio visibly. The qualitative pattern is
+robust: `mixeff` is faster everywhere, and the speedup grows with
+the design's complexity — exactly the regime where bootstrap
+workflows spend most of their time.
+
+## What should you measure?
+
+There are two separate speed questions.
+
+First, measure model fitting. This asks how quickly each engine solves the same
+mixed model as the number of rows, groups, slopes, or crossed random effects
+changes.
+
+Second, measure bootstrap routes. This asks how long the user-facing inference
+verbs take when they repeatedly refit models.
+
+```{r refit-counts}
+data.frame(
+  bootstrap_replicates = c(50L, 200L, 1000L),
+  approximate_refits = c(50L, 200L, 1000L)
+)
+```
+
+The arithmetic is simple, but it is the core product point: small per-refit
+speed differences compound quickly when `nsim` is large.
+
+## How do you benchmark fitting?
+
+Use the scaling benchmark when you want to compare `mixeff::lmm()` with
+`lme4::lmer()` over several synthetic LMM designs.
+
+```{r fit-benchmark-command, eval = FALSE}
+system2(
+  "Rscript",
+  c(
+    "inst/benchmarks/lme4-scaling.R",
+    "--reps=5",
+    "--scenarios=rows,groups,slopes,crossed",
+    "--no-plots"
+  )
+)
+```
+
+That script writes one row per engine, design, scale value, and timing
+repetition, plus a summary table with median elapsed seconds and speed relative
+to `lme4`.
+
+```{r fit-benchmark-files}
+data.frame(
+  file = c(
+    "benchmarks/lme4-scaling/lme4-scaling-raw.csv",
+    "benchmarks/lme4-scaling/lme4-scaling-summary.csv"
+  ),
+  contents = c(
+    "one timing row per engine/design/repetition",
+    "median seconds, fits per second, and relative speed"
+  )
+)
+```
+
+## How do you benchmark bootstrap?
+
+Use the bootstrap benchmark when you want to time the inference routes that make
+the audit-then-bootstrap story practical.
+
+```{r bootstrap-benchmark-command, eval = FALSE}
+system2(
+  "Rscript",
+  c(
+    "inst/benchmarks/bootstrap-inference.R",
+    "--nsim=200",
+    "--reps=3"
+  )
+)
+```
+
+The benchmark includes `test_effect(method = "bootstrap")`,
+`confint(method = "bootstrap")`, `compare(method = "bootstrap")`, and
+`lme4::bootMer()` as an R-engine baseline. If `pbkrtest` is installed, it also
+times `pbkrtest::PBmodcomp()`.
+
+```{r bootstrap-routes}
+data.frame(
+  route = c(
+    "mixeff_test_effect_bootstrap",
+    "mixeff_confint_bootstrap",
+    "mixeff_compare_bootstrap_lrt",
+    "lme4_bootMer_fixef_distribution",
+    "pbkrtest_PBmodcomp"
+  ),
+  target = c(
+    "term-level fixed-effect p-value",
+    "fixed-effect confidence interval",
+    "model comparison p-value",
+    "fixed-effect bootstrap distribution",
+    "parametric bootstrap model comparison"
+  )
+)
+```
+
+## How do you read the result?
+
+For a local speed claim, read the summary CSV and compute ratios from elapsed
+seconds. Values above 1 mean the baseline route took longer than the `mixeff`
+route.
+
+```{r speedup-example, eval = FALSE}
+summary <- read.csv("benchmarks/bootstrap-inference/bootstrap-inference-summary.csv")
+mixeff_ci <- subset(summary, route == "mixeff_confint_bootstrap")
+lme4_boot <- subset(summary, route == "lme4_bootMer_fixef_distribution")
+
+data.frame(
+  comparison = "lme4 bootMer / mixeff bootstrap CI",
+  speedup = lme4_boot$median_sec / mixeff_ci$median_sec
+)
+```
+
+Treat that ratio as local evidence, not a universal constant. It depends on the
+formula, optimizer, random-effects structure, `nsim`, and machine. The point of
+the benchmark scripts is to make the claim reproducible for the model class you
+are actually fitting.
+
+## What should go in a report?
+
+When you report benchmark results, include the model formula, number of rows,
+number of grouping levels, random-effects structure, `nsim`, repetitions, and
+the package versions. The raw CSV has the timing rows; the summary CSV is for
+tables and figures.
+
+```{r reporting-fields}
+data.frame(
+  field = c("formula", "nobs", "groups", "random_terms", "nsim", "reps", "versions"),
+  reason = c(
+    "defines the fixed and random structure being refit",
+    "controls the amount of data processed per fit",
+    "controls the random-effect dimension",
+    "controls covariance structure and optimizer work",
+    "controls bootstrap cost",
+    "shows timing stability",
+    "makes the run reproducible"
+  )
+)
+```

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "purpose": "Small R-facing lme4 parity baseline for classic LMM datasets. These cases validate mixeff's R wrapper surface; engine-level numeric mismatches should be reduced and filed upstream.",
+  "default_tolerances": {
+    "fixef": 1e-5,
+    "sigma": 1e-4,
+    "logLik": 1e-4,
+    "deviance": 1e-4,
+    "AIC": 1e-4,
+    "BIC": 1e-4,
+    "fitted": 1e-4,
+    "residuals": 1e-4,
+    "theta": 1e-3,
+    "varcorr": 1e-3,
+    "ranef": 1e-4,
+    "model_matrix": 0
+  },
+  "cases": [
+    {
+      "id": "sleepstudy_random_intercept",
+      "dataset": "sleepstudy",
+      "package": "lme4",
+      "formula": "Reaction ~ Days + (1 | Subject)",
+      "reml": true,
+      "expected_status": "match",
+      "notes": "Canonical random-intercept sleepstudy baseline."
+    },
+    {
+      "id": "sleepstudy_random_intercept_slope",
+      "dataset": "sleepstudy",
+      "package": "lme4",
+      "formula": "Reaction ~ Days + (1 + Days | Subject)",
+      "reml": true,
+      "expected_status": "match",
+      "tolerances": {
+        "sigma": 0.003,
+        "varcorr": 0.02,
+        "fitted": 0.02,
+        "residuals": 0.02,
+        "ranef": 0.02
+      },
+      "notes": "Random-slope optimizer path has small but stable optimizer-scale differences."
+    },
+    {
+      "id": "dyestuff_random_intercept",
+      "dataset": "Dyestuff",
+      "package": "lme4",
+      "formula": "Yield ~ 1 + (1 | Batch)",
+      "reml": true,
+      "expected_status": "match",
+      "notes": "Balanced one-way random-effects model."
+    },
+    {
+      "id": "dyestuff2_singular_random_intercept",
+      "dataset": "Dyestuff2",
+      "package": "lme4",
+      "formula": "Yield ~ 1 + (1 | Batch)",
+      "reml": true,
+      "expected_status": "known_boundary",
+      "notes": "lme4 reports a boundary/singular fit; parity checks should tolerate equivalent boundary behavior."
+    },
+    {
+      "id": "penicillin_crossed_intercepts",
+      "dataset": "Penicillin",
+      "package": "lme4",
+      "formula": "diameter ~ 1 + (1 | plate) + (1 | sample)",
+      "reml": true,
+      "expected_status": "match",
+      "notes": "Classic crossed random-intercept example."
+    },
+    {
+      "id": "pastes_two_intercepts",
+      "dataset": "Pastes",
+      "package": "lme4",
+      "formula": "strength ~ 1 + (1 | batch) + (1 | cask)",
+      "reml": true,
+      "expected_status": "match",
+      "notes": "Two random-intercept grouping factors."
+    },
+    {
+      "id": "cake_recipe_temp",
+      "dataset": "cake",
+      "package": "lme4",
+      "formula": "angle ~ recipe * temp + (1 | recipe:replicate)",
+      "reml": true,
+      "expected_status": "match",
+      "notes": "Categorical-by-continuous fixed effects with interaction grouping."
+    }
+  ]
+}

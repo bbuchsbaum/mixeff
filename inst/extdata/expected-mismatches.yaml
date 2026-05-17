@@ -1,0 +1,8 @@
+# Deprecated stub — superseded by expected-mismatches.json (PRD §11).
+# The active classified ledger of mixeff↔lme4 parity divergences lives at
+# inst/extdata/expected-mismatches.json. This file is retained only for
+# downstream tooling that still pins the YAML path; it is not consulted by
+# the package or its tests.
+version: 1
+ledger_path: extdata/expected-mismatches.json
+mismatches: []

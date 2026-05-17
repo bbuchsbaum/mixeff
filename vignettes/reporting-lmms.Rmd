@@ -1,0 +1,227 @@
+---
+title: Reporting Linear Mixed Models
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Reporting Linear Mixed Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+A mixed-model report needs more than coefficient estimates. The
+reader needs to know which observations and grouping units were
+used, what random-effects structure was fitted, which inference
+method produced each row, whether the optimizer reached an interior
+solution, and which quantities were not available. Most of those are
+facts about the fit that `lme4` does not store in the fitted object;
+the analyst has to remember them, or reconstruct them from console
+output weeks after the fact.
+
+`mixeff` stores every one of them. This vignette follows a
+Davies-Meteyard–style reporting checklist — describe the data and
+design, report the model specification, show fixed and random
+effects, label inference methods, preserve software provenance, and
+make caveats explicit instead of hiding them in prose — drawing each
+section from the same fitted object.
+
+## What model will we report?
+
+Use one dataset and one fitted model all the way through. Here, clinics are the
+grouping units and each clinic contributes repeated weekly observations.
+
+```{r clinic-data, include = FALSE}
+set.seed(42)
+n_clinic <- 12L
+n_per_clinic <- 6L
+clinic <- factor(rep(seq_len(n_clinic), each = n_per_clinic))
+week <- rep(0:(n_per_clinic - 1L), n_clinic)
+treatment <- factor(
+  rep(rep(c("usual", "coached"), each = n_per_clinic), length.out = length(week)),
+  levels = c("usual", "coached")
+)
+clinic_shift <- rnorm(n_clinic, sd = 0.45)
+score <- 7.2 - 0.28 * week - 0.55 * (treatment == "coached") +
+  clinic_shift[as.integer(clinic)] + rnorm(length(week), sd = 0.35)
+clinic_visits <- data.frame(score, week, treatment, clinic)
+```
+
+```{r show-data}
+head(clinic_visits)
+```
+
+The analysis estimates average changes by week and treatment while allowing
+clinics to have different baselines.
+
+## What did the formula request?
+
+Before fitting, compile the model and read the design audit. This separates
+formula interpretation from optimization and gives you a stable place to check
+the requested random-effects structure.
+
+```{r compile-design}
+spec <- compile_model(score ~ week + treatment + (1 | clinic), clinic_visits)
+audit_design(spec)
+```
+
+```{r compile-checks, include = FALSE}
+stopifnot(inherits(spec, "mm_spec"))
+```
+
+## What fit was used?
+
+Fit the model once. In reporting work, the fitted object is the source for
+summary output, report sections, and provenance.
+
+```{r fit-model}
+fit <- lmm(
+  score ~ week + treatment + (1 | clinic),
+  clinic_visits,
+  control = mm_control(verbose = -1)
+)
+```
+
+```{r fit-checks, include = FALSE}
+stopifnot(inherits(fit, "mm_lmm"))
+stopifnot(identical(fit_status(fit), "converged_interior"))
+stopifnot(all(is.finite(fixef(fit))))
+```
+
+The overview table is a compact first pass over the fitted model: formula,
+fitting mode, number of observations, fit status, inference availability, and
+versioned artifact information.
+
+```{r report-overview}
+reporting_table(fit, "overview")
+```
+
+## Which design facts belong in the report?
+
+A useful mixed-model report names the grouping units and their information
+budget. The data-design section gives the number of levels and rows per group.
+
+```{r data-design}
+reporting_table(fit, "data_design")
+```
+
+The random-term section translates the random-effects formula into auditable
+rows. This is where the report records the grouping factor, basis, covariance
+family, parameter count, and Rust-authored plain-language description.
+
+```{r random-terms}
+reporting_table(fit, "random_terms")
+```
+
+```{r design-report-checks, include = FALSE}
+design <- reporting_table(fit, "data_design")
+stopifnot(any(design$group == "clinic"))
+stopifnot(all(design$group_levels[design$group == "clinic"] == n_clinic))
+terms <- reporting_table(fit, "random_terms")
+stopifnot(all(c("group", "basis", "covariance", "english") %in% names(terms)))
+```
+
+## How are estimates and p-values labelled?
+
+`summary()` gives a familiar coefficient table. Use it for console review.
+
+```{r model-summary}
+coef_table <- summary(fit, method = "auto")$coefficients
+knitr::kable(coef_table, digits = 4)
+```
+
+For report assembly, use `reporting_table()`. The fixed-effect section keeps
+the estimate, uncertainty, statistic, p-value, method, row status, and
+reliability label together.
+
+```{r fixed-effect-report}
+reporting_table(fit, "fixed_effects")
+```
+
+When you need to audit where those rows came from, request the audit view.
+
+```{r fixed-effect-audit}
+fixed_audit <- reporting_table(fit, "fixed_effects", view = "audit")
+fixed_audit[, c("term", "method", "status", "reliability", "source")]
+```
+
+```{r fixed-effect-checks, include = FALSE}
+fixed_report <- reporting_table(fit, "fixed_effects")
+stopifnot(all(is.finite(fixed_report$estimate)))
+stopifnot(any(is.finite(fixed_report$p_value)))
+stopifnot(all(c("method", "status", "reliability") %in% names(fixed_report)))
+stopifnot(all(fixed_audit$source == "fixed_effect_inference_table"))
+```
+
+## How are random effects reported?
+
+The random-effect table reports variance components on the fitted scale. In
+the current contract, those rows are available from the fitted covariance
+summary, while the missing stable Rust variance/covariance report payload is
+recorded separately in the unavailable ledger.
+
+```{r random-effect-report}
+reporting_table(fit, "random_effects")
+```
+
+```{r random-effect-checks, include = FALSE}
+random_report <- reporting_table(fit, "random_effects")
+stopifnot(any(random_report$kind == "variance"))
+stopifnot(any(random_report$group == "Residual"))
+stopifnot(any(is.finite(random_report$variance)))
+```
+
+## What is unavailable or caveated?
+
+Build the full model report when you want the section map, software
+provenance, and ledger of unavailable or not-applicable fields.
+
+```{r full-report}
+report <- model_report(fit)
+report
+```
+
+The unavailable ledger is part of the report, not an error condition. It is
+where `mixeff` records schema gaps, not-applicable sections, and other caveats
+with stable reasons and an action taken.
+
+```{r unavailable-ledger}
+reporting_table(report, "unavailable")
+```
+
+```{r unavailable-checks, include = FALSE}
+unavailable <- reporting_table(report, "unavailable")
+stopifnot(all(c("section", "field", "status", "reason") %in%
+                names(unavailable)))
+stopifnot(any(unavailable$field ==
+                "stable_random_effect_variance_covariance_payload"))
+```
+
+## What should go into your written report?
+
+Use the report sections as the source material for prose:
+
+- `overview` records the formula, fit method, observations, fit status, and
+  versioned artifact information.
+- `data_design` records grouping-unit counts and rows per group.
+- `random_terms` records the random-effects specification and its design
+  support.
+- `fixed_effects` records estimates and inference labels.
+- `random_effects` records fitted variance components.
+- `unavailable` records caveats that should not disappear from the analysis
+  record.
+
+The important habit is to report from the fitted object rather than from memory.
+Use `vignette("inference", package = "mixeff")` for term tests, contrasts, and
+model comparisons. Use `vignette("saving-and-reviving", package = "mixeff")`
+when the report needs to survive an RDS round trip.

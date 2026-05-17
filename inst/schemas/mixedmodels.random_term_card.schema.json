@@ -1,0 +1,164 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/bbuchsbaum/mixeff/schemas/mixedmodels.random_term_card/1",
+  "title": "RandomTermCard",
+  "description": "Per-random-term card authored by the mixedmodels Rust crate. The R wrapper formats; Rust authors English wording and design facts. See planning/PRD.md §9.6 and /Users/bbuchsbaum/code/rust/mixedmodels/docs/random_term_card_prd.md.",
+  "type": "object",
+  "required": [
+    "schema_name",
+    "schema_version",
+    "term_id",
+    "original_fragment",
+    "canonical_fragment",
+    "group",
+    "blocks",
+    "implied_constraints",
+    "design_support"
+  ],
+  "properties": {
+    "schema_name": {
+      "type": "string",
+      "const": "mixedmodels.random_term_card"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "term_id":            { "type": "string", "minLength": 1 },
+    "original_fragment":  { "type": "string" },
+    "canonical_fragment": { "type": "string" },
+    "group": {
+      "type": "object",
+      "description": "GroupingFactorIr — exactly one of single / interaction / cell.",
+      "oneOf": [
+        {
+          "required": ["single"],
+          "properties": {
+            "single": {
+              "type": "object",
+              "required": ["name"],
+              "properties": { "name": { "type": "string" } }
+            }
+          }
+        },
+        {
+          "required": ["interaction"],
+          "properties": {
+            "interaction": {
+              "type": "object",
+              "required": ["names"],
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 2
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": ["cell"],
+          "properties": {
+            "cell": {
+              "type": "object",
+              "required": ["names"],
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "basis",
+          "intercept",
+          "slopes",
+          "covariance",
+          "theta_parameters",
+          "english"
+        ],
+        "properties": {
+          "basis": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "intercept": { "type": "boolean" },
+          "slopes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "covariance": {
+            "description": "CovarianceForm. Stable string values from the upstream enum.",
+            "anyOf": [
+              { "type": "string", "enum": ["full", "diagonal", "scalar", "identity", "reduced_rank"] },
+              { "type": "object" }
+            ]
+          },
+          "theta_parameters": { "type": "integer", "minimum": 0 },
+          "english":          { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "implied_constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "between", "reason"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["zero_covariance", "zero_variance", "equal_variance"]
+          },
+          "between": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2
+          },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "design_support": {
+      "type": "object",
+      "required": ["within_group_variation", "status"],
+      "properties": {
+        "group_levels":           { "type": ["integer", "null"], "minimum": 0 },
+        "min_rows_per_group":     { "type": ["integer", "null"], "minimum": 0 },
+        "median_rows_per_group":  { "type": ["integer", "null"], "minimum": 0 },
+        "within_group_variation": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["present", "absent", "constant", "not_assessed"]
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["sufficient", "weakly_supported", "too_rich", "not_assessable", "supported", "low_support"]
+        }
+      }
+    },
+    "role_origin": {
+      "type": "object",
+      "description": "Optional in v1 outputs that predate the role_origin contract.",
+      "required": ["declared_by_user", "observed_from_data"],
+      "properties": {
+        "declared_by_user":   { "type": "boolean" },
+        "observed_from_data": { "type": "boolean" },
+        "role":               { "type": "string" }
+      }
+    }
+  }
+}

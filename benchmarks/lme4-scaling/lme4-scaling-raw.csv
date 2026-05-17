@@ -1,0 +1,121 @@
+"scenario","scale_var","scale_value","n_rows","n_subject","n_item","n_random_effect_coefficients","random_terms","formula","engine","rep","elapsed_sec","ok","error"
+"rows","rows",500,500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.002,TRUE,NA
+"rows","rows",500,500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.002,TRUE,NA
+"rows","rows",500,500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.002,TRUE,NA
+"rows","rows",500,500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.006,TRUE,NA
+"rows","rows",500,500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.00800000000000001,TRUE,NA
+"rows","rows",500,500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.006,TRUE,NA
+"rows","rows",1000,1000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.00200000000000022,TRUE,NA
+"rows","rows",1000,1000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.00200000000000022,TRUE,NA
+"rows","rows",1000,1000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.00300000000000011,TRUE,NA
+"rows","rows",1000,1000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.00699999999999967,TRUE,NA
+"rows","rows",1000,1000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.0089999999999999,TRUE,NA
+"rows","rows",1000,1000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.00800000000000001,TRUE,NA
+"rows","rows",2500,2500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.004,TRUE,NA
+"rows","rows",2500,2500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.004,TRUE,NA
+"rows","rows",2500,2500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.004,TRUE,NA
+"rows","rows",2500,2500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.0100000000000002,TRUE,NA
+"rows","rows",2500,2500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.00800000000000001,TRUE,NA
+"rows","rows",2500,2500,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.00999999999999979,TRUE,NA
+"rows","rows",5000,5000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.00499999999999989,TRUE,NA
+"rows","rows",5000,5000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.00599999999999934,TRUE,NA
+"rows","rows",5000,5000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.00700000000000056,TRUE,NA
+"rows","rows",5000,5000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.0130000000000008,TRUE,NA
+"rows","rows",5000,5000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.0119999999999996,TRUE,NA
+"rows","rows",5000,5000,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.016,TRUE,NA
+"groups","subject levels",25,200,25,NA,25,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.00299999999999923,TRUE,NA
+"groups","subject levels",25,200,25,NA,25,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.00199999999999978,TRUE,NA
+"groups","subject levels",25,200,25,NA,25,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.00199999999999978,TRUE,NA
+"groups","subject levels",25,200,25,NA,25,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.00700000000000056,TRUE,NA
+"groups","subject levels",25,200,25,NA,25,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.00499999999999989,TRUE,NA
+"groups","subject levels",25,200,25,NA,25,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.00800000000000001,TRUE,NA
+"groups","subject levels",50,400,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.00199999999999978,TRUE,NA
+"groups","subject levels",50,400,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.00100000000000033,TRUE,NA
+"groups","subject levels",50,400,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.00300000000000011,TRUE,NA
+"groups","subject levels",50,400,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.00699999999999967,TRUE,NA
+"groups","subject levels",50,400,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.00600000000000023,TRUE,NA
+"groups","subject levels",50,400,50,NA,50,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.00800000000000001,TRUE,NA
+"groups","subject levels",100,800,100,NA,100,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.00199999999999978,TRUE,NA
+"groups","subject levels",100,800,100,NA,100,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.00300000000000011,TRUE,NA
+"groups","subject levels",100,800,100,NA,100,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.00299999999999923,TRUE,NA
+"groups","subject levels",100,800,100,NA,100,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.00900000000000034,TRUE,NA
+"groups","subject levels",100,800,100,NA,100,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.00699999999999967,TRUE,NA
+"groups","subject levels",100,800,100,NA,100,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.00699999999999967,TRUE,NA
+"groups","subject levels",200,1600,200,NA,200,"(1 | subject)","y ~ x + (1 | subject)","mixeff",1,0.00300000000000011,TRUE,NA
+"groups","subject levels",200,1600,200,NA,200,"(1 | subject)","y ~ x + (1 | subject)","mixeff",2,0.00399999999999956,TRUE,NA
+"groups","subject levels",200,1600,200,NA,200,"(1 | subject)","y ~ x + (1 | subject)","mixeff",3,0.00300000000000011,TRUE,NA
+"groups","subject levels",200,1600,200,NA,200,"(1 | subject)","y ~ x + (1 | subject)","lme4",1,0.00900000000000034,TRUE,NA
+"groups","subject levels",200,1600,200,NA,200,"(1 | subject)","y ~ x + (1 | subject)","lme4",2,0.00799999999999912,TRUE,NA
+"groups","subject levels",200,1600,200,NA,200,"(1 | subject)","y ~ x + (1 | subject)","lme4",3,0.00900000000000034,TRUE,NA
+"slopes","subject levels",25,250,25,NA,50,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",1,0.00199999999999889,TRUE,NA
+"slopes","subject levels",25,250,25,NA,50,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",2,0.00300000000000011,TRUE,NA
+"slopes","subject levels",25,250,25,NA,50,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",3,0.00300000000000011,TRUE,NA
+"slopes","subject levels",25,250,25,NA,50,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",1,0.0080000000000009,TRUE,NA
+"slopes","subject levels",25,250,25,NA,50,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",2,0.00699999999999967,TRUE,NA
+"slopes","subject levels",25,250,25,NA,50,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",3,0.00799999999999912,TRUE,NA
+"slopes","subject levels",50,500,50,NA,100,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",1,0.00300000000000011,TRUE,NA
+"slopes","subject levels",50,500,50,NA,100,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",2,0.00300000000000011,TRUE,NA
+"slopes","subject levels",50,500,50,NA,100,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",3,0.00300000000000011,TRUE,NA
+"slopes","subject levels",50,500,50,NA,100,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",1,0.00899999999999856,TRUE,NA
+"slopes","subject levels",50,500,50,NA,100,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",2,0.011000000000001,TRUE,NA
+"slopes","subject levels",50,500,50,NA,100,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",3,0.00899999999999856,TRUE,NA
+"slopes","subject levels",100,1000,100,NA,200,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",1,0.00399999999999956,TRUE,NA
+"slopes","subject levels",100,1000,100,NA,200,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",2,0.00300000000000011,TRUE,NA
+"slopes","subject levels",100,1000,100,NA,200,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",3,0.00300000000000011,TRUE,NA
+"slopes","subject levels",100,1000,100,NA,200,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",1,0.0120000000000005,TRUE,NA
+"slopes","subject levels",100,1000,100,NA,200,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",2,0.0120000000000005,TRUE,NA
+"slopes","subject levels",100,1000,100,NA,200,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",3,0.0130000000000017,TRUE,NA
+"slopes","subject levels",200,2000,200,NA,400,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",1,0.00500000000000078,TRUE,NA
+"slopes","subject levels",200,2000,200,NA,400,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",2,0.00500000000000078,TRUE,NA
+"slopes","subject levels",200,2000,200,NA,400,"(1 + x | subject)","y ~ x + (1 + x | subject)","mixeff",3,0.00500000000000078,TRUE,NA
+"slopes","subject levels",200,2000,200,NA,400,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",1,0.0169999999999995,TRUE,NA
+"slopes","subject levels",200,2000,200,NA,400,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",2,0.027000000000001,TRUE,NA
+"slopes","subject levels",200,2000,200,NA,400,"(1 + x | subject)","y ~ x + (1 + x | subject)","lme4",3,0.0169999999999995,TRUE,NA
+"crossed","subject/item levels",10,200,10,10,20,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",1,0.00200000000000067,TRUE,NA
+"crossed","subject/item levels",10,200,10,10,20,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",2,0.00300000000000011,TRUE,NA
+"crossed","subject/item levels",10,200,10,10,20,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",3,0.00200000000000067,TRUE,NA
+"crossed","subject/item levels",10,200,10,10,20,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",1,0.00900000000000034,TRUE,NA
+"crossed","subject/item levels",10,200,10,10,20,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",2,0.0080000000000009,TRUE,NA
+"crossed","subject/item levels",10,200,10,10,20,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",3,0.00799999999999912,TRUE,NA
+"crossed","subject/item levels",15,450,15,15,30,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",1,0.00300000000000011,TRUE,NA
+"crossed","subject/item levels",15,450,15,15,30,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",2,0.00300000000000011,TRUE,NA
+"crossed","subject/item levels",15,450,15,15,30,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",3,0.00300000000000011,TRUE,NA
+"crossed","subject/item levels",15,450,15,15,30,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",1,0.00999999999999979,TRUE,NA
+"crossed","subject/item levels",15,450,15,15,30,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",2,0.00900000000000034,TRUE,NA
+"crossed","subject/item levels",15,450,15,15,30,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",3,0.00999999999999979,TRUE,NA
+"crossed","subject/item levels",20,800,20,20,40,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",1,0.00300000000000011,TRUE,NA
+"crossed","subject/item levels",20,800,20,20,40,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",2,0.00399999999999956,TRUE,NA
+"crossed","subject/item levels",20,800,20,20,40,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",3,0.00400000000000134,TRUE,NA
+"crossed","subject/item levels",20,800,20,20,40,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",1,0.011000000000001,TRUE,NA
+"crossed","subject/item levels",20,800,20,20,40,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",2,0.0110000000000028,TRUE,NA
+"crossed","subject/item levels",20,800,20,20,40,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",3,0.0120000000000005,TRUE,NA
+"crossed","subject/item levels",30,1800,30,30,60,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",1,0.00400000000000134,TRUE,NA
+"crossed","subject/item levels",30,1800,30,30,60,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",2,0.00600000000000023,TRUE,NA
+"crossed","subject/item levels",30,1800,30,30,60,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","mixeff",3,0.004999999999999,TRUE,NA
+"crossed","subject/item levels",30,1800,30,30,60,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",1,0.0199999999999996,TRUE,NA
+"crossed","subject/item levels",30,1800,30,30,60,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",2,0.0180000000000007,TRUE,NA
+"crossed","subject/item levels",30,1800,30,30,60,"(1 | subject) + (1 | item)","y ~ x + (1 | subject) + (1 | item)","lme4",3,0.0180000000000007,TRUE,NA
+"crossed_slope","subject/item levels",10,200,10,10,30,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",1,0.00400000000000134,TRUE,NA
+"crossed_slope","subject/item levels",10,200,10,10,30,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",2,0.00400000000000134,TRUE,NA
+"crossed_slope","subject/item levels",10,200,10,10,30,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",3,0.00399999999999778,TRUE,NA
+"crossed_slope","subject/item levels",10,200,10,10,30,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",1,0.0120000000000005,TRUE,NA
+"crossed_slope","subject/item levels",10,200,10,10,30,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",2,0.0110000000000028,TRUE,NA
+"crossed_slope","subject/item levels",10,200,10,10,30,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",3,0.0110000000000028,TRUE,NA
+"crossed_slope","subject/item levels",15,450,15,15,45,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",1,0.00300000000000011,TRUE,NA
+"crossed_slope","subject/item levels",15,450,15,15,45,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",2,0.00300000000000011,TRUE,NA
+"crossed_slope","subject/item levels",15,450,15,15,45,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",3,0.00300000000000011,TRUE,NA
+"crossed_slope","subject/item levels",15,450,15,15,45,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",1,0.0150000000000006,TRUE,NA
+"crossed_slope","subject/item levels",15,450,15,15,45,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",2,0.0150000000000006,TRUE,NA
+"crossed_slope","subject/item levels",15,450,15,15,45,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",3,0.0139999999999993,TRUE,NA
+"crossed_slope","subject/item levels",20,800,20,20,60,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",1,0.00400000000000134,TRUE,NA
+"crossed_slope","subject/item levels",20,800,20,20,60,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",2,0.00399999999999778,TRUE,NA
+"crossed_slope","subject/item levels",20,800,20,20,60,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",3,0.004999999999999,TRUE,NA
+"crossed_slope","subject/item levels",20,800,20,20,60,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",1,0.0190000000000019,TRUE,NA
+"crossed_slope","subject/item levels",20,800,20,20,60,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",2,0.0190000000000019,TRUE,NA
+"crossed_slope","subject/item levels",20,800,20,20,60,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",3,0.0199999999999996,TRUE,NA
+"crossed_slope","subject/item levels",30,1800,30,30,90,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",1,0.00600000000000023,TRUE,NA
+"crossed_slope","subject/item levels",30,1800,30,30,90,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",2,0.00700000000000145,TRUE,NA
+"crossed_slope","subject/item levels",30,1800,30,30,90,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","mixeff",3,0.00700000000000145,TRUE,NA
+"crossed_slope","subject/item levels",30,1800,30,30,90,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",1,0.036999999999999,TRUE,NA
+"crossed_slope","subject/item levels",30,1800,30,30,90,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",2,0.0389999999999979,TRUE,NA
+"crossed_slope","subject/item levels",30,1800,30,30,90,"(1 + x | subject) + (1 | item)","y ~ x + (1 + x | subject) + (1 | item)","lme4",3,0.0359999999999978,TRUE,NA

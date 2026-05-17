@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mixeff.org/schemas/mixedmodels.profile_likelihood_ci-1.0.0.json",
+  "title": "MixedModels profile-likelihood confidence intervals",
+  "description": "Profile-likelihood confidence intervals for variance, scale, and (under ML) fixed-effect parameters in a linear mixed model. Carries one interval row per requested parameter, the underlying profile trace, the fit criterion under which the profile was constructed, and any structured notes (e.g., boundary clamping, REML-omits-beta).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "level",
+    "fit_criterion",
+    "intervals",
+    "profile_rows",
+    "notes"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "mixedmodels.profile_likelihood_ci"
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "crate_version": {
+      "type": ["string", "null"]
+    },
+    "package_version": {
+      "type": ["string", "null"]
+    },
+    "level": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 1,
+      "description": "Nominal confidence level used to construct the intervals (e.g., 0.95)."
+    },
+    "fit_criterion": {
+      "enum": ["ML", "REML"],
+      "description": "Criterion under which the profile was built. ML profiles cover beta, sigma, and theta; REML profiles omit beta with a documented note."
+    },
+    "intervals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/interval_row"
+      },
+      "description": "One row per parameter for which an interval was constructed. Parameters that were requested but cannot be certified (e.g., beta under REML) still appear with status reported via the notes array, not by silent omission."
+    },
+    "profile_rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profile_row"
+      },
+      "description": "Flat array of conditional profile evaluations. Each row is one constrained fit at a profile point, with the full parameter state at that fit and the signed-root deviance value. The profiled parameter is identified by the `p` field; rows for different parameters are interleaved in this single array. Profile rows must carry finite numeric values for `zeta`, `sigma`, `beta`, and `theta`; partial-failure situations are represented at the interval-row or notes level, never by half-populated profile rows."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/note"
+      },
+      "description": "Structured notes about the construction of the intervals. Each note carries a stable code, a severity, and an optional payload."
+    }
+  },
+  "$defs": {
+    "string_or_null": {
+      "type": ["string", "null"]
+    },
+    "number_or_null": {
+      "type": ["number", "null"]
+    },
+    "interval_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "parameter",
+        "estimate",
+        "lower",
+        "upper",
+        "level",
+        "method",
+        "regularity",
+        "boundary_clamped_lower"
+      ],
+      "properties": {
+        "parameter": {
+          "type": "string",
+          "description": "Canonical parameter name, e.g., \"beta[0]\", \"sigma\", \"theta[0,0]\"."
+        },
+        "estimate": {
+          "type": "number",
+          "description": "Point estimate at the maximum-likelihood (or REML) solution."
+        },
+        "lower": {
+          "$ref": "#/$defs/number_or_null",
+          "description": "Lower endpoint of the profile-likelihood interval. Null when the lower endpoint is unavailable (e.g., variance parameter clamped at zero)."
+        },
+        "upper": {
+          "$ref": "#/$defs/number_or_null",
+          "description": "Upper endpoint of the profile-likelihood interval. Null when unavailable."
+        },
+        "level": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "Per-row nominal level (normally matches top-level level)."
+        },
+        "method": {
+          "type": "string",
+          "description": "Method label, expected to be \"profile_likelihood\" for v1.0.0."
+        },
+        "regularity": {
+          "type": "string",
+          "description": "Closed-enum tag describing the regularity of the interval (e.g., \"regular\", \"boundary_clamped\", \"singular_skipped\"). Enumeration pending lock with Rust side."
+        },
+        "boundary_clamped_lower": {
+          "type": "boolean",
+          "description": "True when the lower endpoint was clamped at the parameter-space boundary (e.g., zero for variance parameters)."
+        }
+      }
+    },
+    "profile_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["p", "zeta", "sigma", "beta", "theta"],
+      "properties": {
+        "p": {
+          "type": "string",
+          "description": "Profiled parameter identifier for this row. Opaque string for v1.0.0 — examples emitted by the current Rust side include \"σ\" for the residual SD profile, \"β1\", \"β2\", … for active fixed-effect coefficient profiles, and \"θ1\", \"θ2\", … for theta parameter profiles. R may add display helpers that parse these labels; schema validity does not require parsing."
+        },
+        "zeta": {
+          "type": "number",
+          "description": "Signed-root deviance value at this conditional fit. Must be finite."
+        },
+        "sigma": {
+          "type": "number",
+          "description": "Residual SD at this conditional fit. Must be finite."
+        },
+        "beta": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "Full active fixed-effect coefficient vector at this conditional fit. Length equals the active fixed-effect coefficient count of the model."
+        },
+        "theta": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "Full theta parameter vector at this conditional fit. Length equals the theta parameter count of the model."
+        }
+      }
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Stable closed-enum identifier for the note (e.g., \"profile_beta_unavailable_under_reml\", \"profile_lower_boundary_clamped\")."
+        },
+        "severity": {
+          "enum": ["info", "warning", "error"]
+        },
+        "message": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mixeff.org/schemas/mixedmodels.marginal_quantity_table-1.0.0.json",
+  "title": "MixedModels marginal quantity table",
+  "description": "Contract-shaped rows for mixeff marginal predictions, means, and comparisons. Rows reuse the fixed-effect inference status spine so unsupported quantities remain reportable with stable reasons.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "rows"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "mixedmodels.marginal_quantity_table"
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "crate_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "package_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/marginal_quantity_row"
+      }
+    }
+  },
+  "$defs": {
+    "string_or_null": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "number_or_null": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "string_array": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "marginal_quantity_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "quantity",
+        "label",
+        "estimate",
+        "rhs",
+        "std_error",
+        "df",
+        "statistic",
+        "statistic_name",
+        "p_value",
+        "conf_low",
+        "conf_high",
+        "method",
+        "requested_method",
+        "status",
+        "reliability",
+        "estimability",
+        "reason",
+        "target",
+        "scale",
+        "weights",
+        "comparison",
+        "by",
+        "specs",
+        "grid_id",
+        "details",
+        "notes"
+      ],
+      "properties": {
+        "quantity": {
+          "enum": [
+            "prediction",
+            "mean",
+            "comparison"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "estimate": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "rhs": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "std_error": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "df": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "statistic": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "statistic_name": {
+          "$ref": "#/$defs/string_or_null"
+        },
+        "p_value": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "conf_low": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "conf_high": {
+          "$ref": "#/$defs/number_or_null"
+        },
+        "method": {
+          "type": "string"
+        },
+        "requested_method": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "reliability": {
+          "type": "string"
+        },
+        "estimability": {
+          "type": [
+            "object",
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/string_or_null"
+        },
+        "target": {
+          "enum": [
+            "population",
+            "conditional",
+            "new_levels",
+            "not_assessed"
+          ]
+        },
+        "scale": {
+          "enum": [
+            "link",
+            "response",
+            "not_assessed"
+          ]
+        },
+        "weights": {
+          "type": "string"
+        },
+        "comparison": {
+          "enum": [
+            "identity",
+            "difference",
+            "ratio",
+            "odds_ratio",
+            "risk_difference",
+            "not_assessed"
+          ]
+        },
+        "by": {
+          "$ref": "#/$defs/string_array"
+        },
+        "specs": {
+          "$ref": "#/$defs/string_array"
+        },
+        "grid_id": {
+          "type": "string"
+        },
+        "details": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "notes": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    }
+  }
+}

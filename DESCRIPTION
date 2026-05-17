@@ -1,0 +1,41 @@
+Package: mixeff
+Title: Audit-First Mixed-Effects Models via the 'mixeff-rs' Rust Crate
+Version: 0.1.0
+Authors@R:
+    person("Brad", "Buchsbaum",
+           email = "bbuchsbaum@research.baycrest.org",
+           role = c("aut", "cre"))
+Description: An R wrapper for the 'mixeff-rs' Rust crate, providing
+    linear and generalized linear mixed-effects model fitting via lme4-style
+    formulas. The wrapper is audit-first: every printed claim traces back to
+    a versioned JSON artifact produced by the Rust compiler, and the package
+    refuses to fabricate inference results that the engine cannot certify.
+    See the package vignettes for migration from 'lme4' and the
+    demystification surface for random-effects syntax.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Config/rextendr/version: 0.5.0
+SystemRequirements: Cargo (Rust's package manager, >= 1.78.0), rustc (>= 1.78.0), GNU make
+Depends:
+    R (>= 4.2)
+Imports:
+    jsonlite,
+    Matrix,
+    rlang,
+    stats
+Suggests:
+    ggplot2,
+    emmeans (>= 1.4),
+    estimability,
+    jsonvalidate,
+    knitr,
+    lme4,
+    lmerTest,
+    rextendr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/Needs/website: albersdown

@@ -1,0 +1,314 @@
+---
+title: Demystifying Random-Effects Formulas
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Demystifying Random-Effects Formulas}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+```{r study-data, include = FALSE}
+set.seed(11)
+n_subj <- 30L
+n_time <- 5L
+study <- expand.grid(subject = factor(seq_len(n_subj)),
+                     time = seq_len(n_time))
+subj_dose <- rnorm(n_subj, sd = 1)
+study$dose <- subj_dose[as.integer(study$subject)]
+b0 <- rnorm(n_subj, sd = 0.6)[as.integer(study$subject)]
+b1 <- rnorm(n_subj, sd = 0.2)[as.integer(study$subject)]
+study$x <- rnorm(nrow(study))
+study$z <- rnorm(nrow(study))
+study$score <- 2 + 0.3 * study$time + b0 + b1 * study$time +
+  rnorm(nrow(study), sd = 0.4)
+study$y <- 1 + 0.4 * study$x + 0.2 * study$z + b0 +
+  rnorm(nrow(study), sd = 0.5)
+study$hit <- rbinom(nrow(study), size = 1, prob = plogis(0.5 + study$x))
+
+# A between-subject covariate is required to demonstrate the
+# structural-refusal case.
+between_study <- study
+between_study$dose <- between_study$dose
+
+# A small-N variant to demonstrate the low-information-budget case.
+low_n <- 4L
+low_study <- subset(study, as.integer(subject) <= low_n)
+low_study$subject <- factor(low_study$subject)
+```
+
+Random-effects formulas are compact, and compactness hides
+assumptions. The four characters of `(x | g)` commit the analyst to
+a specific covariance structure, a specific number of free
+parameters, and a specific identification claim about what the data
+can support. Two formulas that differ by a single character — `||`
+for `|`, say — fit different models.
+
+`mixeff` shares the formula language with `lme4`, so the notation
+you already read transfers directly. What it adds is a way to read
+the formula *before* the optimizer runs: the named form of every
+random term, the plain-language scope, the parameter count, and the
+design facts that support or refuse the formula on this particular
+data.
+
+The goal of this vignette is not to pick a model for you. It is to
+show what the model you wrote can and cannot express, and to make
+the difference between nearby spellings legible.
+
+We use a small repeated-measures dataset with one row per subject
+per time point.
+
+```{r study-preview}
+head(study)
+```
+
+## What does `(1 | subject)` say?
+
+A random intercept is the simplest random-effects structure:
+subjects may differ in average score, but the fixed `time` effect
+is the same across subjects. It is often the right choice, and it
+is always a reasonable starting point. `explain_model()` spells
+out what the model assumes and reports that no random slopes were
+added.
+
+```{r intercept-only-explanation}
+intercept_only <- compile_model(score ~ time + (1 | subject), study)
+explain_model(intercept_only)
+```
+
+```{r intercept-only-checks, include = FALSE}
+intercept_only_explanation <- explain_model(intercept_only)
+intercept_only_slopes <-
+  intercept_only_explanation$cards[[1L]]$blocks[[1L]]$slopes
+stopifnot(length(intercept_only_slopes) == 0L)
+stopifnot(any(vapply(
+  intercept_only_explanation$diagnostics,
+  function(x) identical(x$code, "scope_note"),
+  logical(1)
+)))
+```
+
+Each random-effects card has two header lines worth pausing on.
+`wrote:` is the term as you typed it. `canonical:` is what the
+parser hands downstream — what the optimizer, the audit, and the
+inference contract will actually see. They are identical here
+because `(1 | subject)` is already in canonical form, and identity
+is a positive signal: nothing was rewritten. The two diverge for
+more elaborate formulas. `(1 | clinic/site)` is rewritten as
+`(1 | clinic) + (1 | clinic:site)`; implicit intercepts are made
+explicit; double-bar shorthand expands to its split-block form.
+The `canonical:` line is where you read off the model the engine
+will actually fit.
+
+The remaining lines decode the term further. `named form:`
+restates it as a function call that names the grouping factor, the
+intercept, the slopes (if any), and the covariance family.
+`scope:` is a plain-language sentence. `covariance` and `support`
+report parameter cost and design sufficiency.
+
+The `Design notes:` section at the bottom records facts about the
+data that the fitted formula did not use. Here `time` varies
+within each subject, so a subject-level `time` slope is
+structurally possible. That is reported as a note, not a
+correction: whether to add `(time | subject)` is a scientific
+question about whether subjects plausibly differ in their `time`
+slopes, not a mechanical one about what the package can do.
+
+## What changes when you add a random slope?
+
+`(1 + time | subject)` requests a two-dimensional random effect for each
+subject: one baseline coefficient and one `time` coefficient, with a fitted
+covariance between them.
+
+```{r full-slope-explanation}
+full <- compile_model(score ~ time + (1 + time | subject), study)
+explain_model(full)
+```
+
+After fitting, `parameterization()` shows the model's *internal*
+coordinates. A brief detour explains what they are.
+
+The random-effects covariance matrix Σ — here a 2×2 matrix
+describing the variance of the intercept, the variance of the
+`time` slope, and their covariance — is not optimized directly.
+Instead, the engine searches over a vector θ that maps into a
+lower-triangular factor Λ via Σ = σ² Λ Λᵀ. The reasons are
+practical: θ-space has the minimum number of free parameters, it is
+better-conditioned than searching over Σ directly, and the implied
+Σ is positive-semidefinite by construction. This is the same
+parameterization Bates et al. (2015, *JSS* 67(1)) describe for
+`lme4`; `MixedModels.jl` and the engine behind `mixeff` inherit
+it.
+
+For a 2×2 random-effects matrix, Λ has three free entries — the
+three rows you see below. `theta_value` is what the optimizer
+worked with; `lambda_value` places that same number back into the
+matrix. They match here because the mapping is the identity for
+this structure; a mismatch would point to a parameterization bug
+rather than a modelling fact.
+
+```{r full-parameterization}
+full_fit <- lmm(
+  score ~ time + (1 + time | subject),
+  study,
+  control = mm_control(verbose = -1)
+)
+parameterization(full_fit)$table[, c("theta_name", "theta_value", "lambda_value")]
+```
+
+A practical use of this table is boundary-fit detection: when a θ
+entry is pinned at zero, the corresponding variance or covariance
+has reached the edge of its parameter space, and the random-effects
+covariance is reduced-rank. The headliner vignette walks through
+that case end-to-end.
+
+## What do split blocks and `||` mean?
+
+The formula `(1 | subject) + (0 + time | subject)` uses two separate blocks for
+the same grouping factor. That fixes the intercept-slope covariance to zero.
+
+```{r split-blocks}
+split_blocks <- compile_model(
+  score ~ time + (1 | subject) + (0 + time | subject),
+  study
+)
+explain_model(split_blocks)
+```
+
+`(1 + time || subject)` is a shorthand for the same split-block model.
+
+```{r double-bar}
+double_bar <- compile_model(score ~ time + (1 + time || subject), study)
+explain_model(double_bar)
+```
+
+```{r split-checks, include = FALSE}
+split_text <- explain_model(split_blocks)$text
+double_text <- explain_model(double_bar)$text
+stopifnot(grepl("separate random-effect blocks fix the covariance", split_text, fixed = TRUE))
+stopifnot(grepl("double-bar syntax fixes the covariance", double_text, fixed = TRUE))
+stopifnot(grepl("covariance_assumption", split_text, fixed = TRUE))
+stopifnot(grepl("covariance_assumption", double_text, fixed = TRUE))
+```
+
+## What are the three kinds of help?
+
+The audit surface separates three situations that are often mixed together in
+ordinary model output.
+
+First, a structural impossibility: a requested random slope cannot be estimated
+if that variable does not vary within the group. Here `dose` is constant within
+each subject.
+
+```{r structural-impossibility}
+impossible <- compile_model(score ~ dose + (1 + dose | subject), between_study)
+explain_model(impossible)
+```
+
+Second, low information budget: a requested full covariance can be estimable
+in principle while still having little grouping-level support. The package
+reports the parameter count and observed levels.
+
+```{r low-information}
+low_info <- compile_model(score ~ time + (1 + time | subject), low_study)
+diagnostics(low_info)$table[, c("code", "severity", "message")]
+```
+
+Third, unmodeled-but-possible: a fixed effect varies within group, but the
+random-effects formula does not include the corresponding slope. This is the
+quiet design note you saw for `(1 | subject)`.
+
+```{r unmodeled-possible}
+diagnostics(intercept_only)$table[, c("code", "severity", "message")]
+```
+
+```{r help-checks, include = FALSE}
+stopifnot("structural_refusal" %in% diagnostics(impossible)$table$code)
+stopifnot("covariance_too_rich" %in% diagnostics(low_info)$table$code)
+stopifnot("scope_note" %in% diagnostics(intercept_only)$table$code)
+```
+
+## How do you inspect nearby formulas?
+
+`random_options()` is a map of nearby random-effect spellings for one grouping
+factor. It marks the current spelling and reports parameter costs and support
+facts. It does not rank the rows.
+
+```{r random-options-map}
+random_options(intercept_only, group = subject, slope = time)
+```
+
+The same information is available as a data frame if you want to build a
+custom report.
+
+```{r random-options-table}
+opts <- random_options(intercept_only, group = subject, slope = time)
+opts$options[, c("formula", "theta_parameters", "design_status", "current")]
+```
+
+## Why is there no recommendation row?
+
+`mixeff` treats formula explanations as an audit problem, not a model-selection
+problem. The package reports the current model, nearby spellings, assumptions,
+and data-support facts. Choosing among scientifically different random-effects
+structures remains part of the analysis design.
+
+`compare_covariance()` gives another view of the same principle: full,
+diagonal, and scalar covariance families are displayed side by side, without a
+preferred row.
+
+```{r compare-covariance}
+compare_covariance(full)
+```
+
+```{r no-recommendation-check, include = FALSE}
+opts <- random_options(intercept_only, group = subject, slope = time)
+cmp <- compare_covariance(full)
+stopifnot(!"recommended" %in% tolower(names(opts$options)))
+stopifnot(!"recommended" %in% tolower(names(cmp$table)))
+```
+
+## Where do fitted-model changes appear?
+
+After fitting, `changes()` records the journey from the formula you
+wrote to the model the engine actually solved. Each row carries the
+stage at which something happened, the term it affected, the status
+of the change, and three side-by-side renderings: what was
+*requested*, what was *effective* (after design parsing and
+identifiability checks), and what was *fitted* (after the optimizer
+landed). A reduced-rank covariance estimate appears here as a
+labelled fact, not an instruction to rewrite the formula.
+
+The full row carries a lot of text. We show it in two passes so
+neither pass wraps awkwardly in the rendered vignette. The first
+pass names the stage of each change and its status:
+
+```{r fitted-changes-status}
+knitr::kable(
+  changes(full_fit)$table[, c("stage", "term_id", "status", "detail")]
+)
+```
+
+The second pass shows the requested → effective → fitted arc
+itself, where the three columns are the substance of the report:
+
+```{r fitted-changes-arc}
+knitr::kable(
+  changes(full_fit)$table[, c("stage", "requested", "effective", "fitted")]
+)
+```
+
+For a first end-to-end fit workflow, read
+`vignette("lmm-basics", package = "mixeff")`.

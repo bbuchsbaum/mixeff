@@ -1,0 +1,39 @@
+# mote local coordination state — not committed
+.mote/
+
+# Local agent / tooling state — not committed
+.omc/
+.claude/
+.albersdown.bak/
+
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rcheck/
+*.tar.gz
+
+# Rust build artifacts
+src/rust/target/
+src/*.o
+src/*.so
+src/*.dll
+src/symbols.rds
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+src/rust/vendor
+src/Makevars
+src/Makevars.win
+
+# Outputs of tools/vendor-rust.R — regenerated, not committed.
+# These ship inside the package tarball but are not part of the source repo.
+src/rust/upstream/
+src/vendor/
+src/.cargo/
+src/rust/vendor-config.toml
+src/rust/vendor.tar.xz

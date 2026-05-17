@@ -1,0 +1,290 @@
+---
+title: Inference Where lme4 Says No
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Inference Where lme4 Says No}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+Some mixed-model fits are exactly the cases where ordinary
+asymptotic p-values (Wald, Satterthwaite, Kenward-Roger) are least
+trustworthy: boundary fits, reduced-rank covariance estimates, and
+designs whose degrees-of-freedom approximations stop being defined.
+
+The mathematics behind these limits is well established. Self and
+Liang (1987) showed that the likelihood-ratio statistic does not
+follow its standard χ² distribution when a parameter lies on the
+boundary of its parameter space; Stram and Lee (1994) specialised
+the result to variance components in linear mixed models. Kenward
+and Roger (1997), who introduced the most widely used small-sample
+adjustment for fixed-effect tests, derived it from a Taylor
+expansion of the variance estimator that requires an *interior*
+solution for the variance parameters. At the boundary the
+adjustment is undefined by construction. `lme4` typically returns
+the Wald number alongside a one-line `boundary (singular) fit`
+warning, leaving the analyst to decide what to make of the
+situation.
+
+`mixeff` does two things differently. First, it labels the
+asymptotic row with a *closed-enum* reliability reason that names
+why the number is suspect on this fit — for example,
+`*_unavailable_at_boundary` when a variance-parameter derivative is
+not defined. Second, when bootstrap is the defensible route, it
+routes the analyst through a parametric bootstrap as a labelled
+first-class peer to the asymptotic methods. The parametric
+bootstrap has a long pedigree in this setting — Halekoh and
+Højsgaard (2014) implemented it in `pbkrtest` for exactly the
+small-sample and boundary cases where Kenward-Roger needs help. It
+is not a fallback trick; it is the path the inference contract
+documents for this situation.
+
+## What fit are we worried about?
+
+This small repeated-measures example has subject-specific intercepts and slopes
+that are nearly collinear. That is enough to create a reduced-rank random-effect
+covariance.
+
+```{r singular-data, include = FALSE}
+set.seed(3)
+n_subj <- 18L
+days <- 0:9
+b0 <- rnorm(n_subj, sd = 30)
+b1 <- 0.5 * b0 / 30 * 10 + rnorm(n_subj, sd = 0.5)
+
+sleep_like <- do.call(rbind, lapply(seq_len(n_subj), function(i) {
+  data.frame(
+    subj = factor(i),
+    days = days,
+    rt = 250 + b0[i] + (10 + b1[i]) * days +
+      rnorm(length(days), sd = 20)
+  )
+}))
+```
+
+```{r fit-singular}
+fit <- lmm(
+  rt ~ days + (1 + days | subj),
+  sleep_like,
+  control = mm_control(verbose = -1)
+)
+
+fit_status(fit)
+is_singular(fit)
+```
+
+```{r singular-checks, include = FALSE}
+stopifnot(inherits(fit, "mm_lmm"))
+stopifnot(isTRUE(is_singular(fit)))
+stopifnot(identical(fit_status(fit), "converged_reduced_rank"))
+```
+
+The fit is usable, but the covariance state matters for inference. The audit
+verbs keep that state attached to the object.
+
+```{r covariance-diagnostics}
+diagnostics(fit)$table[, c("code", "severity", "stage", "message")]
+```
+
+## Which inference routes are available?
+
+Ask before you test. `inference_options()` is an audit map, not a
+recommender. Each row enumerates one inference method that the
+engine knows about, along with a status, a warrant, and a rough
+cost.
+
+Three columns deserve a short key, because the values are closed
+enums and their meanings are not self-evident.
+
+`expected_status` takes one of three values:
+
+- **`available`** — the method runs on this fit and produces a
+  meaningful number.
+- **`not_assessed`** — the inference contract refuses to run the
+  method on this fit, for a structural reason named in the next
+  column. This is the contract drawing a line, not failing
+  silently.
+- **`not_yet_wired`** — the method is part of the inference
+  contract upstream but has not yet been exposed through the R
+  surface. A roadmap item, not a refusal.
+
+`expected_reliability_reason` is the closed-enum warrant — the
+*why* behind the status. The values that appear on this fit:
+
+- **`*_unavailable_at_boundary`** (here, the `satterthwaite_` and
+  `kenward_roger_` variants) — the asymptotic method relies on a
+  derivative of the variance estimator that, as the previous
+  section explained, is undefined on a boundary fit.
+- **`bootstrap_monte_carlo_replicates`** — the method's reliability
+  is governed by the replicate count and the Monte-Carlo standard
+  error rather than asymptotic theory. You tune it with `nsim`.
+- **`inference_unavailable_by_policy`** — the engine has a refusal
+  policy specific to this combination of method and fit state; the
+  policy itself is the warrant.
+- **`not_available`** — despite the name, this value means that
+  *no additional reason applies* on this row. The Wald row is the
+  case in point: the method runs, and its substantive reliability
+  warrant is recorded in the main `inference_table()` (shown
+  below), not duplicated here.
+
+`approx_cost` is a rough timing estimate. `immediate` is sub-
+second; everything else scales with `nsim` and the cost of one
+refit.
+
+```{r route-map}
+routes <- inference_options(fit, "days", nsim = 200)
+routes$table[, c("method", "expected_status",
+                 "expected_reliability_reason", "approx_cost", "current")]
+```
+
+```{r route-checks, include = FALSE}
+stopifnot("bootstrap" %in% routes$table$method)
+satt <- routes$table[routes$table$method == "satterthwaite", ]
+stopifnot(identical(satt$expected_status, "not_assessed"))
+```
+
+Read the table top to bottom. **Wald** is `available`; its
+reliability warrant lives in `inference_table()` (next chunk).
+**Satterthwaite** and **Kenward-Roger** refuse, both at the
+boundary, for the structural reason discussed above.
+**Bootstrap** is `available` at a cost of roughly four seconds for
+`nsim = 200` — this is the route the contract documents for
+boundary fits. **Bootstrap-LRT** is refused on this fit shape by
+the engine's current policy. **Cluster bootstrap** appears in the
+upstream contract but the R bridge is not yet in place; the closing
+section of this vignette comes back to it as a typed refusal.
+
+```{r wald-status}
+inference_table(fit)$table[, c("term", "method", "status",
+                               "reliability", "reliability_reason")]
+```
+
+## How do I test the term anyway?
+
+For the fixed-effect term, request the bootstrap route explicitly. Rust builds
+the fixed-effect-null target, simulates from that target, refits each replicate,
+and returns a labelled term row.
+
+```{r bootstrap-term}
+term_boot <- test_effect(
+  fit,
+  "days",
+  method = "bootstrap",
+  bootstrap = bootstrap_control(nsim = 50, seed = 1)
+)
+
+term_boot$table[, c("term", "statistic_name", "p_value",
+                    "method", "status", "reliability_reason")]
+```
+
+```{r bootstrap-term-checks, include = FALSE}
+stopifnot(identical(term_boot$table$status, "available"))
+stopifnot(identical(term_boot$table$method, "bootstrap"))
+stopifnot(is.finite(term_boot$table$p_value))
+```
+
+The p-value is not reconstructed in R. The row carries the Rust run payload in
+`details`, including replicate accounting.
+
+```{r bootstrap-payload}
+run <- term_boot$table$details[[1]]$bootstrap
+data.frame(
+  requested_replicates = run$requested_replicates,
+  successful_replicates = run$successful_replicates,
+  boundary_rate = round(run$boundary_rate, 3),
+  mcse = round(run$mcse, 4)
+)
+```
+
+## What about confidence intervals?
+
+For fixed-effect confidence intervals, use `confint(method = "bootstrap")`.
+This is a different bootstrap target: a full-model distribution used for
+intervals and diagnostics, not for p-values.
+
+```{r bootstrap-ci}
+ci <- confint(
+  fit,
+  parm = "days",
+  method = "bootstrap",
+  bootstrap = bootstrap_control(nsim = 50, seed = 2)
+)
+
+ci
+```
+
+```{r bootstrap-ci-checks, include = FALSE}
+stopifnot(all(is.finite(ci)))
+stopifnot(identical(attr(ci, "method"), "bootstrap_full_model_distribution"))
+payload <- attr(ci, "bootstrap")[[1]]
+stopifnot(identical(payload$metadata$target$kind, "full_model_distribution"))
+stopifnot(length(payload$replicate_statistics) >= payload$metadata$successful_replicates,
+          length(payload$replicate_statistics) <= payload$metadata$completed_replicates)
+```
+
+The attached payload says what was simulated. A full-model bootstrap interval
+does not certify a hypothesis-test p-value, and the payload records that caveat.
+
+```{r ci-payload}
+payload$metadata$target$kind
+payload$metadata$notes
+```
+
+## Where does cluster bootstrap stand?
+
+Cluster resampling is available upstream as an estimator-distribution target:
+it resamples grouping levels and summarizes the resulting estimator
+distribution. In the current schema it does not certify fixed-effect p-values,
+so a term test refuses cleanly instead of inventing a null distribution.
+
+```{r cluster-refusal}
+cluster_row <- test_effect(
+  fit,
+  "days",
+  method = "cluster_bootstrap",
+  group = "subj"
+)
+
+cluster_row$table[, c("term", "method", "status", "p_value", "reason_code")]
+```
+
+```{r cluster-checks, include = FALSE}
+stopifnot(identical(cluster_row$table$status, "not_assessed"))
+stopifnot(is.na(cluster_row$table$p_value))
+stopifnot(identical(cluster_row$table$reason_code,
+                    "bootstrap_cluster_resample_p_value_unavailable"))
+```
+
+That refusal is part of the same contract as the available bootstrap rows:
+available numbers are labelled, and unavailable numbers carry stable reasons.
+
+## References
+
+- Halekoh, U., and Højsgaard, S. (2014). A Kenward-Roger approximation
+  and parametric bootstrap methods for tests in linear mixed models —
+  the `R` package `pbkrtest`. *Journal of Statistical Software*,
+  59(9), 1–32. <https://doi.org/10.18637/jss.v059.i09>
+- Kenward, M. G., and Roger, J. H. (1997). Small sample inference for
+  fixed effects from restricted maximum likelihood. *Biometrics*,
+  53(3), 983–997. <https://doi.org/10.2307/2533558>
+- Self, S. G., and Liang, K.-Y. (1987). Asymptotic properties of
+  maximum likelihood estimators and likelihood ratio tests under
+  nonstandard conditions. *Journal of the American Statistical
+  Association*, 82(398), 605–610.
+  <https://doi.org/10.1080/01621459.1987.10478472>
+- Stram, D. O., and Lee, J. W. (1994). Variance components testing in
+  the longitudinal mixed effects model. *Biometrics*, 50(4),
+  1171–1177. <https://doi.org/10.2307/2533455>

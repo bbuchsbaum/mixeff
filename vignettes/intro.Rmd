@@ -1,0 +1,173 @@
+---
+title: Introduction to mixeff
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to mixeff}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+If you have ever fit a mixed model in R, you have almost certainly
+written `lme4::lmer()`. `mixeff::lmm()` accepts the same formulas
+and answers to the same extractors. An `lmer` script becomes an
+`lmm` script with two edits.
+
+What `mixeff` adds is mostly *around* the fit. It exposes the
+random-effects design before optimization, keeps the method behind
+every p-value visible in the output, and produces a fitted object
+that survives `saveRDS()` without losing its audit trail. The goal
+is not to replace your statistical judgment; it is to make the
+fitted object carry enough information that you can inspect, report,
+save, reload, and compare models without guessing which details were
+used.
+
+This vignette is a guided tour at a deliberate pace. The shorter
+elevator pitch is in `vignette("mixeff", package = "mixeff")`.
+
+## What problem does it solve?
+
+In ordinary mixed-model work, three questions come up again and again:
+
+- What does this random-effects formula actually mean?
+- Are the p-values or tests available, and by what method?
+- Can I reconstruct the model state later, after the fit has been saved?
+
+`mixeff` makes those questions part of the fitted object.
+
+## One small model
+
+```{r clinic-data, include = FALSE}
+set.seed(42)
+n_clinic <- 12L
+n_per_clinic <- 6L
+clinic <- factor(rep(seq_len(n_clinic), each = n_per_clinic))
+week <- rep(0:(n_per_clinic - 1L), n_clinic)
+treatment <- factor(
+  rep(rep(c("usual", "coached"), each = n_per_clinic), length.out = length(week)),
+  levels = c("usual", "coached")
+)
+clinic_shift <- rnorm(n_clinic, sd = 0.45)
+score <- 7.2 - 0.28 * week - 0.55 * (treatment == "coached") +
+  clinic_shift[as.integer(clinic)] + rnorm(length(week), sd = 0.35)
+clinic_visits <- data.frame(score, week, treatment, clinic)
+```
+
+```{r fit-model}
+fit <- lmm(
+  score ~ week + treatment + (1 | clinic),
+  clinic_visits,
+  control = mm_control(verbose = -1)
+)
+```
+
+The same object gives the fitted coefficients and the inferential status of
+those coefficients.
+
+```{r coefficient-summary}
+coef_table <- summary(fit, method = "auto")$coefficients
+knitr::kable(coef_table, digits = 4)
+```
+
+```{r intro-checks, include = FALSE}
+p_col <- grep("^Pr\\(|^p\\.value$", names(coef_table), value = TRUE)
+stopifnot(length(p_col) == 1L)
+stopifnot(any(is.finite(coef_table[[p_col]])))
+```
+
+## Reading the formula before fitting
+
+If you are unsure what a random-effects expression actually models,
+the answer is `compile_model()` followed by `explain_model()`.
+`compile_model()` builds the pre-fit specification — the same
+specification the optimizer will receive — and `explain_model()`
+translates each random term into a named form, a plain-language
+scope, and a parameter count.
+
+```{r explain-model}
+spec <- compile_model(score ~ week + treatment + (1 | clinic), clinic_visits)
+explain_model(spec)
+```
+
+`vignette("demystifying-formulas", package = "mixeff")` works
+through the random-effects spellings in detail: scalar versus
+diagonal versus full covariance, `||` shorthand, nested grouping,
+and the difference between "this formula cannot be estimated" and
+"this formula can be estimated but the data are sparse".
+
+A lower-level utility — `mm_parse_formula()` — exists for checking
+that a formula string parses at all and reducing two equivalent
+spellings to the same canonical string. It is the primitive that
+equivalence-class testing uses, not a reader-facing explanation, so
+it is not what you want when the question is "what does this
+formula mean?".
+
+## Reporting tables
+
+Use `reporting_table()` when you want a data-frame result instead of printed
+console output. The default view is compact; use `view = "audit"` when you want
+the full provenance columns.
+
+```{r reporting-tables}
+reporting_table(fit, "overview")
+reporting_table(fit, "fixed_effects")
+reporting_table(fit, "fixed_effects", view = "audit")[, c("term", "source", "status")]
+```
+
+## Saving and reloading
+
+The fitted object stores the values needed by the main extractors, so an RDS
+round trip preserves the pieces you usually report.
+
+```{r save-reload}
+path <- tempfile(fileext = ".rds")
+saveRDS(fit, path)
+restored <- readRDS(path)
+
+fixef(restored)
+reporting_table(restored, "fixed_effects")
+```
+
+```{r save-checks, include = FALSE}
+stopifnot(identical(fixef(restored), fixef(fit)))
+stopifnot(identical(reporting_table(restored, "fixed_effects"),
+                    reporting_table(fit, "fixed_effects")))
+```
+
+## Lower-level tools
+
+Most users should start with `lmm()`, `summary()`, `contrast()`,
+`test_effect()`, `compare()`, and `reporting_table()`. The lower-level
+functions are there when you need them:
+
+- `mm_parse_formula()` checks formula syntax.
+- `compile_model()` builds a pre-fit model specification.
+- `diagnostics()` and `changes()` expose model-state checks.
+- `mm_json_known_schemas()` lists the structured artifact schemas understood by
+  this version of the package.
+
+The computational backend is intentionally not the opening story for most R
+users. It matters because it lets `mixeff` keep a structured audit trail, but
+the user-facing reason to use the package is simpler: fit the model, get the
+numbers, and keep the status of those numbers attached to the object.
+
+## What's next?
+
+Use `vignette("mixeff", package = "mixeff")` for the fastest end-to-end path.
+Use `vignette("lmm-basics", package = "mixeff")` for a slower fitted-model
+walkthrough. Use `vignette("inference", package = "mixeff")` for p-values,
+contrasts, term tests, and model comparisons. Use
+`vignette("demystifying-formulas", package = "mixeff")` for random-effects
+syntax.

@@ -21,7 +21,7 @@ refit.mm_lmm <- function(object, newresp, ...) {
       anyNA(newresp)) {
     mm_abort(
       message = "`newresp` must be a numeric vector with one value per observation and no missing values.",
-      class = "mm_fit_error",
+      class = "mm_arg_error",
       input = newresp
     )
   }
@@ -58,7 +58,7 @@ simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, re.form = NULL, ...) 
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 1) {
     mm_abort(
       message = "`nsim` must be a positive integer.",
-      class = "mm_fit_error",
+      class = "mm_arg_error",
       input = nsim
     )
   }

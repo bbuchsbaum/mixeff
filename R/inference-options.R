@@ -35,7 +35,7 @@ inference_options.mm_lmm <- function(fit, term = NULL, nsim = 1000L, ...) {
         message = sprintf(
           "Unknown fixed-effect term: %s. Known terms: %s",
           term, paste(fixed_terms, collapse = ", ")),
-        class = "mm_inference_unavailable",
+        class = "mm_arg_error",
         input = term
       )
     }
@@ -181,7 +181,7 @@ mm_inference_options_row_bootstrap_lrt <- function(is_reml, nsim) {
     expected_reliability_reason = if (is_reml)
       "inference_unavailable_by_policy"
     else
-      "bootstrap_monte_carlo_replicates",
+      mm_inference_options_bootstrap_lrt_reliability_reason(nsim),
     r_verb = sprintf(
       "test_effect(fit, term, method = 'bootstrap_lrt', bootstrap = bootstrap_control(nsim = %d))",
       nsim),
@@ -191,6 +191,14 @@ mm_inference_options_row_bootstrap_lrt <- function(is_reml, nsim) {
     else
       "model-comparison LRT; refits reduced and alternative per replicate"
   )
+}
+
+mm_inference_options_bootstrap_lrt_reliability_reason <- function(nsim) {
+  if (is.numeric(nsim) && length(nsim) == 1L && !is.na(nsim) && nsim >= 999L) {
+    "bootstrap_monte_carlo_replicates"
+  } else {
+    "bootstrap_insufficient_replicates"
+  }
 }
 
 mm_inference_options_row_cluster_bootstrap <- function(n_groups_max, nsim) {

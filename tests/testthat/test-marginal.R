@@ -98,7 +98,7 @@ test_that("mm_comparisons() returns pairwise differences within by groups", {
 
 test_that("unsupported marginal quantity requests are typed", {
   fit <- mk_marginal_fit()
-  expect_error(mm_grid(fit, ~ missing), class = "mm_inference_unavailable")
+  expect_error(mm_grid(fit, ~ missing), class = "mm_arg_error")
   expect_error(
     mm_comparisons(fit, ~ trt, comparison = "ratio"),
     class = "mm_inference_unavailable"

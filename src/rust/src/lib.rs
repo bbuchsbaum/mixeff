@@ -204,7 +204,7 @@ fn mm_formula_manifest() -> List {
         fixed_effect_inference_table = TRUE,
         satterthwaite = TRUE,
         kenward_roger_explicit = TRUE,
-        bootstrap_fixed_effect_payload = FALSE,
+        bootstrap_fixed_effect_payload = TRUE,
         marginal_quantity_table = TRUE,
         marginal_quantities = TRUE,
     );

@@ -22,7 +22,7 @@ revive.mm_fit <- function(fit, ...) {
   if (!is.list(fit)) {
     mm_abort(
       message = "`fit` must be a fitted mixeff object.",
-      class = "mm_schema_error",
+      class = "mm_arg_error",
       input = fit
     )
   }
@@ -33,7 +33,7 @@ revive.mm_fit <- function(fit, ...) {
   if (!is.list(fit$artifact)) {
     mm_abort(
       message = "`fit` does not carry a parsed compiler artifact.",
-      class = "mm_schema_error",
+      class = "mm_arg_error",
       input = fit
     )
   }
@@ -55,7 +55,7 @@ revive.mm_fit <- function(fit, ...) {
 revive.default <- function(fit, ...) {
   mm_abort(
     message = "`revive()` expects a fitted mixeff object.",
-    class = "mm_schema_error",
+    class = "mm_arg_error",
     input = fit
   )
 }
@@ -115,7 +115,7 @@ getME.mm_lmm <- function(object, name, ...) {
   if (missing(name) || !is.character(name) || !length(name)) {
     mm_abort(
       message = "`name` must be a non-empty character vector.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = name
     )
   }
@@ -137,7 +137,7 @@ getME.mm_lmm <- function(object, name, ...) {
       cnms = .mm_lazy(object, "cnms", mm_random_cnms),
       mm_abort(
         message = sprintf("`getME()` component `%s` is not available.", one),
-        class = "mm_inference_unavailable",
+        class = "mm_arg_error",
         input = one
       )
     )
@@ -150,7 +150,7 @@ getME.mm_lmm <- function(object, name, ...) {
 getME.default <- function(object, name, ...) {
   mm_abort(
     message = "`getME()` expects a fitted mixeff LMM.",
-    class = "mm_schema_error",
+    class = "mm_arg_error",
     input = object
   )
 }
@@ -364,7 +364,7 @@ random_blocks.mm_compiled <- function(fit, ...) {
 random_blocks.default <- function(fit, ...) {
   mm_abort(
     message = "`random_blocks()` expects a compiled or fitted mixeff object.",
-    class = "mm_schema_error",
+    class = "mm_arg_error",
     input = fit
   )
 }
@@ -559,7 +559,7 @@ is_singular.mm_lmm <- function(x, tol = 1e-4, ...) {
 is_singular.default <- function(x, tol = 1e-4, ...) {
   mm_abort(
     message = "`is_singular()` expects a fitted mixeff LMM.",
-    class = "mm_schema_error",
+    class = "mm_arg_error",
     input = x
   )
 }
@@ -587,7 +587,7 @@ mm_object_schema <- function(artifact) {
   if (!inherits(fit, "mm_fit")) {
     mm_abort(
       message = "Lazy extractors require a fitted mixeff object.",
-      class = "mm_schema_error",
+      class = "mm_arg_error",
       input = fit
     )
   }

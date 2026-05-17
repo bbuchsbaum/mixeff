@@ -25,11 +25,12 @@
 \arguments{
 \item{object}{A fitted \code{mm_lmm} object.}
 
-\item{newdata}{Optional new data. Not available in Phase 2.}
+\item{newdata}{Optional new data. Not supported: predictions are
+returned for the fitted data only.}
 
 \item{re.form}{Random-effects conditioning, following lme4's basic
 convention: \code{NULL} for conditional predictions and \code{NA} for population
-predictions. New data requires a future handle-backed prediction path.}
+predictions. Other values are not supported.}
 
 \item{allow.new.levels}{Reserved for future new-data prediction support.}
 

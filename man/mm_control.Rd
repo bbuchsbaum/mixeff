@@ -14,7 +14,8 @@ model explanation.}
 A list of class \code{mm_control}.
 }
 \description{
-\code{mm_control()} collects small R-side controls for \code{\link[=lmm]{lmm()}}. Phase 1.E uses
-\code{verbose} only: \code{verbose = -1} suppresses the pre-fit \code{\link[=explain_model]{explain_model()}}
-printout; non-negative values print it once before optimization.
+\code{mm_control()} collects small R-side controls for \code{\link[=lmm]{lmm()}}. It currently
+exposes \code{verbose} only: \code{verbose = -1} suppresses the pre-fit
+\code{\link[=explain_model]{explain_model()}} printout; non-negative values print it once before
+optimization.
 }

@@ -10,13 +10,21 @@ generically (\code{tryCatch(..., mm_condition = handler)}), or by a more
 specific subclass for finer-grained handling.
 }
 \details{
-Phase 0 ships \code{mm_formula_error}, \code{mm_schema_error}, and the
-\code{mm_bridge_error} fallback for untagged Rust errors. Phase 1.A adds
-\code{mm_data_error} (raised by \code{compile_model()} on data shape / type
-problems). Phase 1.E adds \code{mm_fit_error} for fit construction /
-optimization failures and \code{mm_inference_unavailable} for extractor or
-prediction requests whose uncertainty contract is not implemented yet.
-Subsequent phases add \code{mm_not_identifiable}, \code{mm_design_refusal}, and
-\code{mm_fit_not_optimized} (see PRD §8.1).
+The package ships \code{mm_formula_error}, \code{mm_schema_error}, and the
+\code{mm_bridge_error} fallback for untagged Rust errors; \code{mm_data_error}
+(raised by \code{compile_model()} on data shape / type problems);
+\code{mm_fit_error} for fit construction / optimization failures; and
+\code{mm_inference_unavailable} for inference, extractor, or prediction
+requests the engine cannot certify on this fit. Further classes are
+\code{mm_not_identifiable}, \code{mm_design_refusal}, and \code{mm_fit_not_optimized}
+(see PRD §8.1).
+
+\code{mm_arg_error} is distinct from all of the above: it signals that the
+\emph{caller passed an invalid or malformed argument} (wrong type, value out
+of range, unknown option name, missing required field), independent of
+any model, engine, schema, or data semantics. Catching
+\code{mm_inference_unavailable} must mean "the engine refuses to certify
+this", not "you typed it wrong" — so plain argument validation raises
+\code{mm_arg_error}, never the domain-refusal classes.
 }
 \keyword{internal}

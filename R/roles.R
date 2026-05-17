@@ -28,7 +28,7 @@ roles <- function(...) {
   if (is.null(names(dots)) || any(!nzchar(names(dots)))) {
     mm_abort(
       message = "`roles()` declarations must be named character strings.",
-      class = "mm_schema_error",
+      class = "mm_arg_error",
       input = dots
     )
   }
@@ -37,7 +37,7 @@ roles <- function(...) {
     if (!is.character(role) || length(role) != 1L || is.na(role) || !nzchar(role)) {
       mm_abort(
         message = sprintf("Role for `%s` must be a single non-empty string.", nm),
-        class = "mm_schema_error",
+        class = "mm_arg_error",
         input = role
       )
     }

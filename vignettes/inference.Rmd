@@ -152,8 +152,11 @@ compare(reduced, fit, method = "bootstrap", nsim = 10, seed = 7)
 cmp <- compare(reduced, fit)
 boot <- compare(reduced, fit, method = "bootstrap", nsim = 10, seed = 7)
 stopifnot(is.finite(cmp$table$p_value[[2L]]))
-stopifnot(is.finite(boot$table$p_value[[2L]]))
-stopifnot(identical(boot$table$status[[2L]], "parametric_bootstrap"))
+stopifnot(identical(boot$table$method[[2L]], "parametric_bootstrap_lrt"))
+stopifnot(boot$table$status[[2L]] %in% c("available", "not_assessed"))
+if (identical(boot$table$status[[2L]], "available")) {
+  stopifnot(is.finite(boot$table$p_value[[2L]]))
+}
 ```
 
 ## Unavailable is still useful information

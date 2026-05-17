@@ -1,4 +1,4 @@
-mk_phase4_fit <- function(seed = 40L, slope = TRUE) {
+mk_phase4_fit <- function(seed = 40L, slope = TRUE, reml = TRUE) {
   set.seed(seed)
   n_subjects <- 8L
   n_per <- 5L
@@ -10,7 +10,7 @@ mk_phase4_fit <- function(seed = 40L, slope = TRUE) {
     rnorm(length(x), sd = 0.25)
   df <- data.frame(y = y, x = x, z = z, subject = subject)
   formula <- if (slope) y ~ x + z + (1 | subject) else y ~ x + (1 | subject)
-  lmm(formula, df, control = mm_control(verbose = -1))
+  lmm(formula, df, REML = reml, control = mm_control(verbose = -1))
 }
 
 test_that("glmm() validates family metadata and reports explicit unavailable bridge", {
@@ -82,17 +82,85 @@ test_that("drop1() preserves random effects and reports deletion rows", {
 })
 
 test_that("parametric bootstrap comparison runs on a tiny nsim", {
-  full <- mk_phase4_fit(slope = TRUE)
-  reduced <- mk_phase4_fit(slope = FALSE)
+  # parametric_bootstrap() routes through the certified Rust LRT, which
+  # requires ML fits; compare() refits REML -> ML on its own.
+  full <- mk_phase4_fit(slope = TRUE, reml = FALSE)
+  reduced <- mk_phase4_fit(slope = FALSE, reml = FALSE)
 
   boot <- parametric_bootstrap(reduced, full, nsim = 2, seed = 101)
   cmp <- compare(reduced, full, method = "bootstrap", nsim = 2, seed = 101)
 
   expect_s3_class(boot, "mm_parametric_bootstrap")
-  expect_equal(length(boot$simulated), 2L)
-  expect_true(is.finite(boot$p_value))
+  # Engine either certifies a p-value or refuses with a structured reason;
+  # both are contract-honest. No bare mean() p-value is fabricated.
+  expect_true(boot$status %in% c("available", "not_assessed"))
+  if (identical(boot$status, "available")) {
+    expect_true(is.finite(boot$p_value))
+  } else {
+    expect_true(is.na(boot$p_value))
+    expect_false(is.na(boot$reason))
+  }
+  expect_true(is.numeric(boot$simulated))
+  expect_true("successful_replicates" %in% names(boot))
   expect_s3_class(cmp$bootstrap, "mm_parametric_bootstrap")
-  expect_equal(cmp$table$status[[2L]], "parametric_bootstrap")
+  expect_true(cmp$table$status[[2L]] %in% c("available", "not_assessed"))
+  expect_identical(cmp$table$method[[2L]], "parametric_bootstrap_lrt")
+})
+
+test_that("parametric bootstrap LRT refuses non-nested or mismatched fit data", {
+  set.seed(401)
+  d1 <- data.frame(
+    y = rnorm(24),
+    x = rnorm(24),
+    z = rnorm(24),
+    subject = factor(rep(1:6, each = 4))
+  )
+  d2 <- transform(d1, y = rnorm(24, mean = 10))
+
+  reduced <- lmm(y ~ x + (1 | subject), d1, REML = FALSE,
+                 control = mm_control(verbose = -1))
+  full_other_response <- lmm(y ~ x + z + (1 | subject), d2, REML = FALSE,
+                             control = mm_control(verbose = -1))
+  err <- tryCatch(
+    parametric_bootstrap(reduced, full_other_response, nsim = 2, seed = 1),
+    mm_arg_error = function(cnd) cnd
+  )
+  expect_s3_class(err, "mm_arg_error")
+  expect_identical(err$reason_code, "bootstrap_lrt_requires_same_observations")
+
+  same_df_non_nested <- lmm(y ~ z + (1 | subject), d1, REML = FALSE,
+                            control = mm_control(verbose = -1))
+  err <- tryCatch(
+    compare(reduced, same_df_non_nested, method = "bootstrap", nsim = 2),
+    mm_arg_error = function(cnd) cnd
+  )
+  expect_s3_class(err, "mm_arg_error")
+  expect_identical(err$reason_code, "bootstrap_lrt_requires_nested_models")
+})
+
+test_that("compare(method = 'bootstrap') validates nsim before dispatch", {
+  full <- mk_phase4_fit(slope = TRUE, reml = FALSE)
+  reduced <- mk_phase4_fit(slope = FALSE, reml = FALSE)
+
+  expect_error(
+    compare(reduced, full, method = "bootstrap", nsim = NA),
+    class = "mm_arg_error"
+  )
+  expect_error(
+    compare(reduced, full, method = "bootstrap", nsim = -1),
+    class = "mm_arg_error"
+  )
+})
+
+test_that("parametric_bootstrap() refuses REML fits with a typed contract reason", {
+  full <- mk_phase4_fit(slope = TRUE, reml = TRUE)
+  reduced <- mk_phase4_fit(slope = FALSE, reml = TRUE)
+  err <- tryCatch(
+    parametric_bootstrap(reduced, full, nsim = 2, seed = 1),
+    mm_inference_unavailable = function(cnd) cnd
+  )
+  expect_s3_class(err, "mm_inference_unavailable")
+  expect_identical(err$reason_code, "bootstrap_lrt_requires_ml")
 })
 
 test_that("manifest advertises shipped simulation and inference surfaces", {

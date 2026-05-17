@@ -122,8 +122,7 @@ not explicitly gridded.}
 \item{level}{Confidence level for intervals computed from contrast standard
 errors.}
 
-\item{target}{Prediction target. Phase 3.x implements only
-\code{"population"}.}
+\item{target}{Prediction target. Only \code{"population"} is implemented.}
 
 \item{scale}{Prediction scale. Gaussian LMMs have identical \code{"link"} and
 \code{"response"} scales.}
@@ -132,8 +131,7 @@ errors.}
 \code{"equal"} weights reference-grid cells equally; \code{"proportional"} weights
 cells by observed fixed-factor frequencies.}
 
-\item{comparison}{Comparison scale. Phase 3.x implements only
-\code{"difference"}.}
+\item{comparison}{Comparison scale. Only \code{"difference"} is implemented.}
 }
 \value{
 \code{mm_grid()} returns an \code{mm_grid} object. The other helpers return an

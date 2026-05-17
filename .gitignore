@@ -37,3 +37,9 @@ src/vendor/
 src/.cargo/
 src/rust/vendor-config.toml
 src/rust/vendor.tar.xz
+
+# Rendered pkgdown/albersdown site and stray local package extractions.
+# Both are .Rbuildignore'd already; keep them out of git too. The site is
+# published from CI, not committed; /vendor/ is a local unpack, not source.
+/docs/
+/vendor/

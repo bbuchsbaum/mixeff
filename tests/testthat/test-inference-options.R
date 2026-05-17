@@ -168,13 +168,42 @@ test_that("test_effect(method = 'bootstrap_lrt') runs on ML fit and returns a ch
   expect_identical(te$table$method, "bootstrap_lrt")
   expect_identical(te$table$status, "available")
   expect_identical(te$table$statistic_name, "chi_square")
-  expect_identical(te$table$reliability_reason, "bootstrap_monte_carlo_replicates")
+  # 50 replicates is below the >= 999 moderate threshold: the row must
+  # honestly grade itself "low", not the previously hardcoded "moderate".
+  expect_identical(te$table$reliability, "low")
+  expect_identical(te$table$reliability_reason, "bootstrap_insufficient_replicates")
   expect_true(is.finite(te$table$statistic))
   expect_true(is.finite(te$table$p_value))
   boot <- te$table$details[[1L]]$bootstrap
   expect_equal(boot$successful_replicates, 50)
   expect_true(is.finite(boot$mcse))
   expect_length(boot$replicate_statistics, 50)
+})
+
+test_that("inference_options mirrors bootstrap_lrt reliability threshold", {
+  set.seed(11)
+  n_subj <- 12L
+  n_per <- 6L
+  subj <- factor(rep(seq_len(n_subj), each = n_per))
+  cond <- factor(rep(c("A", "B", "C"), times = length(subj) / 3),
+                 levels = c("A", "B", "C"))
+  b0 <- rnorm(n_subj, sd = 0.4)
+  y <- 2 + 0.6 * (cond == "B") + 0.3 * (cond == "C") +
+       b0[as.integer(subj)] + rnorm(length(subj), sd = 0.3)
+  d <- data.frame(y, cond, subj)
+  fit_ml <- lmm(y ~ cond + (1 | subj), d, REML = FALSE,
+                control = mm_control(verbose = -1))
+
+  opt_low <- inference_options(fit_ml, nsim = 50)$table
+  lrt_low <- opt_low[opt_low$method == "bootstrap_lrt", ]
+  expect_identical(lrt_low$expected_status, "available")
+  expect_identical(lrt_low$expected_reliability_reason,
+                   "bootstrap_insufficient_replicates")
+
+  opt_mod <- inference_options(fit_ml, nsim = 999)$table
+  lrt_mod <- opt_mod[opt_mod$method == "bootstrap_lrt", ]
+  expect_identical(lrt_mod$expected_reliability_reason,
+                   "bootstrap_monte_carlo_replicates")
 })
 
 test_that("test_effect(method = 'cluster_bootstrap') refuses p-values with a stable reason", {
@@ -212,7 +241,7 @@ test_that("test_effect(method = 'cluster_bootstrap') requires group for crossed 
                    "cluster_bootstrap_multifactor_ambiguous")
   expect_error(
     test_effect(fit, "x", method = "cluster_bootstrap", group = "missing"),
-    class = "mm_inference_unavailable"
+    class = "mm_arg_error"
   )
 })
 
@@ -222,5 +251,5 @@ test_that("inference_options rejects unknown terms", {
                   g = factor(rep(1:5, each = 4)))
   fit <- lmm(y ~ x + (1 | g), d, control = mm_control(verbose = -1))
   expect_error(inference_options(fit, term = "definitely_not_a_term"),
-               class = "mm_inference_unavailable")
+               class = "mm_arg_error")
 })

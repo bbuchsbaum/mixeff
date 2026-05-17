@@ -65,9 +65,7 @@ mm_json_negotiate <- function(header) {
   }
 
   result <- tryCatch(
-    .Call(wrap__mm_json_negotiate_one,
-          header$schema_name,
-          header$schema_version),
+    mm_json_negotiate_one(header$schema_name, header$schema_version),
     error = function(cnd) cnd
   )
 

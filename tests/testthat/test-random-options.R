@@ -111,5 +111,5 @@ test_that("random_options() and compare_covariance() keep R9 forbidden advice ph
 })
 
 test_that("random_options() refuses unusable inputs clearly", {
-  expect_error(random_options(list(), "s"), class = "mm_schema_error")
+  expect_error(random_options(list(), "s"), class = "mm_arg_error")
 })

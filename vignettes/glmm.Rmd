@@ -97,12 +97,17 @@ drop1(fit, test = "Chisq")
 
 ## Parametric bootstrap
 
-For small local checks, `compare(method = "bootstrap")` can run a parametric
-bootstrap through `simulate()` and `refit()`. Larger `nsim` values are ordinary
-R computation and can be slow.
+`parametric_bootstrap()` runs the engine-certified bootstrap
+likelihood-ratio test and reports the replicate accounting the Rust engine
+produced. It requires ML fits; `compare(method = "bootstrap")` refits REML
+to ML for you. Larger `nsim` values are slower.
 
 ```{r bootstrap}
-boot <- parametric_bootstrap(reduced, fit, nsim = 2, seed = 99)
+reduced_ml <- lmm(y ~ x + (1 | subject), study, REML = FALSE,
+                   control = mm_control(verbose = -1))
+fit_ml <- lmm(y ~ x + z + (1 | subject), study, REML = FALSE,
+              control = mm_control(verbose = -1))
+boot <- parametric_bootstrap(reduced_ml, fit_ml, nsim = 2, seed = 99)
 boot
 
 compare(reduced, fit, method = "bootstrap", nsim = 2, seed = 99)

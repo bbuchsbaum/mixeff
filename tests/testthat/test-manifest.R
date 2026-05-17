@@ -82,7 +82,7 @@ test_that("manifest capabilities accurately advertise the current phase", {
   expect_true(cap$fixed_effect_inference_table)
   expect_true(cap$satterthwaite)
   expect_true(cap$kenward_roger_explicit)
-  expect_false(cap$bootstrap_fixed_effect_payload)
+  expect_true(cap$bootstrap_fixed_effect_payload)
   expect_true(cap$marginal_quantity_table)
   expect_true(cap$marginal_quantities)
 })

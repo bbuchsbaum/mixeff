@@ -35,11 +35,21 @@ compare.mm_lmm <- function(object,
   target <- match.arg(target)
   method <- match.arg(method)
   refit_for_comparison <- match.arg(refit_for_comparison)
+  if (identical(method, "bootstrap")) {
+    if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 0) {
+      mm_abort(
+        message = "`nsim` must be a non-negative integer for `compare(method = \"bootstrap\")`.",
+        class = "mm_arg_error",
+        input = nsim
+      )
+    }
+    nsim <- as.integer(nsim)
+  }
   fits <- c(list(object), list(...))
   if (!all(vapply(fits, inherits, logical(1), what = "mm_lmm"))) {
     mm_abort(
       message = "`compare()` requires fitted `mm_lmm` objects.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = fits
     )
   }
@@ -55,10 +65,24 @@ compare.mm_lmm <- function(object,
       nsim = nsim,
       seed = seed
     )
-    table$p_value[nrow(table)] <- bootstrap$p_value
-    table$status[nrow(table)] <- "parametric_bootstrap"
-    table$reason[nrow(table)] <- sprintf("parametric bootstrap with nsim=%d", nsim)
+    last <- nrow(table)
+    table$p_value[last] <- bootstrap$p_value
+    table$method[last] <- "parametric_bootstrap_lrt"
+    table$status[last] <- bootstrap$status
+    succ <- bootstrap$successful_replicates
+    table$reason[last] <- if (identical(bootstrap$status, "available")) {
+      sprintf("parametric bootstrap LRT (%s/%d replicates%s)",
+              if (is.na(succ)) "?" else as.character(succ),
+              nsim,
+              if (is.na(bootstrap$mcse)) "" else sprintf(", MCSE=%.4g", bootstrap$mcse))
+    } else {
+      bootstrap$reason %||% "parametric bootstrap LRT did not certify a p-value"
+    }
   } else if (identical(method, "bootstrap")) {
+    # Bootstrap was requested but cannot run: do not let the asymptotic LRT
+    # p-value masquerade as the requested bootstrap result.
+    table$p_value <- NA_real_
+    table$method <- "bootstrap_not_run"
     table$status <- "bootstrap_not_run"
     table$reason <- "set nsim > 0 and compare exactly two models to run bootstrap"
   }
@@ -84,13 +108,22 @@ print.mm_model_comparison <- function(x, ...) {
 
 #' Parametric bootstrap likelihood-ratio comparison
 #'
-#' The bootstrap simulates from the smaller model, refits both models to each
-#' simulated response, and compares simulated likelihood-ratio statistics with
-#' the observed statistic.
+#' Runs the engine-certified parametric-bootstrap likelihood-ratio test
+#' between two nested ML-fitted LMMs through the Rust
+#' `mm_bootstrap_lrt_json` entry point. The smaller model (fewer estimated
+#' parameters) is the reduced model; the larger is the alternative. The
+#' returned object carries the engine's replicate accounting (successful and
+#' completed replicates, boundary count, Monte-Carlo standard error, seed)
+#' rather than a bare `mean()` p-value, so every reported number traces back
+#' to a versioned Rust payload.
 #'
-#' @param null,alternative Fitted `mm_lmm` objects.
-#' @param nsim Number of simulations.
-#' @param seed Optional random seed.
+#' The engine refuses REML fits: refit with `lmm(..., REML = FALSE)` before
+#' calling. (`compare(method = "bootstrap")` refits REML to ML automatically.)
+#'
+#' @param null,alternative Fitted `mm_lmm` objects. Order is irrelevant; the
+#'   model with fewer parameters is treated as the reduced model.
+#' @param nsim Number of bootstrap replicates.
+#' @param seed Optional bootstrap seed.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_parametric_bootstrap` object.
@@ -100,34 +133,92 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
   if (!inherits(null, "mm_lmm") || !inherits(alternative, "mm_lmm")) {
     mm_abort(
       message = "`parametric_bootstrap()` requires two fitted `mm_lmm` objects.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = list(null = null, alternative = alternative)
     )
   }
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 1) {
     mm_abort(
       message = "`nsim` must be a positive integer.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = nsim
     )
   }
   nsim <- as.integer(nsim)
-  observed <- mm_lrt_stat(null, alternative)
-  stats <- mm_with_seed(seed, {
-    vapply(seq_len(nsim), function(i) {
-      y <- stats::simulate(null, nsim = 1L)[[1L]]
-      ref_null <- refit(null, y)
-      ref_alt <- refit(alternative, y)
-      mm_lrt_stat(ref_null, ref_alt)
-    }, numeric(1))
-  })
-  p_value <- mean(stats >= observed)
+  # Reduced = fewer estimated parameters; the engine LRT is direction-aware
+  # so we order explicitly rather than trust the call order.
+  if (alternative$dof < null$dof) {
+    tmp <- null
+    null <- alternative
+    alternative <- tmp
+  }
+  if (isTRUE(null$REML) || isTRUE(alternative$REML)) {
+    mm_abort(
+      message = paste(
+        "parametric bootstrap likelihood-ratio test requires ML-fitted",
+        "models; refit with `lmm(..., REML = FALSE)` and retry"
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "bootstrap_lrt_requires_ml",
+      input = list(null_reml = isTRUE(null$REML),
+                   alternative_reml = isTRUE(alternative$REML))
+    )
+  }
+  mm_assert_bootstrap_lrt_pair(null, alternative)
+  bootstrap <- bootstrap_control(nsim = nsim, seed = seed)
+  bridge <- mm_rust_fit_bridge_payload(alternative)
+  bootstrap_json <- jsonlite::toJSON(
+    unclass(bootstrap),
+    auto_unbox = TRUE,
+    null = "null"
+  )
+  json <- tryCatch(
+    mm_bootstrap_lrt_json(
+      deparse1(null$formula),
+      bridge$formula_string,
+      bridge$spec_data$column_order,
+      bridge$spec_data$numeric_columns,
+      bridge$spec_data$categorical_values,
+      bridge$spec_data$categorical_levels,
+      bridge$weights,
+      bridge$control_json,
+      as.character(bootstrap_json)
+    ),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) {
+    mm_abort(
+      message = conditionMessage(json),
+      class = "mm_inference_unavailable",
+      reason_code = "bootstrap_lrt_engine_refused",
+      parent = json
+    )
+  }
+  parsed <- jsonlite::fromJSON(json, simplifyVector = FALSE)
+  payload <- parsed$payload %||% list()
+  meta <- payload$metadata %||% list()
+  simulated <- as.numeric(unlist(payload$replicate_statistics %||% list(),
+                                 use.names = FALSE))
+  certified <- !is.null(parsed$p_value)
   out <- list(
-    observed = observed,
-    simulated = stats,
-    p_value = p_value,
+    observed = parsed$observed_statistic %||% mm_lrt_stat(null, alternative),
+    simulated = simulated,
+    p_value = parsed$p_value %||% NA_real_,
     nsim = nsim,
-    seed = seed
+    successful_replicates = meta$successful_replicates %||% NA_integer_,
+    completed_replicates = meta$completed_replicates %||% NA_integer_,
+    boundary_count = meta$boundary_count %||% NA_integer_,
+    mcse = parsed$mcse %||% NA_real_,
+    seed = meta$seed_record$seed %||% seed,
+    status = if (certified) "available" else "not_assessed",
+    reason = if (certified) {
+      NA_character_
+    } else {
+      "parametric bootstrap likelihood-ratio test did not certify a p-value"
+    },
+    notes = as.character(unlist(parsed$notes %||% list(), use.names = FALSE)),
+    reduced_formula = deparse1(null$formula),
+    alternative_formula = bridge$formula_string
   )
   class(out) <- "mm_parametric_bootstrap"
   out
@@ -136,10 +227,32 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
 #' @method print mm_parametric_bootstrap
 #' @export
 print.mm_parametric_bootstrap <- function(x, ...) {
-  cat("Parametric bootstrap LRT:\n")
-  cat(sprintf("  observed: %.6g\n", x$observed))
-  cat(sprintf("  nsim:     %d\n", x$nsim))
-  cat(sprintf("  p.value:  %.6g\n", x$p_value))
+  fmt_int <- function(v) if (is.null(v) || is.na(v)) "NA" else format(as.integer(v))
+  fmt_num <- function(v) if (is.null(v) || !is.finite(v)) "NA" else sprintf("%.6g", v)
+  cat("Parametric bootstrap likelihood-ratio test:\n")
+  cat(sprintf("  status:    %s\n", x$status %||% "unknown"))
+  cat(sprintf("  observed:  %s\n", fmt_num(x$observed)))
+  cat(sprintf("  requested replicates: %s\n", fmt_int(x$nsim)))
+  cat(sprintf("  successful / completed: %s / %s\n",
+              fmt_int(x$successful_replicates),
+              fmt_int(x$completed_replicates)))
+  if (!is.null(x$boundary_count) && !is.na(x$boundary_count) &&
+      x$boundary_count > 0L) {
+    cat(sprintf("  boundary replicates: %s\n", fmt_int(x$boundary_count)))
+  }
+  cat(sprintf("  MCSE:      %s\n", fmt_num(x$mcse)))
+  cat(sprintf("  seed:      %s\n", fmt_int(x$seed)))
+  if (identical(x$status, "available")) {
+    cat(sprintf("  p.value:   %s\n", fmt_num(x$p_value)))
+  } else {
+    cat(sprintf("  p.value:   not certified -- %s\n",
+                x$reason %||% "no reason recorded"))
+  }
+  notes <- x$notes %||% character()
+  if (length(notes)) {
+    cat("  notes:\n")
+    for (n in notes) cat(sprintf("    - %s\n", n))
+  }
   invisible(x)
 }
 
@@ -187,6 +300,15 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I"),
   )
   class(obj) <- "mm_anova"
   obj
+}
+
+#' @method print mm_anova
+#' @export
+print.mm_anova <- function(x, ...) {
+  cat(sprintf("Type %s analysis of fixed effects (method: %s):\n",
+              x$type %||% "III", x$requested_method %||% "auto"))
+  print(x$table, row.names = FALSE)
+  invisible(x)
 }
 
 #' Drop one fixed-effect term at a time
@@ -277,7 +399,7 @@ mm_assert_comparable_lmm <- function(fits) {
   if (length(unique(n)) != 1L) {
     mm_abort(
       message = "Compared models must have the same number of observations.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = n
     )
   }
@@ -285,10 +407,65 @@ mm_assert_comparable_lmm <- function(fits) {
   if (length(unique(responses)) != 1L) {
     mm_abort(
       message = "Compared models must use the same response variable.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = responses
     )
   }
+}
+
+mm_assert_bootstrap_lrt_pair <- function(null, alternative) {
+  if (!isTRUE(alternative$dof > null$dof)) {
+    mm_abort(
+      message = paste(
+        "Parametric bootstrap LRT requires nested models with the",
+        "alternative estimating more parameters than the reduced model."
+      ),
+      class = "mm_arg_error",
+      reason_code = "bootstrap_lrt_requires_nested_models",
+      input = list(null_df = null$dof, alternative_df = alternative$dof)
+    )
+  }
+
+  null_vars <- all.vars(null$formula)
+  alt_names <- names(alternative$model_frame %||% data.frame())
+  missing <- setdiff(null_vars, alt_names)
+  if (length(missing)) {
+    mm_abort(
+      message = sprintf(
+        "Parametric bootstrap LRT requires the reduced model variables to be present in the alternative model frame; missing: %s.",
+        paste(missing, collapse = ", ")
+      ),
+      class = "mm_arg_error",
+      reason_code = "bootstrap_lrt_requires_nested_model_frames",
+      input = missing
+    )
+  }
+
+  shared <- intersect(names(null$model_frame %||% data.frame()), alt_names)
+  mismatched <- shared[!vapply(shared, function(nm) {
+    identical(null$model_frame[[nm]], alternative$model_frame[[nm]])
+  }, logical(1))]
+  if (length(mismatched)) {
+    mm_abort(
+      message = sprintf(
+        "Parametric bootstrap LRT requires compared fits to share identical model-frame values; mismatched column(s): %s.",
+        paste(mismatched, collapse = ", ")
+      ),
+      class = "mm_arg_error",
+      reason_code = "bootstrap_lrt_requires_same_observations",
+      input = mismatched
+    )
+  }
+
+  if (!identical(null$weights, alternative$weights)) {
+    mm_abort(
+      message = "Parametric bootstrap LRT requires compared fits to use identical case weights.",
+      class = "mm_arg_error",
+      reason_code = "bootstrap_lrt_requires_same_weights",
+      input = list(null = null$weights, alternative = alternative$weights)
+    )
+  }
+  invisible(TRUE)
 }
 
 mm_prepare_comparison_fits <- function(fits, refit_for_comparison) {

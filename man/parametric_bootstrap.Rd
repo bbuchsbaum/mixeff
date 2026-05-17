@@ -7,11 +7,12 @@
 parametric_bootstrap(null, alternative, nsim = 100L, seed = NULL, ...)
 }
 \arguments{
-\item{null, alternative}{Fitted \code{mm_lmm} objects.}
+\item{null, alternative}{Fitted \code{mm_lmm} objects. Order is irrelevant; the
+model with fewer parameters is treated as the reduced model.}
 
-\item{nsim}{Number of simulations.}
+\item{nsim}{Number of bootstrap replicates.}
 
-\item{seed}{Optional random seed.}
+\item{seed}{Optional bootstrap seed.}
 
 \item{...}{Reserved for future methods.}
 }
@@ -19,7 +20,16 @@ parametric_bootstrap(null, alternative, nsim = 100L, seed = NULL, ...)
 An \code{mm_parametric_bootstrap} object.
 }
 \description{
-The bootstrap simulates from the smaller model, refits both models to each
-simulated response, and compares simulated likelihood-ratio statistics with
-the observed statistic.
+Runs the engine-certified parametric-bootstrap likelihood-ratio test
+between two nested ML-fitted LMMs through the Rust
+\code{mm_bootstrap_lrt_json} entry point. The smaller model (fewer estimated
+parameters) is the reduced model; the larger is the alternative. The
+returned object carries the engine's replicate accounting (successful and
+completed replicates, boundary count, Monte-Carlo standard error, seed)
+rather than a bare \code{mean()} p-value, so every reported number traces back
+to a versioned Rust payload.
+}
+\details{
+The engine refuses REML fits: refit with \code{lmm(..., REML = FALSE)} before
+calling. (\code{compare(method = "bootstrap")} refits REML to ML automatically.)
 }

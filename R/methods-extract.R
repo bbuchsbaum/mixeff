@@ -117,7 +117,10 @@ AIC.mm_lmm <- function(object, ..., k = 2) {
   dots <- list(...)
   if (length(dots)) {
     mm_abort(
-      message = "AIC comparison across multiple objects is not available in Phase 1.E.",
+      message = paste(
+        "AIC comparison across multiple objects is not supported;",
+        "call `AIC()` per model and compare with `compare()`."
+      ),
       class = "mm_inference_unavailable",
       input = dots
     )
@@ -131,7 +134,10 @@ BIC.mm_lmm <- function(object, ...) {
   dots <- list(...)
   if (length(dots)) {
     mm_abort(
-      message = "BIC comparison across multiple objects is not available in Phase 1.E.",
+      message = paste(
+        "BIC comparison across multiple objects is not supported;",
+        "call `BIC()` per model and compare with `compare()`."
+      ),
       class = "mm_inference_unavailable",
       input = dots
     )

@@ -6,10 +6,11 @@
 #' require the later lazy-handle prediction layer.
 #'
 #' @param object A fitted `mm_lmm` object.
-#' @param newdata Optional new data. Not available in Phase 2.
+#' @param newdata Optional new data. Not supported: predictions are
+#'   returned for the fitted data only.
 #' @param re.form Random-effects conditioning, following lme4's basic
 #'   convention: `NULL` for conditional predictions and `NA` for population
-#'   predictions. New data requires a future handle-backed prediction path.
+#'   predictions. Other values are not supported.
 #' @param allow.new.levels Reserved for future new-data prediction support.
 #' @param type Prediction scale. Gaussian LMMs use the same values for
 #'   `"response"` and `"link"`.
@@ -38,7 +39,10 @@ predict.mm_lmm <- function(object,
   interval <- match.arg(interval)
   if (!is.null(newdata)) {
     mm_abort(
-      message = "`newdata` prediction is not available in Phase 2.",
+      message = paste(
+        "`newdata` prediction is not supported by the current Rust",
+        "inference contract; predictions are returned for the fitted data."
+      ),
       class = "mm_inference_unavailable",
       input = newdata
     )
@@ -47,7 +51,7 @@ predict.mm_lmm <- function(object,
       is.na(allow.new.levels)) {
     mm_abort(
       message = "`allow.new.levels` must be TRUE or FALSE.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = allow.new.levels
     )
   }
@@ -58,7 +62,7 @@ predict.mm_lmm <- function(object,
     conditional = object$fitted,
     population = object$fixed_fitted,
     mm_abort(
-      message = "`re.form` requests beyond NULL and NA are not available in Phase 2.",
+      message = "`re.form` values other than NULL or NA are not supported.",
       class = "mm_inference_unavailable",
       input = re.form
     )

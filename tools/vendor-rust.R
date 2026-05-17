@@ -53,7 +53,7 @@ options(error = function() {
 # This constant is the committed source of truth for which `mixeff-rs` ships.
 # It must be a full 40-char commit SHA reachable from origin/main of
 # bbuchsbaum/mixeff-rs (or a tag, once the crate starts tagging releases).
-PINNED_REV <- "ccf7cba4f99b8fdb85d971e04778af6941105898"
+PINNED_REV <- "59b2fb3a269356b6ea62bf383adbeba95091fc31"
 
 rev <- Sys.getenv("MIXEFF_RS_REV", unset = PINNED_REV)
 url <- Sys.getenv(
@@ -148,9 +148,12 @@ if (!grepl("^[0-9a-f]{40}$", resolved_sha)) {
 cat(sprintf("[vendor-rust.R] resolved SHA:  %s\n", resolved_sha))
 
 # ---- 2. clean previous outputs --------------------------------------------
-
-for (p in c(dest_upstream, manifest_path, dest_vendor, dest_cargo,
-            vendor_config)) {
+#
+# `upstream_root` is wiped wholesale (not just `dest_upstream`/`manifest_path`)
+# so any stray hand-placed or pre-rename directory next to the snapshot —
+# e.g. an old `upstream/mixedmodels/` — cannot survive a re-vendor and
+# masquerade as bundled provenance. The snapshot is regenerated below.
+for (p in c(upstream_root, dest_vendor, dest_cargo, vendor_config)) {
   if (file.exists(p) || dir.exists(p)) {
     unlink(p, recursive = TRUE, force = TRUE)
   }

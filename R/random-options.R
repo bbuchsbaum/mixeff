@@ -34,7 +34,7 @@ random_options <- function(spec, group, slope = NULL) {
   if (is.null(group_label) || !nzchar(group_label)) {
     mm_abort(
       message = "`group` must name a grouping factor.",
-      class = "mm_schema_error",
+      class = "mm_arg_error",
       input = group
     )
   }
@@ -254,7 +254,7 @@ mm_assert_compiled_spec <- function(spec) {
   if (!inherits(spec, c("mm_spec", "mm_fit"))) {
     mm_abort(
       message = "`spec` must be an `mm_spec` (from compile_model) or an `mm_fit` (from lmm).",
-      class = "mm_schema_error",
+      class = "mm_arg_error",
       input = spec
     )
   }

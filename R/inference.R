@@ -99,14 +99,14 @@ bootstrap_control <- function(nsim = 999L,
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 1) {
     mm_abort(
       message = "`nsim` must be a positive integer.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = nsim
     )
   }
   if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed) || seed < 0)) {
     mm_abort(
       message = "`seed` must be `NULL` or a non-negative integer.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = seed
     )
   }
@@ -168,7 +168,7 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
   if (!is.character(term) || !length(term)) {
     mm_abort(
       message = "`term` must be a non-empty character vector.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = term
     )
   }
@@ -178,7 +178,7 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
     mm_abort(
       message = sprintf("Unknown fixed-effect term(s): %s.",
                         paste(unknown, collapse = ", ")),
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = unknown
     )
   }
@@ -435,16 +435,20 @@ print.mm_df_for_contrast <- function(x, ...) {
 #' @importFrom stats confint
 #' @export
 confint.mm_lmm <- function(object, parm, level = 0.95,
-                           method = c("wald", "bootstrap"),
+                           method = c("wald", "asymptotic", "bootstrap"),
                            bootstrap = NULL,
                            interval = c("percentile", "basic"), ...) {
   method <- match.arg(method)
+  # `"asymptotic"` is the package-wide name for the closed-form Wald
+  # interval; accept it here as a synonym so the method vocabulary is
+  # consistent with contrast()/test_effect()/inference_table().
+  if (identical(method, "asymptotic")) method <- "wald"
   interval <- match.arg(interval)
   if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
       level <= 0 || level >= 1) {
     mm_abort(
       message = "`level` must be a single number between 0 and 1.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = level
     )
   }
@@ -460,7 +464,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
     mm_abort(
       message = sprintf("Unknown fixed-effect parameter(s): %s.",
                         paste(unknown, collapse = ", ")),
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = unknown
     )
   }
@@ -524,7 +528,7 @@ mm_contrast_matrix <- function(L, fit) {
   if (is.null(L)) {
     mm_abort(
       message = "`L` must be a numeric contrast vector or matrix.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = L
     )
   }
@@ -534,7 +538,7 @@ mm_contrast_matrix <- function(L, fit) {
   if (!is.matrix(L) || !is.numeric(L)) {
     mm_abort(
       message = "`L` must be a numeric contrast vector or matrix.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = L
     )
   }
@@ -542,7 +546,7 @@ mm_contrast_matrix <- function(L, fit) {
     mm_abort(
       message = sprintf("`L` must have %d column(s), one for each fixed effect.",
                         length(fit$beta)),
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = L
     )
   }
@@ -713,7 +717,7 @@ mm_cluster_bootstrap_unavailable_effect_table <- function(fit, term, group = NUL
     if (!is.character(group) || length(group) != 1L || is.na(group) || !nzchar(group)) {
       mm_abort(
         message = "`group` must be a single grouping-factor name.",
-        class = "mm_inference_unavailable",
+        class = "mm_arg_error",
         input = group
       )
     }
@@ -721,7 +725,7 @@ mm_cluster_bootstrap_unavailable_effect_table <- function(fit, term, group = NUL
       mm_abort(
         message = sprintf("Unknown random-effect grouping factor `%s`. Known groups: %s.",
                           group, paste(groups, collapse = ", ")),
-        class = "mm_inference_unavailable",
+        class = "mm_arg_error",
         input = group
       )
     }
@@ -993,7 +997,7 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
       method = "bootstrap_lrt",
       reason = paste(
         "bootstrap likelihood-ratio test requires ML-fitted models;",
-        "this fit is REML -- refit with `lmm(..., reml = FALSE)` and retry"
+        "this fit is REML -- refit with `lmm(..., REML = FALSE)` and retry"
       ),
       reason_code = "bootstrap_lrt_requires_ml"
     ))
@@ -1045,6 +1049,11 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
   }
   parsed <- jsonlite::fromJSON(json, simplifyVector = FALSE)
   payload <- parsed$payload %||% list()
+  grade <- mm_bootstrap_reliability(
+    certified = !is.null(parsed$p_value),
+    successful = payload$metadata$successful_replicates %||% NA_integer_,
+    mcse = parsed$mcse %||% NA_real_
+  )
   data.frame(
     term = term,
     label = term,
@@ -1059,8 +1068,8 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
     p_value = parsed$p_value %||% NA_real_,
     method = "bootstrap_lrt",
     status = if (is.null(parsed$p_value)) "not_assessed" else "available",
-    reliability = if (is.null(parsed$p_value)) "not_available" else "moderate",
-    reliability_reason = "bootstrap_monte_carlo_replicates",
+    reliability = grade$reliability,
+    reliability_reason = grade$reason,
     reason = NA_character_,
     reason_code = NA_character_,
     reason_detail = NA_character_,
@@ -1085,6 +1094,29 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+}
+
+# Grade bootstrap reliability from the engine's replicate accounting rather
+# than asserting a constant. Per the bootstrap contract, `moderate` requires
+# a finite Monte-Carlo standard error and a sufficiently large successful
+# replicate count (>= 999); fewer replicates or a non-finite MCSE are `low`;
+# an uncertified payload is `not_available`.
+mm_bootstrap_reliability <- function(certified, successful, mcse,
+                                     min_moderate = 999L) {
+  if (!isTRUE(certified)) {
+    return(list(reliability = "not_available",
+                reason = "bootstrap_not_certified"))
+  }
+  succ_ok <- is.numeric(successful) && length(successful) == 1L &&
+    !is.na(successful) && successful >= min_moderate
+  mcse_ok <- is.numeric(mcse) && length(mcse) == 1L && is.finite(mcse)
+  if (succ_ok && mcse_ok) {
+    list(reliability = "moderate",
+         reason = "bootstrap_monte_carlo_replicates")
+  } else {
+    list(reliability = "low",
+         reason = "bootstrap_insufficient_replicates")
+  }
 }
 
 # Construct a one-row "unavailable" inference-table-shaped data frame.

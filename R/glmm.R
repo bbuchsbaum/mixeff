@@ -80,14 +80,14 @@ mm_glmm_family_info <- function(family) {
   if (missing(family)) {
     mm_abort(
       message = "`family` is required for `glmm()`.",
-      class = "mm_fit_error"
+      class = "mm_arg_error"
     )
   }
   fam <- if (is.function(family)) family() else family
   if (!inherits(fam, "family")) {
     mm_abort(
       message = "`family` must be an R family object or family constructor.",
-      class = "mm_fit_error",
+      class = "mm_arg_error",
       input = family
     )
   }
@@ -100,7 +100,7 @@ mm_glmm_family_info <- function(family) {
   if (!family_name %in% names(supported) ||
       !link_name %in% supported[[family_name]]) {
     mm_abort(
-      message = sprintf("GLMM family/link `%s/%s` is not in the Phase 4 boundary set.",
+      message = sprintf("GLMM family/link `%s/%s` is not supported.",
                         family_name, link_name),
       class = "mm_fit_error",
       input = list(family = family_name, link = link_name)
@@ -116,7 +116,7 @@ mm_glmm_validate_nagq <- function(nAGQ, approximation) {
   if (!is.numeric(nAGQ) || length(nAGQ) != 1L || is.na(nAGQ) || nAGQ < 1) {
     mm_abort(
       message = "`nAGQ` must be a single positive integer.",
-      class = "mm_fit_error",
+      class = "mm_arg_error",
       input = nAGQ
     )
   }
@@ -124,14 +124,14 @@ mm_glmm_validate_nagq <- function(nAGQ, approximation) {
   if (identical(approximation, "laplace") && nAGQ != 1L) {
     mm_abort(
       message = "`approximation = \"laplace\"` requires `nAGQ = 1`.",
-      class = "mm_fit_error",
+      class = "mm_arg_error",
       input = nAGQ
     )
   }
   if (identical(approximation, "agq") && nAGQ <= 1L) {
     mm_abort(
       message = "`approximation = \"agq\"` requires `nAGQ > 1`.",
-      class = "mm_fit_error",
+      class = "mm_arg_error",
       input = nAGQ
     )
   }

@@ -28,10 +28,8 @@
 #' @param weights Averaging weights for `mm_means()` and `mm_comparisons()`.
 #'   `"equal"` weights reference-grid cells equally; `"proportional"` weights
 #'   cells by observed fixed-factor frequencies.
-#' @param comparison Comparison scale. Phase 3.x implements only
-#'   `"difference"`.
-#' @param target Prediction target. Phase 3.x implements only
-#'   `"population"`.
+#' @param comparison Comparison scale. Only `"difference"` is implemented.
+#' @param target Prediction target. Only `"population"` is implemented.
 #' @param scale Prediction scale. Gaussian LMMs have identical `"link"` and
 #'   `"response"` scales.
 #' @param ... Reserved for future methods.
@@ -55,7 +53,7 @@ mm_grid.mm_lmm <- function(fit, specs, by = NULL, at = list(),
     mm_abort(
       message = sprintf("Unknown fixed-effect predictor(s): %s.",
                         paste(unknown, collapse = ", ")),
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = unknown
     )
   }
@@ -64,7 +62,7 @@ mm_grid.mm_lmm <- function(fit, specs, by = NULL, at = list(),
       (length(at) && (is.null(names(at)) || any(!nzchar(names(at)))))) {
     mm_abort(
       message = "`at` must be a named list of grid values.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = at
     )
   }
@@ -286,7 +284,7 @@ mm_match_marginal_comparison <- function(comparison) {
   comparison <- match.arg(comparison, c("difference", "ratio", "odds_ratio"))
   if (!identical(comparison, "difference")) {
     mm_abort(
-      message = sprintf("`comparison = \"%s\"` is not implemented for native Phase 3.x marginal quantities.", comparison),
+      message = sprintf("`comparison = \"%s\"` is not supported; only `\"difference\"` is implemented for marginal quantities.", comparison),
       class = "mm_inference_unavailable",
       input = comparison
     )
@@ -313,7 +311,7 @@ mm_resolve_grid <- function(fit, grid, specs, by, at) {
     if (is.null(specs)) {
       mm_abort(
         message = "`specs` is required when `grid` is not supplied.",
-        class = "mm_inference_unavailable",
+        class = "mm_arg_error",
         input = specs
       )
     }
@@ -345,7 +343,7 @@ mm_parse_marginal_specs <- function(specs, by = NULL) {
   if (!length(specs)) {
     mm_abort(
       message = "`specs` must name at least one fixed-effect predictor.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = specs
     )
   }
@@ -376,7 +374,7 @@ mm_grid_values_like <- function(template, values, var) {
   if (!length(values)) {
     mm_abort(
       message = sprintf("`at$%s` must contain at least one value.", var),
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = values
     )
   }
@@ -386,7 +384,7 @@ mm_grid_values_like <- function(template, values, var) {
       mm_abort(
         message = sprintf("Unknown level(s) for `%s`: %s.",
                           var, paste(unknown, collapse = ", ")),
-        class = "mm_inference_unavailable",
+        class = "mm_arg_error",
         input = values
       )
     }
@@ -416,7 +414,7 @@ mm_default_grid_values <- function(x, var, displayed, cov.reduce) {
     if (!is.numeric(value) || length(value) != 1L || is.na(value)) {
       mm_abort(
         message = sprintf("`cov.reduce` must return one non-missing number for `%s`.", var),
-        class = "mm_inference_unavailable",
+        class = "mm_arg_error",
         input = value
       )
     }
@@ -596,7 +594,7 @@ mm_validate_marginal_level <- function(level) {
       level <= 0 || level >= 1) {
     mm_abort(
       message = "`level` must be a single number between 0 and 1.",
-      class = "mm_inference_unavailable",
+      class = "mm_arg_error",
       input = level
     )
   }

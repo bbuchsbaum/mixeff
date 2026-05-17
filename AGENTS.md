@@ -30,8 +30,9 @@ snapshot*:
   `git archive PINNED_REV` (reproducible, never a working-tree copy);
   `src/rust/upstream/mixeff-rs.lock` records resolved provenance.
 - `src/rust/Cargo.toml` enables the upstream `unstable-internals` feature —
-  the sanctioned 1.0 SemVer escape hatch for the `compiler` module, the
-  serialized inference enums, and `fixed_effect_fitted()`.
+  the sanctioned 1.0 SemVer escape hatch for the `compiler` module and the
+  serialized inference enums. (`fixed_effect_fitted()`, also used by the
+  bridge, is stable default-API upstream and needs no gate.)
 - To bump: edit `PINNED_REV`, run `Rscript tools/vendor-rust.R`, rebuild,
   commit. Never hand-edit `src/rust/upstream/` (it is regenerated and
   git-ignored; it ships only inside the tarball). The pinned commit must be

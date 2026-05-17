@@ -30,12 +30,13 @@ rand = '0.8'
 # The crate is bundled as a pinned snapshot under upstream/mixeff-rs by
 # tools/vendor-rust.R (PINNED_REV is the committed source of truth).
 #
-# `unstable-internals` unlocks the `compiler` module, the inference-row /
-# test-method enums that the R bridge serializes, and the
-# `fixed_effect_fitted()` accessor. mixeff-rs gates these behind this opt-in
-# feature as its 1.0 SemVer escape hatch (see its docs/semver_policy.md) so
-# IR/internal churn is not a SemVer-major break; enabling it is the
-# upstream-sanctioned integration path, not a private reach-in.
+# `unstable-internals` unlocks the `compiler` module and the inference-row /
+# test-method enums that the R bridge serializes. mixeff-rs gates these
+# behind this opt-in feature as its 1.0 SemVer escape hatch (see its
+# docs/semver_policy.md) so IR/internal churn is not a SemVer-major break;
+# enabling it is the upstream-sanctioned integration path, not a private
+# reach-in. (`fixed_effect_fitted()`, used by the bridge, is now stable
+# default-API upstream and needs no feature gate.)
 mixeff-rs = { path = 'upstream/mixeff-rs', default-features = false, features = ['unstable-internals'] }
 
 [profile.release]

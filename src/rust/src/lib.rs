@@ -359,7 +359,7 @@ fn mm_fit_lmm_json(
     let beta = model.coef();
     let beta_names = model.coef_names();
     let std_errors = model.stderror();
-    let fixed_fitted = model.feterm.full_rank_x() * &model.beta();
+    let fixed_fitted = model.fixed_effect_fitted();
     let log_likelihood = model.loglikelihood();
     let dof = model.dof();
     let nobs = model.nobs();

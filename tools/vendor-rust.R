@@ -1,24 +1,45 @@
 # tools/vendor-rust.R
 #
-# Bundle the upstream `mixedmodels` Rust crate into the package source tree
-# and vendor every transitive registry dependency, so the resulting tarball
-# is self-contained and `R CMD check` (and CRAN / R-Universe) can build the
-# package without reaching outside the unpacked tree.
+# Bundle a *pinned* snapshot of the upstream `mixeff-rs` Rust crate into the
+# package source tree and vendor every transitive registry dependency, so the
+# resulting tarball is self-contained and `R CMD check` (and CRAN /
+# R-Universe) can build the package without reaching outside the unpacked
+# tree.
+#
+# Provenance model (see CLAUDE.md: "JSON artifacts are source of truth,
+# external pointers are caches"):
+#
+#   * The GitHub repo `bbuchsbaum/mixeff-rs` is the canonical provenance.
+#   * The vendored snapshot under src/rust/upstream/mixeff-rs/ is a cache.
+#   * That cache is always extracted from a single pinned commit SHA
+#     (PINNED_REV below), never from a working-tree copy, so the bundled
+#     crate is reproducible and auditable.
+#
+# The local peer checkout (MIXEFF_RS_PATH) is used only as a git object
+# cache to avoid the network when it already contains PINNED_REV; the tree
+# is still materialized via `git archive PINNED_REV`, not by copying the
+# working directory.
 #
 # Layout produced (all paths relative to the package root):
 #
-#   src/rust/upstream/mixedmodels/   <-- bundled snapshot of the upstream crate
-#   src/vendor/                      <-- cargo-vendored registry deps
-#   src/rust/vendor-config.toml      <-- the [source.crates-io] stanza, copied
-#                                        to src/.cargo/config.toml at build
-#                                        time by src/Makevars.in
+#   src/rust/upstream/mixeff-rs/        <-- snapshot of the crate @ PINNED_REV
+#   src/rust/upstream/mixeff-rs.lock    <-- provenance manifest (url + sha)
+#   src/vendor/                         <-- cargo-vendored registry deps
+#   src/rust/vendor-config.toml         <-- [source.crates-io] stanza, copied
+#                                           to src/.cargo/config.toml at build
+#                                           time by src/Makevars.in
+#   src/rust/vendor.tar.xz              <-- immutable vendor form for tarballs
 #
-# Run before building or `R CMD check`. Re-run whenever the upstream crate or
-# its `Cargo.lock` changes.
+# Run before building or `R CMD check`. Re-run whenever PINNED_REV changes.
 #
-# Environment variables:
-#   MIXEFF_UPSTREAM_PATH  override path to the upstream `mixedmodels` repo.
-#                         Defaults to /Users/bbuchsbaum/code/rust/mixedmodels.
+# To bump the pin: update PINNED_REV to a commit SHA (or tag) that exists on
+# `origin/main` of bbuchsbaum/mixeff-rs, then re-run this script and commit
+# the resulting Cargo.lock / parity changes.
+#
+# Environment variables (all optional; defaults are the committed pin):
+#   MIXEFF_RS_REV   commit SHA or tag to vendor. Default: PINNED_REV.
+#   MIXEFF_RS_URL   git URL to clone if the rev is not already local.
+#   MIXEFF_RS_PATH  local peer checkout used as a git object cache.
 #
 # Exit on first error so partial states are visible.
 
@@ -27,126 +48,199 @@ options(error = function() {
   quit(status = 1L, save = "no")
 })
 
-# ---- locate upstream ------------------------------------------------------
+# ---- the pin --------------------------------------------------------------
+#
+# This constant is the committed source of truth for which `mixeff-rs` ships.
+# It must be a full 40-char commit SHA reachable from origin/main of
+# bbuchsbaum/mixeff-rs (or a tag, once the crate starts tagging releases).
+PINNED_REV <- "9a5fe5003d1d7865b1a27d686ef291d4b2a57a95"
 
-upstream <- Sys.getenv(
-  "MIXEFF_UPSTREAM_PATH",
-  unset = "/Users/bbuchsbaum/code/rust/mixedmodels"
+rev <- Sys.getenv("MIXEFF_RS_REV", unset = PINNED_REV)
+url <- Sys.getenv(
+  "MIXEFF_RS_URL",
+  unset = "https://github.com/bbuchsbaum/mixeff-rs.git"
 )
-if (!dir.exists(upstream)) {
-  stop(sprintf(
-    "Upstream `mixedmodels` not found at: %s\nSet MIXEFF_UPSTREAM_PATH to override.",
-    upstream
-  ))
-}
+peer <- Sys.getenv(
+  "MIXEFF_RS_PATH",
+  unset = "/Users/bbuchsbaum/code/rust/mixeff-rs"
+)
 
-pkg_root <- normalizePath(".", winslash = "/")
-src_rust <- file.path(pkg_root, "src", "rust")
-dest_upstream <- file.path(src_rust, "upstream", "mixedmodels")
+pkg_root      <- normalizePath(".", winslash = "/")
+src_rust      <- file.path(pkg_root, "src", "rust")
+upstream_root <- file.path(src_rust, "upstream")
+dest_upstream <- file.path(upstream_root, "mixeff-rs")
+manifest_path <- file.path(upstream_root, "mixeff-rs.lock")
 dest_vendor   <- file.path(pkg_root, "src", "vendor")
 dest_cargo    <- file.path(pkg_root, "src", ".cargo")
 vendor_config <- file.path(src_rust, "vendor-config.toml")
 
-cat(sprintf("[vendor-rust.R] upstream:    %s\n", upstream))
-cat(sprintf("[vendor-rust.R] dest:        %s\n", dest_upstream))
-cat(sprintf("[vendor-rust.R] vendor:      %s\n", dest_vendor))
+git <- Sys.which("git")
+if (!nzchar(git)) stop("[vendor-rust.R] git not found on PATH")
 
-# ---- 1. clean previous outputs --------------------------------------------
+run_git <- function(args, dir = NULL, ...) {
+  full <- if (is.null(dir)) args else c("-C", dir, args)
+  system2(git, full, stdout = TRUE, stderr = TRUE, ...)
+}
+git_ok <- function(res) {
+  st <- attr(res, "status")
+  is.null(st) || identical(st, 0L)
+}
 
-for (p in c(dest_upstream, dest_vendor, dest_cargo, vendor_config)) {
+cat(sprintf("[vendor-rust.R] requested rev: %s\n", rev))
+cat(sprintf("[vendor-rust.R] provenance:    %s\n", url))
+
+# ---- 1. resolve a git repo that contains `rev` ----------------------------
+#
+# Preference order, all of which yield the *same* tree because we extract by
+# SHA, not by working copy:
+#   (a) the local peer checkout, if it already has the rev (no network);
+#   (b) the local peer checkout after `git fetch` (uses its remote);
+#   (c) a fresh clone of MIXEFF_RS_URL into a tempdir.
+
+has_rev <- function(dir) {
+  git_ok(run_git(c("cat-file", "-e", paste0(rev, "^{commit}")), dir = dir))
+}
+
+src_repo <- NULL
+clone_dir <- NULL
+
+if (dir.exists(file.path(peer, ".git"))) {
+  if (has_rev(peer)) {
+    cat(sprintf("[vendor-rust.R] using local peer (has rev): %s\n", peer))
+    src_repo <- peer
+  } else {
+    cat("[vendor-rust.R] peer missing rev; git fetch...\n")
+    run_git(c("fetch", "--quiet", "--all", "--tags"), dir = peer)
+    if (has_rev(peer)) {
+      cat(sprintf("[vendor-rust.R] using local peer (post-fetch): %s\n", peer))
+      src_repo <- peer
+    }
+  }
+}
+
+if (is.null(src_repo)) {
+  clone_dir <- file.path(tempdir(), "mixeff-rs-pin")
+  unlink(clone_dir, recursive = TRUE, force = TRUE)
+  cat(sprintf("[vendor-rust.R] cloning %s ...\n", url))
+  res <- run_git(c("clone", "--quiet", url, clone_dir))
+  if (!git_ok(res)) {
+    cat(res, sep = "\n")
+    stop("[vendor-rust.R] git clone failed")
+  }
+  if (!has_rev(clone_dir)) {
+    # Rev may be a non-default-branch commit; fetch it explicitly.
+    run_git(c("fetch", "--quiet", "origin", rev), dir = clone_dir)
+  }
+  if (!has_rev(clone_dir)) {
+    stop(sprintf(
+      "[vendor-rust.R] rev %s not found in %s after clone+fetch", rev, url
+    ))
+  }
+  src_repo <- clone_dir
+}
+
+resolved_sha <- run_git(
+  c("rev-parse", paste0(rev, "^{commit}")), dir = src_repo
+)[1]
+if (!grepl("^[0-9a-f]{40}$", resolved_sha)) {
+  stop(sprintf("[vendor-rust.R] could not resolve rev to a SHA: %s", rev))
+}
+cat(sprintf("[vendor-rust.R] resolved SHA:  %s\n", resolved_sha))
+
+# ---- 2. clean previous outputs --------------------------------------------
+
+for (p in c(dest_upstream, manifest_path, dest_vendor, dest_cargo,
+            vendor_config)) {
   if (file.exists(p) || dir.exists(p)) {
     unlink(p, recursive = TRUE, force = TRUE)
   }
 }
-
-# ---- 2. copy upstream snapshot --------------------------------------------
-
-# Whitelist of files/dirs we bundle. Everything not listed (target/, tests/,
-# benches/, examples/, comparison/, datasets/, MixedModels.jl/, docs/,
-# scripts/, .git/, .mote/, .omc/) is excluded. Compile-time inputs only.
-keep <- c("Cargo.toml", "Cargo.lock", "src")
-
 dir.create(dest_upstream, recursive = TRUE, showWarnings = FALSE)
-for (entry in keep) {
-  src_path <- file.path(upstream, entry)
-  if (!file.exists(src_path) && !dir.exists(src_path)) {
-    stop(sprintf("[vendor-rust.R] missing required upstream entry: %s", entry))
-  }
-  ok <- file.copy(
-    from      = src_path,
-    to        = dest_upstream,
-    recursive = TRUE,
-    copy.date = TRUE
-  )
-  if (!isTRUE(ok)) {
-    stop(sprintf("[vendor-rust.R] failed to copy %s", entry))
-  }
-}
 
-# Synthesize a LICENSE file from the Cargo.toml `license` field. Upstream
-# does not ship a LICENSE file at the repo root, but its Cargo.toml declares
-# `license = "MIT"`. Bundle a minimal MIT notice so transitive license audits
-# can find one.
-upstream_cargo <- readLines(file.path(dest_upstream, "Cargo.toml"))
-license_line <- grep('^\\s*license\\s*=', upstream_cargo, value = TRUE)[1]
-license_id <- if (length(license_line) && !is.na(license_line)) {
-  sub('^.*"([^"]+)".*$', "\\1", license_line)
-} else {
-  NA_character_
+# ---- 3. materialize the snapshot via `git archive` ------------------------
+#
+# Whitelist: compile-time inputs only. Everything else upstream ships
+# (tests/, benches/, examples/, comparison/, datasets/, docs/, scripts/,
+# .github/, CHANGELOG, etc.) is excluded from the bundle. `build.rs` is
+# REQUIRED: Cargo auto-detects and runs it even though it only emits a link
+# directive under the (unused) `prima` feature; omitting it breaks the
+# offline build. `LICENSE` is bundled so transitive license audits resolve.
+tree_entries <- run_git(
+  c("ls-tree", "--name-only", resolved_sha), dir = src_repo
+)
+required <- c("Cargo.toml", "Cargo.lock", "src", "build.rs")
+missing <- setdiff(required, tree_entries)
+if (length(missing)) {
+  stop(sprintf(
+    "[vendor-rust.R] pinned tree missing required entries: %s",
+    paste(missing, collapse = ", ")
+  ))
 }
-if (identical(license_id, "MIT")) {
-  writeLines(c(
-    "MIT License",
-    "",
-    "Copyright (c) the mixedmodels authors",
-    "",
-    "Permission is hereby granted, free of charge, to any person obtaining a copy",
-    "of this software and associated documentation files (the \"Software\"), to deal",
-    "in the Software without restriction, including without limitation the rights",
-    "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell",
-    "copies of the Software, and to permit persons to whom the Software is",
-    "furnished to do so, subject to the following conditions:",
-    "",
-    "The above copyright notice and this permission notice shall be included in",
-    "all copies or substantial portions of the Software.",
-    "",
-    "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR",
-    "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,",
-    "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE",
-    "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-    "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,",
-    "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN",
-    "THE SOFTWARE."
-  ), file.path(dest_upstream, "LICENSE-MIT"))
+keep <- c(required, intersect(c("LICENSE", "README.md"), tree_entries))
+
+archive_tar <- file.path(tempdir(), "mixeff-rs-archive.tar")
+unlink(archive_tar, force = TRUE)
+res <- run_git(c(
+  "archive", "--format=tar", "-o", archive_tar, resolved_sha, keep
+), dir = src_repo)
+if (!git_ok(res) || !file.exists(archive_tar)) {
+  cat(res, sep = "\n")
+  stop("[vendor-rust.R] git archive failed")
 }
+res <- system2(
+  "tar", c("-xf", archive_tar, "-C", dest_upstream),
+  stdout = TRUE, stderr = TRUE
+)
+if (!git_ok(res)) {
+  cat(res, sep = "\n")
+  stop("[vendor-rust.R] tar extract failed")
+}
+unlink(archive_tar, force = TRUE)
 
 cat(sprintf(
-  "[vendor-rust.R] bundled upstream snapshot (%s files)\n",
+  "[vendor-rust.R] bundled mixeff-rs @ %s (%d files)\n",
+  substr(resolved_sha, 1, 12),
   length(list.files(dest_upstream, recursive = TRUE))
 ))
 
-# ---- 3. point Cargo.toml at the bundled path ------------------------------
+# ---- 4. write the provenance manifest -------------------------------------
 
+manifest <- c(
+  "# Generated by tools/vendor-rust.R -- do not edit.",
+  "# Provenance for the bundled src/rust/upstream/mixeff-rs/ snapshot.",
+  sprintf("crate        = \"mixeff-rs\""),
+  sprintf("source       = \"%s\"", url),
+  sprintf("requested    = \"%s\"", rev),
+  sprintf("resolved_sha = \"%s\"", resolved_sha),
+  sprintf("vendored_utc = \"%s\"",
+          format(Sys.time(), tz = "UTC", "%Y-%m-%dT%H:%M:%SZ"))
+)
+writeLines(manifest, manifest_path)
+cat(sprintf("[vendor-rust.R] wrote %s\n", manifest_path))
+
+# ---- 5. verify Cargo.toml points at the bundled path ----------------------
+#
+# No silent surgery: this script does not rewrite the path dependency. It
+# only asserts the committed Cargo.toml already targets the bundled snapshot.
 cargo_toml_path <- file.path(src_rust, "Cargo.toml")
 cargo_toml <- readLines(cargo_toml_path)
-old_path <- "../../../rust/mixedmodels"
-new_path <- "upstream/mixedmodels"
-hit <- grepl(old_path, cargo_toml, fixed = TRUE)
-if (any(hit)) {
-  cargo_toml[hit] <- sub(old_path, new_path, cargo_toml[hit], fixed = TRUE)
-  writeLines(cargo_toml, cargo_toml_path)
-  cat(sprintf("[vendor-rust.R] rewrote path dep to %s\n", new_path))
-} else if (any(grepl(new_path, cargo_toml, fixed = TRUE))) {
-  cat("[vendor-rust.R] Cargo.toml already references bundled path\n")
-} else {
-  stop("[vendor-rust.R] could not find mixedmodels path dep in Cargo.toml")
+expected_path <- "upstream/mixeff-rs"
+dep_line <- grep("^\\s*mixeff-rs\\s*=", cargo_toml, value = TRUE)
+if (!length(dep_line)) {
+  stop("[vendor-rust.R] no `mixeff-rs = ...` dependency line in Cargo.toml")
 }
+if (!grepl(expected_path, dep_line[1], fixed = TRUE)) {
+  stop(sprintf(
+    paste0("[vendor-rust.R] Cargo.toml mixeff-rs dep does not point at %s\n",
+           "  found: %s\n",
+           "  fix Cargo.toml manually (no silent rewrite)."),
+    expected_path, trimws(dep_line[1])
+  ))
+}
+cat(sprintf("[vendor-rust.R] Cargo.toml dep verified -> %s\n", expected_path))
 
-# ---- 4. run cargo vendor --------------------------------------------------
+# ---- 6. run cargo vendor --------------------------------------------------
 
-# `cargo vendor` writes its config snippet to stdout and the vendored crates
-# to the target dir. Run from src/rust so the relative target ../vendor maps
-# to src/vendor (which is what src/Makevars.in expects).
 cargo <- Sys.which("cargo")
 if (!nzchar(cargo)) {
   cargo <- file.path(Sys.getenv("HOME"), ".cargo", "bin", "cargo")
@@ -156,8 +250,7 @@ if (!file.exists(cargo)) stop("[vendor-rust.R] cargo not found on PATH")
 cat("[vendor-rust.R] running cargo vendor (this can take a minute)...\n")
 res <- system2(
   command = cargo,
-  args    = c("vendor", "--manifest-path", file.path(src_rust, "Cargo.toml"),
-              file.path(pkg_root, "src", "vendor")),
+  args    = c("vendor", "--manifest-path", cargo_toml_path, dest_vendor),
   stdout  = TRUE,
   stderr  = TRUE
 )
@@ -171,7 +264,7 @@ if (!is.null(attr(res, "status")) && attr(res, "status") != 0L) {
 # vendor-config.toml to src/.cargo/config.toml at build time, and cargo
 # then resolves the directory relative to the config file's location. From
 # src/.cargo/, the vendor dir at src/vendor/ is `../vendor`. Always write
-# the canonical relative form, regardless of what cargo printed — the
+# the canonical relative form, regardless of what cargo printed -- the
 # captured stdout is consulted only as a sanity check.
 canonical_config <- c(
   "[source.crates-io]",
@@ -187,8 +280,8 @@ canonical_config <- c(
 writeLines(canonical_config, vendor_config)
 cat(sprintf("[vendor-rust.R] wrote %s\n", vendor_config))
 
-# ---- 5. write src/rust/vendor.tar.xz for tarball distribution -------------
-
+# ---- 7. write src/rust/vendor.tar.xz for tarball distribution -------------
+#
 # `R CMD build` runs the package's Makevars `clean` target, which (per the
 # rextendr template) removes src/vendor/ as a build artifact. The directory
 # form is correct for dev workflows (devtools::test), but the *tarball*
@@ -224,11 +317,16 @@ cat(sprintf(
   file.info(vendor_tarball)$size / 1024 / 1024
 ))
 
-# ---- 6. summary -----------------------------------------------------------
+# ---- 8. cleanup + summary -------------------------------------------------
+
+if (!is.null(clone_dir) && dir.exists(clone_dir)) {
+  unlink(clone_dir, recursive = TRUE, force = TRUE)
+}
 
 vendored_crates <- list.dirs(dest_vendor, recursive = FALSE, full.names = FALSE)
 cat(sprintf(
-  "[vendor-rust.R] done. %d vendored crates in src/vendor/\n",
+  "[vendor-rust.R] done. mixeff-rs @ %s, %d vendored crates in src/vendor/\n",
+  substr(resolved_sha, 1, 12),
   length(vendored_crates)
 ))
 cat("[vendor-rust.R] next: devtools::check(document = FALSE)\n")

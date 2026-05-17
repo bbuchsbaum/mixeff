@@ -5,18 +5,37 @@ working in this repository.
 
 ## Project orientation
 
-`mixeff` is an R wrapper for the `mixedmodels` Rust crate at
-`/Users/bbuchsbaum/code/rust/mixedmodels`. Background reading, in order:
+`mixeff` is an R wrapper for the `mixeff-rs` Rust crate
+(GitHub: `bbuchsbaum/mixeff-rs`), with a local peer checkout at
+`/Users/bbuchsbaum/code/rust/mixeff-rs`. Background reading, in order:
 
 - `planning/vision.md` — the long-arc world the package is building toward.
 - `planning/mission.md` — what we do, who we serve, five operating principles.
 - `planning/PRD.md` — full product requirements, API surface, phasing, risks.
 - `planning/r_layer_proposal.md` — the upstream R-layer proposal (source of truth
   for design intent).
-- `/Users/bbuchsbaum/code/rust/mixedmodels/docs/` — the Rust compiler and
+- `/Users/bbuchsbaum/code/rust/mixeff-rs/docs/` — the Rust compiler and
   inference contracts the wrapper speaks to.
 
 Phases 0–5 in `planning/PRD.md` §10 are the canonical work breakdown.
+
+## Upstream Rust dependency: pinned vendored snapshot
+
+`mixeff-rs` is **not** a git build-dependency (CRAN/R-Universe build offline)
+and **not** an ad-hoc working-copy. It is bundled as a *pinned-commit
+snapshot*:
+
+- `PINNED_REV` in `tools/vendor-rust.R` is the committed source of truth for
+  which `mixeff-rs` commit ships. The snapshot is materialized via
+  `git archive PINNED_REV` (reproducible, never a working-tree copy);
+  `src/rust/upstream/mixeff-rs.lock` records resolved provenance.
+- `src/rust/Cargo.toml` enables the upstream `unstable-internals` feature —
+  the sanctioned 1.0 SemVer escape hatch for the `compiler` module, the
+  serialized inference enums, and `fixed_effect_fitted()`.
+- To bump: edit `PINNED_REV`, run `Rscript tools/vendor-rust.R`, rebuild,
+  commit. Never hand-edit `src/rust/upstream/` (it is regenerated and
+  git-ignored; it ships only inside the tarball). The pinned commit must be
+  pushed to `bbuchsbaum/mixeff-rs` or a clean clone/CI cannot resolve it.
 
 ## Issue tracking and planning: mote
 
@@ -96,11 +115,11 @@ mote msg ack <msg-id>
 
 Before expanding scope, re-run `preflight` and reserve the added paths.
 
-### Upstream `mixedmodels` issues
+### Upstream `mixeff-rs` issues
 
 When mixeff work exposes a concrete upstream Rust-engine bug, agents may lodge
 an issue in the peer repository's mote store at
-`/Users/bbuchsbaum/code/rust/mixedmodels`. Reserve this for bugs with actionable
+`/Users/bbuchsbaum/code/rust/mixeff-rs`. Reserve this for bugs with actionable
 evidence: a minimal reproducer or fixture case, expected/reference behavior,
 observed Rust behavior, relevant commits, and any tolerance/status context.
 
@@ -143,8 +162,10 @@ publish changes through the CLI.
 
 - The R package source lives under `R/`; Rust glue under `src/rust/src/`. Both
   are detailed in `planning/PRD.md` §6.
-- The upstream Rust crate at `/Users/bbuchsbaum/code/rust/mixedmodels` is a
+- The upstream Rust crate at `/Users/bbuchsbaum/code/rust/mixeff-rs` is a
   *peer* repository, not a submodule. Do not edit it from this repo unless you
-  reserve paths there explicitly and coordinate via mote message.
+  reserve paths there explicitly and coordinate via mote message. Changing the
+  bundled snapshot means committing upstream, then bumping `PINNED_REV` and
+  re-running `tools/vendor-rust.R` — never hand-edit `src/rust/upstream/`.
 - Decisions A–D in `planning/PRD.md` §13 must be resolved before Phase 0
   begins. Surface them, do not assume them.

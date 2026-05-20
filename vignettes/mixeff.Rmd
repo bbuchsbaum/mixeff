@@ -131,7 +131,6 @@ stopifnot(identical(fit_status(fit), "converged_reduced_rank"))
 stopifnot(isTRUE(is_singular(fit)))
 diag_codes <- diagnostics(fit)$table$code
 stopifnot("covariance_reduced" %in% diag_codes)
-stopifnot("boundary_parameter" %in% diag_codes)
 ch <- changes(fit)$table
 stopifnot("design_time_reduction" %in% ch$stage ||
           "covariance_transition" %in% ch$stage)

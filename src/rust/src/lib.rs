@@ -372,7 +372,7 @@ fn mm_fit_lmm_json(
             "schema_version": 1
         },
         "artifact_json": artifact_json,
-        "formula": model.formula.to_string(),
+        "formula": model.formula().to_string(),
         "reml": reml,
         "beta": beta.iter().copied().collect::<Vec<_>>(),
         "beta_names": beta_names,
@@ -1049,7 +1049,7 @@ fn fixed_effect_bootstrap_options(
 fn random_effects_json(model: &LinearMixedModel) -> Value {
     let effects = model.ranef_b();
     let terms = model
-        .reterms
+        .reterms()
         .iter()
         .zip(effects.iter())
         .map(|(rt, b)| {

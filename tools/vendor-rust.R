@@ -53,7 +53,7 @@ options(error = function() {
 # This constant is the committed source of truth for which `mixeff-rs` ships.
 # It must be a full 40-char commit SHA reachable from origin/main of
 # bbuchsbaum/mixeff-rs (or a tag, once the crate starts tagging releases).
-PINNED_REV <- "59b2fb3a269356b6ea62bf383adbeba95091fc31"
+PINNED_REV <- "dd1eacfc4d85fc3cee467524f49d3caceb665227"
 
 rev <- Sys.getenv("MIXEFF_RS_REV", unset = PINNED_REV)
 url <- Sys.getenv(
@@ -163,11 +163,13 @@ dir.create(dest_upstream, recursive = TRUE, showWarnings = FALSE)
 # ---- 3. materialize the snapshot via `git archive` ------------------------
 #
 # Whitelist: compile-time inputs only. Everything else upstream ships
-# (tests/, benches/, examples/, comparison/, datasets/, docs/, scripts/,
+# (tests/, benches/, examples/, comparison/, datasets/, scripts/,
 # .github/, CHANGELOG, etc.) is excluded from the bundle. `build.rs` is
 # REQUIRED: Cargo auto-detects and runs it even though it only emits a link
 # directive under the (unused) `prima` feature; omitting it breaks the
 # offline build. `LICENSE` is bundled so transitive license audits resolve.
+# `docs/guide/` is REQUIRED: src/guide/mod.rs uses `include_str!` to embed
+# its tutorial pages at compile time, so the .md files must be on disk.
 tree_entries <- run_git(
   c("ls-tree", "--name-only", resolved_sha), dir = src_repo
 )
@@ -180,6 +182,9 @@ if (length(missing)) {
   ))
 }
 keep <- c(required, intersect(c("LICENSE", "README.md"), tree_entries))
+if ("docs" %in% tree_entries) {
+  keep <- c(keep, "docs/guide")
+}
 
 archive_tar <- file.path(tempdir(), "mixeff-rs-archive.tar")
 unlink(archive_tar, force = TRUE)

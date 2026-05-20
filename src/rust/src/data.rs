@@ -15,11 +15,12 @@
 //! Violations of these invariants produce typed `mm_data_error` strings the
 //! R caller routes back to a typed condition.
 //!
-//! Caution: `DataFrame::add_categorical_with_levels` panics if any value is
-//! not in `levels`. The R wrapper's `mm_translate_data()` derives `levels`
-//! either from `levels(factor)` (so values ⊆ levels by construction) or from
-//! `unique(character)` (same), so the panic path is unreachable through the
-//! supported entry point.
+//! `DataFrame::add_numeric` and `add_categorical_with_levels` validate inputs
+//! and return typed `MixedModelError`s (non-finite numeric, level mismatch,
+//! column-length mismatch). The R wrapper's `mm_translate_data()` should
+//! satisfy these preconditions, so Err is unexpected — but we propagate it
+//! through `mm_data_error:` rather than ignore it, per the no-silent-surgery
+//! contract.
 
 use std::collections::HashMap;
 
@@ -76,7 +77,9 @@ pub(crate) fn build_dataframe(
         let name: &str = name_rstr.as_ref();
 
         if let Some(values) = numeric_map.remove(name) {
-            df.add_numeric(name, values);
+            df.add_numeric(name, values).map_err(|e| {
+                format!("mm_data_error: failed to add numeric column '{name}': {e}")
+            })?;
             continue;
         }
 
@@ -84,7 +87,9 @@ pub(crate) fn build_dataframe(
             let levels = cat_levels_map.remove(name).ok_or_else(|| {
                 format!("mm_data_error: categorical column '{name}' is missing its `levels` entry")
             })?;
-            df.add_categorical_with_levels(name, values, levels);
+            df.add_categorical_with_levels(name, values, levels).map_err(|e| {
+                format!("mm_data_error: failed to add categorical column '{name}': {e}")
+            })?;
             continue;
         }
 

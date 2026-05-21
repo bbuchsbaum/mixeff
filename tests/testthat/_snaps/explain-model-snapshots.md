@@ -36,6 +36,10 @@
           covariance: scalar; theta parameters: 1
           support:    sufficient; group levels: 6; min rows/group: 8; median rows/group: 8
           variation:  t=present
+      
+      Design notes:
+        random_slope_without_intercept: random slope term omits a random intercept; this leaves baseline grouping dependence unmodeled unless represented elsewhere
+        repeated_unit_unmodeled: repeated marginal unit 's' is not covered by a random-intercept dependence path
 
 ---
 
@@ -54,6 +58,9 @@
           covariance: full; theta parameters: 3
           support:    too_rich; group levels: 6; min rows/group: 8; median rows/group: 8
           variation:  intercept=not_assessed; t=present
+      
+      Design notes:
+        covariance_too_rich: 6 levels are below the v0 full-covariance threshold 15 for 3 covariance parameters
 
 ---
 
@@ -119,6 +126,7 @@
         r0 <-> r1 (Intercept <-> t): separate random-effect blocks fix the covariance between `Intercept` and `t` to zero.
       
       Design notes:
+        random_slope_without_intercept: random slope term omits a random intercept; this leaves baseline grouping dependence unmodeled unless represented elsewhere
         covariance_assumption: the covariance between 'Intercept' and 't' is fixed at zero by separate random-effect blocks
 
 ---
@@ -149,9 +157,11 @@
       
       Design notes:
         syntax_expansion: random-effect shorthand expands to (1 | a) + (1 | a:b)
+        random_effect_few_levels: 3 levels are fit-eligible for a scalar random intercept but below the v0 reliability threshold 5
         support_note: the requested covariance structure is information-hungry relative to the observed grouping levels
         scope_note: `t` varies within `a`, so a `a`-level slope is structurally possible
         scope_note: `t` varies within `a:b`, so a `a:b`-level slope is structurally possible
+        repeated_unit_unmodeled: repeated marginal unit 'b' is not covered by a random-intercept dependence path
 
 ---
 
@@ -170,6 +180,10 @@
           covariance: scalar; theta parameters: 1
           support:    sufficient; group levels: 24; min rows/group: 2; median rows/group: 2
           variation:  intercept=not_assessed
+      
+      Design notes:
+        repeated_unit_unmodeled: repeated marginal unit 'i' is not covered by a random-intercept dependence path
+        repeated_unit_unmodeled: repeated marginal unit 's' is not covered by a random-intercept dependence path
 
 ---
 
@@ -198,6 +212,7 @@
           variation:  intercept=not_assessed
       
       Design notes:
+        random_effect_few_levels: 4 levels are fit-eligible for a scalar random intercept but below the v0 reliability threshold 5
         support_note: the requested covariance structure is information-hungry relative to the observed grouping levels
         scope_note: `t` varies within `s`, so a `s`-level slope is structurally possible
         scope_note: `t` varies within `i`, so a `i`-level slope is structurally possible
@@ -241,6 +256,9 @@
           covariance: full; theta parameters: 3
           support:    too_rich; group levels: 4; min rows/group: 2; median rows/group: 2
           variation:  between=absent; intercept=not_assessed
+      
+      Design notes:
+        covariance_too_rich: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
       
       Possible repairs, not applied automatically:
         1. structural_refusal: `between` does not vary within `g`, so a `g`-level `between` slope cannot be estimated from this design.

@@ -100,6 +100,11 @@ mm_explanation_text <- function(spec, audit) {
     lines <- c(lines, "", "Possible repairs, not applied automatically:", repairs)
   }
 
+  fit_notes <- mm_fit_note_lines(diagnostics)
+  if (length(fit_notes)) {
+    lines <- c(lines, "", "Fit notes:", fit_notes)
+  }
+
   singularity <- mm_singularity_lines(audit$report)
   if (length(singularity)) {
     lines <- c(lines, "", "Fitted covariance state:", singularity)
@@ -220,25 +225,49 @@ mm_constraint_lines <- function(constraint, cards) {
 }
 
 mm_design_note_lines <- function(diagnostics) {
+  mm_bucket_advice_lines(diagnostics, "design_note")
+}
+
+mm_fit_note_lines <- function(diagnostics) {
+  mm_bucket_advice_lines(diagnostics, "fit_note")
+}
+
+mm_bucket_advice_lines <- function(diagnostics, bucket) {
+  if (!length(diagnostics)) return(character())
   keep <- vapply(diagnostics, function(d) {
-    d$code %in% c("scope_note", "support_note", "syntax_expansion",
-                  "covariance_assumption")
+    identical(mm_diagnostic_bucket(d$code), bucket)
   }, logical(1))
   diagnostics <- diagnostics[keep]
   if (!length(diagnostics)) return(character())
-  unique(vapply(diagnostics, function(d) sprintf("  %s: %s", d$code, d$message),
-                character(1)))
+  unique(vapply(diagnostics, function(d) {
+    sprintf("  %s: %s", mm_scalar_text(d$code), d$message)
+  }, character(1)))
 }
 
 mm_repair_lines <- function(diagnostics) {
-  refused <- diagnostics[vapply(diagnostics, function(d) {
-    identical(d$code, "structural_refusal")
-  }, logical(1))]
-  actions <- unlist(lapply(refused, function(d) d$suggested_actions %||% d$message),
-                    use.names = FALSE)
-  actions <- unique(actions[nzchar(actions)])
-  if (!length(actions)) return(character())
-  sprintf("  %d. structural_refusal: %s", seq_along(actions), actions)
+  if (!length(diagnostics)) return(character())
+  keep <- vapply(diagnostics, function(d) {
+    identical(mm_diagnostic_bucket(d$code), "repair")
+  }, logical(1))
+  refused <- diagnostics[keep]
+  if (!length(refused)) return(character())
+  pairs <- unlist(
+    lapply(refused, function(d) {
+      actions <- unlist(d$suggested_actions %||% list(), use.names = FALSE)
+      actions <- actions[nzchar(actions)]
+      if (!length(actions)) actions <- d$message %||% ""
+      actions <- actions[nzchar(actions)]
+      lapply(actions, function(a) list(code = mm_scalar_text(d$code), action = a))
+    }),
+    recursive = FALSE
+  )
+  if (!length(pairs)) return(character())
+  keys <- vapply(pairs, function(p) paste(p$code, p$action, sep = "\x1f"),
+                 character(1))
+  pairs <- pairs[!duplicated(keys)]
+  vapply(seq_along(pairs), function(i) {
+    sprintf("  %d. %s: %s", i, pairs[[i]]$code, pairs[[i]]$action)
+  }, character(1))
 }
 
 mm_singularity_lines <- function(report) {

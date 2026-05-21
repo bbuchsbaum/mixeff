@@ -1147,3 +1147,446 @@ mm_inference_row_unavailable <- function(term, method, reason, reason_code = NA_
     check.names = FALSE
   )
 }
+
+# Stage D.3 (bd-01KRFGFSK4A0MGPFQVCNY5SYFK): wrapper for the upstream
+# `profile_confint_payload` FFI. Refits the model from the bridge payload
+# (no persistent Rust handle), parses the schema-versioned JSON, and
+# returns a list with the rendered confint matrix plus the raw payload.
+
+mm_profile_confint <- function(fit, parm = NULL, level = 0.95) {
+  payload <- mm_profile_confint_payload(fit, level)
+  fit_criterion <- as.character(payload$fit_criterion %||% "")
+
+  intervals <- payload$intervals %||% list()
+  rows <- lapply(intervals, mm_translate_profile_row, fit = fit)
+  rows <- Filter(Negate(is.null), rows)
+  table <- if (length(rows)) {
+    do.call(rbind, rows)
+  } else {
+    mm_empty_profile_table()
+  }
+
+  # Under REML, beta is not profiled upstream by contract. Append explicit
+  # typed-refusal rows so the caller can see WHICH beta were requested but
+  # not certified, mirroring the bootstrap CI's "available" / refusal
+  # distinction. Any beta name in `parm` (or every beta when parm is the
+  # default) gets one row with reason_code = profile_beta_unavailable_under_reml.
+  if (identical(fit_criterion, "REML")) {
+    beta_names_requested <- mm_profile_beta_subset(fit, parm)
+    if (length(beta_names_requested)) {
+      missing_rows <- lapply(beta_names_requested, function(nm) {
+        data.frame(
+          parameter = nm,
+          parameter_kind = "beta",
+          estimate = unname(fit$beta[nm]),
+          lower = NA_real_,
+          upper = NA_real_,
+          method = "profile_likelihood",
+          regularity = "profile_beta_unavailable_under_reml",
+          boundary_clamped_lower = FALSE,
+          reason_code = "profile_beta_unavailable_under_reml",
+          stringsAsFactors = FALSE
+        )
+      })
+      table <- rbind(table, do.call(rbind, missing_rows))
+    }
+  }
+
+  if (!is.null(parm)) {
+    parm <- as.character(parm)
+    keep <- table$parameter %in% parm
+    table <- table[keep, , drop = FALSE]
+  }
+
+  rownames(table) <- NULL
+  mat <- as.matrix(table[, c("lower", "upper"), drop = FALSE])
+  rownames(mat) <- table$parameter
+  alpha <- 1 - level
+  colnames(mat) <- c(sprintf("%.1f %%", 100 * alpha / 2),
+                     sprintf("%.1f %%", 100 * (1 - alpha / 2)))
+  attr(mat, "method") <- "profile_likelihood"
+  attr(mat, "status") <- "available"
+  attr(mat, "fit_criterion") <- fit_criterion
+  attr(mat, "mm_profile") <- list(
+    schema = list(
+      schema_name = as.character(payload$schema_name %||% NA_character_),
+      schema_version = as.character(payload$schema_version %||% NA_character_)
+    ),
+    fit_criterion = fit_criterion,
+    level = as.numeric(payload$level %||% level),
+    notes = as.character(unlist(payload$notes %||% list(),
+                                use.names = FALSE)),
+    table = table
+  )
+  mm_new_confint(mat)
+}
+
+mm_profile_confint_payload <- function(fit, level) {
+  bridge <- mm_rust_fit_bridge_payload(fit)
+  json <- tryCatch(
+    .Call(
+      wrap__mm_lmm_profile_confint_json,
+      bridge$formula_string,
+      isTRUE(fit$REML),
+      bridge$spec_data$column_order,
+      bridge$spec_data$numeric_columns,
+      bridge$spec_data$categorical_values,
+      bridge$spec_data$categorical_levels,
+      bridge$weights,
+      bridge$control_json,
+      as.numeric(level)
+    ),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) {
+    mm_abort_from_bridge(json)
+  }
+  payload <- tryCatch(
+    jsonlite::fromJSON(json, simplifyVector = FALSE),
+    error = function(cnd) {
+      mm_abort(
+        message = sprintf("Failed to parse profile CI JSON: %s",
+                          conditionMessage(cnd)),
+        class = "mm_schema_error",
+        input = json,
+        parent = cnd
+      )
+    }
+  )
+  schema_name <- as.character(payload$schema_name %||% "")
+  if (!nzchar(schema_name)) {
+    mm_abort(
+      message = "Profile CI payload is missing its schema header.",
+      class = "mm_schema_error",
+      input = payload
+    )
+  }
+  mm_json_negotiate(list(
+    schema_name = schema_name,
+    schema_version = as.character(payload$schema_version %||% NA_character_)
+  ))
+  payload
+}
+
+# Translate one upstream profile row from its parameter-name encoding
+# ("β1", "β2", "σ", "θ1", ...) into mixeff-side coordinates so the matrix
+# row names align with fit$beta and the rest of the wrapper.
+mm_translate_profile_row <- function(row, fit) {
+  upstream <- as.character(row$parameter %||% "")
+  mapped <- mm_map_profile_parameter(upstream, fit)
+  if (is.null(mapped)) return(NULL)
+  data.frame(
+    parameter = mapped$name,
+    parameter_kind = mapped$kind,
+    estimate = as.numeric(row$estimate %||% NA_real_),
+    lower = as.numeric(row$lower %||% NA_real_),
+    upper = as.numeric(row$upper %||% NA_real_),
+    method = as.character(row$method %||% "profile_likelihood"),
+    regularity = as.character(row$regularity %||% "regular_profile_likelihood"),
+    boundary_clamped_lower = isTRUE(row$boundary_clamped_lower),
+    reason_code = NA_character_,
+    stringsAsFactors = FALSE
+  )
+}
+
+mm_map_profile_parameter <- function(upstream, fit) {
+  if (upstream %in% c("\u03C3", "<U+03C3>")) {
+    return(list(name = "sigma", kind = "sigma"))
+  }
+  beta_idx <- mm_profile_parameter_index(upstream, c("\u03B2", "<U+03B2>"))
+  if (!is.na(beta_idx)) {
+    beta_names <- names(fit$beta)
+    if (beta_idx >= 1L && beta_idx <= length(beta_names)) {
+      return(list(name = beta_names[[beta_idx]], kind = "beta"))
+    }
+    return(NULL)
+  }
+  theta_idx <- mm_profile_parameter_index(upstream, c("\u03B8", "<U+03B8>"))
+  if (!is.na(theta_idx)) {
+    return(list(name = sprintf("theta%d", theta_idx), kind = "theta"))
+  }
+  # Unrecognized parameter name; do not silently drop — surface a stable
+  # synthetic label so callers see the row in attr(ci, "mm_profile")$table.
+  list(name = upstream, kind = "unknown")
+}
+
+mm_profile_parameter_index <- function(upstream, prefix) {
+  for (one_prefix in prefix) {
+    if (!startsWith(upstream, one_prefix)) next
+    suffix <- substr(upstream, nchar(one_prefix) + 1L, nchar(upstream))
+    if (!grepl("^[0-9]+$", suffix)) return(NA_integer_)
+    return(suppressWarnings(as.integer(suffix)))
+  }
+  NA_integer_
+}
+
+mm_profile_beta_subset <- function(fit, parm) {
+  beta_names <- names(fit$beta)
+  if (is.null(parm)) return(beta_names)
+  parm <- as.character(parm)
+  intersect(beta_names, parm)
+}
+
+mm_empty_profile_table <- function() {
+  data.frame(
+    parameter = character(),
+    parameter_kind = character(),
+    estimate = numeric(),
+    lower = numeric(),
+    upper = numeric(),
+    method = character(),
+    regularity = character(),
+    boundary_clamped_lower = logical(),
+    reason_code = character(),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Wald inference on a linear combination of fixed effects
+#'
+#' Convenience helper for the common case of testing
+#' \eqn{H_0:\, c^\top \beta = 0}{H0: c' beta = 0} where `c` is a sparse,
+#' named weight vector. The estimate is \eqn{c^\top \hat\beta}{c' beta_hat},
+#' the standard error is \eqn{\sqrt{c^\top V c}}{sqrt(c' V c)} where `V`
+#' is the model's fixed-effect covariance, the statistic is the Wald
+#' ratio, and the interval is the symmetric Wald CI at `level`.
+#'
+#' For `mm_glmm`, the statistic is the asymptotic Wald *z* (no df). For
+#' `mm_lmm`, the default is Satterthwaite-approximated *t* via
+#' [df_for_contrast()]; pass `method = "asymptotic"` to force Wald *z*.
+#'
+#' Weight names must be a subset of `names(fixef(fit))`. Coefficients
+#' not named in `weights` contribute zero. Pass the long-form
+#' [contrast()] front door if you need multiple contrasts or non-default
+#' rhs.
+#'
+#' @param fit A fitted `mm_lmm` or `mm_glmm`.
+#' @param weights A named numeric vector (or named list / single-row
+#'   data.frame coercible to one). Names must match
+#'   `names(fixef(fit))` exactly.
+#' @param level Confidence level for the Wald interval. Default 0.95.
+#' @param method For `mm_lmm`, the degrees-of-freedom method passed to
+#'   [df_for_contrast()]. Defaults to `"auto"` (Satterthwaite when
+#'   available). For `mm_glmm`, only `"asymptotic"` is accepted.
+#' @param ... Reserved for future methods.
+#'
+#' @return A single-row data.frame with columns `estimate`, `std_error`,
+#'   `statistic`, `statistic_name` (`"t"` or `"z"`), `df`, `p_value`,
+#'   `lower`, `upper`, and `method`. The result carries an `"mm_status"`
+#'   attribute reflecting the underlying vcov reliability (`status`,
+#'   `method`, `reliability`, `reason`).
+#'
+#' @examples
+#' \dontrun{
+#' # Difference-in-differences contrast at a focal SOA = 25 ms
+#' # (Loo et al. 2026 aphantasia primary estimand, glmm path)
+#' soa_s_25 <- (log(0.025) - mean(fit$data$soa_log)) / sd(fit$data$soa_log)
+#' mm_lincomb(fit, c(
+#'   "group: aphant:mask: masked"        = 1,
+#'   "group: aphant:mask: masked:soa_s"  = soa_s_25
+#' ))
+#' }
+#'
+#' @seealso [contrast()] for the long-form, Rust-routed contrast surface
+#'   with full estimability / reliability reporting.
+#'
+#' @export
+mm_lincomb <- function(fit, weights, level = 0.95, method = NULL, ...) {
+  UseMethod("mm_lincomb")
+}
+
+#' @rdname mm_lincomb
+#' @export
+mm_lincomb.default <- function(fit, weights, level = 0.95, method = NULL, ...) {
+  mm_abort(
+    message = "`mm_lincomb()` is only defined for `mm_lmm` and `mm_glmm` fits.",
+    class = "mm_arg_error",
+    input = fit
+  )
+}
+
+#' @rdname mm_lincomb
+#' @export
+mm_lincomb.mm_glmm <- function(fit, weights, level = 0.95, method = NULL, ...) {
+  if (!is.null(method) && !identical(method, "asymptotic") && !identical(method, "auto")) {
+    mm_abort(
+      message = "`mm_lincomb()` on `mm_glmm` only supports `method = \"asymptotic\"` (Wald z).",
+      class = "mm_arg_error",
+      input = method
+    )
+  }
+  beta_named <- mm_lincomb_fixef(fit)
+  beta  <- as.numeric(beta_named)
+  bnms  <- names(beta_named)
+  Vfull <- stats::vcov(fit)
+  V     <- as.matrix(unclass(Vfull))
+  dimnames(V) <- list(bnms, bnms)
+  w     <- mm_lincomb_weights_vector(weights, bnms)
+  est   <- sum(w * beta)
+  se    <- sqrt(drop(t(w) %*% V %*% w))
+  z     <- est / se
+  q     <- stats::qnorm((1 + level) / 2)
+  p     <- 2 * stats::pnorm(abs(z), lower.tail = FALSE)
+  out <- data.frame(
+    estimate       = est,
+    std_error      = se,
+    statistic      = z,
+    statistic_name = "z",
+    df             = NA_real_,
+    p_value        = p,
+    lower          = est - q * se,
+    upper          = est + q * se,
+    method         = "asymptotic",
+    stringsAsFactors = FALSE,
+    check.names    = FALSE
+  )
+  attr(out, "mm_status") <- mm_lincomb_status_from_vcov(Vfull)
+  out
+}
+
+#' @rdname mm_lincomb
+#' @export
+mm_lincomb.mm_lmm <- function(fit, weights,
+                              level = 0.95,
+                              method = c("auto", "satterthwaite",
+                                         "kenward_roger", "asymptotic"),
+                              ...) {
+  method <- match.arg(method)
+  beta_named <- mm_lincomb_fixef(fit)
+  beta  <- as.numeric(beta_named)
+  bnms  <- names(beta_named)
+  Vfull <- stats::vcov(fit)
+  V     <- as.matrix(unclass(Vfull))
+  dimnames(V) <- list(bnms, bnms)
+  w     <- mm_lincomb_weights_vector(weights, bnms)
+  est   <- sum(w * beta)
+  se    <- sqrt(drop(t(w) %*% V %*% w))
+
+  if (identical(method, "asymptotic")) {
+    df <- NA_real_
+    stat_name <- "z"
+    statistic <- est / se
+    p <- 2 * stats::pnorm(abs(statistic), lower.tail = FALSE)
+    q <- stats::qnorm((1 + level) / 2)
+    method_used <- "asymptotic"
+  } else {
+    L <- matrix(w, nrow = 1L, dimnames = list(NULL, bnms))
+    df_tbl <- df_for_contrast(fit, L, method = method)
+    df <- as.numeric(df_tbl[1L])
+    method_used <- attr(df_tbl, "method") %||% method
+    statistic <- est / se
+    stat_name <- "t"
+    if (is.finite(df) && df > 0) {
+      p <- 2 * stats::pt(abs(statistic), df = df, lower.tail = FALSE)
+      q <- stats::qt((1 + level) / 2, df = df)
+    } else {
+      p <- NA_real_
+      q <- NA_real_
+    }
+  }
+
+  out <- data.frame(
+    estimate       = est,
+    std_error      = se,
+    statistic      = statistic,
+    statistic_name = stat_name,
+    df             = df,
+    p_value        = p,
+    lower          = if (is.finite(q)) est - q * se else NA_real_,
+    upper          = if (is.finite(q)) est + q * se else NA_real_,
+    method         = method_used,
+    stringsAsFactors = FALSE,
+    check.names    = FALSE
+  )
+  attr(out, "mm_status") <- mm_lincomb_status_from_vcov(Vfull)
+  out
+}
+
+mm_lincomb_weights_vector <- function(weights, fixef_names) {
+  if (is.null(weights)) {
+    mm_abort(
+      message = "`weights` must be a named numeric vector.",
+      class = "mm_arg_error",
+      input = weights
+    )
+  }
+  if (is.data.frame(weights)) {
+    if (nrow(weights) != 1L) {
+      mm_abort(
+        message = "`weights` data.frame must have exactly one row.",
+        class = "mm_arg_error",
+        input = weights
+      )
+    }
+    nms <- names(weights)
+    weights <- stats::setNames(as.numeric(unlist(weights[1L, ], use.names = FALSE)), nms)
+  } else if (is.list(weights)) {
+    nms <- names(weights)
+    weights <- stats::setNames(as.numeric(unlist(weights, use.names = FALSE)), nms)
+  }
+  if (!is.numeric(weights) || is.null(names(weights)) || any(!nzchar(names(weights)))) {
+    mm_abort(
+      message = "`weights` must be a named numeric vector with non-empty names.",
+      class = "mm_arg_error",
+      input = weights
+    )
+  }
+  if (anyNA(weights)) {
+    mm_abort(
+      message = "`weights` must not contain NA.",
+      class = "mm_arg_error",
+      input = weights
+    )
+  }
+  if (anyDuplicated(names(weights))) {
+    mm_abort(
+      message = "`weights` names must be unique.",
+      class = "mm_arg_error",
+      input = weights
+    )
+  }
+  unknown <- setdiff(names(weights), fixef_names)
+  if (length(unknown)) {
+    mm_abort(
+      message = sprintf(
+        "Unknown coefficient name(s) in `weights`: %s. Valid names: %s.",
+        paste(sprintf("`%s`", unknown), collapse = ", "),
+        paste(sprintf("`%s`", fixef_names), collapse = ", ")
+      ),
+      class = "mm_arg_error",
+      input = weights
+    )
+  }
+  out <- stats::setNames(rep(0, length(fixef_names)), fixef_names)
+  out[names(weights)] <- as.numeric(weights)
+  out
+}
+
+mm_lincomb_fixef <- function(fit) {
+  ## fixef() returns a named numeric vector for both mm_lmm and mm_glmm;
+  ## stats::coef() on mm_glmm returns the random-effects list, so we
+  ## resolve fixed effects explicitly here.
+  if (utils::isS3method("fixef", class = class(fit)[1L], envir = asNamespace("mixeff")) ||
+      !is.null(getS3method("fixef", class(fit)[1L], optional = TRUE))) {
+    out <- fixef(fit)
+  } else {
+    out <- fit$beta
+  }
+  if (is.null(names(out))) {
+    mm_abort(
+      message = "Fitted model has unnamed fixed effects; mm_lincomb() needs names.",
+      class = "mm_arg_error",
+      input = fit
+    )
+  }
+  out
+}
+
+mm_lincomb_status_from_vcov <- function(V) {
+  list(
+    status      = attr(V, "mm_status")      %||% "available",
+    method      = attr(V, "mm_method")      %||% NA_character_,
+    reliability = attr(V, "mm_reliability") %||% NA_character_,
+    reason      = attr(V, "mm_reason")      %||% attr(V, "mm_unavailable_reason") %||% NA_character_
+  )
+}

@@ -96,6 +96,77 @@ emm_basis.mm_lmm <- function(object, trms, xlev, grid,
   )
 }
 
+#' @rdname emmeans-support
+#' @export
+recover_data.mm_glmm <- function(object, data = NULL, ...) {
+  if (!requireNamespace("emmeans", quietly = TRUE)) {
+    mm_abort(
+      message = "`recover_data.mm_glmm()` requires the optional emmeans package.",
+      class = "mm_inference_unavailable"
+    )
+  }
+  trms <- stats::delete.response(stats::terms(mm_fixed_formula(object)))
+  frame <- data %||% object$model_frame
+  emmeans::recover_data(
+    object$call,
+    trms,
+    attr(object$model_frame, "na.action"),
+    frame = frame,
+    ...
+  )
+}
+
+#' @rdname emmeans-support
+#' @export
+emm_basis.mm_glmm <- function(object, trms, xlev, grid, ...) {
+  if (!requireNamespace("emmeans", quietly = TRUE) ||
+      !requireNamespace("estimability", quietly = TRUE)) {
+    mm_abort(
+      message = "`emm_basis.mm_glmm()` requires the optional emmeans and estimability packages.",
+      class = "mm_inference_unavailable"
+    )
+  }
+  m <- stats::model.frame(trms, grid, na.action = stats::na.pass, xlev = xlev)
+  X_train <- stats::model.matrix(object, type = "fixed")
+  X <- stats::model.matrix(trms, m, contrasts.arg = attr(X_train, "contrasts"))
+  if (ncol(X) != length(fixef(object))) {
+    mm_abort(
+      message = "The emmeans reference grid design does not match the fitted fixed effects.",
+      class = "mm_inference_unavailable",
+      expected = names(fixef(object)),
+      observed = colnames(X)
+    )
+  }
+  colnames(X) <- names(fixef(object))
+  X <- X[, names(fixef(object)), drop = FALSE]
+
+  bhat <- as.numeric(fixef(object))
+  names(bhat) <- names(fixef(object))
+  V <- mm_emmeans_vcov(object)
+  ## GLMM Wald is asymptotic z; df is +Inf so emmeans uses the
+  ## standard-normal z reference distribution.
+  dffun <- function(k, dfargs) Inf
+  dfargs <- list()
+  misc <- list(initMesg = mm_emmeans_init_messages(V))
+  ## Hand emmeans the family link so type = "response" applies linkinv
+  ## naturally. The family object on object$family is the standard R
+  ## family() shape (linkfun, linkinv, mu.eta, valideta).
+  fam <- object$family
+  if (!is.null(fam) && is.list(fam) && !is.null(fam$link)) {
+    misc <- emmeans::.std.link.labels(fam, misc)
+  }
+
+  list(
+    X = X,
+    bhat = bhat,
+    nbasis = estimability::all.estble,
+    V = V,
+    dffun = dffun,
+    dfargs = dfargs,
+    misc = misc
+  )
+}
+
 mm_emmeans_vcov <- function(object) {
   stats::vcov(object, type = "fixed")
 }

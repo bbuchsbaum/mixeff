@@ -4,6 +4,8 @@
 \alias{emmeans-support}
 \alias{recover_data.mm_lmm}
 \alias{emm_basis.mm_lmm}
+\alias{recover_data.mm_glmm}
+\alias{emm_basis.mm_glmm}
 \title{Optional emmeans support for mixeff LMMs}
 \usage{
 recover_data.mm_lmm(object, data = NULL, ...)
@@ -16,6 +18,10 @@ emm_basis.mm_lmm(
   method = c("auto", "satterthwaite", "kenward_roger", "asymptotic", "none"),
   ...
 )
+
+recover_data.mm_glmm(object, data = NULL, ...)
+
+emm_basis.mm_glmm(object, trms, xlev, grid, ...)
 }
 \arguments{
 \item{object}{A fitted \code{mm_lmm}.}

@@ -75,6 +75,124 @@ print.summary.mm_lmm <- function(x, ...) {
   invisible(x)
 }
 
+#' @method summary mm_glmm
+#' @export
+summary.mm_glmm <- function(object, tests = c("none", "coefficients"), ...) {
+  tests <- match.arg(tests)
+  inference <- NULL
+  vcov_status <- NULL
+  if (identical(tests, "coefficients")) {
+    inference <- mm_glmm_wald_z_inference(object)
+    vcov_status <- attr(inference, "mm_vcov_status")
+  }
+  coef <- mm_summary_coefficients(object, inference)
+  out <- list(
+    call = object$call,
+    formula = object$formula,
+    family = object$family,
+    method = object$method,
+    nAGQ = object$nAGQ,
+    coefficients = coef,
+    dispersion = object$dispersion,
+    logLik = object$logLik,
+    AIC = object$AIC,
+    BIC = object$BIC,
+    nobs = object$nobs,
+    df_residual = object$df_residual,
+    fit_status = object$fit_status,
+    varcorr = object$varcorr,
+    tests = tests,
+    inference = inference,
+    vcov_status = vcov_status
+  )
+  class(out) <- "summary.mm_glmm"
+  out
+}
+
+## Build a Wald-z coefficient inference table for an mm_glmm fit from
+## the stored fixed-effect covariance payload. Falls back to NA stats
+## when the payload reports itself unavailable (e.g. revived fits that
+## lost the matrix); the diagonal-from-std_errors flavor counts as
+## available for univariate Wald z, but the mm_vcov_status attribute
+## still flags the moderate / unavailable reliability for callers.
+mm_glmm_wald_z_inference <- function(object) {
+  beta <- as.numeric(object$beta)
+  names(beta) <- names(object$beta)
+  Vfull <- stats::vcov(object)
+  V <- as.matrix(unclass(Vfull))
+  status <- list(
+    status      = attr(Vfull, "mm_status")      %||% "available",
+    method      = attr(Vfull, "mm_method")      %||% NA_character_,
+    reliability = attr(Vfull, "mm_reliability") %||% NA_character_,
+    reason      = attr(Vfull, "mm_reason")      %||%
+                  attr(Vfull, "mm_unavailable_reason") %||% NA_character_
+  )
+  se <- if (!is.null(object$std_errors) &&
+            length(object$std_errors) == length(beta)) {
+    as.numeric(object$std_errors)
+  } else {
+    suppressWarnings(sqrt(diag(V)))
+  }
+  z <- beta / se
+  p <- 2 * stats::pnorm(abs(z), lower.tail = FALSE)
+  method_used <- if (identical(status$status, "available")) {
+    "asymptotic"
+  } else {
+    "not_computed"
+  }
+  if (identical(method_used, "not_computed")) {
+    z[] <- NA_real_; p[] <- NA_real_
+  }
+  rows <- data.frame(
+    label             = names(beta),
+    kind              = "coefficient",
+    estimate          = unname(beta),
+    std_error         = unname(se),
+    denominator_df    = NA_real_,
+    statistic         = unname(z),
+    statistic_name    = ifelse(is.na(z), NA_character_, "z"),
+    p_value           = unname(p),
+    method            = method_used,
+    status            = status$status,
+    reliability       = status$reliability,
+    reliability_reason = status$reason,
+    reason            = status$reason,
+    stringsAsFactors  = FALSE
+  )
+  out <- list(table = rows, raw = NULL)
+  class(out) <- c("mm_inference_table", "list")
+  attr(out, "mm_vcov_status") <- status
+  out
+}
+
+#' @method print summary.mm_glmm
+#' @export
+print.summary.mm_glmm <- function(x, ...) {
+  cat("Generalized linear mixed model fit\n")
+  cat(sprintf("Formula: %s\n", deparse1(x$formula)))
+  cat(sprintf("Family/link: %s/%s\n", x$family$family, x$family$link))
+  cat(sprintf("Method: %s (nAGQ = %d)\n", x$method, x$nAGQ))
+  cat(sprintf("Fit status: %s\n\n", x$fit_status))
+  print(x$varcorr)
+  cat("\nFixed effects:\n")
+  print(x$coefficients)
+  if (!is.null(x$vcov_status) && !is.null(x$inference)) {
+    rel <- x$vcov_status$reliability
+    if (!is.na(rel) && nzchar(rel) && !identical(rel, "available")) {
+      cat(sprintf(
+        "\nWald-z reliability: %s (%s).",
+        rel,
+        x$vcov_status$method %||% "no method tag"
+      ))
+      if (!is.na(x$vcov_status$reason) && nzchar(x$vcov_status$reason)) {
+        cat(sprintf(" Reason: %s.", x$vcov_status$reason))
+      }
+      cat("\n")
+    }
+  }
+  invisible(x)
+}
+
 # Gate the long inference-rows footer behind explicit verbosity. Default
 # summary() / print(summary(.)) output is now compact; users opt in via
 # print(summary(fit), verbose = TRUE) or by setting

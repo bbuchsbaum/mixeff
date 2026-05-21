@@ -1,0 +1,275 @@
+aphantasia_fixture_dir <- function() {
+  candidates <- c(
+    system.file("extdata", "aphantasia", package = "mixeff"),
+    file.path("inst", "extdata", "aphantasia"),
+    testthat::test_path("..", "..", "inst", "extdata", "aphantasia")
+  )
+  hit <- candidates[dir.exists(candidates)][1L]
+  if (is.na(hit) || !nzchar(hit)) {
+    testthat::skip("aphantasia fixture is unavailable")
+  }
+  hit
+}
+
+aphantasia_reference <- function() {
+  jsonlite::fromJSON(
+    file.path(aphantasia_fixture_dir(), "reference.json"),
+    simplifyVector = FALSE
+  )
+}
+
+aphantasia_trials <- function() {
+  readRDS(file.path(aphantasia_fixture_dir(), "trials.rds"))
+}
+
+aphantasia_metadata <- function() {
+  readRDS(file.path(aphantasia_fixture_dir(), "metadata.rds"))
+}
+
+aphantasia_run_full <- function() {
+  identical(tolower(Sys.getenv("MIXEFF_RUN_APHANTASIA")), "true")
+}
+
+aphantasia_prepare_model_data <- function(trials, stimtype = FALSE) {
+  out <- transform(
+    trials,
+    participant = factor(participant),
+    item = factor(trial_image),
+    group = factor(ifelse(aphantasia == "yes", "aphant", "control"),
+                   levels = c("control", "aphant")),
+    mask = factor(ifelse(back_masked == "yes", "masked", "unmasked"),
+                  levels = c("unmasked", "masked")),
+    block = factor(block_num),
+    soa_log = log(SOA)
+  )
+  out$soa_s <- as.numeric(scale(out$soa_log))
+  if (isTRUE(stimtype)) {
+    out$stimtype <- factor(
+      ifelse(out$bubbled == "yes", "occluded", "intact"),
+      levels = c("intact", "occluded")
+    )
+  }
+  out
+}
+
+aphantasia_data_sets <- function(ref, trials) {
+  excluded <- unlist(ref$excluded_participants, use.names = FALSE)
+  primary_raw <- subset(
+    trials,
+    bubbled == "yes" & !is.na(correct) & !participant %in% excluded
+  )
+  sensitivity_raw <- subset(trials, bubbled == "yes" & !is.na(correct))
+  sensitivity_raw$aphantasia[
+    sensitivity_raw$participant %in% excluded
+  ] <- "no"
+  intact_raw <- subset(
+    trials,
+    bubbled == "no" & !is.na(correct) & !participant %in% excluded
+  )
+  combined_raw <- subset(trials, !is.na(correct) & !participant %in% excluded)
+
+  primary <- aphantasia_prepare_model_data(primary_raw)
+  age <- subset(primary, !is.na(age))
+  age$age_z <- as.numeric(scale(age$age))
+
+  matched_ids <- unique(c(
+    as.character(primary$participant[primary$aphantasia == "yes"]),
+    as.character(primary$participant[
+      primary$aphantasia != "yes" &
+        primary$source_folder == "prolific_control_age_match"
+    ])
+  ))
+  matched <- droplevels(primary[primary$participant %in% matched_ids, ])
+  matched_age <- matched
+  matched_age$age_z <- as.numeric(scale(matched_age$age))
+
+  rt <- subset(primary, correct == 1 & is.finite(rt) & rt > 0)
+  rt$log_rt <- log(rt$rt)
+
+  list(
+    primary = primary,
+    sensitivity = aphantasia_prepare_model_data(sensitivity_raw),
+    intact = aphantasia_prepare_model_data(intact_raw),
+    combined = aphantasia_prepare_model_data(combined_raw, stimtype = TRUE),
+    rt = rt,
+    age = age,
+    matched = matched,
+    matched_age = matched_age
+  )
+}
+
+aphantasia_fit_cases <- function(ref, data_sets) {
+  models <- ref$models
+  list(
+    primary = list(data = data_sets$primary, family = stats::binomial()),
+    sensitivity = list(data = data_sets$sensitivity, family = stats::binomial()),
+    intact = list(data = data_sets$intact, family = stats::binomial()),
+    combined = list(data = data_sets$combined, family = stats::binomial()),
+    rt = list(data = data_sets$rt),
+    S1_intercept_only = list(data = data_sets$primary, family = stats::binomial()),
+    S1_current_uncorrelated_slopes = list(data = data_sets$primary,
+                                          family = stats::binomial()),
+    S1_correlated_slopes = list(data = data_sets$primary,
+                                family = stats::binomial()),
+    S1_item_mask_slope = list(data = data_sets$primary,
+                              family = stats::binomial()),
+    S1_maximal = list(data = data_sets$primary, family = stats::binomial()),
+    S7_age_covariate = list(data = data_sets$age, family = stats::binomial()),
+    S9_age_matched_subset = list(data = data_sets$matched,
+                                 family = stats::binomial()),
+    S9_age_matched_subset_age_covariate = list(
+      data = data_sets$matched_age,
+      family = stats::binomial()
+    )
+  )[names(models)]
+}
+
+aphantasia_lme4_key <- function(x) {
+  gsub(": ", "", as.character(x), fixed = TRUE)
+}
+
+aphantasia_expect_fit_matches_reference <- function(fit, ref, id) {
+  tol <- if (identical(ref$model_type, "lmm")) {
+    unlist(aphantasia_reference()$tolerances$lmm, use.names = TRUE)
+  } else {
+    unlist(aphantasia_reference()$tolerances$glmm, use.names = TRUE)
+  }
+
+  observed <- mixeff::fixef(fit)
+  names(observed) <- aphantasia_lme4_key(names(observed))
+  expected <- unlist(ref$fixef, use.names = TRUE)
+  common <- intersect(names(expected), names(observed))
+  expect_equal(length(common), length(expected),
+               info = sprintf("not all fixed effects aligned for `%s`", id))
+  expect_equal(observed[common], expected[common],
+               tolerance = as.numeric(tol["fixef_abs"]),
+               info = sprintf("fixed effects mismatch for `%s`", id))
+
+  loglik_ref <- ref$logLik
+  aic_ref <- ref$AIC
+  loglik_rel <- abs(as.numeric(stats::logLik(fit)) - loglik_ref) /
+    max(1, abs(loglik_ref))
+  aic_rel <- abs(stats::AIC(fit) - aic_ref) / max(1, abs(aic_ref))
+  expect_true(
+    loglik_rel < as.numeric(tol["logLik_rel"]),
+    info = sprintf("logLik relative mismatch for `%s`", id)
+  )
+  expect_true(
+    aic_rel < as.numeric(tol["AIC_rel"]),
+    info = sprintf("AIC relative mismatch for `%s`", id)
+  )
+}
+
+aphantasia_has_glmm_full_vcov <- function(fit) {
+  V <- stats::vcov(fit)
+  identical(attr(V, "mm_status"), "available") &&
+    is.matrix(V) &&
+    all(is.finite(V))
+}
+
+## Map lme4-style coefficient names (e.g. "groupaphant:maskmasked") to
+## mixeff's "group: aphant:mask: masked" naming so user code written
+## against lme4 conventions can drive mm_lincomb() on an mm_glmm fit.
+aphantasia_to_mixeff_key <- function(fit, lme4_keys) {
+  mix_names <- names(mixeff::fixef(fit))
+  lme4_to_mix <- setNames(mix_names, aphantasia_lme4_key(mix_names))
+  unname(lme4_to_mix[lme4_keys])
+}
+
+aphantasia_lincomb <- function(fit, weights) {
+  mix_keys <- aphantasia_to_mixeff_key(fit, names(weights))
+  stopifnot(!anyNA(mix_keys))
+  named <- setNames(as.numeric(weights), mix_keys)
+  out <- mixeff::mm_lincomb(fit, named)
+  ## Adapt to the historical column shape this helper used to return
+  ## (estimate, SE, z, p) so existing assertions don't need rewriting.
+  data.frame(
+    estimate = out$estimate,
+    SE       = out$std_error,
+    z        = out$statistic,
+    p        = out$p_value
+  )
+}
+
+test_that("aphantasia fixture has anonymized data and frozen references", {
+  ref <- aphantasia_reference()
+  trials <- aphantasia_trials()
+  metadata <- aphantasia_metadata()
+
+  expect_identical(ref$schema$name, "mixeff.aphantasia_fixture_reference")
+  expect_equal(nrow(trials), ref$counts$trials)
+  expect_equal(nrow(metadata), ref$counts$metadata_rows)
+  expect_true(all(grepl("^p_[0-9a-f]{16}$", trials$participant)))
+  expect_true(all(grepl("^p_[0-9a-f]{16}$", metadata$participant)))
+  expect_false(any(grepl("^[0-9a-f]{24}$", trials$participant)))
+  expect_true(all(c("primary", "sensitivity", "intact", "combined", "rt") %in%
+                    names(ref$models)))
+  expect_equal(ref$counts$primary_trials, 17280L)
+  expect_equal(ref$counts$combined_trials, 23040L)
+})
+
+test_that("aphantasia fit-side reproduction matches cached lme4 references when enabled", {
+  testthat::skip_on_cran()
+  mm_skip_if_no_lme4()
+  testthat::skip_if_not(
+    aphantasia_run_full(),
+    "Set MIXEFF_RUN_APHANTASIA=true to run the full aphantasia reproduction."
+  )
+
+  ref <- aphantasia_reference()
+  data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
+  cases <- aphantasia_fit_cases(ref, data_sets)
+
+  for (id in names(cases)) {
+    model_ref <- ref$models[[id]]
+    form <- stats::as.formula(model_ref$formula)
+    fit <- if (identical(model_ref$model_type, "lmm")) {
+      mixeff::lmm(form, cases[[id]]$data, REML = FALSE,
+                  control = mixeff::mm_control(verbose = -1))
+    } else {
+      mixeff::glmm(form, cases[[id]]$data, family = cases[[id]]$family,
+                   control = mixeff::mm_control(verbose = -1))
+    }
+    aphantasia_expect_fit_matches_reference(fit, model_ref, id)
+  }
+})
+
+test_that("aphantasia GLMM inference checks are gated on full vcov support", {
+  testthat::skip_on_cran()
+  mm_skip_if_no_lme4()
+  testthat::skip_if_not(
+    aphantasia_run_full(),
+    "Set MIXEFF_RUN_APHANTASIA=true to run the full aphantasia reproduction."
+  )
+
+  ref <- aphantasia_reference()
+  data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
+  primary_ref <- ref$models$primary
+  fit <- mixeff::glmm(
+    stats::as.formula(primary_ref$formula),
+    data_sets$primary,
+    family = stats::binomial(),
+    control = mixeff::mm_control(verbose = -1)
+  )
+  testthat::skip_if_not(
+    aphantasia_has_glmm_full_vcov(fit),
+    "GLMM fixed-effect covariance payload is not yet available."
+  )
+
+  s25 <- (log(0.025) - mean(data_sets$primary$soa_log)) /
+    stats::sd(data_sets$primary$soa_log)
+  observed <- rbind(
+    cbind(where = "centered_soa",
+          aphantasia_lincomb(fit, c("groupaphant:maskmasked" = 1))),
+    cbind(where = "25_ms",
+          aphantasia_lincomb(
+            fit,
+            c("groupaphant:maskmasked" = 1,
+              "groupaphant:maskmasked:soa_s" = s25)
+          ))
+  )
+  expected <- ref$inference$primary_dd
+  expect_equal(observed$estimate, unlist(expected$estimate),
+               tolerance = 2.5e-2)
+  expect_equal(observed$where, unlist(expected$where))
+})

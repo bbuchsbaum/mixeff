@@ -103,6 +103,25 @@
       "first_seen": "2026-05-02",
       "linked_mote": "bd-01KQF83XAN4CGAS176JRX8CR7E",
       "upstream_mote": null
+    },
+    {
+      "case_id": "pastes_two_intercepts",
+      "field": "ranef.cask",
+      "test_file": "test-lme4-parity.R",
+      "package_source": "lme4 Pastes",
+      "dataset": "Pastes",
+      "formula": "strength ~ 1 + (1 | batch) + (1 | cask)",
+      "reml": true,
+      "case_tolerance": 1.0e-4,
+      "observed_max_abs_diff": 5.55e-5,
+      "observed_max_rel_diff": 2.53e-4,
+      "expected_max_abs_diff": 2.0e-4,
+      "expected_max_rel_diff": 1.0e-3,
+      "status": "expected_mismatch",
+      "reason": "Optimizer drift between mixeff cobyla and lme4 BOBYQA on the two-level nested-style crossed-intercepts Pastes model. logLik / sigma / fixef agree to ~1e-6 but conditional modes on the inner cask grouping differ by up to ~5.5e-5 (~2.5e-4 relative). Variance components on near-zero residual blocks are sensitive to optimizer path; PRD §3 disclaims bit-exact lme4 reproduction and PRD risk R2 covers this class of divergence. Reference: lme4 2.0.1, lmerTest 3.2.1, pbkrtest 0.5.5.",
+      "first_seen": "2026-05-21",
+      "linked_mote": "bd-01KRV31R4BJVQCEF0F58NFD4YN",
+      "upstream_mote": null
     }
   ]
 }

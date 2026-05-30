@@ -29,3 +29,8 @@ The fixture keeps only analysis columns needed for the reproduction tests:
 participant, bubbled, back_masked, SOA, block_num, trial_image, category,
 correct, rt, aphantasia, age, vviq_standard, source, and source_folder.
 `source_folder` is retained for the S9 age-matched folder analysis.
+
+The test file keeps ordinary checks fast. Set `MIXEFF_RUN_APHANTASIA=true` to
+run the core model refits (primary, sensitivity, intact, combined, RT, S7, and
+S9). Set `MIXEFF_RUN_APHANTASIA_STRESS=true` for the S1 random-effects
+stability variants, which are much slower on the current GLMM bridge.

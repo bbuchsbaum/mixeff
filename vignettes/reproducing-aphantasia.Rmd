@@ -86,7 +86,9 @@ table(primary_dat$group, primary_dat$mask)
 
 The live fits are opt-in because the primary GLMM alone takes several minutes
 on a laptop. Set `MIXEFF_RUN_APHANTASIA_VIGNETTE=true` to execute the model
-chunks while rendering.
+chunks while rendering. The test suite uses the same principle: the core
+reproduction runs under `MIXEFF_RUN_APHANTASIA=true`, and the slower S1
+random-effects stability variants run under `MIXEFF_RUN_APHANTASIA_STRESS=true`.
 
 ```{r primary-fit, eval = run_live}
 primary_fit <- glmm(

@@ -196,24 +196,6 @@
       "first_seen": "2026-05-22",
       "linked_mote": "bd-01KS80NV9550EJYXZ8SJCXNQRP",
       "upstream_mote": "bd-01KS7PVAW6MR6CHF4MQFXG4703"
-    },
-    {
-      "case_id": "aphantasia_rt",
-      "field": "fixef",
-      "test_file": "test-aphantasia-reproduction.R",
-      "package_source": "Loo aphantasia revision 3 anonymized fixture",
-      "dataset": "inst/extdata/aphantasia",
-      "formula": "log_rt ~ group * mask * soa_s + block + (1 | participant) + (1 | item)",
-      "reml": false,
-      "case_tolerance": 1.0e-4,
-      "observed_max_abs_diff": 5.2961e-3,
-      "expected_max_abs_diff": 1.0e-2,
-      "expected_max_rel_diff": null,
-      "status": "expected_mismatch",
-      "reason": "The RT LMM likelihood and AIC match the cached lme4 reference to numerical precision, but fixed effects drift by ~0.0053 under the current native trust-region path. This is a tolerance-calibration mismatch for the real-data fixture rather than a GLMM covariance blocker.",
-      "first_seen": "2026-05-22",
-      "linked_mote": "bd-01KS80NV9550EJYXZ8SJCXNQRP",
-      "upstream_mote": "bd-01KS7PVAW6MR6CHF4MQFXG4703"
     }
   ]
 }

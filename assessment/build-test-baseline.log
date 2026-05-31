@@ -1,0 +1,73 @@
+=== BUILD: clean install succeeded (Rust compiled, vignettes built) — see prior log ===
+=== FULL TEST BASELINE (non-stopping) Sun 31 May 2026 13:44:38 EDT ===
+  `actual`: 0.625
+`expected`: 0.642
+
+GLMM theta parity failed for case `cbpp_binomial_logit_profiled_pirls` field `theta`; tolerance=1e-03; reference versions: lme4=2.0.1, lmerTest=3.2.1, pbkrtest=0.5.5
+Backtrace:
+    ▆
+ 1. └─mm_expect_glmm_lme4_parity(case) at test-glmm.R:137:5
+ 2.   └─mm_assert_parity(...) at test-glmm.R:101:3
+ 3.     └─testthat::expect_equal(...) at ./helper-parity-scoreboard.R:184:7
+── 9. Failure ('test-glmm.R:137:5'): GLMM cases match lme4 within classified led
+Expected `mm_numeric_payload(observed)` to equal `mm_numeric_payload(expected)`.
+Differences:
+  `actual`: -277.534
+`expected`: -277.502
+
+GLMM logLik parity failed for case `cbpp_binomial_logit_profiled_pirls` field `logLik`; tolerance=1e-04; reference versions: lme4=2.0.1, lmerTest=3.2.1, pbkrtest=0.5.5
+Backtrace:
+    ▆
+ 1. └─mm_expect_glmm_lme4_parity(case) at test-glmm.R:137:5
+ 2.   └─mm_assert_parity(...) at test-glmm.R:103:3
+ 3.     └─testthat::expect_equal(...) at ./helper-parity-scoreboard.R:184:7
+── 10. Failure ('test-glmm.R:137:5'): GLMM cases match lme4 within classified le
+Expected `mm_numeric_payload(observed)` to equal `mm_numeric_payload(expected)`.
+Differences:
+  `actual`: 555.069
+`expected`: 555.004
+
+GLMM deviance parity failed for case `cbpp_binomial_logit_profiled_pirls` field `deviance`; tolerance=1e-04; reference versions: lme4=2.0.1, lmerTest=3.2.1, pbkrtest=0.5.5
+Backtrace:
+    ▆
+ 1. └─mm_expect_glmm_lme4_parity(case) at test-glmm.R:137:5
+ 2.   └─mm_assert_parity(...) at test-glmm.R:105:3
+ 3.     └─testthat::expect_equal(...) at ./helper-parity-scoreboard.R:184:7
+  ... and 8 more
+Maximum number of 10 failures reached, some test results may be missing.
+══ DONE ════════════════════════════════════════════════════════════════════════
+
+=== TOTALS: pass=2394 fail=14 warn=0 skip=17 (files=44) ===
+
+=== TESTS WITH FAILURES/ERRORS ===
+                     file           context
+   test-bw-lme-tutorial.R   bw-lme-tutorial
+   test-bw-lme-tutorial.R   bw-lme-tutorial
+           test-emmeans.R           emmeans
+              test-glmm.R              glmm
+              test-glmm.R              glmm
+       test-lme4-parity.R       lme4-parity
+ test-parity-scoreboard.R parity-scoreboard
+     test-phase2-revive.R     phase2-revive
+            test-phase4.R            phase4
+                                                                   test failed
+                Bodo Winter LME tutorial models match lme4 core outputs      3
+                  Bodo Winter likelihood-ratio examples agree with lme4      1
+      optional emmeans methods reproduce native marginal mean estimates      0
+                    GLMM lme4 parity cases are declared in the manifest      0
+                  GLMM cases match lme4 within classified ledger bounds      8
+    classic lme4 LMM cases match random-effect modes where labels align      1
+ classic lme4 parity checks emit a compact R-facing scoreboard artifact      1
+          fixed-effect covariance payload parser rejects contract drift      0
+       glmm() family/link surface matches the upstream support contract      0
+ error
+ FALSE
+ FALSE
+  TRUE
+  TRUE
+ FALSE
+ FALSE
+ FALSE
+  TRUE
+  TRUE
+=== DONE Sun 31 May 2026 13:44:55 EDT ===

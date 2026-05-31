@@ -26,7 +26,9 @@
 #'     `random_options`, `compare_covariance`, `fit_lmm`, `fit_glmm`,
 #'     `audit`, `changes`, `diagnostics`, `fit_status`,
 #'     `parameterization`, `roles`, `as_json`, `simulate`, `inference`,
-#'     `marginal_quantity_table`, `marginal_quantities`). The
+#'     `model_comparison_table`, `fit_summary_payload`,
+#'     `marginal_quantity_table`,
+#'     `marginal_quantities`). The
 #'     `marginal_quantity_table` schema may be available before the
 #'     corresponding `marginal_quantities` verbs are implemented.}
 #' }

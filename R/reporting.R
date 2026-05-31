@@ -86,6 +86,62 @@ reporting_table.mm_model_report <- function(fit, section = "all",
   mm_report_view_table(fit$sections[[section]], section, view)
 }
 
+#' @rdname model_report
+#' @method reporting_table mm_model_comparison
+#' @export
+reporting_table.mm_model_comparison <- function(fit, section = "comparison_ledger",
+                                                view = c("compact", "audit"),
+                                                ...) {
+  mm_report_comparison_object_table(fit, section = section, view = view)
+}
+
+#' @rdname model_report
+#' @method reporting_table mm_drop1
+#' @export
+reporting_table.mm_drop1 <- function(fit, section = "comparison_ledger",
+                                     view = c("compact", "audit"), ...) {
+  mm_report_comparison_object_table(fit, section = section, view = view)
+}
+
+mm_report_comparison_object_table <- function(fit, section = "comparison_ledger",
+                                              view = c("compact", "audit")) {
+  view <- match.arg(view)
+  section <- mm_report_sections_arg(section, allow_many = FALSE)
+  table <- mm_report_section(fit$ledger %||% mm_comparison_ledger_empty(),
+                             "mixeff.comparison")$table
+  if (identical(section, "all")) {
+    out <- list(comparison_ledger = mm_report_view_table(table, "comparison_ledger", view))
+    return(out)
+  }
+  if (!identical(section, "comparison_ledger")) {
+    mm_abort(
+      message = "Comparison objects only expose the `comparison_ledger` reporting section.",
+      class = "mm_schema_error",
+      input = section
+    )
+  }
+  mm_report_view_table(table, "comparison_ledger", view)
+}
+
+#' @rdname model_report
+#' @method reporting_table mm_random_effect_test
+#' @export
+reporting_table.mm_random_effect_test <- function(fit, section = "all",
+                                                  view = c("compact", "audit"),
+                                                  ...) {
+  view <- match.arg(view)
+  table <- fit$table
+  if (identical(view, "audit")) {
+    return(table)
+  }
+  keep <- intersect(
+    c("term", "group", "statistic", "statistic_name", "p_value",
+      "reference_distribution", "method", "status", "reason_code"),
+    names(table)
+  )
+  table[, keep, drop = FALSE]
+}
+
 #' @method print mm_model_report
 #' @export
 print.mm_model_report <- function(x, ...) {
@@ -382,7 +438,19 @@ mm_report_random_terms <- function(fit) {
 }
 
 mm_report_random_effects <- function(fit) {
-  vc <- VarCorr(fit)$table
+  has_fit_summary <- is.list(fit$fit_summary) && is.list(fit$fit_summary$varcorr)
+  vc_obj <- if (has_fit_summary) {
+    mm_varcorr_from_result(fit$fit_summary$varcorr)
+  } else {
+    VarCorr(fit)
+  }
+  varcorr_source <- if (has_fit_summary) {
+    "mixedmodels.fit_summary.varcorr"
+  } else {
+    "fit$varcorr"
+  }
+  varcorr_status <- if (has_fit_summary) "available" else "available_from_varcorr"
+  vc <- vc_obj$table
   table <- if (nrow(vc)) {
     data.frame(
       group = vc$group,
@@ -394,9 +462,9 @@ mm_report_random_effects <- function(fit) {
       std_dev = vc$std_dev,
       correlation = vc$correlation,
       covariance_family = NA_character_,
-      status = "available_from_varcorr",
+      status = varcorr_status,
       reason = NA_character_,
-      source = "fit$varcorr",
+      source = varcorr_source,
       stringsAsFactors = FALSE
     )
   } else {
@@ -416,7 +484,7 @@ mm_report_random_effects <- function(fit) {
       stringsAsFactors = FALSE
     )
   }
-  residual <- VarCorr(fit)$residual_sd
+  residual <- vc_obj$residual_sd
   if (!is.na(residual)) {
     table <- rbind(table, data.frame(
       group = "Residual",
@@ -428,20 +496,24 @@ mm_report_random_effects <- function(fit) {
       std_dev = residual,
       correlation = "",
       covariance_family = "residual",
-      status = "available_from_varcorr",
+      status = varcorr_status,
       reason = NA_character_,
-      source = "fit$varcorr",
+      source = varcorr_source,
       stringsAsFactors = FALSE
     ))
   }
-  unavailable <- mm_report_unavailable(
-    section = "random_effects",
-    field = "stable_random_effect_variance_covariance_payload",
-    status = "schema_gap",
-    reason = "using_fit_varcorr_until_rust_report_payload_is_available",
-    source = "planning/reporting_artifact_requirements.md"
-  )
-  mm_report_section(table, "fit$varcorr", unavailable = unavailable)
+  unavailable <- if (has_fit_summary) {
+    mm_report_unavailable_empty()
+  } else {
+    mm_report_unavailable(
+      section = "random_effects",
+      field = "stable_random_effect_variance_covariance_payload",
+      status = "schema_gap",
+      reason = "using_fit_varcorr_until_rust_report_payload_is_available",
+      source = "planning/reporting_artifact_requirements.md"
+    )
+  }
+  mm_report_section(table, varcorr_source, unavailable = unavailable)
 }
 
 mm_report_fixed_effects <- function(fit) {

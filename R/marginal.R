@@ -437,23 +437,12 @@ mm_restore_grid_classes <- function(grid, frame) {
 }
 
 mm_fixed_basis <- function(fit, grid) {
-  terms <- stats::delete.response(stats::terms(mm_fixed_formula(fit)))
-  X_train <- stats::model.matrix(fit, type = "fixed")
-  X <- stats::model.matrix(
-    terms,
-    data = grid,
-    contrasts.arg = attr(X_train, "contrasts")
-  )
-  if (ncol(X) != length(fixef(fit))) {
-    mm_abort(
-      message = "Reference grid design columns do not match the fitted fixed effects.",
-      class = "mm_inference_unavailable",
-      expected = names(fixef(fit)),
-      observed = colnames(X)
-    )
-  }
-  colnames(X) <- names(fixef(fit))
-  X[, names(fixef(fit)), drop = FALSE]
+  # Reconstruct the reference-grid design in the engine's coefficient basis
+  # (treatment contrasts for all factors, columns aligned to names(beta) by
+  # name). Using R's default contrasts here silently mis-evaluated marginal
+  # means for ordered-factor and interaction models. See
+  # mm_engine_fixed_matrix() in predict.R.
+  mm_engine_fixed_matrix(fit, grid)
 }
 
 mm_grid_labels <- function(grid, vars) {

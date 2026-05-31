@@ -1,124 +1,208 @@
 ---
-title: GLMM Boundary and Model Comparison
+title: GLMM Fitting and Model Comparison
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{GLMM Boundary and Model Comparison}
+  %\VignetteIndexEntry{GLMM Fitting and Model Comparison}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
-```
-
 ```{r setup, include = FALSE}
+has_lme4 <- requireNamespace("lme4", quietly = TRUE)
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   message = FALSE,
-  warning = FALSE
+  warning = FALSE,
+  eval = has_lme4
 )
 ```
 
-```{r load-package}
+```{r load-package, eval = TRUE}
 library(mixeff)
 ```
 
-```{r study-data, include = FALSE}
-set.seed(11)
-n_subj <- 30L
-n_time <- 5L
-study <- expand.grid(subject = factor(seq_len(n_subj)),
-                     time = seq_len(n_time))
-b0 <- rnorm(n_subj, sd = 0.6)[as.integer(study$subject)]
-study$x <- rnorm(nrow(study))
-study$z <- rnorm(nrow(study))
-study$y <- 1 + 0.4 * study$x + 0.2 * study$z + b0 +
-  rnorm(nrow(study), sd = 0.5)
-study$hit <- rbinom(nrow(study), size = 1, prob = plogis(0.5 + study$x))
+```{r lme4-missing, eval = !has_lme4, echo = FALSE, results = "asis"}
+cat("The executable cbpp examples in this vignette require the `lme4` package.\n")
 ```
 
-This page covers two things. The first is the lifecycle tools that
-follow a linear mixed-model fit and that `lme4` users already reach
-for: `simulate()`, `refit()`, `compare()`, multi-model `anova()`,
-`drop1()`, and a small parametric-bootstrap path.
+This vignette shows the current GLMM contract in `mixeff`. The available path
+is `glmm(..., method = "pirls_profiled")`, which delegates to the upstream
+profiled PIRLS GLMM fitter. `nAGQ = 1` is the Laplace-scale setting; larger
+`nAGQ` values ask the same profiled path to evaluate with more quadrature
+points. The separate joint-Laplace backend remains a typed boundary in this
+CRAN-oriented build because the vendored Rust engine is compiled without the
+optional `nlopt` backend.
 
-The second is the GLMM front door — `glmm()` — which accepts the
-familiar `family` and `link` arguments, validates them, and currently
-raises a *typed* error because the GLMM fitting path is not yet
-available in this build. A typed boundary is a deliberate choice: an
-analyst who tries `glmm()` on their data sees a stable refusal
-message rather than a fallback fit they did not ask for.
+The example uses the `lme4::cbpp` data. `glmm()` does not yet expose binomial
+case weights, so the grouped counts are expanded to Bernoulli rows before
+fitting.
 
-```{r glmm-boundary, error = TRUE}
-glmm(
-  hit ~ x + (1 | subject),
-  study,
-  family = binomial(),
+```{r cbpp-data}
+env <- new.env(parent = emptyenv())
+utils::data("cbpp", package = "lme4", envir = env)
+cbpp <- get("cbpp", envir = env, inherits = FALSE)
+
+expand_cbpp <- function(data) {
+  rows <- lapply(seq_len(nrow(data)), function(i) {
+    successes <- data$incidence[[i]]
+    failures <- data$size[[i]] - successes
+    data.frame(
+      herd = data$herd[[i]],
+      period = data$period[[i]],
+      y = c(rep.int(1L, successes), rep.int(0L, failures))
+    )
+  })
+  droplevels(do.call(rbind, rows))
+}
+
+cbpp_binary <- expand_cbpp(cbpp)
+c(n_grouped_rows = nrow(cbpp), n_binary_rows = nrow(cbpp_binary))
+```
+
+## Family and Audit
+
+The statistical intent is a binomial-logit GLMM with a herd random intercept.
+Before fitting, the same formula can be compiled and explained so the fixed and
+random-effect structure is visible before numerical optimization starts.
+
+```{r audit-first}
+cbpp_family <- binomial(link = "logit")
+cbpp_formula <- y ~ period + (1 | herd)
+
+cbpp_spec <- compile_model(cbpp_formula, cbpp_binary)
+explain_model(cbpp_spec)
+```
+
+## Fit
+
+```{r fit-laplace}
+glmm_fit <- glmm(
+  cbpp_formula,
+  cbpp_binary,
+  family = cbpp_family,
+  method = "pirls_profiled",
+  nAGQ = 1L,
   control = mm_control(verbose = -1)
+)
+
+glmm_fit
+fixef(glmm_fit)
+VarCorr(glmm_fit)
+```
+
+The summary prints fitted quantities and deliberately avoids coefficient tests
+unless the inference contract certifies them.
+
+```{r summary}
+summary(glmm_fit)
+```
+
+Core extractors are available from the durable R object.
+
+```{r extractors}
+head(fitted(glmm_fit))
+head(residuals(glmm_fit))
+head(ranef(glmm_fit)[[1L]])
+c(
+  logLik = as.numeric(logLik(glmm_fit)),
+  deviance = deviance(glmm_fit),
+  AIC = AIC(glmm_fit),
+  BIC = BIC(glmm_fit)
 )
 ```
 
-## Simulate and refit
+## Quadrature Sensitivity
 
-```{r simulate-refit}
-fit <- lmm(y ~ x + z + (1 | subject), study, control = mm_control(verbose = -1))
+`nAGQ` is part of the fit request and is recorded on the object. This is a
+small sensitivity check, not a claim that the joint optimizer is enabled.
 
-sims <- simulate(fit, nsim = 2, seed = 10)
-head(sims)
+```{r agq-sensitivity}
+glmm_fit_agq3 <- glmm(
+  cbpp_formula,
+  cbpp_binary,
+  family = cbpp_family,
+  method = "pirls_profiled",
+  nAGQ = 3L,
+  control = mm_control(verbose = -1)
+)
 
-refit_fit <- refit(fit, sims$sim_1)
-fixef(refit_fit)
+data.frame(
+  nAGQ = c(glmm_fit$nAGQ, glmm_fit_agq3$nAGQ),
+  logLik = c(as.numeric(logLik(glmm_fit)),
+             as.numeric(logLik(glmm_fit_agq3))),
+  AIC = c(AIC(glmm_fit), AIC(glmm_fit_agq3)),
+  check.names = FALSE
+)
 ```
 
-`simulate()` uses the stored fixed effects, random-effect covariance summaries,
-and residual scale. `refit()` uses the stored formula and model frame with the
-new response.
+## Current Boundaries
 
-## Compare models
+In-sample `fitted()` and `residuals()` are available, and
+`summary(fit, tests = "coefficients")` now returns a Wald-z fixed-effect
+table built from the upstream PIRLS/Laplace working-Hessian covariance
+payload (reliability label: `moderate`). GLMM prediction, simulation/refit
+methods, and the joint-Laplace backend remain uncertified by the current
+Rust contract; the package exposes those as ordinary R conditions rather
+than silently filling in values.
 
-```{r compare}
-reduced <- lmm(y ~ x + (1 | subject), study, control = mm_control(verbose = -1))
+```{r boundaries}
+glmm_boundary <- function(expr) {
+  cnd <- tryCatch({
+    force(expr)
+    NULL
+  }, error = function(cnd) cnd)
+  if (is.null(cnd)) {
+    return(data.frame(status = "available", class = NA_character_,
+                      message = "", check.names = FALSE))
+  }
+  data.frame(
+    status = "unavailable",
+    class = class(cnd)[[1L]],
+    message = conditionMessage(cnd),
+    check.names = FALSE
+  )
+}
 
-compare(reduced, fit)
-anova(reduced, fit)
-```
-
-REML fits are refit by ML for likelihood comparison when
-`refit_for_comparison = "auto"` (the default). The comparison table records
-which rows were refit.
-
-```{r drop1}
-drop1(fit, test = "Chisq")
-```
-
-## Parametric bootstrap
-
-`parametric_bootstrap()` runs the engine-certified bootstrap
-likelihood-ratio test and reports the replicate accounting the Rust engine
-produced. It requires ML fits; `compare(method = "bootstrap")` refits REML
-to ML for you. Larger `nsim` values are slower.
-
-```{r bootstrap}
-reduced_ml <- lmm(y ~ x + (1 | subject), study, REML = FALSE,
-                   control = mm_control(verbose = -1))
-fit_ml <- lmm(y ~ x + z + (1 | subject), study, REML = FALSE,
-              control = mm_control(verbose = -1))
-boot <- parametric_bootstrap(reduced_ml, fit_ml, nsim = 2, seed = 99)
-boot
-
-compare(reduced, fit, method = "bootstrap", nsim = 2, seed = 99)
+rbind(
+  predict = glmm_boundary(predict(glmm_fit)),
+  coefficient_tests = glmm_boundary(summary(glmm_fit, tests = "coefficients")),
+  simulate = glmm_boundary(stats::simulate(glmm_fit, nsim = 1L)),
+  refit = glmm_boundary(refit(glmm_fit, fitted(glmm_fit))),
+  joint_laplace = glmm_boundary(glmm(
+    cbpp_formula,
+    cbpp_binary,
+    family = cbpp_family,
+    method = "joint_laplace",
+    control = mm_control(verbose = -1)
+  ))
+)
 ```
 
 ```{r checks, include = FALSE}
-stopifnot(nrow(sims) == nrow(study))
-stopifnot(inherits(refit_fit, "mm_lmm"))
-cmp <- compare(reduced, fit)
-stopifnot(nrow(cmp$table) == 2L)
-stopifnot(any(cmp$table$refit))
-stopifnot(inherits(drop1(fit), "mm_drop1"))
-stopifnot(inherits(boot, "mm_parametric_bootstrap"))
+stopifnot(inherits(glmm_fit, "mm_glmm"))
+stopifnot(identical(glmm_fit$nAGQ, 1L))
+stopifnot(identical(glmm_fit_agq3$nAGQ, 3L))
+stopifnot(nobs(glmm_fit) == nrow(cbpp_binary))
+stopifnot(all(is.finite(fixef(glmm_fit))))
+stopifnot(is.finite(as.numeric(logLik(glmm_fit))))
+stopifnot(is.finite(AIC(glmm_fit)))
+stopifnot(inherits(summary(glmm_fit), "summary.mm_glmm"))
+stopifnot(length(fitted(glmm_fit)) == nrow(cbpp_binary))
+stopifnot(length(residuals(glmm_fit)) == nrow(cbpp_binary))
+
+boundaries <- rbind(
+  predict = glmm_boundary(predict(glmm_fit)),
+  coefficient_tests = glmm_boundary(summary(glmm_fit, tests = "coefficients")),
+  joint_laplace = glmm_boundary(glmm(
+    cbpp_formula,
+    cbpp_binary,
+    family = cbpp_family,
+    method = "joint_laplace",
+    control = mm_control(verbose = -1)
+  ))
+)
+stopifnot(identical(boundaries["predict", "class"], "mm_inference_unavailable"))
+stopifnot(identical(boundaries["coefficient_tests", "status"], "available"))
+stopifnot(identical(boundaries["joint_laplace", "class"], "mm_fit_error"))
 ```

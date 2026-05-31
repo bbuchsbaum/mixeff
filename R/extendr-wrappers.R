@@ -69,6 +69,18 @@ mm_compile_model_json <- function(formula, column_order, numeric_columns, catego
 #' @noRd
 mm_fit_lmm_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json) .Call(wrap__mm_fit_lmm_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json)
 
+#' Fit a generalized linear mixed-effects model and return the fit payload JSON.
+#'
+#' This is the Stage B.1 GLMM fit primitive. The R layer owns formula/data
+#' validation and user-facing S3 shape; Rust owns construction of the upstream
+#' `GeneralizedLinearMixedModel`, the PIRLS fit, and the compiler artifact.
+#' `method = "pirls_profiled"` maps to upstream `fast = true`. The joint
+#' Laplace path requires the upstream `nlopt` feature, which this CRAN-oriented
+#' wrapper build intentionally does not enable.
+#'
+#' @noRd
+mm_fit_glmm_json <- function(formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, weights, offset, control_json) .Call(wrap__mm_fit_glmm_json, formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, weights, offset, control_json)
+
 #' Evaluate fixed-effect contrast rows through the Rust inference contract.
 #'
 #' @noRd
@@ -109,6 +121,26 @@ mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_colum
 #' @noRd
 mm_bootstrap_lrt_json <- function(reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, bootstrap_options_json) .Call(wrap__mm_bootstrap_lrt_json, reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, bootstrap_options_json)
 
+#' Build an upstream model-comparison table for fitted LMM payloads.
+#'
+#' Each list element is the R-side bridge payload for one fitted model
+#' (`formula_string`, `REML`, `spec_data`, `weights`, and `control_json`).
+#' Returning the upstream `ModelComparisonTable` keeps nestedness, ML-refit,
+#' information-criteria, and reason-code rules owned by the Rust contract.
+#'
+#' @noRd
+mm_compare_models_json <- function(model_payloads, method, refit_policy) .Call(wrap__mm_compare_models_json, model_payloads, method, refit_policy)
+
+#' Boundary-aware variance-component likelihood-ratio test.
+#'
+#' `reduced_payload` may be NULL when the tested random term is the only
+#' random-effect term. In that case the reduced model is the fixed-effect
+#' linear model built from the full model's response and fixed-effect design.
+#' Otherwise it is the bridge payload for the reduced LMM.
+#'
+#' @noRd
+mm_boundary_lrt_json <- function(reduced_payload, full_payload, reduced_formula) .Call(wrap__mm_boundary_lrt_json, reduced_payload, full_payload, reduced_formula)
+
 #' Render an `audit_design()` artifact as text.
 #'
 #' Takes the JSON produced by `mm_compile_model_json` and returns the
@@ -130,6 +162,44 @@ mm_audit_report_text <- function(artifact_json) .Call(wrap__mm_audit_report_text
 #'
 #' @noRd
 mm_audit_report_json <- function(artifact_json) .Call(wrap__mm_audit_report_json, artifact_json)
+
+#' Conditional variance matrices of the random effects, serialized for R.
+#'
+#' Mirrors `lme4::condVar` / `ranef(condVar = TRUE)`. Each RE term yields a
+#' `p × p × n` PSD array (one `p × p` block per grouping level), flattened
+#' column-major so `array(payload$postvar, dim = payload$dim)` reconstructs the
+#' 3-D array R expects. `names` indexes the leading two dimensions (slope
+#' names per term) and `levels` indexes the trailing dimension.
+#'
+#' @noRd
+mm_lmm_cond_var_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json) .Call(wrap__mm_lmm_cond_var_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json)
+
+#' New-data predictions through `LinearMixedModel::predict_new`.
+#'
+#' `allow_new_levels_policy` is the string-form of `NewReLevels`:
+#'   "error"       -> NewReLevels::Error
+#'   "population"  -> NewReLevels::Population
+#'   "missing"     -> NewReLevels::Missing
+#'
+#' Returns a JSON payload carrying one prediction per `newdata` row.
+#' Predictions whose upstream value is `None` (unseen grouping level under
+#' the "missing" policy) are encoded as JSON `null`, which the R side
+#' translates to `NA_real_`.
+#'
+#' @noRd
+mm_lmm_predict_new_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, allow_new_levels_policy) .Call(wrap__mm_lmm_predict_new_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, allow_new_levels_policy)
+
+#' Profile-likelihood confidence intervals through
+#' `mixeff_rs::stats::profile_confint_payload`.
+#'
+#' `level` is the confidence level in `(0, 1)`. The upstream payload carries
+#' both the computed intervals and the raw profile rows. Under REML the
+#' upstream contract omits beta from the profiled parameters; the R-side
+#' wrapper turns this absence into a typed `profile_beta_unavailable_under_reml`
+#' reason rather than fabricating beta CIs.
+#'
+#' @noRd
+mm_lmm_profile_confint_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, level) .Call(wrap__mm_lmm_profile_confint_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, level)
 
 #' Demo of the interrupt bridge — a no-op loop that yields to R between
 #' iterations so Ctrl-C can terminate it. Returns `iters` on clean

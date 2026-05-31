@@ -15,11 +15,13 @@ mm_lme4_parity_manifest <- function() {
   jsonlite::fromJSON(path, simplifyVector = FALSE)
 }
 
-mm_lme4_parity_cases <- function(ids = NULL) {
+mm_lme4_parity_cases <- function(ids = NULL, model = "lmm") {
   manifest <- mm_lme4_parity_manifest()
   cases <- manifest$cases
   if (!is.null(ids)) {
     cases <- Filter(function(x) x$id %in% ids, cases)
+  } else if (!is.null(model)) {
+    cases <- Filter(function(x) identical(x$model %||% "lmm", model), cases)
   }
   lapply(cases, function(case) {
     case$default_tolerances <- manifest$default_tolerances
@@ -514,14 +516,28 @@ mm_expect_prediction_lme4_parity <- function(case) {
   testthat::expect_identical(attr(se, "mm_unavailable_reason"),
                              "prediction_se_unavailable_phase_2")
 
-  testthat::expect_error(
-    stats::predict(pair$mixeff, newdata = pair$data),
-    class = "mm_inference_unavailable"
-  )
-  testthat::expect_error(
-    stats::predict(pair$mixeff, re.form = stats::as.formula("~0")),
-    class = "mm_inference_unavailable"
-  )
+  # newdata prediction is wired through mm_lmm_predict_new_json (Stage C.1,
+  # bd-01KRCKCZJ5B5AQS5BV77VMM8ZF). Re-running on the training rows must
+  # reproduce the in-sample fitted values within the case tolerance.
+  newdata_conditional <- stats::predict(pair$mixeff, newdata = pair$data,
+                                        re.form = NULL)
+  mm_assert_parity(newdata_conditional, stats::predict(pair$lme4),
+                   case$id, "predict_newdata_conditional", tol$fitted,
+                   "predict conditional with newdata=training")
+  newdata_population <- stats::predict(pair$mixeff, newdata = pair$data,
+                                       re.form = NA)
+  mm_assert_parity(newdata_population,
+                   stats::predict(pair$lme4, re.form = NA),
+                   case$id, "predict_newdata_population", tol$fitted,
+                   "predict population with newdata=training")
+  # `~0` is the explicit population form; behavior must mirror `re.form = NA`.
+  newdata_zero <- stats::predict(pair$mixeff,
+                                 re.form = stats::as.formula("~0"))
+  mm_assert_parity(newdata_zero,
+                   stats::predict(pair$lme4, re.form = NA),
+                   case$id, "predict_re_form_zero", tol$fitted,
+                   "predict re.form=~0 on in-sample data")
+
   testthat::expect_error(
     stats::predict(pair$mixeff, interval = "confidence"),
     class = "mm_inference_unavailable"

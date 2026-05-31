@@ -130,8 +130,8 @@ attr(V, "mm_unavailable_reason")
 V
 ```
 
-The same rule applies to conditional variances for random effects, which the
-current contract does not yet certify:
+Conditional variances for random effects also survive the round trip. With
+`condVar = TRUE`, each grouping table carries a finite `postVar` array.
 
 ```{r ranef-condvar}
 re <- ranef(restored, condVar = TRUE)
@@ -142,8 +142,9 @@ dim(attr(re$clinic, "postVar"))
 ```{r unavailable-checks, include = FALSE}
 stopifnot(is.null(attr(V, "mm_unavailable_reason")) ||
           is.character(attr(V, "mm_unavailable_reason")))
-stopifnot(identical(attr(re, "mm_unavailable_reason"),
-                    "random_effect_conditional_variance_unavailable"))
+stopifnot(is.null(attr(re, "mm_unavailable_reason")))
+stopifnot(is.array(attr(re$clinic, "postVar")))
+stopifnot(all(is.finite(attr(re$clinic, "postVar"))))
 ```
 
 ## What should you report?

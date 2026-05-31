@@ -9,7 +9,7 @@ test_effect(
   fit,
   term,
   method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "bootstrap_lrt",
-    "cluster_bootstrap", "asymptotic", "none"),
+    "cluster_bootstrap", "asymptotic", "boundary_lrt", "none"),
   bootstrap = NULL,
   group = NULL,
   ...
@@ -19,7 +19,7 @@ test_effect(
   fit,
   term,
   method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "bootstrap_lrt",
-    "cluster_bootstrap", "asymptotic", "none"),
+    "cluster_bootstrap", "asymptotic", "boundary_lrt", "none"),
   bootstrap = NULL,
   group = NULL,
   ...

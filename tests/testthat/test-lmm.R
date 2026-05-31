@@ -138,17 +138,20 @@ test_that("random-effect and variance-component extractors are shaped like lme4 
   expect_equal(vc$residual_sd, sigma(fit))
 })
 
-test_that("Phase 2 unavailable extractor paths are typed", {
+test_that("revived extractor paths return typed values", {
   df <- mk_lmm_fit_fixture()
   fit <- lmm(y ~ x + (1 | subject), df, control = mm_control(verbose = -1))
 
   re <- ranef(fit, condVar = TRUE)
   expect_s3_class(re, "mm_ranef")
-  expect_identical(attr(re, "mm_unavailable_reason"),
-                   "random_effect_conditional_variance_unavailable")
-  expect_true(all(is.na(attr(re$subject, "postVar"))))
-  expect_error(stats::predict(fit, newdata = df),
-               class = "mm_inference_unavailable")
+  expect_null(attr(re, "mm_unavailable_reason"))
+  pv <- attr(re$subject, "postVar")
+  expect_true(is.array(pv))
+  expect_identical(dim(pv), c(1L, 1L, nrow(re$subject)))
+  expect_true(all(is.finite(pv)))
+
+  pred <- stats::predict(fit, newdata = df)
+  expect_equal(unname(pred), unname(fitted(fit)), tolerance = 1e-8)
   expect_error(stats::predict(fit, re.form = ~(1 | subject)),
                class = "mm_inference_unavailable")
 })

@@ -28,6 +28,32 @@ print.mm_lmm <- function(x, ...) {
   invisible(x)
 }
 
+#' @method print mm_glmm
+#' @export
+print.mm_glmm <- function(x, ...) {
+  schema <- x$schema %||% mm_object_schema(x$artifact)
+  cat("Generalized linear mixed model fit\n")
+  cat(sprintf("Formula: %s\n", deparse1(x$formula)))
+  cat(sprintf("Family/link: %s/%s\n", x$family$family, x$family$link))
+  cat(sprintf("Method: %s (nAGQ = %d)\n", x$method, x$nAGQ))
+  cat(sprintf("Fit status: %s\n", x$fit_status))
+  cat(mm_print_optimizer_line(x))
+  cat(sprintf(
+    "Artifact: %s v%s; crate: %s\n",
+    schema$schema_name %||% "not_recorded",
+    schema$schema_version %||% "not_recorded",
+    schema$crate_version %||% "not_recorded"
+  ))
+  cat(sprintf(
+    "nobs: %d, dispersion: %.6g, logLik: %.6g\n",
+    x$nobs, x$dispersion, x$logLik
+  ))
+  cat("Fixed effects:\n")
+  print(signif(fixef(x), 6))
+  cat("Audit verbs: audit(), diagnostics(), model_report()\n")
+  invisible(x)
+}
+
 # Render the singular-fit summary per PRD §9.5.6: describe effective rank,
 # point to changes() and random_options(), never recommend a different
 # model spelling. Returns character() when the fit is not singular.

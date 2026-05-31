@@ -113,18 +113,27 @@ bw_expect_varcorr_close <- function(fit, ref, tolerance, label) {
       expected$grp[[i]], expected$var1[[i]], label
     ))
     if (any(hit)) {
-      expect_equal(observed$table$std_dev[hit][1L], expected$sdcor[[i]],
-                   tolerance = tolerance,
-                   info = sprintf("variance component parity failed for `%s`",
-                                  label))
+      field <- sprintf(
+        "varcorr.std_dev.%s.%s",
+        mm_lme4_group_key(expected$grp[[i]]),
+        bw_label_key(expected$var1[[i]])
+      )
+      mm_assert_parity(
+        observed$table$std_dev[hit][1L],
+        expected$sdcor[[i]],
+        label,
+        field,
+        tolerance,
+        "variance component"
+      )
     }
   }
 
   residual_sd <- as.data.frame(lme4::VarCorr(ref))$sdcor[
     as.data.frame(lme4::VarCorr(ref))$grp == "Residual"
   ][1L]
-  expect_equal(observed$residual_sd, residual_sd, tolerance = tolerance,
-               info = sprintf("residual SD parity failed for `%s`", label))
+  mm_assert_parity(observed$residual_sd, residual_sd, label,
+                   "varcorr.residual_sd", tolerance, "residual SD")
 }
 
 test_that("Bodo Winter politeness fixture preserves tutorial data shape", {
@@ -148,22 +157,19 @@ test_that("Bodo Winter LME tutorial models match lme4 core outputs", {
     tol <- case$tolerance
 
     bw_expect_fixef_close(pair$mixeff, pair$lme4, tol$fixef, label)
-    expect_equal(sigma(pair$mixeff), sigma(pair$lme4), tolerance = tol$scalar,
-                 info = sprintf("sigma parity failed for `%s`", label))
-    expect_equal(as.numeric(logLik(pair$mixeff)),
-                 as.numeric(stats::logLik(pair$lme4)),
-                 tolerance = tol$scalar,
-                 info = sprintf("logLik parity failed for `%s`", label))
-    expect_equal(AIC(pair$mixeff), AIC(pair$lme4), tolerance = tol$scalar,
-                 info = sprintf("AIC parity failed for `%s`", label))
-    expect_equal(BIC(pair$mixeff), BIC(pair$lme4), tolerance = tol$scalar,
-                 info = sprintf("BIC parity failed for `%s`", label))
-    expect_equal(fitted(pair$mixeff), fitted(pair$lme4),
-                 tolerance = tol$fitted,
-                 info = sprintf("fitted-value parity failed for `%s`", label))
-    expect_equal(residuals(pair$mixeff), residuals(pair$lme4),
-                 tolerance = tol$fitted,
-                 info = sprintf("residual parity failed for `%s`", label))
+    mm_assert_parity(sigma(pair$mixeff), sigma(pair$lme4), label,
+                     "sigma", tol$scalar, "sigma")
+    mm_assert_parity(as.numeric(logLik(pair$mixeff)),
+                     as.numeric(stats::logLik(pair$lme4)), label,
+                     "logLik", tol$scalar, "logLik")
+    mm_assert_parity(AIC(pair$mixeff), AIC(pair$lme4), label,
+                     "AIC", tol$scalar, "AIC")
+    mm_assert_parity(BIC(pair$mixeff), BIC(pair$lme4), label,
+                     "BIC", tol$scalar, "BIC")
+    mm_assert_parity(fitted(pair$mixeff), fitted(pair$lme4), label,
+                     "fitted", tol$fitted, "fitted-value")
+    mm_assert_parity(residuals(pair$mixeff), residuals(pair$lme4), label,
+                     "residuals", tol$fitted, "residual")
     bw_expect_varcorr_close(pair$mixeff, pair$lme4, tol$varcorr, label)
   }
 })
@@ -204,10 +210,9 @@ test_that("Bodo Winter likelihood-ratio examples agree with lme4", {
 
     mm_cmp <- mixeff::compare(mm_null, mm_full)$table
     lme4_cmp <- stats::anova(lme4_null, lme4_full)
-    expect_equal(mm_cmp$LRT[[2L]], lme4_cmp$Chisq[[2L]], tolerance = 1e-3,
-                 info = sprintf("LRT statistic mismatch for `%s`", label))
-    expect_equal(mm_cmp$p_value[[2L]], lme4_cmp$`Pr(>Chisq)`[[2L]],
-                 tolerance = 1e-4,
-                 info = sprintf("LRT p-value mismatch for `%s`", label))
+    mm_assert_parity(mm_cmp$LRT[[2L]], lme4_cmp$Chisq[[2L]], label,
+                     "lrt.statistic", 1e-3, "LRT statistic")
+    mm_assert_parity(mm_cmp$p_value[[2L]], lme4_cmp$`Pr(>Chisq)`[[2L]],
+                     label, "lrt.p_value", 1e-4, "LRT p-value")
   }
 })

@@ -1,4 +1,4 @@
-mk_marginal_fit <- function(seed = 42L) {
+mk_marginal_fit <- function(seed = 42L, weighted = FALSE) {
   set.seed(seed)
   subject <- factor(rep(seq_len(12L), each = 6L))
   trt <- factor(rep(c("a", "b", "c"), times = 24L))
@@ -11,11 +11,18 @@ mk_marginal_fit <- function(seed = 42L) {
     0.25 * x +
     b0[as.integer(subject)] +
     rnorm(length(subject), sd = 0.25)
-  lmm(
-    y ~ trt + block + x + (1 | subject),
-    data.frame(y = y, trt = trt, block = block, x = x, subject = subject),
-    control = mm_control(verbose = -1)
-  )
+  df <- data.frame(y = y, trt = trt, block = block, x = x, subject = subject)
+  if (isTRUE(weighted)) {
+    df$w <- rep(c(1, 2, 0.75, 1.5, 3, 0.5), length.out = nrow(df))
+    return(lmm(
+      y ~ trt + block + x + (1 | subject),
+      df,
+      weights = w,
+      control = mm_control(verbose = -1)
+    ))
+  }
+  lmm(y ~ trt + block + x + (1 | subject), df,
+      control = mm_control(verbose = -1))
 }
 
 test_that("mm_grid() builds a fixed-effect reference grid", {
@@ -94,6 +101,31 @@ test_that("mm_comparisons() returns pairwise differences within by groups", {
   expect_true(all(grepl(" - ", cmp$table$label, fixed = TRUE)))
   expect_true(all(vapply(cmp$table$by, identical, logical(1), "block")))
   expect_true(all(vapply(cmp$table$specs, identical, logical(1), "trt")))
+})
+
+test_that("weighted LMM covariance feeds marginal standard errors", {
+  fit <- mk_marginal_fit(weighted = TRUE)
+  unweighted <- mk_marginal_fit()
+  V <- stats::vcov(fit, type = "fixed")
+  grid <- mm_grid(fit, ~ trt, at = list(x = 0))
+
+  pred <- mm_predictions(fit, grid = grid, method = "asymptotic")
+  means <- mm_means(fit, ~ trt, at = list(x = 0), method = "asymptotic")
+  expected_pred_se <- sqrt(rowSums((grid$X %*% V) * grid$X))
+  expected_mean_se <- sqrt(rowSums((means$L %*% V) * means$L))
+  expected_weights <- rep(c(1, 2, 0.75, 1.5, 3, 0.5),
+                          length.out = nrow(fit$model_frame))
+
+  expect_equal(fit$weights, expected_weights)
+  expect_identical(attr(V, "mm_status"), "available")
+  expect_identical(attr(V, "mm_schema_name"),
+                   "mixedmodels.fixed_effect_covariance_matrix")
+  expect_gt(max(abs(unname(V) - unname(stats::vcov(unweighted, type = "fixed")))),
+            1e-6)
+  expect_equal(pred$table$std_error, unname(expected_pred_se), tolerance = 1e-8)
+  expect_equal(means$table$std_error, unname(expected_mean_se), tolerance = 1e-8)
+  expect_true(all(pred$table$status == "available"))
+  expect_true(all(means$table$status == "available"))
 })
 
 test_that("unsupported marginal quantity requests are typed", {

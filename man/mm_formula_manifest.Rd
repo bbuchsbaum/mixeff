@@ -22,7 +22,9 @@ the lme4-style syntax surface.}
 \code{random_options}, \code{compare_covariance}, \code{fit_lmm}, \code{fit_glmm},
 \code{audit}, \code{changes}, \code{diagnostics}, \code{fit_status},
 \code{parameterization}, \code{roles}, \code{as_json}, \code{simulate}, \code{inference},
-\code{marginal_quantity_table}, \code{marginal_quantities}). The
+\code{model_comparison_table}, \code{fit_summary_payload},
+\code{marginal_quantity_table},
+\code{marginal_quantities}). The
 \code{marginal_quantity_table} schema may be available before the
 corresponding \code{marginal_quantities} verbs are implemented.}
 }

@@ -166,9 +166,9 @@ stopifnot(all(fixed_audit$source == "fixed_effect_inference_table"))
 ## How are random effects reported?
 
 The random-effect table reports variance components on the fitted scale. In
-the current contract, those rows are available from the fitted covariance
-summary, while the missing stable Rust variance/covariance report payload is
-recorded separately in the unavailable ledger.
+the current contract, those rows come from the Rust-authored
+`mixedmodels.fit_summary` payload, so the source and availability status travel
+with the report.
 
 ```{r random-effect-report}
 reporting_table(fit, "random_effects")
@@ -203,8 +203,8 @@ reporting_table(report, "unavailable")
 unavailable <- reporting_table(report, "unavailable")
 stopifnot(all(c("section", "field", "status", "reason") %in%
                 names(unavailable)))
-stopifnot(any(unavailable$field ==
-                "stable_random_effect_variance_covariance_payload"))
+stopifnot(!any(unavailable$field ==
+                 "stable_random_effect_variance_covariance_payload"))
 ```
 
 ## What should go into your written report?

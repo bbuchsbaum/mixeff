@@ -85,6 +85,46 @@
       "reml": true,
       "expected_status": "match",
       "notes": "Categorical-by-continuous fixed effects with interaction grouping."
+    },
+    {
+      "id": "cbpp_binomial_logit_profiled_pirls",
+      "model": "glmm",
+      "dataset": "cbpp",
+      "package": "lme4",
+      "formula": "y ~ period + (1 | herd)",
+      "source_formula": "cbind(incidence, size - incidence) ~ period + (1 | herd)",
+      "family": "binomial",
+      "link": "logit",
+      "data_transform": "expand_binomial_trials",
+      "method": "pirls_profiled",
+      "reml": false,
+      "expected_status": "expected_mismatch",
+      "tolerances": {
+        "fixef": 1e-4,
+        "theta": 1e-3,
+        "logLik": 1e-4,
+        "deviance": 1e-4
+      },
+      "notes": "R wrapper cbpp parity uses expanded Bernoulli rows because the initial GLMM bridge does not yet expose binomial case weights. Expected mismatches are classified in the parity ledger because mixeff uses profiled fast-PIRLS while lme4::glmer uses joint Laplace."
+    },
+    {
+      "id": "grouseticks_poisson_log_profiled_pirls",
+      "model": "glmm",
+      "dataset": "grouseticks",
+      "package": "lme4",
+      "formula": "TICKS ~ YEAR + cHEIGHT + (1 | INDEX) + (1 | BROOD) + (1 | LOCATION)",
+      "family": "poisson",
+      "link": "log",
+      "method": "pirls_profiled",
+      "reml": false,
+      "expected_status": "expected_mismatch",
+      "tolerances": {
+        "fixef": 1e-4,
+        "theta": 1e-3,
+        "logLik": 1e-4,
+        "deviance": 1e-4
+      },
+      "notes": "Multi-random-intercept Poisson GLMM parity against lme4::glmer. Deviance parity uses -2*logLik on both sides because lme4::deviance.glmer reports the GLM deviance-residual scale."
     }
   ]
 }

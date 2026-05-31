@@ -4,6 +4,9 @@
 \alias{predict.mm_lmm}
 \alias{fitted.mm_lmm}
 \alias{residuals.mm_lmm}
+\alias{fitted.mm_glmm}
+\alias{residuals.mm_glmm}
+\alias{predict.mm_glmm}
 \title{Predict from a fitted mixeff LMM}
 \usage{
 \method{predict}{mm_lmm}(
@@ -20,19 +23,38 @@
 
 \method{fitted}{mm_lmm}(object, ...)
 
-\method{residuals}{mm_lmm}(object, type = c("response"), ...)
+\method{residuals}{mm_lmm}(
+  object,
+  type = c("response", "pearson", "deviance", "working"),
+  scaled = FALSE,
+  ...
+)
+
+\method{fitted}{mm_glmm}(object, ...)
+
+\method{residuals}{mm_glmm}(object, type = c("response"), ...)
+
+\method{predict}{mm_glmm}(object, ...)
 }
 \arguments{
 \item{object}{A fitted \code{mm_lmm} object.}
 
-\item{newdata}{Optional new data. Not supported: predictions are
-returned for the fitted data only.}
+\item{newdata}{Optional new data. Must be a \code{data.frame} containing every
+variable referenced by the model's formula. Categorical levels must
+either match the training factor levels or trigger the \code{allow.new.levels}
+policy.}
 
 \item{re.form}{Random-effects conditioning, following lme4's basic
-convention: \code{NULL} for conditional predictions and \code{NA} for population
-predictions. Other values are not supported.}
+convention. \code{NULL} returns conditional predictions; \code{NA} (or \code{~0})
+returns population-level (fixed-effect) predictions. Conditioning on a
+subset of grouping factors via a one-sided formula is not supported by
+the current Rust contract and raises \code{mm_inference_unavailable}.}
 
-\item{allow.new.levels}{Reserved for future new-data prediction support.}
+\item{allow.new.levels}{When \code{FALSE} (default), unseen grouping levels in
+\code{newdata} raise \code{mm_inference_unavailable} through the Rust
+\code{NewReLevels::Error} policy. When \code{TRUE}, unseen levels are replaced by
+the population mean (zero random effect), matching
+\code{lme4::predict(allow.new.levels = TRUE)}.}
 
 \item{type}{Prediction scale. Gaussian LMMs use the same values for
 \code{"response"} and \code{"link"}.}
@@ -53,8 +75,7 @@ A numeric vector, or a list with \code{fit} and \code{se.fit} when
 \code{se.fit = TRUE}.
 }
 \description{
-Phase 2 supports in-sample predictions for \code{\link[=lmm]{lmm()}} fits. \code{re.form = NULL}
-returns conditional fitted values, while \code{re.form = NA} returns the
-population-level fixed-effect part. New data and prediction standard errors
-require the later lazy-handle prediction layer.
+Predictions follow the lme4 generic shape. In-sample predictions reuse
+the cached fitted/fixed values; new-data predictions are dispatched
+through the Rust \code{predict_new} contract.
 }

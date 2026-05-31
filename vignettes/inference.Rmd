@@ -28,7 +28,7 @@ method is for this particular fit. `lme4` reports the number;
 When a coefficient, contrast, or term test has an available method,
 the p-value is printed with the method name. When the requested
 method is unavailable on this fit, the row says so, with a stable
-reason rather than an apologetic substitute.
+[reason](inference-method-glossary.html) rather than an apologetic substitute.
 
 ## What model are we fitting?
 

@@ -49,6 +49,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   }
 
   spec <- compile_model(formula, data)
+  mm_validate_fit_structure(spec)
   if (control$verbose >= 0L) {
     print(explain_model(spec))
   }
@@ -76,6 +77,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   }
 
   fit_result <- mm_json_parse_lmm_fit(json)
+  fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
   beta <- mm_named_numeric(fit_result$beta, fit_result$beta_names)
   std_errors <- mm_named_numeric(fit_result$std_errors, fit_result$beta_names)
@@ -95,6 +97,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
     weights        = weights,
     artifact       = artifact,
     fit            = fit_result,
+    fit_summary    = fit_summary,
     schema         = mm_object_schema(artifact),
     rust_handle    = NULL,
     lazy_cache     = mm_empty_lazy_cache(),
@@ -115,10 +118,91 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
     fitted         = as.numeric(unlist(fit_result$fitted, use.names = FALSE)),
     residuals      = as.numeric(unlist(fit_result$residuals, use.names = FALSE)),
     random_effects = mm_ranef_from_terms(fit_result$ranef),
-    varcorr        = mm_varcorr_from_result(fit_result$varcorr)
+    varcorr        = mm_varcorr_from_result(fit_summary$varcorr %||% fit_result$varcorr)
   )
   class(fit) <- c("mm_lmm", "mm_fit", "mm_compiled")
   fit
+}
+
+# Pre-fit structural guards (audit-first; PRD §8.1). The Rust fit driver can
+# panic ("Matrix index out of bounds") on empty data, or silently return a
+# degenerate fit when a random effect is not identifiable (e.g. one
+# observation per group). We refuse with a typed condition *before* crossing
+# the bridge rather than letting a panic or a misleading fit escape.
+mm_validate_fit_structure <- function(spec, lmm = TRUE) {
+  n <- nrow(spec$model_frame)
+  if (n == 0L) {
+    mm_abort(
+      message = "`data` has no rows (zero observations after handling missing values); cannot fit a model.",
+      class = "mm_data_error"
+    )
+  }
+  if (n == 1L) {
+    mm_abort(
+      message = "`data` has a single observation; a mixed model needs at least two rows to estimate any variance.",
+      class = "mm_not_identifiable",
+      nobs = n
+    )
+  }
+  # The "levels < observations" rule guards against the random effect being
+  # confounded with the residual scale. It applies to LMMs only: GLMMs have
+  # no separate residual variance, so an observation-level random effect
+  # (one level per row) is a valid, common overdispersion device that glmer
+  # also accepts. Skip the per-group check for GLMMs.
+  if (!isTRUE(lmm)) {
+    return(invisible(spec))
+  }
+  for (g in mm_spec_grouping_columns(spec)) {
+    cols <- g$columns
+    if (!all(cols %in% names(spec$model_frame))) next
+    n_levels <- nrow(unique(spec$model_frame[cols]))
+    if (n_levels >= n) {
+      mm_abort(
+        message = sprintf(
+          paste0("Grouping factor `%s` has %d level(s) for %d observation(s); ",
+                 "with (at least) one level per observation the random effect ",
+                 "and the residual variance are not separately identifiable. ",
+                 "(lme4 errors here: number of levels of each grouping factor ",
+                 "must be < number of observations.)"),
+          g$label, n_levels, n
+        ),
+        class = "mm_not_identifiable",
+        group = g$label,
+        n_levels = n_levels,
+        nobs = n
+      )
+    }
+  }
+  invisible(spec)
+}
+
+# Extract the grouping-factor column(s) for each random term from the compiled
+# semantic model. The engine encodes the group as one of `single$name`,
+# `cell$names`, or `interaction$names`.
+mm_spec_grouping_columns <- function(spec) {
+  terms <- spec$artifact$semantic_model$random_terms %||% list()
+  out <- list()
+  for (t in terms) {
+    g <- t$group
+    cols <- NULL
+    if (is.character(g) && length(g) == 1L) {
+      cols <- g
+    } else if (is.list(g)) {
+      if (!is.null(g$single$name)) {
+        cols <- g$single$name
+      } else if (!is.null(g$cell$names)) {
+        cols <- unlist(g$cell$names, use.names = FALSE)
+      } else if (!is.null(g$interaction$names)) {
+        cols <- unlist(g$interaction$names, use.names = FALSE)
+      }
+    }
+    if (!is.null(cols)) {
+      cols <- as.character(cols)
+      out[[length(out) + 1L]] <- list(columns = cols,
+                                      label = paste(cols, collapse = ":"))
+    }
+  }
+  out
 }
 
 mm_lmm_weights <- function(expr, data, enclos) {
@@ -174,6 +258,32 @@ mm_json_parse_lmm_fit <- function(json) {
     )
   }
   parsed
+}
+
+mm_json_parse_fit_summary <- function(fit_summary) {
+  if (!is.list(fit_summary)) {
+    mm_abort(
+      message = "LMM fit JSON is missing the fit-summary payload.",
+      class = "mm_schema_error",
+      input = fit_summary
+    )
+  }
+  if (!identical(as.character(fit_summary$schema_name), "mixedmodels.fit_summary") ||
+      !identical(as.character(fit_summary$schema_version), "1.0.0")) {
+    mm_abort(
+      message = "LMM fit JSON has an unknown fit-summary schema.",
+      class = "mm_schema_error",
+      input = fit_summary
+    )
+  }
+  if (!is.list(fit_summary$varcorr)) {
+    mm_abort(
+      message = "LMM fit-summary payload is missing its VarCorr table.",
+      class = "mm_schema_error",
+      input = fit_summary
+    )
+  }
+  fit_summary
 }
 
 mm_named_numeric <- function(values, names) {

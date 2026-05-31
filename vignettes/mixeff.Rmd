@@ -149,7 +149,8 @@ it offers it as a labelled, first-class peer to the asymptotic methods
 
 `inference_options()` is the audit verb for that judgment. It
 enumerates the inference methods available on the current fit, gives
-each one a closed-enum *reason* for its status, and names the verb
+each one a [closed-enum *reason*](inference-method-glossary.html)
+for its status, and names the verb
 you would call to invoke it.
 
 ```{r inference-options}
@@ -262,8 +263,9 @@ labels on the same coefficients.
 
 - match `lme4` numerics bit-for-bit; statistical equivalence within
   documented tolerances on parity datasets is the bar.
-- fit GLMMs end-to-end; `glmm()` is a typed boundary today
-  (`vignette("glmm", package = "mixeff")`).
+- provide the joint-Laplace / AGQ GLMM backend; `glmm()` currently ships
+  the labelled profiled-PIRLS path and refuses unavailable joint methods
+  explicitly (`vignette("glmm", package = "mixeff")`).
 - ship Kenward-Roger or profile-likelihood confidence intervals in v0.
 
 Each of those is a stable boundary with a name, not a missing feature

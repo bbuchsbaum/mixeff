@@ -10,10 +10,11 @@ glmm(
   family,
   random = NULL,
   weights = NULL,
+  offset = NULL,
   subset = NULL,
   na.action = na.omit,
   contrasts = NULL,
-  approximation = c("laplace", "agq"),
+  method = c("pirls_profiled", "joint_laplace"),
   nAGQ = 1L,
   inference = c("auto", "none", "asymptotic", "bootstrap"),
   control = mm_control(),
@@ -25,18 +26,23 @@ glmm(
 
 \item{data}{A \code{data.frame}.}
 
-\item{family}{A family object or family constructor such as \code{\link[=binomial]{binomial()}} or
-\code{\link[=poisson]{poisson()}}.}
+\item{family}{A supported GLMM family object or family constructor. The
+certified 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or
+\code{"cloglog"} links; \code{\link[=poisson]{poisson()}} with \code{"log"} or \code{"sqrt"} links; and
+\code{\link[=Gamma]{Gamma()}} with \code{"log"} link.}
 
 \item{random}{Reserved for the native random-effect constructor path.}
 
 \item{weights, subset, na.action, contrasts}{Reserved for future parity with
 \code{\link[=lmm]{lmm()}}.}
 
-\item{approximation}{Objective approximation: \code{"laplace"} or \code{"agq"}.}
+\item{method}{GLMM estimation method. \code{"pirls_profiled"} is available in
+this build; \code{"joint_laplace"} requires the optional upstream \code{nlopt}
+backend and raises a typed \code{mm_fit_error} when unavailable.}
 
-\item{nAGQ}{Number of adaptive Gauss-Hermite quadrature points. \code{1} is
-Laplace; values above \code{1} require \code{approximation = "agq"}.}
+\item{nAGQ}{Number of adaptive Gauss-Hermite quadrature points. \code{1} is the
+Laplace setting; values above \code{1} request AGQ metadata from the profiled
+path.}
 
 \item{inference}{Requested inference method.}
 
@@ -45,12 +51,14 @@ Laplace; values above \code{1} require \code{approximation = "agq"}.}
 \item{...}{Reserved for future use.}
 }
 \value{
-This function currently raises \code{mm_fit_error}.
+An object of class \code{mm_glmm}, also inheriting from \code{mm_fit} and
+\code{mm_compiled}.
 }
 \description{
-\code{glmm()} is the Phase 4 GLMM boundary. It validates the R-side family/link
-request, compiles the model formula, and records the requested objective
-approximation metadata. The current Rust bridge does not yet expose a GLMM
-fit primitive, so the function raises a typed \code{mm_fit_error} instead of
-pretending to fit.
+\code{glmm()} validates the R-side family/link request, compiles the model
+formula, and delegates the numerical fit to the upstream Rust
+\code{GeneralizedLinearMixedModel}. The default \code{method = "pirls_profiled"} is
+the labelled fast-PIRLS path. \code{method = "joint_laplace"} is refused in this
+build because the vendored Rust engine is compiled without the optional
+\code{nlopt} backend.
 }

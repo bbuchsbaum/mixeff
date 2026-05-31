@@ -5,6 +5,9 @@
 \alias{model_report.mm_fit}
 \alias{reporting_table}
 \alias{reporting_table.mm_fit}
+\alias{reporting_table.mm_model_comparison}
+\alias{reporting_table.mm_drop1}
+\alias{reporting_table.mm_random_effect_test}
 \title{Produce reporting tables for a fitted mixeff model}
 \usage{
 model_report(fit, sections = "all", ...)
@@ -14,6 +17,22 @@ model_report(fit, sections = "all", ...)
 reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
 
 \method{reporting_table}{mm_fit}(fit, section = "all", view = c("compact", "audit"), ...)
+
+\method{reporting_table}{mm_model_comparison}(
+  fit,
+  section = "comparison_ledger",
+  view = c("compact", "audit"),
+  ...
+)
+
+\method{reporting_table}{mm_drop1}(
+  fit,
+  section = "comparison_ledger",
+  view = c("compact", "audit"),
+  ...
+)
+
+\method{reporting_table}{mm_random_effect_test}(fit, section = "all", view = c("compact", "audit"), ...)
 }
 \arguments{
 \item{fit}{A fitted \code{mm_fit}, usually from \code{\link[=lmm]{lmm()}}.}

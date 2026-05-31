@@ -1,17 +1,24 @@
 #' Predict from a fitted mixeff LMM
 #'
-#' Phase 2 supports in-sample predictions for [lmm()] fits. `re.form = NULL`
-#' returns conditional fitted values, while `re.form = NA` returns the
-#' population-level fixed-effect part. New data and prediction standard errors
-#' require the later lazy-handle prediction layer.
+#' Predictions follow the lme4 generic shape. In-sample predictions reuse
+#' the cached fitted/fixed values; new-data predictions are dispatched
+#' through the Rust `predict_new` contract.
 #'
 #' @param object A fitted `mm_lmm` object.
-#' @param newdata Optional new data. Not supported: predictions are
-#'   returned for the fitted data only.
+#' @param newdata Optional new data. Must be a `data.frame` containing every
+#'   variable referenced by the model's formula. Categorical levels must
+#'   either match the training factor levels or trigger the `allow.new.levels`
+#'   policy.
 #' @param re.form Random-effects conditioning, following lme4's basic
-#'   convention: `NULL` for conditional predictions and `NA` for population
-#'   predictions. Other values are not supported.
-#' @param allow.new.levels Reserved for future new-data prediction support.
+#'   convention. `NULL` returns conditional predictions; `NA` (or `~0`)
+#'   returns population-level (fixed-effect) predictions. Conditioning on a
+#'   subset of grouping factors via a one-sided formula is not supported by
+#'   the current Rust contract and raises `mm_inference_unavailable`.
+#' @param allow.new.levels When `FALSE` (default), unseen grouping levels in
+#'   `newdata` raise `mm_inference_unavailable` through the Rust
+#'   `NewReLevels::Error` policy. When `TRUE`, unseen levels are replaced by
+#'   the population mean (zero random effect), matching
+#'   `lme4::predict(allow.new.levels = TRUE)`.
 #' @param type Prediction scale. Gaussian LMMs use the same values for
 #'   `"response"` and `"link"`.
 #' @param se.fit Logical; when `TRUE`, returns `NA` standard errors with an
@@ -37,16 +44,10 @@ predict.mm_lmm <- function(object,
                            ...) {
   type <- match.arg(type)
   interval <- match.arg(interval)
-  if (!is.null(newdata)) {
-    mm_abort(
-      message = paste(
-        "`newdata` prediction is not supported by the current Rust",
-        "inference contract; predictions are returned for the fitted data."
-      ),
-      class = "mm_inference_unavailable",
-      input = newdata
-    )
-  }
+  mm_reject_unsupported_dots(
+    list(...), "predict",
+    c(random.only = "use `re.form = NA` for population-level (fixed-only) predictions or `re.form = NULL` for conditional predictions.")
+  )
   if (!is.logical(allow.new.levels) || length(allow.new.levels) != 1L ||
       is.na(allow.new.levels)) {
     mm_abort(
@@ -55,20 +56,6 @@ predict.mm_lmm <- function(object,
       input = allow.new.levels
     )
   }
-
-  target <- mm_prediction_target(re.form)
-  pred <- switch(
-    target,
-    conditional = object$fitted,
-    population = object$fixed_fitted,
-    mm_abort(
-      message = "`re.form` values other than NULL or NA are not supported.",
-      class = "mm_inference_unavailable",
-      input = re.form
-    )
-  )
-  names(pred) <- rownames(object$model_frame)
-
   if (!identical(interval, "none")) {
     mm_abort(
       message = paste(
@@ -78,6 +65,29 @@ predict.mm_lmm <- function(object,
       class = "mm_inference_unavailable",
       input = interval
     )
+  }
+
+  target <- mm_prediction_target(re.form)
+  if (identical(target, "unsupported")) {
+    mm_abort(
+      message = paste(
+        "`re.form` values other than NULL, NA, or ~0 are not supported by the",
+        "current Rust prediction contract."
+      ),
+      class = "mm_inference_unavailable",
+      input = re.form
+    )
+  }
+
+  if (is.null(newdata)) {
+    pred <- switch(
+      target,
+      conditional = object$fitted,
+      population  = object$fixed_fitted
+    )
+    names(pred) <- rownames(object$model_frame)
+  } else {
+    pred <- mm_predict_newdata(object, newdata, target, allow.new.levels)
   }
 
   if (isTRUE(se.fit)) {
@@ -100,11 +110,49 @@ fitted.mm_lmm <- function(object, ...) {
 
 #' @rdname predict.mm_lmm
 #' @export
-residuals.mm_lmm <- function(object, type = c("response"), ...) {
+residuals.mm_lmm <- function(object,
+                             type = c("response", "pearson", "deviance",
+                                      "working"),
+                             scaled = FALSE, ...) {
+  type <- match.arg(type)
+  out <- object$residuals
+  # For a Gaussian LMM with iid residuals, the working and deviance residuals
+  # equal the response residuals; the Pearson residual divides by the residual
+  # scale (unit working weights).
+  if (identical(type, "pearson")) {
+    out <- out / object$sigma
+  }
+  if (isTRUE(scaled)) {
+    out <- out / object$sigma
+  }
+  names(out) <- rownames(object$model_frame)
+  out
+}
+
+#' @rdname predict.mm_lmm
+#' @export
+fitted.mm_glmm <- fitted.mm_lmm
+
+#' @rdname predict.mm_lmm
+#' @export
+residuals.mm_glmm <- function(object, type = c("response"), ...) {
+  # The engine returns response-scale residuals for GLMMs; Pearson/deviance
+  # residuals are not certified by the current contract, so refuse rather than
+  # silently return response residuals under a different label.
   type <- match.arg(type)
   out <- object$residuals
   names(out) <- rownames(object$model_frame)
   out
+}
+
+#' @rdname predict.mm_lmm
+#' @export
+predict.mm_glmm <- function(object, ...) {
+  mm_abort(
+    message = "GLMM prediction is not certified by the current Rust contract.",
+    class = "mm_inference_unavailable",
+    input = object$formula
+  )
 }
 
 mm_prediction_target <- function(re.form) {
@@ -114,5 +162,234 @@ mm_prediction_target <- function(re.form) {
   if (length(re.form) == 1L && is.na(re.form)) {
     return("population")
   }
+  # ~0 / ~ 0 evaluates to a one-sided formula with character "~0"; treat as
+  # explicit population request.
+  if (inherits(re.form, "formula") &&
+      identical(length(re.form), 2L) &&
+      identical(trimws(deparse1(re.form[[2L]])), "0")) {
+    return("population")
+  }
   "unsupported"
+}
+
+# Dispatch to the upstream predict_new contract (conditional path) or
+# compute fixed-only predictions via the cached fixed-effect design matrix
+# (population path). lme4 mirrors this split: re.form = NA bypasses the
+# RE bridge entirely, so we do the same on the R side without paying the
+# refit cost in the Rust FFI.
+mm_predict_newdata <- function(fit, newdata, target, allow_new_levels) {
+  if (!is.data.frame(newdata)) {
+    mm_abort(
+      message = "`newdata` must be a data.frame.",
+      class = "mm_data_error",
+      input = newdata
+    )
+  }
+  needed <- all.vars(stats::delete.response(stats::terms(fit$formula)))
+  missing_vars <- setdiff(needed, names(newdata))
+  if (length(missing_vars)) {
+    mm_abort(
+      message = sprintf(
+        "`newdata` is missing variable(s) required by the model formula: %s.",
+        paste(missing_vars, collapse = ", ")
+      ),
+      class = "mm_data_error",
+      input = newdata,
+      missing = missing_vars
+    )
+  }
+
+  if (identical(target, "population")) {
+    return(mm_predict_fixed_only(fit, newdata))
+  }
+
+  mm_predict_conditional_newdata(fit, newdata, allow_new_levels)
+}
+
+# Conditional newdata prediction via the Rust `predict_new` FFI. The Rust
+# contract refits the model from formula + training data, so the call is
+# self-contained.
+mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
+  policy <- if (isTRUE(allow_new_levels)) "population" else "error"
+
+  spec_data <- mm_translate_data(fit$model_frame)
+  formula_string <- mm_coerce_formula_string(fit$formula)
+  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
+                                   auto_unbox = TRUE, null = "null")
+  new_data <- mm_translate_data(newdata)
+
+  json <- tryCatch(
+    .Call(
+      wrap__mm_lmm_predict_new_json,
+      formula_string,
+      isTRUE(fit$REML),
+      spec_data$column_order,
+      spec_data$numeric_columns,
+      spec_data$categorical_values,
+      spec_data$categorical_levels,
+      mm_bridge_weights(fit$weights),
+      as.character(control_json),
+      new_data$column_order,
+      new_data$numeric_columns,
+      new_data$categorical_values,
+      new_data$categorical_levels,
+      policy
+    ),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) {
+    mm_abort_from_bridge(json, newdata = newdata)
+  }
+
+  payload <- tryCatch(
+    jsonlite::fromJSON(json, simplifyVector = FALSE),
+    error = function(cnd) {
+      mm_abort(
+        message = sprintf("Failed to parse predict_new JSON: %s",
+                          conditionMessage(cnd)),
+        class = "mm_schema_error",
+        parent = cnd
+      )
+    }
+  )
+  schema <- payload$schema %||% list()
+  if (!identical(as.character(schema$schema_name), "mixeff.lmm_predict_new") ||
+      !identical(as.character(schema$schema_version), "1")) {
+    mm_abort(
+      message = "predict_new payload has an unknown schema header.",
+      class = "mm_schema_error",
+      input = payload
+    )
+  }
+
+  preds_raw <- payload$predictions %||% list()
+  out <- vapply(preds_raw, function(v) {
+    if (is.null(v)) NA_real_ else as.numeric(v)
+  }, numeric(1))
+  if (length(out) != nrow(newdata)) {
+    mm_abort(
+      message = sprintf(
+        "predict_new returned %d prediction(s) for %d input row(s).",
+        length(out), nrow(newdata)
+      ),
+      class = "mm_schema_error",
+      input = payload
+    )
+  }
+  names(out) <- rownames(newdata)
+  out
+}
+
+# Fixed-effect-only prediction (re.form = NA path). Build the FE design
+# matrix from the fit's stored fixed formula, align column names to beta,
+# and multiply. Treating columns absent from `newdata` as zero matches the
+# upstream `predict_new` behavior for partial X matrices.
+mm_predict_fixed_only <- function(fit, newdata) {
+  mm_new <- tryCatch(
+    mm_engine_fixed_matrix(fit, newdata),
+    error = function(cnd) cnd
+  )
+  if (inherits(mm_new, "condition")) {
+    # model.frame failures (e.g. a missing predictor column) surface as a
+    # data error; the engine-basis alignment failure already carries its own
+    # typed class and is re-raised as-is.
+    if (inherits(mm_new, "mm_inference_unavailable")) stop(mm_new)
+    mm_abort(
+      message = sprintf("Failed to build model frame for newdata: %s",
+                        conditionMessage(mm_new)),
+      class = "mm_data_error",
+      parent = mm_new
+    )
+  }
+  # Columns are aligned to names(beta) by mm_engine_fixed_matrix().
+  pred <- as.numeric(mm_new %*% fit$beta)
+  names(pred) <- rownames(newdata)
+  pred
+}
+
+mm_training_xlevels <- function(fit) {
+  rhs <- stats::delete.response(stats::terms(mm_fixed_formula(fit)))
+  fe_vars <- all.vars(rhs)
+  factor_cols <- vapply(fit$model_frame, is.factor, logical(1))
+  factor_names <- intersect(names(factor_cols)[factor_cols], fe_vars)
+  if (!length(factor_names)) return(list())
+  lapply(fit$model_frame[factor_names], levels)
+}
+
+mm_training_contrasts <- function(fit) {
+  # Restrict to factors that appear in the fixed-effect part; passing
+  # contrasts for random-effect grouping factors makes model.matrix warn
+  # ("variable ... is absent, its contrast will be ignored").
+  fe_vars <- all.vars(stats::delete.response(stats::terms(mm_fixed_formula(fit))))
+  is_fac <- vapply(fit$model_frame, is.factor, logical(1))
+  factor_vars <- intersect(names(is_fac)[is_fac], fe_vars)
+  if (!length(factor_vars)) return(NULL)
+  # The Rust engine codes EVERY factor with treatment (dummy) contrasts,
+  # including ordered factors (which R would otherwise give contr.poly). We
+  # must force contr.treatment so the reconstructed design matches `beta`'s
+  # basis; see mm_engine_fixed_matrix() for the full rationale.
+  stats::setNames(rep(list("contr.treatment"), length(factor_vars)), factor_vars)
+}
+
+# Build the fixed-effect design matrix for arbitrary `data` (newdata or a
+# reference grid) in the SAME basis the engine used at fit time, with columns
+# named and ordered to match `fit$beta`.
+#
+# Why this exists: the engine codes all factors with treatment contrasts and
+# labels coefficients in a mixeff-specific encoding (e.g. "recipe: B",
+# "recipe: B:temperature: 215"). R's model.matrix() instead (a) uses
+# contr.poly for ordered factors and (b) orders interaction columns with the
+# first factor varying fastest, whereas the engine varies the last factor
+# fastest. Either mismatch silently corrupts X %*% beta. The previous code
+# relied on positional alignment + a blind colnames<- rename, which produced
+# wrong predictions/marginal means whenever an ordered factor or an
+# interaction was present (e.g. lme4::cake). We instead force treatment
+# contrasts, translate R-style column names into the engine encoding, and
+# align by name.
+mm_engine_fixed_matrix <- function(fit, data) {
+  rhs <- stats::delete.response(stats::terms(mm_fixed_formula(fit)))
+  mf <- stats::model.frame(rhs, data = data, na.action = stats::na.pass,
+                           xlev = mm_training_xlevels(fit))
+  X <- stats::model.matrix(rhs, data = mf,
+                           contrasts.arg = mm_training_contrasts(fit))
+  beta_names <- names(fit$beta)
+
+  # Factor variables present in the fixed part, longest name first so that a
+  # factor whose name is a prefix of another (e.g. "rec" vs "recipe") is
+  # matched greedily.
+  fe_vars <- all.vars(rhs)
+  is_fac <- vapply(fit$model_frame, is.factor, logical(1))
+  factor_vars <- intersect(names(is_fac)[is_fac], fe_vars)
+  factor_vars <- factor_vars[order(nchar(factor_vars), decreasing = TRUE)]
+
+  translate_component <- function(comp) {
+    for (v in factor_vars) {
+      if (startsWith(comp, v)) {
+        lev <- substring(comp, nchar(v) + 1L)
+        if (nzchar(lev)) return(paste0(v, ": ", lev))
+      }
+    }
+    comp
+  }
+  translate_name <- function(nm) {
+    if (nm == "(Intercept)") return(nm)
+    parts <- strsplit(nm, ":", fixed = TRUE)[[1L]]
+    paste(vapply(parts, translate_component, character(1)), collapse = ":")
+  }
+  colnames(X) <- vapply(colnames(X), translate_name, character(1))
+
+  missing <- setdiff(beta_names, colnames(X))
+  if (length(missing)) {
+    mm_abort(
+      message = paste0(
+        "Could not reconstruct the fixed-effect design in the engine's ",
+        "coefficient basis; missing column(s): ",
+        paste(missing, collapse = ", "), "."
+      ),
+      class = "mm_inference_unavailable",
+      expected = beta_names,
+      observed = colnames(X)
+    )
+  }
+  X[, beta_names, drop = FALSE]
 }

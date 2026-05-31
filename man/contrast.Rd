@@ -9,7 +9,8 @@ contrast(
   fit,
   L,
   rhs = 0,
-  method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic", "none"),
+  method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic",
+    "boundary_lrt", "none"),
   bootstrap = NULL,
   ...
 )
@@ -18,7 +19,8 @@ contrast(
   fit,
   L,
   rhs = 0,
-  method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic", "none"),
+  method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic",
+    "boundary_lrt", "none"),
   bootstrap = NULL,
   ...
 )

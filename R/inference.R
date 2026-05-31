@@ -20,7 +20,8 @@
 #' @export
 contrast <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
                                                  "kenward_roger", "bootstrap",
-                                                 "asymptotic", "none"),
+                                                 "asymptotic", "boundary_lrt",
+                                                 "none"),
                      bootstrap = NULL, ...) {
   UseMethod("contrast")
 }
@@ -29,11 +30,25 @@ contrast <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
 #' @export
 contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
                                                         "kenward_roger", "bootstrap",
-                                                        "asymptotic", "none"),
+                                                        "asymptotic", "boundary_lrt",
+                                                        "none"),
                             bootstrap = NULL, ...) {
   method <- match.arg(method)
   L <- mm_contrast_matrix(L, fit)
   rhs <- rep(as.numeric(rhs), length.out = nrow(L))
+  if (identical(method, "boundary_lrt")) {
+    table <- mm_boundary_lrt_fixed_effect_contrast_table(L, rhs)
+    obj <- list(
+      table = table,
+      L = L,
+      rhs = rhs,
+      requested_method = method,
+      raw = NULL
+    )
+    class(obj) <- "mm_contrast"
+    return(obj)
+  }
+
   if (identical(method, "none")) {
     estimate <- as.numeric(L %*% fit$beta) - rhs
     table <- data.frame(
@@ -60,6 +75,19 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
     return(obj)
   }
 
+  if (mm_boundary_df_method_unavailable(fit, method)) {
+    table <- mm_boundary_df_unavailable_contrast_table(fit, L, rhs, method)
+    obj <- list(
+      table = table,
+      L = L,
+      rhs = rhs,
+      requested_method = method,
+      raw = NULL
+    )
+    class(obj) <- "mm_contrast"
+    return(obj)
+  }
+
   parsed <- mm_rust_contrast_table(fit, L, rhs, method, bootstrap = bootstrap)
   table <- parsed$table
   table$contrast <- table$label
@@ -68,7 +96,8 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
   table <- table[, c("contrast", "estimate", "rhs", "std_error", "df",
                      "statistic", "statistic_name", "p_value", "method",
                      "requested_method", "status", "reliability",
-                     "estimability", "reason", "details", "notes"),
+                     "reliability_reason", "estimability", "reason",
+                     "reason_code", "reason_detail", "details", "notes"),
                  drop = FALSE]
   obj <- list(
     table = table,
@@ -151,7 +180,8 @@ test_effect <- function(fit, term, method = c("auto", "satterthwaite",
                                              "kenward_roger", "bootstrap",
                                              "bootstrap_lrt",
                                              "cluster_bootstrap",
-                                             "asymptotic", "none"),
+                                             "asymptotic", "boundary_lrt",
+                                             "none"),
                         bootstrap = NULL, group = NULL, ...) {
   UseMethod("test_effect")
 }
@@ -162,7 +192,8 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
                                                      "kenward_roger", "bootstrap",
                                                      "bootstrap_lrt",
                                                      "cluster_bootstrap",
-                                                     "asymptotic", "none"),
+                                                     "asymptotic", "boundary_lrt",
+                                                     "none"),
                                bootstrap = NULL, group = NULL, ...) {
   method <- match.arg(method)
   if (!is.character(term) || !length(term)) {
@@ -182,7 +213,9 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
       input = unknown
     )
   }
-  if (identical(method, "none")) {
+  if (identical(method, "boundary_lrt")) {
+    table <- mm_boundary_lrt_fixed_effect_table(term)
+  } else if (identical(method, "none")) {
     table <- mm_unavailable_effect_table(term, method)
   } else if (identical(method, "bootstrap")) {
     rows <- lapply(term, function(t) {
@@ -212,13 +245,16 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
     names(table)[names(table) == "denominator_df"] <- "den_df"
   } else if (identical(method, "cluster_bootstrap")) {
     table <- mm_cluster_bootstrap_unavailable_effect_table(fit, term, group)
+  } else if (mm_boundary_df_method_unavailable(fit, method)) {
+    table <- mm_boundary_df_unavailable_effect_table(term, method)
   } else {
     parsed <- mm_rust_term_table(fit, method)
     table <- parsed$table[parsed$table$term %in% term, , drop = FALSE]
     table$requested_method <- method
     table <- table[, c("term", "numerator_df", "denominator_df", "statistic",
                        "statistic_name", "p_value", "method", "requested_method",
-                       "status", "reliability", "reason", "details", "notes"),
+                       "status", "reliability", "reliability_reason", "reason",
+                       "reason_code", "reason_detail", "details", "notes"),
                    drop = FALSE]
     names(table)[names(table) == "numerator_df"] <- "num_df"
     names(table)[names(table) == "denominator_df"] <- "den_df"
@@ -226,6 +262,377 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
   obj <- list(table = table, requested_method = method)
   class(obj) <- "mm_effect_test"
   obj
+}
+
+#' Test a random-effect variance component
+#'
+#' `test_random_effect()` exposes the boundary-aware likelihood-ratio route for
+#' random-effect variance components. The v1 certified route is a nested ML
+#' comparison that adds exactly one variance/covariance parameter and reports
+#' the Self-Liang 50:50 mixture reference distribution. It is intentionally
+#' separate from [test_effect()], which tests fixed effects.
+#'
+#' @param fit A fitted `mm_lmm`.
+#' @param term Random-effect term to test. This can be the term id (`"r0"`),
+#'   the original random-effect fragment such as `"(1 | subject)"`, or a
+#'   unique grouping factor name such as `"subject"`.
+#' @param method Currently `"boundary_lrt"`.
+#' @param refit_for_comparison How to handle REML fits. `"auto"` and `"ml"`
+#'   refit to ML; `"error"` refuses.
+#' @param ... Reserved for future methods.
+#'
+#' @return An `mm_random_effect_test` object with a one-row `table`.
+#'
+#' @export
+test_random_effect <- function(fit, term,
+                               method = c("boundary_lrt"),
+                               refit_for_comparison = c("auto", "error", "ml"),
+                               ...) {
+  UseMethod("test_random_effect")
+}
+
+#' @rdname test_random_effect
+#' @export
+test_random_effect.mm_lmm <- function(fit, term,
+                                      method = c("boundary_lrt"),
+                                      refit_for_comparison = c("auto", "error", "ml"),
+                                      ...) {
+  method <- match.arg(method)
+  refit_for_comparison <- match.arg(refit_for_comparison)
+  if (!is.character(term) || length(term) != 1L || is.na(term) || !nzchar(term)) {
+    mm_abort(
+      message = "`term` must be one random-effect term id, fragment, or group.",
+      class = "mm_arg_error",
+      input = term
+    )
+  }
+
+  full <- mm_boundary_lrt_ml_fit(fit, refit_for_comparison)
+  terms <- mm_random_effect_term_table(full)
+  selected <- mm_match_random_effect_term(terms, term)
+  reduced_formula <- mm_drop_random_term_formula(full, selected$index)
+  remaining <- nrow(terms) - 1L
+  reduced <- NULL
+  reduced_payload <- NULL
+  if (remaining > 0L) {
+    reduced <- lmm(reduced_formula, full$model_frame, REML = FALSE,
+                   weights = full$weights, control = mm_control(verbose = -1))
+    reduced_payload <- mm_boundary_lrt_bridge_payload(reduced)
+  }
+
+  json <- tryCatch(
+    mm_boundary_lrt_json(
+      reduced_payload,
+      mm_boundary_lrt_bridge_payload(full),
+      deparse1(reduced_formula)
+    ),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) {
+    mm_abort_from_bridge(json, method = method, term = term)
+  }
+  payload <- mm_json_parse_boundary_lrt(json)
+  table <- mm_boundary_lrt_table(
+    payload = payload,
+    term = selected,
+    reduced_formula = reduced_formula,
+    full = full,
+    reduced = reduced,
+    refit = !identical(full, fit)
+  )
+  obj <- list(
+    table = table,
+    requested_method = method,
+    term = selected,
+    reduced = reduced,
+    full = full,
+    raw = payload
+  )
+  class(obj) <- "mm_random_effect_test"
+  obj
+}
+
+#' @method print mm_random_effect_test
+#' @export
+print.mm_random_effect_test <- function(x, ...) {
+  cat("Random-effect variance-component test:\n")
+  cols <- intersect(
+    c("term", "group", "statistic", "statistic_name", "p_value",
+      "reference_distribution", "status", "reason_code"),
+    names(x$table)
+  )
+  print(x$table[, cols, drop = FALSE], row.names = FALSE)
+  invisible(x)
+}
+
+mm_boundary_lrt_ml_fit <- function(fit, refit_for_comparison) {
+  if (!inherits(fit, "mm_lmm")) {
+    mm_abort(
+      message = "`test_random_effect()` requires a fitted `mm_lmm` object.",
+      class = "mm_arg_error",
+      input = fit
+    )
+  }
+  if (!isTRUE(fit$REML)) {
+    return(fit)
+  }
+  if (identical(refit_for_comparison, "error")) {
+    mm_abort(
+      message = "Boundary LRT requires ML-fitted models; use `refit_for_comparison = \"auto\"` or refit with `REML = FALSE`.",
+      class = "mm_inference_unavailable",
+      reason_code = "boundary_lrt_requires_ml",
+      input = list(REML = TRUE)
+    )
+  }
+  lmm(fit$formula, fit$model_frame, REML = FALSE, weights = fit$weights,
+      control = mm_control(verbose = -1))
+}
+
+mm_boundary_lrt_bridge_payload <- function(fit) {
+  payload <- mm_rust_fit_bridge_payload(fit)
+  payload$REML <- isTRUE(fit$REML)
+  payload
+}
+
+mm_random_effect_term_table <- function(fit) {
+  terms <- fit$artifact$semantic_model$random_terms %||% list()
+  if (!length(terms)) {
+    mm_abort(
+      message = "No random-effect terms are available to test.",
+      class = "mm_inference_unavailable",
+      reason_code = "boundary_lrt_requires_variance_component_comparison"
+    )
+  }
+  rows <- lapply(seq_along(terms), function(i) {
+    term <- terms[[i]]
+    basis <- term$basis %||% list()
+    p <- length(basis)
+    if (!p) p <- 1L
+    covariance <- mm_scalar_text(term$covariance, "full")
+    theta_parameters <- switch(
+      covariance,
+      scalar = 1L,
+      diagonal = p,
+      diag = p,
+      p * (p + 1L) / 2L
+    )
+    data.frame(
+      index = i,
+      term_id = term$id %||% sprintf("r%d", i - 1L),
+      term = term$source_syntax$text %||% sprintf("random term %d", i),
+      group = mm_random_term_group_label(fit, term, i),
+      basis = paste(vapply(basis, mm_basis_label, character(1)), collapse = ", "),
+      covariance = covariance,
+      theta_parameters = as.integer(theta_parameters),
+      stringsAsFactors = FALSE
+    )
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
+}
+
+mm_match_random_effect_term <- function(terms, term) {
+  hits <- terms$term_id == term | terms$term == term | terms$group == term
+  if (!any(hits)) {
+    mm_abort(
+      message = sprintf(
+        "Unknown random-effect term `%s`. Available terms: %s.",
+        term,
+        paste(unique(c(terms$term_id, terms$term, terms$group)), collapse = ", ")
+      ),
+      class = "mm_arg_error",
+      input = term
+    )
+  }
+  if (sum(hits) > 1L) {
+    mm_abort(
+      message = sprintf(
+        "Random-effect term `%s` is ambiguous; use the term id or exact fragment.",
+        term
+      ),
+      class = "mm_arg_error",
+      input = term
+    )
+  }
+  terms[which(hits)[[1L]], , drop = FALSE]
+}
+
+mm_drop_random_term_formula <- function(fit, drop_index) {
+  response <- mm_response_name(fit)
+  fixed <- setdiff(mm_fixed_effect_terms(fit), "1")
+  fixed_rhs <- if (length(fixed)) paste(fixed, collapse = " + ") else "1"
+  terms <- fit$artifact$semantic_model$random_terms %||% list()
+  random <- vapply(terms, function(x) x$source_syntax$text %||% "", character(1))
+  random <- random[nzchar(random)]
+  if (drop_index <= length(random)) {
+    random <- random[-drop_index]
+  }
+  rhs <- paste(c(fixed_rhs, random), collapse = " + ")
+  stats::as.formula(paste(response, "~", rhs), env = environment(fit$formula))
+}
+
+mm_json_parse_boundary_lrt <- function(json) {
+  if (!is.character(json) || length(json) != 1L || is.na(json) || !nzchar(json)) {
+    mm_abort(
+      message = "`json` must be a single non-empty character string.",
+      class = "mm_schema_error",
+      input = json
+    )
+  }
+  parsed <- tryCatch(
+    jsonlite::fromJSON(json, simplifyVector = FALSE),
+    error = function(cnd) {
+      mm_abort(
+        message = sprintf("Failed to parse boundary-LRT JSON: %s", conditionMessage(cnd)),
+        class = "mm_schema_error",
+        input = json,
+        parent = cnd
+      )
+    }
+  )
+  if (!identical(as.character(parsed$schema_name), "mixedmodels.boundary_lrt") ||
+      !identical(as.character(parsed$schema_version), "1.0.0")) {
+    mm_abort(
+      message = "Boundary-LRT JSON has an unknown schema header.",
+      class = "mm_schema_error",
+      input = parsed
+    )
+  }
+  parsed
+}
+
+mm_boundary_lrt_table <- function(payload, term, reduced_formula, full, reduced, refit) {
+  status <- as.character(payload$status %||% "not_assessed")
+  available <- identical(status, "available")
+  reference_distribution <- mm_boundary_lrt_reference_label(payload$mixture)
+  reason <- payload$reason %||% if (available) NA_character_ else
+    "boundary LRT did not certify a p-value"
+  reason_code <- payload$reason_code %||% if (available) NA_character_ else
+    "boundary_lrt_not_assessed"
+  details <- list(
+    schema_name = payload$schema_name,
+    schema_version = payload$schema_version,
+    mixture = payload$mixture %||% list(),
+    references = payload$references %||% character(),
+    notes = payload$notes %||% character(),
+    comparison_class = payload$comparison_class %||% NA_character_,
+    ordinary_chisq_dof = payload$ordinary_chisq_dof %||% NA_integer_,
+    loglik_within_optimizer_tol = payload$loglik_within_optimizer_tol %||% NA,
+    reduced_formula = deparse1(reduced_formula),
+    full_formula = deparse1(full$formula),
+    reduced_class = if (is.null(reduced)) "lm_fixed_effect_submodel" else "mm_lmm",
+    shape_restrictions = c(
+      "nested ML fits",
+      "same fixed-effect column space",
+      "exactly one tested variance/covariance parameter",
+      "no extra nuisance parameter on the boundary"
+    )
+  )
+  data.frame(
+    term = term$term,
+    term_id = term$term_id,
+    group = term$group,
+    theta_parameters = term$theta_parameters,
+    statistic = payload$statistic %||% NA_real_,
+    statistic_name = "chi_bar_square",
+    ordinary_chisq_dof = payload$ordinary_chisq_dof %||% NA_integer_,
+    p_value = payload$pvalue %||% NA_real_,
+    method = if (available) "boundary_lrt_self_liang_mixture" else "boundary_lrt",
+    requested_method = "boundary_lrt",
+    status = status,
+    reason = reason,
+    reason_code = reason_code,
+    reference_distribution = reference_distribution,
+    refit = isTRUE(refit),
+    details = I(list(details)),
+    notes = I(list(payload$notes %||% character())),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+}
+
+mm_boundary_lrt_reference_label <- function(mixture) {
+  if (is.null(mixture) || !length(mixture)) {
+    return(NA_character_)
+  }
+  parts <- vapply(mixture, function(component) {
+    weight <- as.numeric(component$weight %||% NA_real_)
+    df <- component$chisq_df
+    if (is.null(df) && identical(as.numeric(component$point_mass_at %||% NA_real_), 0)) {
+      df <- 0L
+    }
+    if (is.null(df)) {
+      sprintf("%.3g * point-mass(%s)", weight,
+              as.character(component$point_mass_at %||% NA_real_))
+    } else {
+      sprintf("%.3g * chi-square(%s)", weight, as.integer(df))
+    }
+  }, character(1))
+  paste(parts, collapse = " + ")
+}
+
+mm_boundary_lrt_fixed_effect_reason <- function() {
+  "boundary_lrt is a variance-component route, not a fixed-effect p-value method"
+}
+
+mm_boundary_lrt_fixed_effect_contrast_table <- function(L, rhs) {
+  reason <- mm_boundary_lrt_fixed_effect_reason()
+  reason_code <- "boundary_lrt_not_applicable_to_fixed_effects"
+  data.frame(
+    contrast = rownames(L),
+    estimate = NA_real_,
+    rhs = rhs,
+    std_error = NA_real_,
+    df = NA_real_,
+    statistic = NA_real_,
+    statistic_name = NA_character_,
+    p_value = NA_real_,
+    method = "not_applicable",
+    requested_method = "boundary_lrt",
+    status = "unsupported",
+    reliability = "not_available",
+    reliability_reason = "not_applicable_to_fixed_effects",
+    estimability = "not_assessed",
+    reason = reason,
+    reason_code = reason_code,
+    reason_detail = reason,
+    details = I(rep(list(list(boundary_lrt = list(
+      route = "variance_component",
+      fixed_effect_applicable = FALSE
+    ))), nrow(L))),
+    notes = I(rep(list(character()), nrow(L))),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+}
+
+mm_boundary_lrt_fixed_effect_table <- function(term) {
+  reason <- mm_boundary_lrt_fixed_effect_reason()
+  reason_code <- "boundary_lrt_not_applicable_to_fixed_effects"
+  data.frame(
+    term = term,
+    num_df = NA_real_,
+    den_df = NA_real_,
+    statistic = NA_real_,
+    statistic_name = NA_character_,
+    p_value = NA_real_,
+    method = "not_applicable",
+    requested_method = "boundary_lrt",
+    status = "unsupported",
+    reliability = "not_available",
+    reliability_reason = "not_applicable_to_fixed_effects",
+    reason = reason,
+    reason_code = reason_code,
+    reason_detail = reason,
+    details = I(rep(list(list(boundary_lrt = list(
+      route = "variance_component",
+      fixed_effect_applicable = FALSE
+    ))), length(term))),
+    notes = I(rep(list(character()), length(term))),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
 }
 
 #' @method print mm_effect_test
@@ -435,7 +842,8 @@ print.mm_df_for_contrast <- function(x, ...) {
 #' @importFrom stats confint
 #' @export
 confint.mm_lmm <- function(object, parm, level = 0.95,
-                           method = c("wald", "asymptotic", "bootstrap"),
+                           method = c("wald", "asymptotic", "bootstrap",
+                                      "profile"),
                            bootstrap = NULL,
                            interval = c("percentile", "basic"), ...) {
   method <- match.arg(method)
@@ -451,6 +859,10 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
       class = "mm_arg_error",
       input = level
     )
+  }
+  if (identical(method, "profile")) {
+    return(mm_profile_confint(object, if (missing(parm)) NULL else parm,
+                              level))
   }
   terms <- names(object$beta)
   if (missing(parm)) {
@@ -692,6 +1104,84 @@ mm_unavailable_effect_table <- function(term, method) {
     details = I(rep(list(NULL), length(term))),
     notes = I(rep(list(character()), length(term))),
     stringsAsFactors = FALSE
+  )
+}
+
+mm_boundary_df_method_unavailable <- function(fit, method) {
+  method %in% c("satterthwaite", "kenward_roger") && isTRUE(is_singular(fit))
+}
+
+mm_boundary_df_reason_code <- function(method) {
+  switch(
+    method,
+    satterthwaite = "satterthwaite_unavailable_at_boundary",
+    kenward_roger = "kenward_roger_unavailable_at_boundary",
+    "finite_sample_df_unavailable_at_boundary"
+  )
+}
+
+mm_boundary_df_reason <- function(method) {
+  sprintf(
+    "%s degrees-of-freedom inference is not certified for boundary or reduced-rank variance-parameter fits.",
+    method
+  )
+}
+
+mm_boundary_df_unavailable_contrast_table <- function(fit, L, rhs, method) {
+  reason_code <- mm_boundary_df_reason_code(method)
+  reason <- mm_boundary_df_reason(method)
+  n <- nrow(L)
+  data.frame(
+    contrast = rownames(L),
+    estimate = as.numeric(L %*% fit$beta) - rhs,
+    rhs = rhs,
+    std_error = NA_real_,
+    df = NA_real_,
+    statistic = NA_real_,
+    statistic_name = NA_character_,
+    p_value = NA_real_,
+    method = method,
+    requested_method = method,
+    status = "not_assessed",
+    reliability = "not_available",
+    reliability_reason = reason_code,
+    estimability = I(rep(list(NULL), n)),
+    reason = reason,
+    reason_code = reason_code,
+    reason_detail = fit_status(fit),
+    details = I(rep(list(list(
+      boundary_policy = reason_code,
+      fit_status = fit_status(fit)
+    )), n)),
+    notes = I(rep(list(character()), n)),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+}
+
+mm_boundary_df_unavailable_effect_table <- function(term, method) {
+  reason_code <- mm_boundary_df_reason_code(method)
+  reason <- mm_boundary_df_reason(method)
+  n <- length(term)
+  data.frame(
+    term = term,
+    num_df = NA_real_,
+    den_df = NA_real_,
+    statistic = NA_real_,
+    statistic_name = NA_character_,
+    p_value = NA_real_,
+    method = method,
+    requested_method = method,
+    status = "not_assessed",
+    reliability = "not_available",
+    reliability_reason = reason_code,
+    reason = reason,
+    reason_code = reason_code,
+    reason_detail = NA_character_,
+    details = I(rep(list(list(boundary_policy = reason_code)), n)),
+    notes = I(rep(list(character()), n)),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
   )
 }
 
@@ -1567,7 +2057,7 @@ mm_lincomb_fixef <- function(fit) {
   ## stats::coef() on mm_glmm returns the random-effects list, so we
   ## resolve fixed effects explicitly here.
   if (utils::isS3method("fixef", class = class(fit)[1L], envir = asNamespace("mixeff")) ||
-      !is.null(getS3method("fixef", class(fit)[1L], optional = TRUE))) {
+      !is.null(utils::getS3method("fixef", class(fit)[1L], optional = TRUE))) {
     out <- fixef(fit)
   } else {
     out <- fit$beta

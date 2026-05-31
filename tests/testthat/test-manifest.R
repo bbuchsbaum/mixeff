@@ -54,7 +54,8 @@ test_that("manifest capabilities accurately advertise the current phase", {
       "roles", "as_json", "fit_glmm", "simulate", "inference",
       "fixed_effect_inference_table", "satterthwaite",
       "kenward_roger_explicit", "bootstrap_fixed_effect_payload",
-      "marginal_quantity_table", "marginal_quantities"),
+      "model_comparison_table", "fit_summary_payload", "marginal_quantity_table",
+      "marginal_quantities"),
     ignore.order = TRUE
   )
   # Shipped: Phase 0 (parse_formula) and Phase 1.A-F (compile/audit,
@@ -73,16 +74,15 @@ test_that("manifest capabilities accurately advertise the current phase", {
   expect_true(cap$parameterization)
   expect_true(cap$roles)
   expect_true(cap$as_json)
-  # GLMM fitting still needs a dedicated FFI primitive; the R-side
-  # inference and simulation surfaces are now present and advertise their
-  # own unavailable/certification status where needed.
-  expect_false(cap$fit_glmm)
+  expect_true(cap$fit_glmm)
   expect_true(cap$simulate)
   expect_true(cap$inference)
   expect_true(cap$fixed_effect_inference_table)
   expect_true(cap$satterthwaite)
   expect_true(cap$kenward_roger_explicit)
   expect_true(cap$bootstrap_fixed_effect_payload)
+  expect_true(cap$model_comparison_table)
+  expect_true(cap$fit_summary_payload)
   expect_true(cap$marginal_quantity_table)
   expect_true(cap$marginal_quantities)
 })
@@ -101,5 +101,7 @@ test_that("manifest exposes the audit report and random term card schemas", {
   expect_identical(schemas[["mixedmodels.model_audit_report"]], "2")
   expect_identical(schemas[["mixedmodels.random_term_card"]], "1")
   expect_identical(schemas[["mixedmodels.fixed_effect_inference_table"]], "1.0.0")
+  expect_identical(schemas[["mixedmodels.model_comparison_table"]], "1.0.0")
+  expect_identical(schemas[["mixedmodels.fit_summary"]], "1.0.0")
   expect_identical(schemas[["mixedmodels.marginal_quantity_table"]], "1.0.0")
 })

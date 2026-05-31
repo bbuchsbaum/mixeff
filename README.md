@@ -145,7 +145,7 @@ with regression-detector limits enforced by the test suite.
 - **Phase 1** — `lmm()`, audit-first surface (`compile_model`, `audit_design`, `explain_model`, `random_options`, `compare_covariance`, `changes`, `diagnostics`, `parameterization`, `roles`), lme4-style extractors: **shipped**.
 - **Phase 2** — `saveRDS` round-trip, `revive()`, lazy extractors, `model.matrix`, `vcov`: **shipped**.
 - **Phase 3** — `contrast`, `test_effect`, `inference_table`, `confint`, `anova`, `drop1`, parametric bootstrap, bootstrap LRT: **shipped**.
-- **Phase 4** — `glmm()` (Laplace + AGQ), `simulate`, `refit`, `compare`: **in progress** (bridge primitive landing).
+- **Phase 4** — `glmm()` profiled-PIRLS bridge, `simulate`, `refit`, `compare`: **in progress** (joint Laplace / AGQ still explicit boundaries).
 - **Phase 5** — `emmeans` integration, profile-likelihood CIs, multivariate shared-theta: deferred.
 
 The audit-first contract is what the package is for. Read

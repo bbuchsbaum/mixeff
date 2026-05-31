@@ -125,9 +125,9 @@ getME.mm_lmm <- function(object, name, ...) {
       one,
       X = stats::model.matrix(object, type = "fixed"),
       Z = stats::model.matrix(object, type = "random"),
-      Zt = t(stats::model.matrix(object, type = "random")),
+      Zt = Matrix::t(stats::model.matrix(object, type = "random")),
       Lambda = .mm_lazy(object, "Lambda", mm_lambda_matrix),
-      Lambdat = t(.mm_lazy(object, "Lambda", mm_lambda_matrix)),
+      Lambdat = Matrix::t(.mm_lazy(object, "Lambda", mm_lambda_matrix)),
       theta = object$theta,
       beta = object$beta,
       fixef = object$beta,
@@ -173,7 +173,12 @@ model.matrix.mm_lmm <- function(object, type = c("fixed", "random"), ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
-vcov.mm_lmm <- function(object, type = c("fixed", "theta"), ...) {
+model.matrix.mm_glmm <- model.matrix.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
+vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
+                        correlation = FALSE, ...) {
   type <- match.arg(type)
   if (identical(type, "theta")) {
     theta_names <- parameterization(object)$table$theta_name
@@ -186,13 +191,22 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"), ...) {
     attr(out, "mm_method") <- "unavailable"
     return(out)
   }
-  object$fixed_effect_vcov %||%
+  V <- object$fixed_effect_vcov %||%
     mm_fixed_effect_vcov_from_payload(
       object$artifact$fixed_effect_covariance_matrix,
       object$beta,
       object$std_errors
     )
+  if (isTRUE(correlation)) {
+    # Match lme4: attach the correlation matrix as a "correlation" attribute.
+    attr(V, "correlation") <- stats::cov2cor(V)
+  }
+  V
 }
+
+#' @rdname mm_lmm-methods
+#' @export
+vcov.mm_glmm <- vcov.mm_lmm
 
 mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors) {
   coef_names <- names(beta) %||% names(std_errors)

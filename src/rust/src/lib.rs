@@ -7,13 +7,21 @@ use mixeff_rs::compiler::{
 use mixeff_rs::formula::parse_formula;
 use mixeff_rs::model::{
     parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
-    BootstrapSeedRecord, BootstrapTarget, FixedEffectBootstrapOptions, LinearMixedModel,
-    MixedModelBootstrap, MixedModelFit,
+    BootstrapSeedRecord, BootstrapTarget, Family, FixedEffectBootstrapOptions,
+    GeneralizedLinearMixedModel, LinearMixedModel, LinkFunction, MixedModelBootstrap,
+    MixedModelFit, NewReLevels,
+};
+use mixeff_rs::stats::{
+    profile_confint_payload, BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit,
+    ModelComparisonMethod, ModelComparisonOptions, ModelComparisonRefitPolicy,
+    ModelComparisonTable, BOUNDARY_LRT_SCHEMA, BOUNDARY_LRT_SCHEMA_VERSION, FIT_SUMMARY_SCHEMA,
+    FIT_SUMMARY_SCHEMA_VERSION, PROFILE_LIKELIHOOD_CI_SCHEMA, PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION,
 };
 use nalgebra::{DMatrix, DVector};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 mod data;
 
@@ -40,6 +48,8 @@ const SCHEMA_VERSION_FIXED_EFFECT_INFERENCE_TABLE: &str =
     FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION;
 const SCHEMA_NAME_MARGINAL_QUANTITY_TABLE: &str = "mixedmodels.marginal_quantity_table";
 const SCHEMA_VERSION_MARGINAL_QUANTITY_TABLE: &str = "1.0.0";
+const SCHEMA_NAME_MODEL_COMPARISON_TABLE: &str = "mixedmodels.model_comparison_table";
+const SCHEMA_VERSION_MODEL_COMPARISON_TABLE: &str = "1.0.0";
 const MIXEDMODELS_CRATE_VERSION: &str = "0.1.0";
 
 // Closed list of (schema_name, schema_version) the wrapper currently
@@ -67,6 +77,16 @@ const KNOWN_SCHEMAS: &[(&str, &str)] = &[
     (
         SCHEMA_NAME_MARGINAL_QUANTITY_TABLE,
         SCHEMA_VERSION_MARGINAL_QUANTITY_TABLE,
+    ),
+    (
+        SCHEMA_NAME_MODEL_COMPARISON_TABLE,
+        SCHEMA_VERSION_MODEL_COMPARISON_TABLE,
+    ),
+    (BOUNDARY_LRT_SCHEMA, BOUNDARY_LRT_SCHEMA_VERSION),
+    (FIT_SUMMARY_SCHEMA, FIT_SUMMARY_SCHEMA_VERSION),
+    (
+        PROFILE_LIKELIHOOD_CI_SCHEMA,
+        PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION,
     ),
 ];
 
@@ -181,6 +201,15 @@ fn mm_formula_manifest() -> List {
             SCHEMA_NAME_MARGINAL_QUANTITY_TABLE,
             Robj::from(SCHEMA_VERSION_MARGINAL_QUANTITY_TABLE),
         ),
+        (
+            SCHEMA_NAME_MODEL_COMPARISON_TABLE,
+            Robj::from(SCHEMA_VERSION_MODEL_COMPARISON_TABLE),
+        ),
+        (FIT_SUMMARY_SCHEMA, Robj::from(FIT_SUMMARY_SCHEMA_VERSION)),
+        (
+            PROFILE_LIKELIHOOD_CI_SCHEMA,
+            Robj::from(PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION),
+        ),
     ]);
 
     let capabilities = list!(
@@ -198,13 +227,15 @@ fn mm_formula_manifest() -> List {
         parameterization = TRUE,
         roles = TRUE,
         as_json = TRUE,
-        fit_glmm = FALSE,
+        fit_glmm = TRUE,
         simulate = TRUE,
         inference = TRUE,
         fixed_effect_inference_table = TRUE,
         satterthwaite = TRUE,
         kenward_roger_explicit = TRUE,
         bootstrap_fixed_effect_payload = TRUE,
+        model_comparison_table = TRUE,
+        fit_summary_payload = TRUE,
         marginal_quantity_table = TRUE,
         marginal_quantities = TRUE,
     );
@@ -366,6 +397,13 @@ fn mm_fit_lmm_json(
     let df_residual = nobs.saturating_sub(dof);
 
     let opt = model.opt_summary();
+    let fit_summary =
+        serde_json::to_value(FitSummaryPayload::from_linear_model(&model)).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize fit-summary payload: {}",
+                e
+            )
+        })?;
     let payload = json!({
         "schema": {
             "schema_name": "mixeff.lmm_fit_result",
@@ -392,6 +430,7 @@ fn mm_fit_lmm_json(
         "residuals": model.residuals().iter().copied().collect::<Vec<_>>(),
         "ranef": random_effects_json(&model),
         "varcorr": varcorr_json(&model),
+        "fit_summary": fit_summary,
         "optimizer": {
             "backend": opt.backend_name(),
             "algorithm": opt.optimizer_name(),
@@ -404,6 +443,164 @@ fn mm_fit_lmm_json(
 
     serde_json::to_string(&payload)
         .map_err(|e| format!("mm_schema_error: failed to serialize fit result: {}", e))
+}
+
+/// Fit a generalized linear mixed-effects model and return the fit payload JSON.
+///
+/// This is the Stage B.1 GLMM fit primitive. The R layer owns formula/data
+/// validation and user-facing S3 shape; Rust owns construction of the upstream
+/// `GeneralizedLinearMixedModel`, the PIRLS fit, and the compiler artifact.
+/// `method = "pirls_profiled"` maps to upstream `fast = true`. The joint
+/// Laplace path requires the upstream `nlopt` feature, which this CRAN-oriented
+/// wrapper build intentionally does not enable.
+///
+/// @noRd
+#[extendr]
+fn mm_fit_glmm_json(
+    formula: &str,
+    family: &str,
+    link: &str,
+    method: &str,
+    n_agq: i32,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    weights: Doubles,
+    offset: Doubles,
+    control_json: &str,
+) -> std::result::Result<String, String> {
+    let _control: Value = serde_json::from_str(control_json)
+        .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
+    let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
+    let df = data::build_dataframe(
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &column_order,
+    )?;
+    let family = glmm_family(family)?;
+    let link = glmm_link(link)?;
+    let (fast, method_label) = glmm_method(method, n_agq)?;
+    let n_agq = usize::try_from(n_agq)
+        .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
+
+    // Prior weights (e.g. binomial trial counts) and a fixed linear-predictor
+    // offset are both supported by the engine; route to the matching
+    // constructor when supplied (empty Doubles => None).
+    let weights = optional_case_weights(&weights, df.nrow())?;
+    let offset = optional_offset(&offset, df.nrow())?;
+    let mut model = match (weights, offset) {
+        (None, None) => {
+            GeneralizedLinearMixedModel::new(parsed, &df, family, Some(link))
+        }
+        (Some(w), None) => GeneralizedLinearMixedModel::new_with_weights(
+            parsed,
+            &df,
+            family,
+            Some(link),
+            w,
+        ),
+        (None, Some(o)) => GeneralizedLinearMixedModel::new_with_offset(
+            parsed,
+            &df,
+            family,
+            Some(link),
+            o,
+        ),
+        (Some(w), Some(o)) => GeneralizedLinearMixedModel::new_with_weights_and_offset(
+            parsed,
+            &df,
+            family,
+            Some(link),
+            w,
+            o,
+        ),
+    }
+    .map_err(|e| format!("mm_fit_error: failed to construct GLMM: {}", e))?;
+    model
+        .fit_with_options(fast, n_agq, false)
+        .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
+
+    let artifact_json = serde_json::to_string(model.compiler_artifact()).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize GLMM post-fit artifact: {}",
+            e
+        )
+    })?;
+    let artifact_value: Value = serde_json::from_str(&artifact_json).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to inspect GLMM post-fit artifact JSON: {}",
+            e
+        )
+    })?;
+    let fit_status = artifact_value
+        .get("optimizer_certificate")
+        .and_then(|x| x.get("status"))
+        .and_then(Value::as_str)
+        .unwrap_or("not_assessed");
+
+    let beta = model.coef();
+    let beta_names = model.coef_names();
+    let std_errors = model.stderror();
+    let log_likelihood = model.loglikelihood();
+    let dof = model.dof();
+    let nobs = model.nobs();
+    let df_residual = nobs.saturating_sub(dof);
+    let opt = model.opt_summary();
+    let fit_summary = serde_json::to_value(FitSummaryPayload::from_generalized_model(&model))
+        .map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize GLMM fit-summary payload: {}",
+                e
+            )
+        })?;
+
+    let payload = json!({
+        "schema": {
+            "schema_name": "mixeff.glmm_fit_result",
+            "schema_version": 1
+        },
+        "artifact_json": artifact_json,
+        "formula": model.formula_label().unwrap_or_else(|| formula.to_string()),
+        "family": glmm_family_label(family),
+        "link": glmm_link_label(link),
+        "method": method_label,
+        "n_agq": n_agq,
+        "beta": beta.iter().copied().collect::<Vec<_>>(),
+        "beta_names": beta_names,
+        "theta": model.theta(),
+        "dispersion": model.dispersion(false),
+        "log_likelihood": log_likelihood,
+        "deviance": -2.0 * log_likelihood,
+        "aic": model.aic(),
+        "bic": model.bic(),
+        "nobs": nobs,
+        "dof": dof,
+        "df_residual": df_residual,
+        "fit_status": fit_status,
+        "std_errors": std_errors.iter().copied().collect::<Vec<_>>(),
+        "fitted": model.fitted().iter().copied().collect::<Vec<_>>(),
+        "residuals": model.residuals().iter().copied().collect::<Vec<_>>(),
+        "ranef": random_effects_json_glmm(&model),
+        "varcorr": varcorr_json_glmm(&model),
+        "fit_summary": fit_summary,
+        "optimizer": {
+            "backend": opt.backend_name(),
+            "algorithm": opt.optimizer_name(),
+            "return_value": opt.return_value.as_str(),
+            "function_evaluations": opt.feval,
+            "objective": opt.fmin,
+            "reml": opt.reml
+        }
+    });
+
+    serde_json::to_string(&payload).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize GLMM fit result: {}",
+            e
+        )
+    })
 }
 
 /// Evaluate fixed-effect contrast rows through the Rust inference contract.
@@ -531,13 +728,7 @@ fn mm_full_model_bootstrap_contrast_json(
     let level_values: Vec<f64> = levels.iter().map(|v| v.0).collect();
 
     // Single-row contrast: extract L row and observed contrast estimate (L * beta).
-    let l_row: Vec<f64> = hypothesis
-        .l
-        .values
-        .row(0)
-        .iter()
-        .copied()
-        .collect();
+    let l_row: Vec<f64> = hypothesis.l.values.row(0).iter().copied().collect();
     let contrast_label = hypothesis.label.clone();
     let beta_observed = model.beta();
     let observed_estimate: f64 = l_row
@@ -568,7 +759,8 @@ fn mm_full_model_bootstrap_contrast_json(
         .collect();
     if finite_stats.is_empty() {
         return Err(
-            "mm_inference_unavailable: bootstrap produced no finite contrast statistics".to_string(),
+            "mm_inference_unavailable: bootstrap produced no finite contrast statistics"
+                .to_string(),
         );
     }
     finite_stats.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -786,9 +978,7 @@ fn mm_bootstrap_lrt_json(
     let observed_logl_alt = alternative.loglikelihood();
     let observed_lrt = 2.0 * (observed_logl_alt - observed_logl_red);
     if !observed_lrt.is_finite() {
-        return Err(
-            "mm_inference_unavailable: observed LRT statistic is not finite".to_string(),
-        );
+        return Err("mm_inference_unavailable: observed LRT statistic is not finite".to_string());
     }
 
     let (mut rng, seed_record) = make_bootstrap_rng(options.seed);
@@ -886,6 +1076,93 @@ fn mm_bootstrap_lrt_json(
         .map_err(|e| format!("mm_schema_error: failed to serialize bootstrap LRT: {}", e))
 }
 
+/// Build an upstream model-comparison table for fitted LMM payloads.
+///
+/// Each list element is the R-side bridge payload for one fitted model
+/// (`formula_string`, `REML`, `spec_data`, `weights`, and `control_json`).
+/// Returning the upstream `ModelComparisonTable` keeps nestedness, ML-refit,
+/// information-criteria, and reason-code rules owned by the Rust contract.
+///
+/// @noRd
+#[extendr]
+fn mm_compare_models_json(
+    model_payloads: List,
+    method: &str,
+    refit_policy: &str,
+) -> std::result::Result<String, String> {
+    if model_payloads.len() < 2 {
+        return Err(
+            "mm_arg_error: model comparison requires at least two fitted models".to_string(),
+        );
+    }
+
+    let method = model_comparison_method(method)?;
+    let refit_policy = model_comparison_refit_policy(refit_policy)?;
+    let mut models: Vec<LinearMixedModel> = Vec::with_capacity(model_payloads.len());
+    for (idx, payload) in model_payloads.values().enumerate() {
+        models.push(fit_lmm_from_bridge_payload_robj(&payload, idx + 1)?);
+    }
+    let model_refs = models
+        .iter()
+        .map(|model| model as &dyn MixedModelFit)
+        .collect::<Vec<_>>();
+
+    let table = ModelComparisonTable::compare_with_options(
+        &model_refs,
+        ModelComparisonOptions {
+            method,
+            refit_policy,
+        },
+    )
+    .map_err(|e| format!("mm_inference_unavailable: model comparison failed: {}", e))?;
+
+    let payload = json!({
+        "schema": {
+            "schema_name": SCHEMA_NAME_MODEL_COMPARISON_TABLE,
+            "schema_version": SCHEMA_VERSION_MODEL_COMPARISON_TABLE,
+        },
+        "payload": table,
+    });
+    serde_json::to_string(&payload).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize model comparison: {}",
+            e
+        )
+    })
+}
+
+/// Boundary-aware variance-component likelihood-ratio test.
+///
+/// `reduced_payload` may be NULL when the tested random term is the only
+/// random-effect term. In that case the reduced model is the fixed-effect
+/// linear model built from the full model's response and fixed-effect design.
+/// Otherwise it is the bridge payload for the reduced LMM.
+///
+/// @noRd
+#[extendr]
+fn mm_boundary_lrt_json(
+    reduced_payload: Robj,
+    full_payload: Robj,
+    reduced_formula: &str,
+) -> std::result::Result<String, String> {
+    let full = fit_lmm_from_bridge_payload_robj(&full_payload, 2)?;
+    let result = if reduced_payload.is_null() {
+        let reduced = LinearModelFit::fit(
+            full.response().clone(),
+            full.model_matrix().clone(),
+            Some(reduced_formula.to_string()),
+        )
+        .map_err(|e| format!("mm_inference_unavailable: boundary LRT reduced LM failed: {e}"))?;
+        BoundaryLikelihoodRatioTest::variance_component(&reduced, &full)
+    } else {
+        let reduced = fit_lmm_from_bridge_payload_robj(&reduced_payload, 1)?;
+        BoundaryLikelihoodRatioTest::variance_component(&reduced, &full)
+    };
+
+    serde_json::to_string(&result)
+        .map_err(|e| format!("mm_schema_error: failed to serialize boundary LRT: {e}"))
+}
+
 fn fit_lmm_from_bridge_data(
     formula: &str,
     reml: bool,
@@ -914,6 +1191,209 @@ fn fit_lmm_from_bridge_data(
     Ok(model)
 }
 
+fn fit_lmm_from_bridge_payload_robj(
+    payload: &Robj,
+    index: usize,
+) -> std::result::Result<LinearMixedModel, String> {
+    let payload_list = List::try_from(payload).map_err(|e| {
+        format!("mm_schema_error: comparison payload {index} must be a list: {e:?}")
+    })?;
+    let payload_map = list_to_map(&payload_list, &format!("comparison payload {index}"))?;
+    let spec_data = required_list(&payload_map, "spec_data", index)?;
+    let spec_map = list_to_map(&spec_data, &format!("comparison payload {index} spec_data"))?;
+
+    let formula = required_string(&payload_map, "formula_string", index)?;
+    let reml = required_bool(&payload_map, "REML", index)?;
+    let column_order = required_strings(&spec_map, "column_order", index)?;
+    let numeric_columns = required_list(&spec_map, "numeric_columns", index)?;
+    let categorical_values = required_list(&spec_map, "categorical_values", index)?;
+    let categorical_levels = required_list(&spec_map, "categorical_levels", index)?;
+    let weights = required_doubles(&payload_map, "weights", index)?;
+    let control_json = required_string(&payload_map, "control_json", index)?;
+
+    fit_lmm_from_bridge_data(
+        &formula,
+        reml,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &weights,
+        &control_json,
+    )
+}
+
+fn glmm_family(family: &str) -> std::result::Result<Family, String> {
+    match family {
+        "bernoulli" => Ok(Family::Bernoulli),
+        // Grouped binomial (proportion response + trial-count weights). The R
+        // layer sends "bernoulli" for ungrouped 0/1 responses and "binomial"
+        // only when trial weights are supplied.
+        "binomial" => Ok(Family::Binomial),
+        "poisson" => Ok(Family::Poisson),
+        "gamma" => Ok(Family::Gamma),
+        other => Err(format!("mm_fit_error: unsupported GLMM family `{other}`")),
+    }
+}
+
+fn glmm_link(link: &str) -> std::result::Result<LinkFunction, String> {
+    match link {
+        "identity" => Ok(LinkFunction::Identity),
+        "log" => Ok(LinkFunction::Log),
+        "logit" => Ok(LinkFunction::Logit),
+        "probit" => Ok(LinkFunction::Probit),
+        "cloglog" => Ok(LinkFunction::Cloglog),
+        "inverse" => Ok(LinkFunction::Inverse),
+        "sqrt" => Ok(LinkFunction::Sqrt),
+        other => Err(format!("mm_fit_error: unsupported GLMM link `{other}`")),
+    }
+}
+
+fn glmm_method(method: &str, n_agq: i32) -> std::result::Result<(bool, &'static str), String> {
+    if n_agq < 1 {
+        return Err("mm_arg_error: nAGQ must be a positive integer".to_string());
+    }
+    match method {
+        "pirls_profiled" => Ok((true, "pirls_profiled")),
+        "joint_laplace" => {
+            if n_agq > 1 {
+                return Err(
+                    "mm_arg_error: method='joint_laplace' currently requires nAGQ <= 1".to_string(),
+                );
+            }
+            Err(
+                "mm_fit_error: estimation_method_unavailable: method='joint_laplace' requires the upstream nlopt backend, which is disabled in this vendored build"
+                    .to_string(),
+            )
+        }
+        other => Err(format!("mm_arg_error: unsupported GLMM method `{other}`")),
+    }
+}
+
+fn glmm_family_label(family: Family) -> &'static str {
+    match family {
+        Family::Normal => "normal",
+        Family::Bernoulli => "bernoulli",
+        Family::Binomial => "binomial",
+        Family::Poisson => "poisson",
+        Family::Gamma => "gamma",
+        Family::InverseGaussian => "inverse_gaussian",
+        _ => "unknown",
+    }
+}
+
+fn glmm_link_label(link: LinkFunction) -> &'static str {
+    match link {
+        LinkFunction::Identity => "identity",
+        LinkFunction::Log => "log",
+        LinkFunction::Logit => "logit",
+        LinkFunction::Probit => "probit",
+        LinkFunction::Cloglog => "cloglog",
+        LinkFunction::Inverse => "inverse",
+        LinkFunction::Sqrt => "sqrt",
+        _ => "unknown",
+    }
+}
+
+fn list_to_map(list: &List, context: &str) -> std::result::Result<HashMap<String, Robj>, String> {
+    list.try_into()
+        .map_err(|e| format!("mm_schema_error: failed to read {context}: {e:?}"))
+}
+
+fn required_robj(
+    map: &HashMap<String, Robj>,
+    field: &str,
+    index: usize,
+) -> std::result::Result<Robj, String> {
+    map.get(field)
+        .cloned()
+        .ok_or_else(|| format!("mm_schema_error: comparison payload {index} is missing `{field}`"))
+}
+
+fn required_string(
+    map: &HashMap<String, Robj>,
+    field: &str,
+    index: usize,
+) -> std::result::Result<String, String> {
+    let robj = required_robj(map, field, index)?;
+    String::try_from(&robj).map_err(|e| {
+        format!(
+            "mm_schema_error: comparison payload {index} field `{field}` must be a string: {e:?}"
+        )
+    })
+}
+
+fn required_bool(
+    map: &HashMap<String, Robj>,
+    field: &str,
+    index: usize,
+) -> std::result::Result<bool, String> {
+    let robj = required_robj(map, field, index)?;
+    bool::try_from(&robj).map_err(|e| {
+        format!(
+            "mm_schema_error: comparison payload {index} field `{field}` must be TRUE/FALSE: {e:?}"
+        )
+    })
+}
+
+fn required_list(
+    map: &HashMap<String, Robj>,
+    field: &str,
+    index: usize,
+) -> std::result::Result<List, String> {
+    let robj = required_robj(map, field, index)?;
+    List::try_from(&robj).map_err(|e| {
+        format!("mm_schema_error: comparison payload {index} field `{field}` must be a list: {e:?}")
+    })
+}
+
+fn required_strings(
+    map: &HashMap<String, Robj>,
+    field: &str,
+    index: usize,
+) -> std::result::Result<Strings, String> {
+    let robj = required_robj(map, field, index)?;
+    Strings::try_from(&robj).map_err(|e| {
+        format!("mm_schema_error: comparison payload {index} field `{field}` must be a character vector: {e:?}")
+    })
+}
+
+fn required_doubles(
+    map: &HashMap<String, Robj>,
+    field: &str,
+    index: usize,
+) -> std::result::Result<Doubles, String> {
+    let robj = required_robj(map, field, index)?;
+    Doubles::try_from(&robj).map_err(|e| {
+        format!("mm_schema_error: comparison payload {index} field `{field}` must be a numeric vector: {e:?}")
+    })
+}
+
+fn model_comparison_method(method: &str) -> std::result::Result<ModelComparisonMethod, String> {
+    match method {
+        "auto" => Ok(ModelComparisonMethod::Auto),
+        "lrt" | "likelihood_ratio" => Ok(ModelComparisonMethod::LikelihoodRatio),
+        "bootstrap" => Ok(ModelComparisonMethod::Auto),
+        "aic" | "information_criteria" => Ok(ModelComparisonMethod::InformationCriteria),
+        other => Err(format!(
+            "mm_arg_error: unsupported model-comparison method `{other}`"
+        )),
+    }
+}
+
+fn model_comparison_refit_policy(
+    refit_policy: &str,
+) -> std::result::Result<ModelComparisonRefitPolicy, String> {
+    match refit_policy {
+        "error" => Ok(ModelComparisonRefitPolicy::Error),
+        "auto" | "ml" => Ok(ModelComparisonRefitPolicy::Ml),
+        "never" => Ok(ModelComparisonRefitPolicy::Never),
+        other => Err(format!(
+            "mm_arg_error: unsupported model-comparison refit policy `{other}`"
+        )),
+    }
+}
+
 fn optional_case_weights(
     weights: &Doubles,
     n_obs: usize,
@@ -932,6 +1412,30 @@ fn optional_case_weights(
         if !w.is_finite() || *w <= 0.0 {
             return Err(format!(
                 "mm_data_error: weight at index {i} must be finite and positive (got {w})"
+            ));
+        }
+    }
+    Ok(Some(values))
+}
+
+fn optional_offset(
+    offset: &Doubles,
+    n_obs: usize,
+) -> std::result::Result<Option<Vec<f64>>, String> {
+    let values = offset.iter().map(|v| v.0).collect::<Vec<_>>();
+    if values.is_empty() {
+        return Ok(None);
+    }
+    if values.len() != n_obs {
+        return Err(format!(
+            "mm_data_error: offset length ({}) does not match number of observations ({n_obs})",
+            values.len()
+        ));
+    }
+    for (i, o) in values.iter().enumerate() {
+        if !o.is_finite() {
+            return Err(format!(
+                "mm_data_error: offset at index {i} must be finite (got {o})"
             ));
         }
     }
@@ -1071,8 +1575,43 @@ fn random_effects_json(model: &LinearMixedModel) -> Value {
     json!(terms)
 }
 
+fn random_effects_json_glmm(model: &GeneralizedLinearMixedModel) -> Value {
+    let effects = model.ranef();
+    let terms = model
+        .lmm()
+        .reterms()
+        .iter()
+        .zip(effects.iter())
+        .map(|(rt, b)| {
+            let values = (0..rt.levels.len())
+                .map(|level_idx| {
+                    (0..rt.vsize)
+                        .map(|coef_idx| b[(coef_idx, level_idx)])
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "group": rt.grouping_name.as_str(),
+                "levels": rt.levels.clone(),
+                "names": rt.cnames.clone(),
+                "values": values
+            })
+        })
+        .collect::<Vec<_>>();
+    json!(terms)
+}
+
 fn varcorr_json(model: &LinearMixedModel) -> Value {
     let vc = model.varcorr();
+    varcorr_value(&vc)
+}
+
+fn varcorr_json_glmm(model: &GeneralizedLinearMixedModel) -> Value {
+    let vc = model.varcorr();
+    varcorr_value(&vc)
+}
+
+fn varcorr_value(vc: &mixeff_rs::stats::VarCorr) -> Value {
     let components = vc
         .components
         .iter()
@@ -1142,6 +1681,216 @@ fn mm_interrupt_demo(iters: i32) -> i32 {
     n
 }
 
+/// Conditional variance matrices of the random effects, serialized for R.
+///
+/// Mirrors `lme4::condVar` / `ranef(condVar = TRUE)`. Each RE term yields a
+/// `p × p × n` PSD array (one `p × p` block per grouping level), flattened
+/// column-major so `array(payload$postvar, dim = payload$dim)` reconstructs the
+/// 3-D array R expects. `names` indexes the leading two dimensions (slope
+/// names per term) and `levels` indexes the trailing dimension.
+///
+/// @noRd
+#[extendr]
+fn mm_lmm_cond_var_json(
+    formula: &str,
+    reml: bool,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    weights: Doubles,
+    control_json: &str,
+) -> std::result::Result<String, String> {
+    let model = fit_lmm_from_bridge_data(
+        formula,
+        reml,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &weights,
+        control_json,
+    )?;
+    let condvar = model.cond_var();
+    let terms: Vec<Value> = model
+        .reterms()
+        .iter()
+        .zip(condvar.iter())
+        .map(|(rt, blocks)| {
+            let p = rt.vsize;
+            let n = blocks.len();
+            // Column-major flatten: R's array(x, dim = c(p,p,n)) reads
+            // the slice row-by-row within each column, columns within each
+            // slice. That maps to mat[(row, col)] in DMatrix iteration.
+            let mut postvar: Vec<f64> = Vec::with_capacity(p * p * n);
+            for level_idx in 0..n {
+                let mat = &blocks[level_idx];
+                for col in 0..p {
+                    for row in 0..p {
+                        postvar.push(mat[(row, col)]);
+                    }
+                }
+            }
+            json!({
+                "group": rt.grouping_name.as_str(),
+                "names": rt.cnames.clone(),
+                "levels": rt.levels.clone(),
+                "postvar": postvar,
+                "dim": [p, p, n],
+            })
+        })
+        .collect();
+    let payload = json!({
+        "schema": {
+            "schema_name": "mixeff.lmm_cond_var",
+            "schema_version": 1,
+        },
+        "terms": terms,
+    });
+    serde_json::to_string(&payload).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize cond_var payload: {}",
+            e
+        )
+    })
+}
+
+/// New-data predictions through `LinearMixedModel::predict_new`.
+///
+/// `allow_new_levels_policy` is the string-form of `NewReLevels`:
+///   "error"       -> NewReLevels::Error
+///   "population"  -> NewReLevels::Population
+///   "missing"     -> NewReLevels::Missing
+///
+/// Returns a JSON payload carrying one prediction per `newdata` row.
+/// Predictions whose upstream value is `None` (unseen grouping level under
+/// the "missing" policy) are encoded as JSON `null`, which the R side
+/// translates to `NA_real_`.
+///
+/// @noRd
+#[extendr]
+#[allow(clippy::too_many_arguments)]
+fn mm_lmm_predict_new_json(
+    formula: &str,
+    reml: bool,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    weights: Doubles,
+    control_json: &str,
+    new_column_order: Strings,
+    new_numeric_columns: List,
+    new_categorical_values: List,
+    new_categorical_levels: List,
+    allow_new_levels_policy: &str,
+) -> std::result::Result<String, String> {
+    let model = fit_lmm_from_bridge_data(
+        formula,
+        reml,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &weights,
+        control_json,
+    )?;
+    let newdf = data::build_dataframe(
+        &new_numeric_columns,
+        &new_categorical_values,
+        &new_categorical_levels,
+        &new_column_order,
+    )?;
+    let policy = match allow_new_levels_policy {
+        "error" => NewReLevels::Error,
+        "population" => NewReLevels::Population,
+        "missing" => NewReLevels::Missing,
+        other => {
+            return Err(format!(
+                "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
+                other
+            ));
+        }
+    };
+    let predictions = model
+        .predict_new(&newdf, policy)
+        .map_err(|e| format!("mm_inference_unavailable: predict_new failed: {}", e))?;
+    let pred_array: Vec<Value> = predictions
+        .iter()
+        .map(|o| match o {
+            Some(v) => json!(*v),
+            None => Value::Null,
+        })
+        .collect();
+    let payload = json!({
+        "schema": {
+            "schema_name": "mixeff.lmm_predict_new",
+            "schema_version": 1,
+        },
+        "predictions": pred_array,
+        "policy": allow_new_levels_policy,
+        "n_new": predictions.len(),
+    });
+    serde_json::to_string(&payload).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize predict_new payload: {}",
+            e
+        )
+    })
+}
+
+/// Profile-likelihood confidence intervals through
+/// `mixeff_rs::stats::profile_confint_payload`.
+///
+/// `level` is the confidence level in `(0, 1)`. The upstream payload carries
+/// both the computed intervals and the raw profile rows. Under REML the
+/// upstream contract omits beta from the profiled parameters; the R-side
+/// wrapper turns this absence into a typed `profile_beta_unavailable_under_reml`
+/// reason rather than fabricating beta CIs.
+///
+/// @noRd
+#[extendr]
+fn mm_lmm_profile_confint_json(
+    formula: &str,
+    reml: bool,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    weights: Doubles,
+    control_json: &str,
+    level: f64,
+) -> std::result::Result<String, String> {
+    if !(level > 0.0 && level < 1.0) {
+        return Err(format!(
+            "mm_arg_error: profile confint level must be in (0, 1); got {}",
+            level
+        ));
+    }
+    let mut model = fit_lmm_from_bridge_data(
+        formula,
+        reml,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &weights,
+        control_json,
+    )?;
+    let payload = profile_confint_payload(&mut model, level).map_err(|e| {
+        format!(
+            "mm_inference_unavailable: profile_confint_payload failed: {}",
+            e
+        )
+    })?;
+    payload.to_json().map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize profile CI payload: {}",
+            e
+        )
+    })
+}
+
 fn make_bootstrap_rng(seed: Option<u64>) -> (StdRng, BootstrapSeedRecord) {
     match seed {
         Some(s) => (StdRng::seed_from_u64(s), BootstrapSeedRecord::std_rng(s)),
@@ -1174,13 +1923,19 @@ extendr_module! {
     fn mm_json_known_schemas;
     fn mm_compile_model_json;
     fn mm_fit_lmm_json;
+    fn mm_fit_glmm_json;
     fn mm_fixed_effect_contrast_json;
     fn mm_fixed_effect_bootstrap_contrast_json;
     fn mm_full_model_bootstrap_contrast_json;
     fn mm_fixed_effect_bootstrap_term_json;
     fn mm_fixed_effect_term_json;
     fn mm_bootstrap_lrt_json;
+    fn mm_compare_models_json;
+    fn mm_boundary_lrt_json;
     fn mm_audit_report_text;
     fn mm_audit_report_json;
+    fn mm_lmm_cond_var_json;
+    fn mm_lmm_predict_new_json;
+    fn mm_lmm_profile_confint_json;
     fn mm_interrupt_demo;
 }

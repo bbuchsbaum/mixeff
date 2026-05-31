@@ -29,6 +29,10 @@ fixef.mm_lmm <- function(object, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
+fixef.mm_glmm <- fixef.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
 ranef <- function(object, ...) {
   UseMethod("ranef")
 }
@@ -37,15 +41,47 @@ ranef <- function(object, ...) {
 #' @export
 ranef.mm_lmm <- function(object, condVar = FALSE, ...) {
   if (isTRUE(condVar)) {
-    out <- lapply(object$random_effects, mm_attach_ranef_postvar)
+    postvars <- tryCatch(
+      mm_cond_var_postvars(object),
+      error = function(cnd) cnd
+    )
+    if (inherits(postvars, "condition")) {
+      out <- lapply(object$random_effects, mm_attach_ranef_postvar_unavailable,
+                    reason = conditionMessage(postvars))
+      class(out) <- class(object$random_effects)
+      attr(out, "mm_unavailable_reason") <-
+        "random_effect_conditional_variance_unavailable"
+      return(out)
+    }
+    out <- mm_attach_ranef_postvars(object$random_effects, postvars)
     class(out) <- class(object$random_effects)
-    attr(out, "mm_unavailable_reason") <- "random_effect_conditional_variance_unavailable"
     return(out)
   }
   object$random_effects
 }
 
-mm_attach_ranef_postvar <- function(df) {
+#' @rdname mm_lmm-methods
+#' @export
+ranef.mm_glmm <- function(object, condVar = FALSE, ...) {
+  if (isTRUE(condVar)) {
+    out <- lapply(
+      object$random_effects,
+      mm_attach_ranef_postvar_unavailable,
+      reason = "random_effect_conditional_variance_unavailable_for_glmm"
+    )
+    class(out) <- class(object$random_effects)
+    attr(out, "mm_unavailable_reason") <-
+      "random_effect_conditional_variance_unavailable_for_glmm"
+    return(out)
+  }
+  object$random_effects
+}
+
+# Fallback postvar attachment used when the Rust cond_var() bridge fails
+# (typed-refusal path). We keep the array-shaped attribute so downstream
+# callers that test attr(df, "postVar") never see NULL, but every entry is
+# NA and an explicit `mm_unavailable_reason` attribute records why.
+mm_attach_ranef_postvar_unavailable <- function(df, reason) {
   p <- ncol(df)
   n <- nrow(df)
   postvar <- array(
@@ -54,8 +90,152 @@ mm_attach_ranef_postvar <- function(df) {
     dimnames = list(names(df), names(df), rownames(df))
   )
   attr(df, "postVar") <- postvar
-  attr(df, "mm_unavailable_reason") <- "random_effect_conditional_variance_unavailable"
+  attr(df, "mm_unavailable_reason") <-
+    "random_effect_conditional_variance_unavailable"
+  attr(df, "mm_cond_var_error") <- reason
   df
+}
+
+# Back-compat alias; some callers (e.g. revive() helpers) still reference
+# the old name. New code should use mm_attach_ranef_postvar_unavailable.
+mm_attach_ranef_postvar <- function(df) {
+  mm_attach_ranef_postvar_unavailable(
+    df,
+    reason = "random_effect_conditional_variance_unavailable"
+  )
+}
+
+mm_attach_ranef_postvars <- function(ranef_list, postvars) {
+  for (group in names(ranef_list)) {
+    df <- ranef_list[[group]]
+    pv <- postvars[[group]]
+    if (is.null(pv)) {
+      ranef_list[[group]] <- mm_attach_ranef_postvar_unavailable(
+        df,
+        reason = sprintf("cond_var bridge returned no payload for group `%s`",
+                         group)
+      )
+      next
+    }
+    df_cols <- names(df)
+    df_levels <- rownames(df)
+    if (!setequal(df_cols, dimnames(pv)[[1L]]) ||
+        !setequal(df_levels, dimnames(pv)[[3L]])) {
+      ranef_list[[group]] <- mm_attach_ranef_postvar_unavailable(
+        df,
+        reason = sprintf(
+          "cond_var bridge returned mismatched names/levels for group `%s`",
+          group
+        )
+      )
+      next
+    }
+    pv_aligned <- pv[df_cols, df_cols, df_levels, drop = FALSE]
+    attr(df, "postVar") <- pv_aligned
+    ranef_list[[group]] <- df
+  }
+  ranef_list
+}
+
+# Round-trip a cond_var FFI call for `fit` and return a named list keyed by
+# grouping factor; each element is a `p × p × n` PSD array (dimnames =
+# slope-names × slope-names × levels). Cached on fit$lazy_cache so repeated
+# ranef(condVar=TRUE) calls do not pay the ~refit cost again.
+mm_cond_var_postvars <- function(fit) {
+  .mm_lazy(fit, "cond_var", mm_compute_cond_var_postvars)
+}
+
+mm_compute_cond_var_postvars <- function(fit) {
+  spec_data <- mm_translate_data(fit$model_frame)
+  formula_string <- mm_coerce_formula_string(fit$formula)
+  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
+                                   auto_unbox = TRUE, null = "null")
+
+  json <- tryCatch(
+    .Call(
+      wrap__mm_lmm_cond_var_json,
+      formula_string,
+      isTRUE(fit$REML),
+      spec_data$column_order,
+      spec_data$numeric_columns,
+      spec_data$categorical_values,
+      spec_data$categorical_levels,
+      mm_bridge_weights(fit$weights),
+      as.character(control_json)
+    ),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) {
+    mm_abort_from_bridge(json)
+  }
+  payload <- tryCatch(
+    jsonlite::fromJSON(json, simplifyVector = FALSE),
+    error = function(cnd) {
+      mm_abort(
+        message = sprintf("Failed to parse cond_var JSON: %s",
+                          conditionMessage(cnd)),
+        class = "mm_schema_error",
+        parent = cnd
+      )
+    }
+  )
+  schema <- payload$schema %||% list()
+  if (!identical(as.character(schema$schema_name), "mixeff.lmm_cond_var") ||
+      !identical(as.character(schema$schema_version), "1")) {
+    mm_abort(
+      message = "cond_var payload has an unknown schema header.",
+      class = "mm_schema_error",
+      input = payload
+    )
+  }
+
+  out <- list()
+  for (term in payload$terms %||% list()) {
+    group <- as.character(term$group)
+    slope_names <- as.character(unlist(term$names, use.names = FALSE))
+    level_names <- as.character(unlist(term$levels, use.names = FALSE))
+    flat <- as.numeric(unlist(term$postvar, use.names = FALSE))
+    dims <- as.integer(unlist(term$dim, use.names = FALSE))
+    arr <- array(flat, dim = dims,
+                 dimnames = list(slope_names, slope_names, level_names))
+    if (is.null(out[[group]])) {
+      out[[group]] <- arr
+    } else {
+      # `(1|g) + (0+t|g)` collapses to one ranef(fit)$g frame whose columns
+      # are the union of the per-term slopes. Mirror that here as a block-
+      # diagonal postVar (the two RE blocks are independent in this
+      # parameterisation, so off-diagonal blocks are zero).
+      out[[group]] <- mm_merge_block_diag_postvar(out[[group]], arr, group)
+    }
+  }
+  out
+}
+
+mm_merge_block_diag_postvar <- function(existing, incoming, group) {
+  existing_levels <- dimnames(existing)[[3L]]
+  incoming_levels <- dimnames(incoming)[[3L]]
+  if (!setequal(existing_levels, incoming_levels)) {
+    mm_abort(
+      message = sprintf(
+        "cond_var: cannot combine RE terms for group `%s` because their level sets differ.",
+        group
+      ),
+      class = "mm_schema_error"
+    )
+  }
+  incoming_aligned <- incoming[, , existing_levels, drop = FALSE]
+  existing_names <- dimnames(existing)[[1L]]
+  incoming_names <- dimnames(incoming_aligned)[[1L]]
+  new_names <- c(existing_names, incoming_names)
+  new_p <- length(new_names)
+  n <- length(existing_levels)
+  combined <- array(0, dim = c(new_p, new_p, n),
+                    dimnames = list(new_names, new_names, existing_levels))
+  old_p <- length(existing_names)
+  add_p <- length(incoming_names)
+  combined[seq_len(old_p), seq_len(old_p), ] <- existing
+  combined[(old_p + 1L):new_p, (old_p + 1L):new_p, ] <- incoming_aligned
+  combined
 }
 
 #' @rdname mm_lmm-methods
@@ -78,6 +258,10 @@ coef.mm_lmm <- function(object, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
+coef.mm_glmm <- coef.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
 VarCorr <- function(x, ...) {
   UseMethod("VarCorr")
 }
@@ -90,13 +274,64 @@ VarCorr.mm_lmm <- function(x, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
+VarCorr.mm_glmm <- VarCorr.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
 sigma.mm_lmm <- function(object, ...) {
   object$sigma
 }
 
 #' @rdname mm_lmm-methods
 #' @export
-logLik.mm_lmm <- function(object, ...) {
+sigma.mm_glmm <- sigma.mm_lmm
+
+# Refuse recognized-but-unsupported lme4 arguments that `...` would otherwise
+# swallow silently, returning a plausible-but-wrong value (no silent surgery;
+# PRD §8.1). `reject` maps an argument name to an actionable explanation.
+mm_reject_unsupported_dots <- function(dots, method, reject) {
+  if (!length(dots) || !length(reject)) return(invisible(NULL))
+  nms <- names(dots)
+  hit <- intersect(nms[nzchar(nms)], names(reject))
+  if (length(hit)) {
+    arg <- hit[[1L]]
+    mm_abort(
+      message = sprintf("`%s()` does not support the `%s` argument: %s",
+                        method, arg, reject[[arg]]),
+      class = "mm_arg_error",
+      argument = arg,
+      method = method
+    )
+  }
+  invisible(NULL)
+}
+
+# The fit carries a single (RE)ML criterion. logLik()/deviance() cannot switch
+# it after the fact, so honor a matching `REML=` and refuse a mismatching one
+# (rather than silently returning the wrong-criterion value).
+mm_check_reml_request <- function(object, REML, method) {
+  if (is.null(REML)) return(invisible(NULL))
+  if (!identical(isTRUE(REML), isTRUE(object$REML))) {
+    mm_abort(
+      message = sprintf(
+        paste0("This model was fitted with REML = %s; `%s(REML = %s)` cannot ",
+               "change the estimation criterion after the fact. Refit with ",
+               "lmm(..., REML = %s) to obtain the %s value."),
+        isTRUE(object$REML), method, isTRUE(REML), isTRUE(REML),
+        if (isTRUE(REML)) "REML" else "ML"
+      ),
+      class = "mm_inference_unavailable",
+      requested_REML = isTRUE(REML),
+      fit_REML = isTRUE(object$REML)
+    )
+  }
+  invisible(NULL)
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+logLik.mm_lmm <- function(object, REML = NULL, ...) {
+  mm_check_reml_request(object, REML, "logLik")
   structure(
     object$logLik,
     df = object$dof,
@@ -107,9 +342,18 @@ logLik.mm_lmm <- function(object, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
-deviance.mm_lmm <- function(object, ...) {
+logLik.mm_glmm <- logLik.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
+deviance.mm_lmm <- function(object, REML = NULL, ...) {
+  mm_check_reml_request(object, REML, "deviance")
   object$deviance
 }
+
+#' @rdname mm_lmm-methods
+#' @export
+deviance.mm_glmm <- deviance.mm_lmm
 
 #' @rdname mm_lmm-methods
 #' @export
@@ -130,6 +374,10 @@ AIC.mm_lmm <- function(object, ..., k = 2) {
 
 #' @rdname mm_lmm-methods
 #' @export
+AIC.mm_glmm <- AIC.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
 BIC.mm_lmm <- function(object, ...) {
   dots <- list(...)
   if (length(dots)) {
@@ -147,9 +395,17 @@ BIC.mm_lmm <- function(object, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
+BIC.mm_glmm <- BIC.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
 nobs.mm_lmm <- function(object, ...) {
   object$nobs
 }
+
+#' @rdname mm_lmm-methods
+#' @export
+nobs.mm_glmm <- nobs.mm_lmm
 
 #' @rdname mm_lmm-methods
 #' @export
@@ -159,14 +415,175 @@ df.residual.mm_lmm <- function(object, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
+df.residual.mm_glmm <- df.residual.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
 formula.mm_lmm <- function(x, ...) {
   x$formula
 }
 
 #' @rdname mm_lmm-methods
 #' @export
+formula.mm_glmm <- formula.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @export
 model.frame.mm_lmm <- function(formula, ...) {
   formula$model_frame
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+model.frame.mm_glmm <- model.frame.mm_lmm
+
+#' Number of groups per random-effect grouping factor
+#'
+#' `ngrps()` returns a named integer vector giving the number of levels of each
+#' random-effect grouping factor, mirroring `lme4::ngrps()`.
+#'
+#' @param object A fitted `mm_lmm`/`mm_glmm` model.
+#' @param ... Unused.
+#' @return A named integer vector of group counts.
+#' @rdname mm_lmm-methods
+#' @export
+ngrps <- function(object, ...) {
+  UseMethod("ngrps")
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+ngrps.default <- function(object, ...) {
+  mm_abort(
+    message = "`ngrps()` has no method for this object.",
+    class = "mm_arg_error",
+    input = object
+  )
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+ngrps.mm_lmm <- function(object, ...) {
+  re <- object$random_effects %||% list()
+  vapply(re, nrow, integer(1L))
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+ngrps.mm_glmm <- ngrps.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @importFrom stats weights
+#' @export
+weights.mm_lmm <- function(object, ...) {
+  object$weights
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+weights.mm_glmm <- weights.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @importFrom stats extractAIC
+#' @export
+extractAIC.mm_lmm <- function(fit, scale, k = 2, ...) {
+  edf <- fit$dof
+  c(edf, -2 * fit$logLik + k * edf)
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+extractAIC.mm_glmm <- extractAIC.mm_lmm
+
+#' @rdname mm_lmm-methods
+#' @importFrom stats terms
+#' @export
+terms.mm_lmm <- function(x, ...) {
+  stats::terms(mm_fixed_formula(x))
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+terms.mm_glmm <- terms.mm_lmm
+
+#' Coerce variance components to an lme4-style data frame
+#'
+#' Produces the long form returned by `as.data.frame(lme4::VarCorr(.))`:
+#' one row per variance (`var2 = NA`) and one row per covariance
+#' (`var1`, `var2` both set), with a final `Residual` row for LMMs. `vcov`
+#' holds the (co)variance and `sdcor` the standard deviation (diagonal) or
+#' correlation (off-diagonal). This is the shape `broom.mixed::tidy()` expects.
+#'
+#' @param x An `mm_varcorr` object from [VarCorr()].
+#' @param row.names,optional Ignored; present for S3 consistency.
+#' @param ... Unused.
+#' @rdname mm_lmm-methods
+#' @export
+as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
+                                     ...) {
+  grp <- character(0); var1 <- character(0); var2 <- character(0)
+  vcov <- numeric(0); sdcor <- numeric(0)
+  for (comp in x$components_raw %||% list()) {
+    nm <- comp$names
+    sd <- comp$std_dev
+    corr <- comp$correlations
+    p <- length(nm)
+    # Variance (diagonal) rows first, matching lme4's ordering.
+    for (i in seq_len(p)) {
+      grp <- c(grp, comp$group); var1 <- c(var1, nm[i]); var2 <- c(var2, NA_character_)
+      vcov <- c(vcov, sd[i]^2); sdcor <- c(sdcor, sd[i])
+    }
+    # Covariance (off-diagonal) rows; correlations are stored row-major in the
+    # strict lower triangle (see mm_varcorr_correlation_text()).
+    for (i in seq_len(p)) {
+      offset <- (i - 1L) * (i - 2L) / 2L
+      for (j in seq_len(i - 1L)) {
+        r <- corr[offset + j]
+        grp <- c(grp, comp$group); var1 <- c(var1, nm[j]); var2 <- c(var2, nm[i])
+        vcov <- c(vcov, r * sd[i] * sd[j]); sdcor <- c(sdcor, r)
+      }
+    }
+  }
+  if (!is.null(x$residual_sd) && length(x$residual_sd) == 1L &&
+      is.finite(x$residual_sd)) {
+    grp <- c(grp, "Residual"); var1 <- c(var1, NA_character_)
+    var2 <- c(var2, NA_character_)
+    vcov <- c(vcov, x$residual_sd^2); sdcor <- c(sdcor, x$residual_sd)
+  }
+  data.frame(grp = grp, var1 = var1, var2 = var2, vcov = vcov, sdcor = sdcor,
+             stringsAsFactors = FALSE)
+}
+
+#' Coerce conditional modes to an lme4-style data frame
+#'
+#' Produces the long form returned by `as.data.frame(lme4::ranef(.))`: columns
+#' `grpvar`, `term`, `grp`, `condval`, and `condsd`. `condsd` is the
+#' conditional standard deviation, taken from the `postVar` attribute when the
+#' modes were extracted with `condVar = TRUE`, and `NA` otherwise.
+#'
+#' @param x An `mm_ranef` object from [ranef()].
+#' @param row.names,optional Ignored; present for S3 consistency.
+#' @param ... Unused.
+#' @rdname mm_lmm-methods
+#' @export
+as.data.frame.mm_ranef <- function(x, row.names = NULL, optional = FALSE, ...) {
+  grpvar <- character(0); term <- character(0); grp <- character(0)
+  condval <- numeric(0); condsd <- numeric(0)
+  for (g in names(x)) {
+    df <- x[[g]]
+    pv <- attr(df, "postVar")
+    terms <- colnames(df)
+    levs <- rownames(df)
+    for (ti in seq_along(terms)) {
+      for (li in seq_along(levs)) {
+        sdv <- if (!is.null(pv)) sqrt(pv[ti, ti, li]) else NA_real_
+        grpvar <- c(grpvar, g); term <- c(term, terms[ti]); grp <- c(grp, levs[li])
+        condval <- c(condval, df[li, ti]); condsd <- c(condsd, sdv)
+      }
+    }
+  }
+  data.frame(grpvar = grpvar, term = term, grp = grp, condval = condval,
+             condsd = condsd, stringsAsFactors = FALSE)
 }
 
 mm_ranef_from_terms <- function(terms) {
@@ -205,6 +622,18 @@ mm_ranef_from_terms <- function(terms) {
 }
 
 mm_varcorr_from_result <- function(varcorr) {
+  # Keep the raw (full-precision) per-group covariance pieces so
+  # as.data.frame.mm_varcorr() can reconstruct the lme4 long form
+  # (grp/var1/var2/vcov/sdcor); the printed `table` only retains a rounded
+  # correlation string.
+  components_raw <- lapply(varcorr$components %||% list(), function(component) {
+    list(
+      group = as.character(component$group),
+      names = as.character(unlist(component$names, use.names = FALSE)),
+      std_dev = as.numeric(unlist(component$std_dev, use.names = FALSE)),
+      correlations = as.numeric(unlist(component$correlations, use.names = FALSE))
+    )
+  })
   components <- lapply(varcorr$components %||% list(), function(component) {
     names <- as.character(unlist(component$names, use.names = FALSE))
     std_dev <- as.numeric(unlist(component$std_dev, use.names = FALSE))
@@ -241,7 +670,8 @@ mm_varcorr_from_result <- function(varcorr) {
 
   out <- list(
     table = table,
-    residual_sd = residual_sd
+    residual_sd = residual_sd,
+    components_raw = components_raw
   )
   class(out) <- c("mm_varcorr", "list")
   out

@@ -4,80 +4,184 @@
 \alias{mm_lmm-methods}
 \alias{fixef}
 \alias{fixef.mm_lmm}
+\alias{fixef.mm_glmm}
 \alias{ranef}
 \alias{ranef.mm_lmm}
+\alias{ranef.mm_glmm}
 \alias{coef.mm_lmm}
+\alias{coef.mm_glmm}
 \alias{VarCorr}
 \alias{VarCorr.mm_lmm}
+\alias{VarCorr.mm_glmm}
 \alias{sigma.mm_lmm}
+\alias{sigma.mm_glmm}
 \alias{logLik.mm_lmm}
+\alias{logLik.mm_glmm}
 \alias{deviance.mm_lmm}
+\alias{deviance.mm_glmm}
 \alias{AIC.mm_lmm}
+\alias{AIC.mm_glmm}
 \alias{BIC.mm_lmm}
+\alias{BIC.mm_glmm}
 \alias{nobs.mm_lmm}
+\alias{nobs.mm_glmm}
 \alias{df.residual.mm_lmm}
+\alias{df.residual.mm_glmm}
 \alias{formula.mm_lmm}
+\alias{formula.mm_glmm}
 \alias{model.frame.mm_lmm}
+\alias{model.frame.mm_glmm}
+\alias{ngrps}
+\alias{ngrps.default}
+\alias{ngrps.mm_lmm}
+\alias{ngrps.mm_glmm}
+\alias{weights.mm_lmm}
+\alias{weights.mm_glmm}
+\alias{extractAIC.mm_lmm}
+\alias{extractAIC.mm_glmm}
+\alias{terms.mm_lmm}
+\alias{terms.mm_glmm}
+\alias{as.data.frame.mm_varcorr}
+\alias{as.data.frame.mm_ranef}
 \alias{model.matrix.mm_lmm}
+\alias{model.matrix.mm_glmm}
 \alias{vcov.mm_lmm}
+\alias{vcov.mm_glmm}
 \title{Extract components from a fitted mixeff LMM}
 \usage{
 fixef(object, ...)
 
 \method{fixef}{mm_lmm}(object, ...)
 
+\method{fixef}{mm_glmm}(object, ...)
+
 ranef(object, ...)
 
 \method{ranef}{mm_lmm}(object, condVar = FALSE, ...)
 
+\method{ranef}{mm_glmm}(object, condVar = FALSE, ...)
+
 \method{coef}{mm_lmm}(object, ...)
+
+\method{coef}{mm_glmm}(object, ...)
 
 VarCorr(x, ...)
 
 \method{VarCorr}{mm_lmm}(x, ...)
 
+\method{VarCorr}{mm_glmm}(x, ...)
+
 \method{sigma}{mm_lmm}(object, ...)
 
-\method{logLik}{mm_lmm}(object, ...)
+\method{sigma}{mm_glmm}(object, ...)
 
-\method{deviance}{mm_lmm}(object, ...)
+\method{logLik}{mm_lmm}(object, REML = NULL, ...)
+
+\method{logLik}{mm_glmm}(object, REML = NULL, ...)
+
+\method{deviance}{mm_lmm}(object, REML = NULL, ...)
+
+\method{deviance}{mm_glmm}(object, REML = NULL, ...)
 
 \method{AIC}{mm_lmm}(object, ..., k = 2)
 
+\method{AIC}{mm_glmm}(object, ..., k = 2)
+
 \method{BIC}{mm_lmm}(object, ...)
+
+\method{BIC}{mm_glmm}(object, ...)
 
 \method{nobs}{mm_lmm}(object, ...)
 
+\method{nobs}{mm_glmm}(object, ...)
+
 \method{df.residual}{mm_lmm}(object, ...)
+
+\method{df.residual}{mm_glmm}(object, ...)
 
 \method{formula}{mm_lmm}(x, ...)
 
+\method{formula}{mm_glmm}(x, ...)
+
 \method{model.frame}{mm_lmm}(formula, ...)
+
+\method{model.frame}{mm_glmm}(formula, ...)
+
+ngrps(object, ...)
+
+\method{ngrps}{default}(object, ...)
+
+\method{ngrps}{mm_lmm}(object, ...)
+
+\method{ngrps}{mm_glmm}(object, ...)
+
+\method{weights}{mm_lmm}(object, ...)
+
+\method{weights}{mm_glmm}(object, ...)
+
+\method{extractAIC}{mm_lmm}(fit, scale, k = 2, ...)
+
+\method{extractAIC}{mm_glmm}(fit, scale, k = 2, ...)
+
+\method{terms}{mm_lmm}(x, ...)
+
+\method{terms}{mm_glmm}(x, ...)
+
+\method{as.data.frame}{mm_varcorr}(x, row.names = NULL, optional = FALSE, ...)
+
+\method{as.data.frame}{mm_ranef}(x, row.names = NULL, optional = FALSE, ...)
 
 \method{model.matrix}{mm_lmm}(object, type = c("fixed", "random"), ...)
 
-\method{vcov}{mm_lmm}(object, type = c("fixed", "theta"), ...)
+\method{model.matrix}{mm_glmm}(object, type = c("fixed", "random"), ...)
+
+\method{vcov}{mm_lmm}(object, type = c("fixed", "theta"), correlation = FALSE, ...)
+
+\method{vcov}{mm_glmm}(object, type = c("fixed", "theta"), correlation = FALSE, ...)
 }
 \arguments{
 \item{object, x, formula}{A fitted \code{mm_lmm} object.}
 
-\item{...}{Reserved for generic compatibility.}
+\item{...}{Unused.}
 
 \item{condVar}{Logical; when \code{TRUE}, Phase 2 returns the random-effects
 tables with an \code{NA} \code{postVar} array and an \code{mm_unavailable_reason}
 attribute rather than fabricating conditional variances.}
 
+\item{x}{An \code{mm_ranef} object from \code{\link[=ranef]{ranef()}}.}
+
 \item{k}{Penalty per parameter for \code{\link[=AIC]{AIC()}}.}
+
+\item{row.names, optional}{Ignored; present for S3 consistency.}
 
 \item{type}{For \code{model.matrix()}, \code{"fixed"} returns the fixed-effect design
 matrix and \code{"random"} returns the sparse random-effect design matrix. For
 \code{vcov()}, \code{"fixed"} returns the fixed-effect covariance surface and
 \code{"theta"} returns an unavailable theta-covariance matrix with a reason
 attribute.}
+
+\item{object}{A fitted \code{mm_lmm}/\code{mm_glmm} model.}
+}
+\value{
+A named integer vector of group counts.
 }
 \description{
 These methods provide the common lme4-style extractor surface for
 \code{\link[=lmm]{lmm()}} fits. The required values are stored directly on the R object or
 rebuilt lazily from the serialized artifact, so these methods do not require
 a live Rust handle after \code{saveRDS()} / \code{readRDS()}.
+
+\code{ngrps()} returns a named integer vector giving the number of levels of each
+random-effect grouping factor, mirroring \code{lme4::ngrps()}.
+
+Produces the long form returned by \code{as.data.frame(lme4::VarCorr(.))}:
+one row per variance (\code{var2 = NA}) and one row per covariance
+(\code{var1}, \code{var2} both set), with a final \code{Residual} row for LMMs. \code{vcov}
+holds the (co)variance and \code{sdcor} the standard deviation (diagonal) or
+correlation (off-diagonal). This is the shape \code{broom.mixed::tidy()} expects.
+
+Produces the long form returned by \code{as.data.frame(lme4::ranef(.))}: columns
+\code{grpvar}, \code{term}, \code{grp}, \code{condval}, and \code{condsd}. \code{condsd} is the
+conditional standard deviation, taken from the \code{postVar} attribute when the
+modes were extracted with \code{condVar = TRUE}, and \code{NA} otherwise.
 }

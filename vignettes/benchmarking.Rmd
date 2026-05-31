@@ -233,6 +233,92 @@ data.frame(
 )
 ```
 
+## What does inference method choice cost?
+
+Speed is only one part of the inference decision. The route table also needs
+calibration evidence: how often a method rejects under a null, how often it
+detects a small alternative, and whether interval routes cover that small
+alternative.
+
+The lightweight simulation scaffold records those three quantities over four
+fixtures: an interior fit, a boundary-like fit, a reduced-rank fit, and a
+small-group fit. The checked-in summary is produced by the default fast mode,
+which excludes bootstrap routes so the script runs in seconds. Slow mode adds
+bootstrap and bootstrap-LRT routes for local evidence gathering.
+
+```{r inference-simulation-data}
+simulation_path <- system.file(
+  "extdata", "inference-method-simulation-summary.csv",
+  package = "mixeff"
+)
+if (!nzchar(simulation_path)) {
+  simulation_file <- file.path("inst", "extdata",
+                               "inference-method-simulation-summary.csv")
+  simulation_path <- if (file.exists(simulation_file)) {
+    simulation_file
+  } else {
+    file.path("..", simulation_file)
+  }
+}
+simulation <- read.csv(simulation_path, stringsAsFactors = FALSE)
+
+head(simulation)
+```
+
+```{r inference-simulation-checks, include = FALSE}
+stopifnot(nrow(simulation) > 0L)
+stopifnot(all(c("method", "fixture", "mode", "n_reps", "type_I_error",
+                "power_at_alt", "coverage_at_alt") %in% names(simulation)))
+```
+
+```{r inference-simulation-command, eval = FALSE}
+system2(
+  "Rscript",
+  c(
+    "inst/benchmarks/inference-method-simulation.R",
+    "--mode=slow",
+    "--reps=100",
+    "--nsim=199"
+  )
+)
+```
+
+The plot below shows whichever metrics are available for each route. P-value
+routes contribute Type I error and power; interval routes contribute coverage.
+Routes not wired in the current package version remain in the CSV with
+`n_reps = 0`, so downstream reports can distinguish "not run in fast mode" from
+"not part of the contract".
+
+```{r inference-simulation-plot, eval = requireNamespace("ggplot2", quietly = TRUE), fig.width = 8, fig.height = 5, fig.alt = "Inference simulation metrics by method and fixture."}
+library(ggplot2)
+
+simulation_long <- stats::reshape(
+  simulation,
+  varying = c("type_I_error", "power_at_alt", "coverage_at_alt"),
+  v.names = "value",
+  timevar = "metric",
+  times = c("Type I error", "Power at small alternative", "Coverage at small alternative"),
+  direction = "long"
+)
+simulation_long <- subset(simulation_long, n_reps > 0 & is.finite(value))
+simulation_long$metric <- factor(
+  simulation_long$metric,
+  levels = c("Type I error", "Power at small alternative",
+             "Coverage at small alternative")
+)
+
+ggplot(simulation_long, aes(method, value, fill = method)) +
+  geom_col(width = 0.7, show.legend = FALSE) +
+  facet_grid(metric ~ fixture) +
+  coord_cartesian(ylim = c(0, 1)) +
+  labs(x = NULL, y = "empirical proportion") +
+  theme_minimal(base_size = 10) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  )
+```
+
 ## How do you read the result?
 
 For a local speed claim, read the summary CSV and compute ratios from elapsed

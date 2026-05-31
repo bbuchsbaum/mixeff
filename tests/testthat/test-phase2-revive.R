@@ -39,6 +39,17 @@ test_that("lazy extractors rebuild fixed and random design components", {
   expect_true(exists("X", envir = fit$lazy_cache, inherits = FALSE))
   expect_true(exists("Z", envir = fit$lazy_cache, inherits = FALSE))
 
+  # Zt / Lambdat must not error on sparse Matrix objects (regression: a bare
+  # base::t() failed with "argument is not a matrix"; needs Matrix::t()).
+  Zt <- getME(fit, "Zt")
+  Lambdat <- getME(fit, "Lambdat")
+  expect_s4_class(Zt, "sparseMatrix")
+  expect_s4_class(Lambdat, "sparseMatrix")
+  expect_equal(dim(Zt), rev(dim(Z)))
+  expect_equal(dim(Lambdat), dim(Lambda))
+  expect_equal(as.matrix(Zt), t(as.matrix(Z)))
+  expect_equal(as.matrix(Lambdat), t(as.matrix(Lambda)))
+
   parts <- getME(fit, c("theta", "beta", "flist", "cnms", "y"))
   expect_equal(parts$theta, fit$theta)
   expect_equal(parts$beta, fit$beta)

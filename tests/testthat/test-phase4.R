@@ -13,7 +13,154 @@ mk_phase4_fit <- function(seed = 40L, slope = TRUE, reml = TRUE) {
   lmm(formula, df, REML = reml, control = mm_control(verbose = -1))
 }
 
-test_that("glmm() validates family metadata and reports explicit unavailable bridge", {
+mk_cbpp_glmm_fit <- function() {
+  skip_if_not_installed("lme4")
+  env <- new.env(parent = emptyenv())
+  utils::data("cbpp", package = "lme4", envir = env)
+  cbpp <- get("cbpp", envir = env, inherits = FALSE)
+  rows <- lapply(seq_len(nrow(cbpp)), function(i) {
+    successes <- cbpp$incidence[[i]]
+    failures <- cbpp$size[[i]] - cbpp$incidence[[i]]
+    data.frame(
+      y = c(rep(1, successes), rep(0, failures)),
+      period = cbpp$period[[i]],
+      herd = cbpp$herd[[i]]
+    )
+  })
+  df <- droplevels(do.call(rbind, rows))
+
+  list(
+    fit = glmm(y ~ period + (1 | herd), df, family = binomial(),
+               method = "pirls_profiled", control = mm_control(verbose = -1)),
+    data = df
+  )
+}
+
+mk_glmm_contract_data <- function(family) {
+  set.seed(416)
+  n_groups <- 8L
+  n_per_group <- 8L
+  subject <- factor(rep(seq_len(n_groups), each = n_per_group))
+  x <- rep(seq(-1, 1, length.out = n_per_group), n_groups)
+  b0 <- rnorm(n_groups, sd = 0.25)[as.integer(subject)]
+  eta <- 0.4 + 0.3 * x + b0
+
+  y <- switch(
+    family,
+    binomial = stats::rbinom(length(x), size = 1L, prob = stats::plogis(eta)),
+    poisson = stats::rpois(length(x), lambda = exp(eta)),
+    gamma = stats::rgamma(length(x), shape = 8, rate = 8 / exp(eta)),
+    stop(sprintf("unsupported test family `%s`", family), call. = FALSE)
+  )
+  data.frame(y = y, x = x, subject = subject)
+}
+
+test_that("glmm() fits expanded cbpp binomial smoke through profiled PIRLS", {
+  pair <- mk_cbpp_glmm_fit()
+  fit <- pair$fit
+  df <- pair$data
+
+  expect_s3_class(fit, "mm_glmm")
+  expect_s3_class(fit, "mm_fit")
+  expect_identical(fit$family$family, "binomial")
+  expect_identical(fit$family$link, "logit")
+  expect_identical(fit$method, "pirls_profiled")
+  expect_equal(nobs(fit), nrow(df))
+  expect_true(all(is.finite(fixef(fit))))
+  expect_true(all(is.finite(fit$theta)))
+  expect_true(is.finite(as.numeric(logLik(fit))))
+  expect_true(is.finite(AIC(fit)))
+  expect_s3_class(summary(fit), "summary.mm_glmm")
+  expect_true(all(is.finite(diag(vcov(fit)))))
+  expect_equal(nrow(model.matrix(fit)), nrow(df))
+  ## Upstream payload now serializes the GLMM fixed-effect covariance,
+  ## so Wald-z coefficient tests are available with moderate reliability.
+  s_coef <- summary(fit, tests = "coefficients")
+  expect_s3_class(s_coef, "summary.mm_glmm")
+  expect_true(all(c("Estimate", "Std. Error", "z value", "Pr(>|z|)") %in%
+                  colnames(s_coef$coefficients)))
+  expect_identical(s_coef$vcov_status$status, "available")
+})
+
+test_that("glmm() family/link surface matches the upstream support contract", {
+  expected <- data.frame(
+    family = c(rep("binomial", 3), rep("poisson", 2), "Gamma"),
+    link = c("logit", "probit", "cloglog", "log", "sqrt", "log"),
+    stringsAsFactors = FALSE
+  )
+  supported <- mm_glmm_supported_family_link_table()
+  expect_equal(supported[order(supported$family, supported$link), ],
+               expected[order(expected$family, expected$link), ],
+               ignore_attr = TRUE)
+
+  cases <- list(
+    list(family = binomial(link = "logit"), engine_family = "binomial"),
+    list(family = binomial(link = "probit"), engine_family = "binomial"),
+    list(family = binomial(link = "cloglog"), engine_family = "binomial"),
+    list(family = poisson(link = "log"), engine_family = "poisson"),
+    list(family = poisson(link = "sqrt"), engine_family = "poisson"),
+    list(family = Gamma(link = "log"), engine_family = "gamma")
+  )
+
+  for (case in cases) {
+    data_family <- case$engine_family
+    data_family <- if (identical(data_family, "gamma")) "gamma" else data_family
+    df <- mk_glmm_contract_data(data_family)
+    fit <- glmm(y ~ x + (1 | subject), df, family = case$family,
+                method = "pirls_profiled", control = mm_control(verbose = -1))
+    expect_s3_class(fit, "mm_glmm")
+    expect_identical(fit$family$family, case$engine_family)
+    expect_identical(fit$family$link, case$family$link)
+    expect_true(is.finite(as.numeric(logLik(fit))))
+    expect_true(all(is.finite(fixef(fit))))
+  }
+})
+
+test_that("glmm() refuses off-contract family/link pairs with a stable reason code", {
+  df <- data.frame(
+    y = c(0, 1, 0, 1, 1, 0),
+    x = c(0, 0, 1, 1, 0, 1),
+    subject = factor(rep(1:3, each = 2))
+  )
+  bad_cases <- list(
+    gaussian_identity = gaussian(),
+    binomial_log = binomial(link = "log"),
+    poisson_identity = poisson(link = "identity"),
+    gamma_inverse = Gamma(link = "inverse"),
+    inverse_gaussian_log = inverse.gaussian(link = "log")
+  )
+
+  for (family in bad_cases) {
+    err <- tryCatch(
+      glmm(y ~ x + (1 | subject), df, family = family,
+           control = mm_control(verbose = -1)),
+      mm_inference_unavailable = function(cnd) cnd
+    )
+    expect_s3_class(err, "mm_inference_unavailable")
+    expect_identical(err$reason_code, "unsupported_glmm_family_link")
+    expect_identical(err$family, family$family)
+    expect_identical(err$link, family$link)
+    expect_true(all(c("family", "link") %in% names(err$supported)))
+  }
+})
+
+test_that("mm_glmm revive preserves durable extractor behavior", {
+  fit <- mk_cbpp_glmm_fit()$fit
+  path <- tempfile(fileext = ".rds")
+  saveRDS(fit, path)
+  restored <- revive(readRDS(path))
+
+  expect_s3_class(restored, "mm_glmm")
+  expect_false(fit_handle_alive(restored))
+  expect_true(is.environment(restored$lazy_cache))
+  expect_equal(fixef(restored), fixef(fit))
+  expect_equal(ranef(restored), ranef(fit))
+  expect_equal(VarCorr(restored)$table, VarCorr(fit)$table)
+  expect_error(stats::predict(restored),
+               class = "mm_inference_unavailable")
+})
+
+test_that("glmm() validates family metadata and reports unavailable joint backend", {
   df <- data.frame(
     y = c(0, 1, 0, 1, 1, 0),
     x = c(0, 0, 1, 1, 0, 1),
@@ -21,18 +168,22 @@ test_that("glmm() validates family metadata and reports explicit unavailable bri
   )
   err <- tryCatch(
     glmm(y ~ x + (1 | subject), df, family = binomial(),
-         control = mm_control(verbose = -1)),
+         method = "joint_laplace", control = mm_control(verbose = -1)),
     mm_fit_error = function(cnd) cnd
   )
   expect_s3_class(err, "mm_fit_error")
-  expect_match(conditionMessage(err), "GLMM fitting is not available", fixed = TRUE)
+  expect_match(conditionMessage(err), "estimation_method_unavailable",
+               fixed = TRUE)
   expect_equal(err$metadata$family$family, "binomial")
   expect_equal(err$metadata$family$link, "logit")
-  expect_error(
+  expect_equal(err$metadata$method, "joint_laplace")
+  unsupported <- tryCatch(
     glmm(y ~ x + (1 | subject), df, family = gaussian(),
          control = mm_control(verbose = -1)),
-    class = "mm_fit_error"
+    mm_inference_unavailable = function(cnd) cnd
   )
+  expect_s3_class(unsupported, "mm_inference_unavailable")
+  expect_identical(unsupported$reason_code, "unsupported_glmm_family_link")
 })
 
 test_that("simulate.mm_lmm is reproducible and refit() uses the stored model", {
@@ -60,12 +211,56 @@ test_that("compare() and multi-model anova() refit REML fits by ML for compariso
 
   expect_s3_class(cmp, "mm_model_comparison")
   expect_equal(nrow(cmp$table), 2L)
+  expect_equal(nrow(cmp$ledger), 2L)
+  expect_true(all(c("comparison_id", "formula", "fit_method", "refit",
+                    "comparison_method", "fit_status", "validity_status",
+                    "source") %in% names(cmp$ledger)))
+  expect_identical(cmp$ledger$formula, cmp$table$formula)
+  expect_true(all(cmp$ledger$fit_method == "ML"))
+  expect_true(any(cmp$ledger$refit))
   expect_true(all(!cmp$table$REML))
   expect_true(any(cmp$table$refit))
   expect_true(is.finite(cmp$table$LRT[[2L]]))
+  expect_true(cmp$table$lrt_available[[2L]])
+  expect_identical(cmp$ledger$comparison_method[[2L]], cmp$table$method[[2L]])
+  expect_identical(cmp$ledger$validity_status[[2L]], cmp$table$status[[2L]])
+  expect_identical(cmp$table$comparison_class[[2L]], "nested_fixed_effects")
   expect_s3_class(av, "mm_model_comparison")
   expect_error(
     compare(reduced, full, refit_for_comparison = "error"),
+    class = "mm_inference_unavailable"
+  )
+})
+
+test_that("compare() consumes Rust validity rows for non-nested models", {
+  set.seed(409)
+  subject <- factor(rep(seq_len(8L), each = 4L))
+  d <- data.frame(
+    y = rnorm(32),
+    x = rep(seq_len(4L), 8L),
+    z = rep(c(0, 1), length.out = 32L),
+    subject = subject
+  )
+  fit_x <- lmm(y ~ x + (1 | subject), d, REML = FALSE,
+               control = mm_control(verbose = -1))
+  fit_z <- lmm(y ~ z + (1 | subject), d, REML = FALSE,
+               control = mm_control(verbose = -1))
+
+  cmp <- compare(fit_x, fit_z)
+
+  expect_s3_class(cmp, "mm_model_comparison")
+  expect_true(all(is.finite(cmp$table$AIC)))
+  expect_true(all(is.finite(cmp$table$BIC)))
+  expect_false(cmp$table$lrt_available[[2L]])
+  expect_true(is.na(cmp$table$LRT[[2L]]))
+  expect_true(is.na(cmp$table$p_value[[2L]]))
+  expect_identical(cmp$table$reason_code[[2L]], "non_nested_models_lrt_invalid")
+  expect_identical(cmp$table$comparison_class[[2L]], "non_nested_fixed_effects")
+  expect_identical(cmp$ledger$reason_code[[2L]], "non_nested_models_lrt_invalid")
+  expect_identical(cmp$ledger$validity_status[[2L]], cmp$table$status[[2L]])
+  expect_true(nzchar(cmp$ledger$reason[[2L]]))
+  expect_error(
+    compare(fit_x, fit_z, method = "lrt"),
     class = "mm_inference_unavailable"
   )
 })
@@ -76,9 +271,14 @@ test_that("drop1() preserves random effects and reports deletion rows", {
 
   expect_s3_class(d, "mm_drop1")
   expect_true(all(c("dropped", "formula", "LRT", "p_value") %in% names(d$table)))
+  expect_equal(nrow(d$ledger), nrow(d$table))
+  expect_true(all(c("dropped", "formula", "reference_formula",
+                    "comparison_method", "statistic", "status",
+                    "fit_status") %in% names(d$ledger)))
   expect_true("x" %in% d$table$dropped)
   expect_true("z" %in% d$table$dropped)
   expect_true(all(grepl("(1 | subject)", d$table$formula, fixed = TRUE)))
+  expect_true(all(d$ledger$reference_formula == deparse1(formula(fit))))
 })
 
 test_that("parametric bootstrap comparison runs on a tiny nsim", {
@@ -167,5 +367,5 @@ test_that("manifest advertises shipped simulation and inference surfaces", {
   cap <- mm_formula_manifest()$capabilities
   expect_true(cap$simulate)
   expect_true(cap$inference)
-  expect_false(cap$fit_glmm)
+  expect_true(cap$fit_glmm)
 })

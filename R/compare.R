@@ -86,8 +86,16 @@ compare.mm_lmm <- function(object,
     table$status <- "bootstrap_not_run"
     table$reason <- "set nsim > 0 and compare exactly two models to run bootstrap"
   }
+  ledger <- mm_comparison_ledger(
+    table,
+    target = target,
+    requested_method = method,
+    refit_for_comparison = refit_for_comparison,
+    source = "mixeff.compare"
+  )
   obj <- list(
     table = table,
+    ledger = ledger,
     fits = fits,
     target = target,
     method = method,
@@ -339,7 +347,9 @@ drop1.mm_lmm <- function(object,
   if (!is.null(scope)) {
     terms <- intersect(terms, as.character(scope))
   }
-  full <- mm_prepare_comparison_fits(list(object), refit_for_comparison)$fits[[1L]]
+  prepared_full <- mm_prepare_comparison_fits(list(object), refit_for_comparison)
+  full <- prepared_full$fits[[1L]]
+  full_refit <- isTRUE(prepared_full$refit[[1L]])
   rows <- lapply(terms, function(term) {
     reduced_formula <- mm_drop_fixed_term_formula(full, term)
     reduced <- lmm(reduced_formula, full$model_frame, REML = isTRUE(full$REML),
@@ -381,7 +391,14 @@ drop1.mm_lmm <- function(object,
     )
   }
   rownames(table) <- NULL
-  obj <- list(table = table, full = full)
+  ledger <- mm_drop1_comparison_ledger(
+    full = full,
+    table = table,
+    test = test,
+    refit_for_comparison = refit_for_comparison,
+    full_refit = full_refit
+  )
+  obj <- list(table = table, ledger = ledger, full = full)
   class(obj) <- "mm_drop1"
   obj
 }
@@ -494,42 +511,355 @@ mm_compare_table <- function(fits, method, refit) {
   ord <- order(vapply(fits, function(x) x$dof, numeric(1)))
   fits <- fits[ord]
   refit <- refit[ord]
-  rows <- lapply(seq_along(fits), function(i) {
-    fit <- fits[[i]]
-    data.frame(
-      model = paste0("m", i),
-      formula = deparse1(fit$formula),
-      nobs = nobs(fit),
-      df = fit$dof,
-      logLik = as.numeric(logLik(fit)),
-      deviance = deviance(fit),
-      AIC = AIC(fit),
-      BIC = BIC(fit),
-      REML = isTRUE(fit$REML),
-      refit = isTRUE(refit[[i]]),
-      delta_df = NA_real_,
-      LRT = NA_real_,
-      p_value = NA_real_,
-      method = if (identical(method, "aic")) "none" else "asymptotic_lrt",
-      status = if (identical(method, "aic")) "information_criteria" else "asymptotic_uncertified",
-      reason = if (identical(method, "aic")) "" else "ordinary LRT is not a finite-sample mixed-model certificate",
-      stringsAsFactors = FALSE
-    )
+  payloads <- lapply(fits, function(fit) {
+    payload <- mm_rust_fit_bridge_payload(fit)
+    payload$REML <- isTRUE(fit$REML)
+    payload
   })
-  table <- do.call(rbind, rows)
-  if (!identical(method, "aic") && nrow(table) > 1L) {
-    for (i in 2:nrow(table)) {
-      table$delta_df[[i]] <- table$df[[i]] - table$df[[i - 1L]]
-      table$LRT[[i]] <- pmax(0, table$deviance[[i - 1L]] - table$deviance[[i]])
-      if (table$delta_df[[i]] > 0) {
-        table$p_value[[i]] <- stats::pchisq(table$LRT[[i]],
-                                            df = table$delta_df[[i]],
-                                            lower.tail = FALSE)
-      }
-    }
+  json <- tryCatch(
+    mm_compare_models_json(payloads, method, "never"),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) {
+    mm_abort_from_bridge(json, method = method)
   }
+  parsed <- mm_json_parse_model_comparison_table(json)
+  table <- mm_compare_table_from_rust_payload(parsed$payload, fits, refit, method)
   rownames(table) <- NULL
   table
+}
+
+mm_json_parse_model_comparison_table <- function(json) {
+  if (!is.character(json) || length(json) != 1L || is.na(json) || !nzchar(json)) {
+    mm_abort(
+      message = "`json` must be a single non-empty character string.",
+      class = "mm_schema_error",
+      input = json
+    )
+  }
+  parsed <- tryCatch(
+    jsonlite::fromJSON(json, simplifyVector = FALSE),
+    error = function(cnd) {
+      mm_abort(
+        message = sprintf("Failed to parse model-comparison JSON: %s",
+                          conditionMessage(cnd)),
+        class = "mm_schema_error",
+        input = json,
+        parent = cnd
+      )
+    }
+  )
+  schema <- parsed$schema
+  if (!is.list(schema) ||
+      !identical(as.character(schema$schema_name), "mixedmodels.model_comparison_table") ||
+      !identical(as.character(schema$schema_version), "1.0.0")) {
+    mm_abort(
+      message = "Model-comparison JSON has an unknown schema header.",
+      class = "mm_schema_error",
+      input = parsed
+    )
+  }
+  if (!is.list(parsed$payload) || !is.list(parsed$payload$rows)) {
+    mm_abort(
+      message = "Model-comparison JSON is missing its row payload.",
+      class = "mm_schema_error",
+      input = parsed
+    )
+  }
+  parsed
+}
+
+mm_compare_table_from_rust_payload <- function(payload, fits, refit, method) {
+  rows <- payload$rows
+  n <- length(rows)
+  if (n != length(fits)) {
+    mm_abort(
+      message = "Model-comparison row count does not match compared fits.",
+      class = "mm_schema_error",
+      input = list(rows = n, fits = length(fits))
+    )
+  }
+
+  scalar <- function(row, field, default) {
+    value <- row[[field]]
+    if (is.null(value)) default else value
+  }
+  chr <- function(field, default = NA_character_) {
+    vapply(rows, function(row) as.character(scalar(row, field, default)),
+           character(1))
+  }
+  num <- function(field, default = NA_real_) {
+    vapply(rows, function(row) as.numeric(scalar(row, field, default)),
+           numeric(1))
+  }
+  int <- function(field, default = NA_integer_) {
+    as.integer(vapply(rows, function(row) as.integer(scalar(row, field, default)),
+                      integer(1)))
+  }
+  bool <- function(field, default = FALSE) {
+    vapply(rows, function(row) isTRUE(scalar(row, field, default)), logical(1))
+  }
+
+  lrt_available <- bool("lrt_available")
+  requires_ml_refit <- bool("requires_ml_refit")
+  status <- rep("not_available", n)
+  status[seq_len(n) == 1L] <- "reference_model"
+  status[lrt_available] <- "available"
+  status[requires_ml_refit] <- "ml_refit_required"
+  if (identical(method, "aic")) {
+    status[] <- "information_criteria"
+  }
+
+  method_col <- rep("not_available", n)
+  method_col[seq_len(n) == 1L | lrt_available] <- "asymptotic_lrt"
+  if (identical(method, "aic")) {
+    method_col[] <- "none"
+  }
+
+  reason <- chr("reason", "")
+  reason[is.na(reason)] <- ""
+
+  data.frame(
+    model = paste0("m", seq_len(n)),
+    formula = chr("label", ""),
+    nobs = int("nobs"),
+    df = int("dof"),
+    logLik = num("loglik"),
+    deviance = num("deviance"),
+    AIC = num("aic"),
+    BIC = num("bic"),
+    delta_aic = num("delta_aic"),
+    delta_bic = num("delta_bic"),
+    REML = vapply(fits, function(fit) isTRUE(fit$REML), logical(1)),
+    refit = vapply(refit, isTRUE, logical(1)),
+    fit_status = vapply(fits, mm_fit_status_label, character(1)),
+    delta_df = num("chisq_dof"),
+    LRT = num("chisq"),
+    p_value = num("pvalue"),
+    method = method_col,
+    status = status,
+    reason = reason,
+    reason_code = chr("reason_code"),
+    comparison_class = chr("comparison_class"),
+    lrt_available = lrt_available,
+    information_criteria_available = bool("information_criteria_available", TRUE),
+    requires_ml_refit = requires_ml_refit,
+    loglik_within_optimizer_tol = bool("loglik_within_optimizer_tol", NA),
+    rust_method = as.character(payload$method %||% NA_character_),
+    rust_refit_policy = as.character(payload$refit_policy %||% NA_character_),
+    stringsAsFactors = FALSE
+  )
+}
+
+mm_comparison_ledger <- function(table, target, requested_method,
+                                 refit_for_comparison,
+                                 source = "mixeff.compare") {
+  n <- nrow(table)
+  if (!n) {
+    return(mm_comparison_ledger_empty())
+  }
+  status <- mm_table_col(table, "status", "not_available")
+  reason <- mm_comparison_reason(
+    status,
+    mm_table_col(table, "reason", NA_character_),
+    mm_table_col(table, "reason_code", NA_character_)
+  )
+  reml <- mm_logical_col(table, "REML", FALSE)
+  refit <- mm_logical_col(table, "refit", FALSE)
+  data.frame(
+    comparison_id = rep(mm_comparison_id(table$formula, target, requested_method), n),
+    model_id = mm_table_col(table, "model", paste0("m", seq_len(n))),
+    model_index = seq_len(n),
+    model_role = ifelse(seq_len(n) == 1L, "reference", "candidate"),
+    formula = as.character(table$formula),
+    fit_method = ifelse(reml, "REML", "ML"),
+    original_fit_method = ifelse(refit, "REML", ifelse(reml, "REML", "ML")),
+    refit = refit,
+    refit_policy = rep(refit_for_comparison, n),
+    comparison_target = rep(target, n),
+    requested_method = rep(requested_method, n),
+    comparison_method = mm_table_col(table, "method", requested_method),
+    statistic = as.numeric(mm_table_col(table, "LRT", NA_real_)),
+    statistic_name = ifelse(is.na(mm_table_col(table, "LRT", NA_real_)),
+                            NA_character_, "LRT"),
+    df = as.numeric(mm_table_col(table, "delta_df", NA_real_)),
+    p_value = as.numeric(mm_table_col(table, "p_value", NA_real_)),
+    nobs = as.integer(mm_table_col(table, "nobs", NA_integer_)),
+    logLik = as.numeric(mm_table_col(table, "logLik", NA_real_)),
+    AIC = as.numeric(mm_table_col(table, "AIC", NA_real_)),
+    BIC = as.numeric(mm_table_col(table, "BIC", NA_real_)),
+    dof = as.numeric(mm_table_col(table, "df", NA_real_)),
+    delta_aic = as.numeric(mm_table_col(table, "delta_aic", NA_real_)),
+    delta_bic = as.numeric(mm_table_col(table, "delta_bic", NA_real_)),
+    fit_status = mm_table_col(table, "fit_status", "not_assessed"),
+    validity_status = status,
+    status = status,
+    reason = reason,
+    reason_code = mm_table_col(table, "reason_code", NA_character_),
+    comparison_class = mm_table_col(table, "comparison_class", NA_character_),
+    lrt_available = mm_logical_col(table, "lrt_available", FALSE),
+    information_criteria_available = mm_logical_col(
+      table, "information_criteria_available", TRUE
+    ),
+    requires_ml_refit = mm_logical_col(table, "requires_ml_refit", FALSE),
+    loglik_within_optimizer_tol = mm_table_col(table, "loglik_within_optimizer_tol", NA),
+    report_row = seq_len(n),
+    source = rep(source, n),
+    stringsAsFactors = FALSE
+  )
+}
+
+mm_drop1_comparison_ledger <- function(full, table, test, refit_for_comparison,
+                                       full_refit) {
+  n <- nrow(table)
+  if (!n) {
+    return(mm_comparison_ledger_empty())
+  }
+  status <- if (identical(test, "Chisq")) {
+    ifelse(is.finite(table$LRT) & !is.na(table$p_value), "available",
+           "not_available")
+  } else {
+    rep("information_criteria", n)
+  }
+  reason <- ifelse(
+    identical(test, "Chisq") | status != "information_criteria",
+    NA_character_,
+    "single-term deletion reported without likelihood-ratio test"
+  )
+  data.frame(
+    comparison_id = rep(mm_comparison_id(c(deparse1(full$formula), table$formula),
+                                         "fixed_effects", test), n),
+    model_id = paste0("drop_", seq_len(n)),
+    model_index = seq_len(n),
+    model_role = "reduced_candidate",
+    dropped = as.character(table$dropped),
+    formula = as.character(table$formula),
+    reference_formula = rep(deparse1(full$formula), n),
+    fit_method = ifelse(isTRUE(full$REML), "REML", "ML"),
+    original_fit_method = ifelse(isTRUE(full_refit), "REML",
+                                 ifelse(isTRUE(full$REML), "REML", "ML")),
+    refit = rep(isTRUE(full_refit), n),
+    refit_policy = rep(refit_for_comparison, n),
+    comparison_target = "fixed_effects",
+    requested_method = rep(test, n),
+    comparison_method = as.character(table$method),
+    statistic = as.numeric(table$LRT),
+    statistic_name = ifelse(identical(test, "Chisq"), "LRT", NA_character_),
+    df = as.numeric(table$df),
+    p_value = as.numeric(table$p_value),
+    nobs = rep(nobs(full), n),
+    logLik = as.numeric(table$logLik),
+    AIC = as.numeric(table$AIC),
+    BIC = as.numeric(table$BIC),
+    dof = NA_real_,
+    delta_aic = NA_real_,
+    delta_bic = NA_real_,
+    fit_status = rep(mm_fit_status_label(full), n),
+    validity_status = status,
+    status = status,
+    reason = mm_comparison_reason(status, reason, NA_character_),
+    reason_code = NA_character_,
+    comparison_class = "drop1_fixed_effect",
+    lrt_available = identical(test, "Chisq") & is.finite(table$LRT),
+    information_criteria_available = TRUE,
+    requires_ml_refit = rep(isTRUE(full_refit), n),
+    loglik_within_optimizer_tol = NA,
+    report_row = seq_len(n),
+    source = "mixeff.drop1",
+    stringsAsFactors = FALSE
+  )
+}
+
+mm_comparison_ledger_empty <- function() {
+  data.frame(
+    comparison_id = character(),
+    model_id = character(),
+    model_index = integer(),
+    model_role = character(),
+    formula = character(),
+    fit_method = character(),
+    original_fit_method = character(),
+    refit = logical(),
+    refit_policy = character(),
+    comparison_target = character(),
+    requested_method = character(),
+    comparison_method = character(),
+    statistic = numeric(),
+    statistic_name = character(),
+    df = numeric(),
+    p_value = numeric(),
+    nobs = integer(),
+    logLik = numeric(),
+    AIC = numeric(),
+    BIC = numeric(),
+    dof = numeric(),
+    delta_aic = numeric(),
+    delta_bic = numeric(),
+    fit_status = character(),
+    validity_status = character(),
+    status = character(),
+    reason = character(),
+    reason_code = character(),
+    comparison_class = character(),
+    lrt_available = logical(),
+    information_criteria_available = logical(),
+    requires_ml_refit = logical(),
+    loglik_within_optimizer_tol = logical(),
+    report_row = integer(),
+    source = character(),
+    stringsAsFactors = FALSE
+  )
+}
+
+mm_comparison_reason <- function(status, reason, reason_code) {
+  status <- as.character(status)
+  reason <- as.character(reason)
+  reason_code <- rep(as.character(reason_code), length.out = length(status))
+
+  missing <- is.na(reason) | !nzchar(reason)
+  reason[missing & status == "reference_model"] <- "baseline model for comparison"
+  reason[missing & status == "information_criteria"] <- "information criteria row"
+
+  missing <- is.na(reason) | !nzchar(reason)
+  use_code <- missing & !is.na(reason_code) & nzchar(reason_code)
+  reason[use_code] <- reason_code[use_code]
+
+  missing <- is.na(reason) | !nzchar(reason)
+  needs_reason <- !status %in% c("available", "reference_model",
+                                 "information_criteria")
+  reason[missing & needs_reason] <- "comparison status not available"
+  reason[reason == ""] <- NA_character_
+  reason
+}
+
+mm_table_col <- function(table, col, default) {
+  if (col %in% names(table)) {
+    table[[col]]
+  } else {
+    rep(default, nrow(table))
+  }
+}
+
+mm_logical_col <- function(table, col, default) {
+  vapply(mm_table_col(table, col, default), isTRUE, logical(1))
+}
+
+mm_comparison_id <- function(formulas, target, method) {
+  text <- paste(c(target, method, formulas), collapse = "\r")
+  codes <- utf8ToInt(enc2utf8(text))
+  if (!length(codes)) {
+    return("cmp_00000000")
+  }
+  checksum <- sum((seq_along(codes) %% 997L) * codes) %% 1000000007
+  sprintf("cmp_%08x", as.integer(checksum))
+}
+
+mm_fit_status_label <- function(fit) {
+  as.character(
+    fit$fit_status %||%
+      fit$artifact$optimizer_certificate$status %||%
+      "not_assessed"
+  )
 }
 
 mm_lrt_stat <- function(null, alternative) {

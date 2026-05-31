@@ -17,6 +17,10 @@ refit <- function(object, newresp, ...) {
 #' @rdname refit
 #' @export
 refit.mm_lmm <- function(object, newresp, ...) {
+  mm_reject_unsupported_dots(
+    list(...), "refit",
+    c(newweights = "changing prior weights on refit is not supported; refit with lmm(..., weights = ).")
+  )
   if (!is.numeric(newresp) || length(newresp) != nobs(object) ||
       anyNA(newresp)) {
     mm_abort(
@@ -55,6 +59,12 @@ refit.mm_lmm <- function(object, newresp, ...) {
 #' @method simulate mm_lmm
 #' @export
 simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, re.form = NULL, ...) {
+  mm_reject_unsupported_dots(
+    list(...), "simulate",
+    c(newparams = "simulating from user-supplied parameters is not yet supported; refit the model you want to simulate from.",
+      newdata = "simulating on new data is not yet supported; the simulation uses the fitted model frame.",
+      use.u = "conditioning on the fitted random effects (`use.u`) is not yet supported; use `re.form = NULL` (new draws) or `re.form = NA` (population).")
+  )
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 1) {
     mm_abort(
       message = "`nsim` must be a positive integer.",

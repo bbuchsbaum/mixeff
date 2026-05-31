@@ -1,0 +1,42 @@
+name: Release gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::devtools, any::testthat, any::jsonvalidate, any::rmarkdown
+          needs: test
+
+      - name: License notice is current
+        run: Rscript tools/check-license-note.R
+
+      - name: Vendored Rust snapshot is current
+        run: Rscript tools/check-vendor-drift.R
+
+      - name: Schema and manifest tests
+        run: Rscript -e "devtools::test(filter = 'schemas|schema-versioning|manifest')"
+
+      - name: No-network source install
+        env:
+          CARGO_NET_OFFLINE: true
+        run: Rscript tools/check-offline-install.R

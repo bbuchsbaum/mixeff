@@ -137,17 +137,19 @@ test_that("data-design report includes grouping unit counts", {
   expect_true("status" %in% names(row))
 })
 
-test_that("random-effect report includes variance rows and explicit schema gap", {
+test_that("random-effect report consumes Rust fit-summary VarCorr payload", {
   fit <- mk_reporting_fit()
   random_effects <- reporting_table(fit, "random_effects")
   unavailable <- model_report(fit)$unavailable
 
+  expect_identical(fit$fit_summary$schema_name, "mixedmodels.fit_summary")
+  expect_identical(fit$fit_summary$schema_version, "1.0.0")
   expect_true(any(random_effects$kind == "variance"))
   expect_true(any(random_effects$group == "Residual"))
-  expect_true(any(unavailable$field ==
-                    "stable_random_effect_variance_covariance_payload"))
-  expect_true(any(unavailable$reason ==
-                    "using_fit_varcorr_until_rust_report_payload_is_available"))
+  expect_true(all(random_effects$status == "available"))
+  expect_true(all(random_effects$source == "mixedmodels.fit_summary.varcorr"))
+  expect_false(any(unavailable$field ==
+                     "stable_random_effect_variance_covariance_payload"))
 })
 
 test_that("report output avoids recommendation language", {
@@ -164,6 +166,35 @@ test_that("report output avoids recommendation language", {
   for (pattern in forbidden) {
     expect_false(grepl(pattern, txt, ignore.case = TRUE))
   }
+})
+
+test_that("reporting_table() exposes durable comparison ledgers", {
+  full <- mk_reporting_fit()
+  reduced <- lmm(y ~ 1 + (1 | subject), full$model_frame,
+                 control = mm_control(verbose = -1))
+
+  cmp <- compare(reduced, full)
+  compact <- reporting_table(cmp, "comparison_ledger")
+  audit <- reporting_table(cmp, "comparison_ledger", view = "audit")
+  all_sections <- reporting_table(cmp, "all")
+
+  expect_equal(nrow(audit), nrow(cmp$ledger))
+  expect_true(all(c("comparison_id", "formula", "comparison_method",
+                    "statistic", "p_value", "status", "reason") %in%
+                    names(compact)))
+  expect_false("source" %in% names(compact))
+  expect_identical(all_sections$comparison_ledger, compact)
+  expect_identical(audit$source, cmp$ledger$source)
+
+  dropped <- stats::drop1(full, test = "Chisq")
+  dropped_ledger <- reporting_table(dropped, "comparison_ledger", view = "audit")
+
+  expect_equal(nrow(dropped_ledger), nrow(dropped$ledger))
+  expect_identical(dropped_ledger$reference_formula, dropped$ledger$reference_formula)
+  expect_error(
+    reporting_table(cmp, "fixed_effects"),
+    class = "mm_schema_error"
+  )
 })
 
 test_that("saved fits preserve report sections backed by stored artifacts", {

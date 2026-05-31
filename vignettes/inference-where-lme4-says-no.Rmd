@@ -40,7 +40,8 @@ warning, leaving the analyst to decide what to make of the
 situation.
 
 `mixeff` does two things differently. First, it labels the
-asymptotic row with a *closed-enum* reliability reason that names
+asymptotic row with a
+[closed-enum reliability reason](inference-method-glossary.html) that names
 why the number is suspect on this fit — for example,
 `*_unavailable_at_boundary` when a variance-parameter derivative is
 not defined. Second, when bootstrap is the defensible route, it
@@ -106,48 +107,14 @@ recommender. Each row enumerates one inference method that the
 engine knows about, along with a status, a warrant, and a rough
 cost.
 
-Three columns deserve a short key, because the values are closed
-enums and their meanings are not self-evident.
-
-`expected_status` takes one of three values:
-
-- **`available`** — the method runs on this fit and produces a
-  meaningful number.
-- **`not_assessed`** — the inference contract refuses to run the
-  method on this fit, for a structural reason named in the next
-  column. This is the contract drawing a line, not failing
-  silently.
-- **`not_yet_wired`** — the method is part of the inference
-  contract upstream but has not yet been exposed through the R
-  surface. A roadmap item, not a refusal.
-
-`expected_reliability_reason` is the closed-enum warrant — the
-*why* behind the status. The values that appear on this fit:
-
-- **`*_unavailable_at_boundary`** (here, the `satterthwaite_` and
-  `kenward_roger_` variants) — the asymptotic method relies on a
-  derivative of the variance estimator that, as the previous
-  section explained, is undefined on a boundary fit.
-- **`bootstrap_monte_carlo_replicates`** — the method's reliability
-  is governed by the replicate count and the Monte-Carlo standard
-  error rather than asymptotic theory. You tune it with `nsim`.
-- **`inference_unavailable_by_policy`** — the engine has a refusal
-  policy specific to this combination of method and fit state; the
-  policy itself is the warrant.
-- **`not_available`** — despite the name, this value means that
-  *no additional reason applies* on this row. The Wald row is the
-  case in point: the method runs, and its substantive reliability
-  warrant is recorded in the main `inference_table()` (shown
-  below), not duplicated here.
-
-`approx_cost` is a rough timing estimate. `immediate` is sub-
-second; everything else scales with `nsim` and the cost of one
-refit.
+The printed object is the reader-facing map. It keeps the raw enum
+columns in `routes$table` for scripts, but explains the route status
+with display columns. The complete contract vocabulary is in the
+[inference method glossary](inference-method-glossary.html).
 
 ```{r route-map}
 routes <- inference_options(fit, "days", nsim = 200)
-routes$table[, c("method", "expected_status",
-                 "expected_reliability_reason", "approx_cost", "current")]
+routes
 ```
 
 ```{r route-checks, include = FALSE}
@@ -156,16 +123,17 @@ satt <- routes$table[routes$table$method == "satterthwaite", ]
 stopifnot(identical(satt$expected_status, "not_assessed"))
 ```
 
-Read the table top to bottom. **Wald** is `available`; its
-reliability warrant lives in `inference_table()` (next chunk).
-**Satterthwaite** and **Kenward-Roger** refuse, both at the
-boundary, for the structural reason discussed above.
-**Bootstrap** is `available` at a cost of roughly four seconds for
-`nsim = 200` — this is the route the contract documents for
-boundary fits. **Bootstrap-LRT** is refused on this fit shape by
-the engine's current policy. **Cluster bootstrap** appears in the
-upstream contract but the R bridge is not yet in place; the closing
-section of this vignette comes back to it as a typed refusal.
+Read the table top to bottom. **Wald** runs now; its reliability
+warrant lives in `inference_table()` (next chunk). **Satterthwaite**
+and **Kenward-Roger** refuse at the boundary for the structural
+reason discussed above. **Bootstrap** runs now at a cost of roughly
+four seconds for `nsim = 200`; this is the route the contract
+documents for boundary fits. **Bootstrap-LRT** refuses here because
+the example fit is REML and the LRT route requires ML. **Cluster
+bootstrap** refuses fixed-effect p-values because the current
+cluster-resample target describes estimator distributions, not null
+hypothesis tests. **Profile CI** is not certified for this boundary
+fit.
 
 ```{r wald-status}
 inference_table(fit)$table[, c("term", "method", "status",
@@ -271,8 +239,61 @@ stopifnot(identical(cluster_row$table$reason_code,
 That refusal is part of the same contract as the available bootstrap rows:
 available numbers are labelled, and unavailable numbers carry stable reasons.
 
+## Variance-component boundary tests
+
+The boundary likelihood-ratio route is for random-effect variance components,
+not fixed effects. `test_random_effect()` makes that distinction explicit. In
+the one-component case the reference distribution is the Self-Liang 50:50
+mixture: `0.5 * chi-square(0) + 0.5 * chi-square(1)`.
+
+```{r boundary-lrt}
+ri_fit <- lmm(
+  rt ~ days + (1 | subj),
+  sleep_like,
+  REML = FALSE,
+  control = mm_control(verbose = -1)
+)
+
+re_lrt <- test_random_effect(ri_fit, "subj", method = "boundary_lrt")
+re_lrt
+```
+
+```{r boundary-lrt-table}
+reporting_table(re_lrt)[, c("term", "statistic", "p_value",
+                            "reference_distribution", "status")]
+```
+
+```{r boundary-lrt-checks, include = FALSE}
+stopifnot(inherits(re_lrt, "mm_random_effect_test"))
+stopifnot(identical(re_lrt$table$status, "available"))
+stopifnot(identical(re_lrt$table$reference_distribution,
+                    "0.5 * chi-square(0) + 0.5 * chi-square(1)"))
+stopifnot(is.finite(re_lrt$table$p_value))
+```
+
+Asking for the same method on a fixed effect returns a typed refusal with a
+stable reason code. This is not a software gap; it is the methodological
+boundary. Self and Liang (1987), Stram and Lee (1994), and Crainiceanu and
+Ruppert (2004) address variance-component tests at the boundary, not ordinary
+fixed-effect Wald rows.
+
+```{r boundary-fixed-refusal}
+fixed_boundary <- test_effect(ri_fit, "days", method = "boundary_lrt")
+fixed_boundary$table[, c("term", "method", "status", "reason_code")]
+```
+
+```{r boundary-fixed-checks, include = FALSE}
+stopifnot(identical(fixed_boundary$table$status, "unsupported"))
+stopifnot(identical(fixed_boundary$table$reason_code,
+                    "boundary_lrt_not_applicable_to_fixed_effects"))
+```
+
 ## References
 
+- Crainiceanu, C. M., and Ruppert, D. (2004). Likelihood ratio tests
+  in linear mixed models with one variance component. *Journal of the
+  Royal Statistical Society: Series B*, 66(1), 165–185.
+  <https://doi.org/10.1111/j.1467-9868.2004.00438.x>
 - Halekoh, U., and Højsgaard, S. (2014). A Kenward-Roger approximation
   and parametric bootstrap methods for tests in linear mixed models —
   the `R` package `pbkrtest`. *Journal of Statistical Software*,

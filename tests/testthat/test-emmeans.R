@@ -63,6 +63,40 @@ test_that("optional emmeans pairwise estimates agree with fixed-effect differenc
   expect_true(all(is.finite(pairs$SE)))
 })
 
+test_that("marginal means match lme4 on an ordered-factor interaction model", {
+  # Regression: the engine codes all factors (incl. ordered) with treatment
+  # contrasts, but the R-side basis used contr.poly for ordered factors and a
+  # different interaction column order, silently evaluating marginal means at
+  # the reference level instead of averaging (lme4::cake: 19.3 vs 35.8).
+  testthat::skip_if_not_installed("lme4")
+  testthat::skip_if_not_installed("emmeans")
+  testthat::skip_if_not_installed("estimability")
+  d <- lme4::cake
+
+  ref <- lme4::lmer(angle ~ recipe * temperature + (1 | recipe:replicate), d)
+  fit <- lmm(angle ~ recipe * temperature + (1 | recipe:replicate), d,
+             control = mm_control(verbose = -1))
+
+  ref_emm <- summary(emmeans::emmeans(ref, ~ temperature))$emmean
+  mix_emm <- summary(emmeans::emmeans(fit, ~ temperature))$emmean
+  native <- mm_means(fit, ~ temperature)
+
+  expect_equal(mix_emm, ref_emm, tolerance = 1e-6)
+  expect_equal(native$table$estimate, ref_emm, tolerance = 1e-6)
+
+  # And the fixed-effect predictions on the full grid (predict re.form = NA)
+  # must agree, which exercises the same engine-basis reconstruction.
+  nd <- expand.grid(recipe = levels(d$recipe),
+                    temperature = ordered(levels(d$temperature),
+                                          levels = levels(d$temperature)))
+  nd$replicate <- factor(levels(d$replicate)[1], levels = levels(d$replicate))
+  expect_equal(
+    unname(predict(fit, newdata = nd, re.form = NA)),
+    unname(predict(ref, nd, re.form = NA)),
+    tolerance = 1e-6
+  )
+})
+
 test_that("emmeans support methods are exported for conditional registration", {
   testthat::skip_if_not_installed("emmeans")
   exported <- getNamespaceExports("mixeff")

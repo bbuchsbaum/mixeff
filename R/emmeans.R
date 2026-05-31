@@ -57,19 +57,12 @@ emm_basis.mm_lmm <- function(object, trms, xlev, grid,
     )
   }
   method <- match.arg(method)
-  m <- stats::model.frame(trms, grid, na.action = stats::na.pass, xlev = xlev)
-  X_train <- stats::model.matrix(object, type = "fixed")
-  X <- stats::model.matrix(trms, m, contrasts.arg = attr(X_train, "contrasts"))
-  if (ncol(X) != length(fixef(object))) {
-    mm_abort(
-      message = "The emmeans reference grid design does not match the fitted fixed effects.",
-      class = "mm_inference_unavailable",
-      expected = names(fixef(object)),
-      observed = colnames(X)
-    )
-  }
-  colnames(X) <- names(fixef(object))
-  X <- X[, names(fixef(object)), drop = FALSE]
+  # Build the basis in the engine's coefficient basis and aligned to
+  # names(beta). emmeans supplies `trms`/`xlev`/`grid`, but R's default
+  # contrasts (contr.poly for ordered factors) and interaction column order
+  # disagree with the engine, so we reconstruct from the fit's own fixed
+  # formula via the shared helper. See mm_engine_fixed_matrix() in predict.R.
+  X <- mm_engine_fixed_matrix(object, grid)
 
   bhat <- as.numeric(fixef(object))
   names(bhat) <- names(fixef(object))

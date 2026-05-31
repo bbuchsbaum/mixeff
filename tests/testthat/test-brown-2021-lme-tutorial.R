@@ -9,8 +9,9 @@
 # - /Code/intro_to_lmer.Rmd
 #
 # The paper also includes binomial glmer() examples using acc_dummy_data.csv.
-# Those are intentionally not included here because mixeff::glmm() is currently
-# a typed Phase 4 boundary, not a fitted GLMM bridge.
+# Those remain outside this LMM parity file; mixeff::glmm() now has its own
+# profiled-PIRLS bridge tests and still labels unavailable joint backends
+# explicitly.
 
 brown_fixture_path <- function(file) {
   candidates <- c(

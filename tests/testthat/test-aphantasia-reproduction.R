@@ -34,6 +34,19 @@ aphantasia_run_stress <- function() {
   identical(tolower(Sys.getenv("MIXEFF_RUN_APHANTASIA_STRESS")), "true")
 }
 
+aphantasia_run_joint_proof <- function() {
+  identical(tolower(Sys.getenv("MIXEFF_APHANTASIA_JOINT_PROOF")), "true")
+}
+
+aphantasia_joint_budget <- function() {
+  raw <- Sys.getenv("MIXEFF_APHANTASIA_JOINT_BUDGET", unset = "40")
+  value <- suppressWarnings(as.integer(raw))
+  if (is.na(value) || value < 1L) {
+    stop("MIXEFF_APHANTASIA_JOINT_BUDGET must be a positive integer")
+  }
+  value
+}
+
 aphantasia_prepare_model_data <- function(trials, stimtype = FALSE) {
   out <- transform(
     trials,
@@ -151,6 +164,13 @@ aphantasia_glmm_method <- function(id) {
   "pirls_profiled"
 }
 
+aphantasia_glmm_control <- function(id) {
+  if (id %in% c("intact", "combined") && aphantasia_use_joint_glmm()) {
+    return(mixeff::mm_control(verbose = -1, max_feval = aphantasia_joint_budget()))
+  }
+  mixeff::mm_control(verbose = -1)
+}
+
 aphantasia_lme4_key <- function(x) {
   gsub(": ", "", as.character(x), fixed = TRUE)
 }
@@ -246,6 +266,12 @@ aphantasia_lincomb <- function(fit, weights) {
   )
 }
 
+aphantasia_diagnostic_payloads <- function(fit) {
+  cert <- fit$artifact$optimizer_certificate %||% list()
+  diags <- c(fit$artifact$diagnostics %||% list(), cert$diagnostics %||% list())
+  lapply(diags, function(diagnostic) diagnostic$payload %||% list())
+}
+
 test_that("aphantasia fixture has anonymized data and frozen references", {
   ref <- aphantasia_reference()
   trials <- aphantasia_trials()
@@ -285,10 +311,57 @@ test_that("aphantasia core fit-side reproduction matches cached lme4 references 
     } else {
       mixeff::glmm(form, cases[[id]]$data, family = cases[[id]]$family,
                    method = aphantasia_glmm_method(id), nAGQ = 1L,
-                   control = mixeff::mm_control(verbose = -1))
+                   control = aphantasia_glmm_control(id))
     }
     aphantasia_expect_fit_matches_reference(fit, model_ref, id)
   }
+})
+
+test_that("aphantasia intact budgeted joint Laplace proof improves the profiled gap when enabled", {
+  testthat::skip_on_cran()
+  mm_skip_if_no_lme4()
+  testthat::skip_if_not(
+    aphantasia_run_joint_proof(),
+    paste(
+      "Set MIXEFF_APHANTASIA_JOINT_PROOF=true to run the budgeted intact",
+      "joint-Laplace timing/parity proof."
+    )
+  )
+
+  budget <- aphantasia_joint_budget()
+  ref <- aphantasia_reference()
+  data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
+  cases <- aphantasia_fit_cases(ref, data_sets)
+  model_ref <- ref$models$intact
+  fit <- mixeff::glmm(
+    stats::as.formula(model_ref$formula),
+    cases$intact$data,
+    family = cases$intact$family,
+    method = "joint_laplace",
+    nAGQ = 1L,
+    control = mixeff::mm_control(verbose = -1, max_feval = budget)
+  )
+
+  observed <- mixeff::fixef(fit)
+  names(observed) <- aphantasia_lme4_key(names(observed))
+  expected <- unlist(model_ref$fixef, use.names = TRUE)
+  common <- intersect(names(expected), names(observed))
+  max_fixef_drift <- max(abs(observed[common] - expected[common]))
+  loglik_gap <- abs(as.numeric(stats::logLik(fit)) - model_ref$logLik)
+  payloads <- aphantasia_diagnostic_payloads(fit)
+  fit_modes <- unlist(lapply(payloads, function(payload) {
+    payload$fit_mode %||% NA_character_
+  }), use.names = FALSE)
+  scorecard_classes <- unlist(lapply(payloads, function(payload) {
+    payload$scorecard_class %||% NA_character_
+  }), use.names = FALSE)
+
+  expect_lte(fit$fit$optimizer$function_evaluations, budget)
+  expect_match(fit$fit$optimizer$return_value, "^JOINT_LAPLACE:")
+  expect_lt(loglik_gap, 0.5)
+  expect_lt(max_fixef_drift, 0.1)
+  expect_true("uncertified_joint_candidate" %in% fit_modes)
+  expect_true("budget_limited_joint_candidate" %in% scorecard_classes)
 })
 
 test_that("aphantasia S1 random-effects stability fits run in the stress tier", {

@@ -119,7 +119,9 @@ the sensitivity model assigns the four intermediate VVIQ participants to the
 control group. The intact and combined high-baseline Bernoulli models keep the
 runnable profiled path in the opt-in reproduction gate and are checked against
 the parity ledger. The labelled joint route is available as
-`method = "joint_laplace"`, but it is a slower audit path on these data.
+`method = "joint_laplace"`; for the intact model the budgeted audit route
+(`mm_control(max_feval = 40)`) substantially reduces the lme4 gap, but still
+returns an explicit budget-limited, non-certified optimizer diagnostic.
 
 ```{r additional-glmms, eval = run_live}
 sensitivity <- subset(trials, bubbled == "yes" & !is.na(correct))

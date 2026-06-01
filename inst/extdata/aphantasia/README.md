@@ -32,5 +32,8 @@ correct, rt, aphantasia, age, vviq_standard, source, and source_folder.
 
 The test file keeps ordinary checks fast. Set `MIXEFF_RUN_APHANTASIA=true` to
 run the core model refits (primary, sensitivity, intact, combined, RT, S7, and
-S9). Set `MIXEFF_RUN_APHANTASIA_STRESS=true` for the S1 random-effects
-stability variants, which are much slower on the current GLMM bridge.
+S9) on the runnable profiled GLMM path with parity-ledger checks. Set
+`MIXEFF_APHANTASIA_JOINT=true` as an extra audit switch to route intact and
+combined through the slower labelled joint-Laplace path. Set
+`MIXEFF_RUN_APHANTASIA_STRESS=true` for the S1 random-effects stability
+variants, which are much slower on the current GLMM bridge.

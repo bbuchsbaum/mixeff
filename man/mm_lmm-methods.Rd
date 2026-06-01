@@ -140,7 +140,7 @@ ngrps(object, ...)
 \method{vcov}{mm_glmm}(object, type = c("fixed", "theta"), correlation = FALSE, ...)
 }
 \arguments{
-\item{object, x, formula}{A fitted \code{mm_lmm} object.}
+\item{object, x, formula, fit}{A fitted \code{mm_lmm} or \code{mm_glmm} object.}
 
 \item{...}{Unused.}
 
@@ -148,9 +148,14 @@ ngrps(object, ...)
 tables with an \code{NA} \code{postVar} array and an \code{mm_unavailable_reason}
 attribute rather than fabricating conditional variances.}
 
-\item{x}{An \code{mm_ranef} object from \code{\link[=ranef]{ranef()}}.}
+\item{x}{An \code{mm_varcorr} object from \code{\link[=VarCorr]{VarCorr()}}.}
+
+\item{REML}{Ignored; included for S3 compatibility with likelihood and
+deviance generics.}
 
 \item{k}{Penalty per parameter for \code{\link[=AIC]{AIC()}}.}
+
+\item{scale}{Ignored; included for S3 compatibility with \code{\link[=extractAIC]{extractAIC()}}.}
 
 \item{row.names, optional}{Ignored; present for S3 consistency.}
 
@@ -160,7 +165,7 @@ matrix and \code{"random"} returns the sparse random-effect design matrix. For
 \code{"theta"} returns an unavailable theta-covariance matrix with a reason
 attribute.}
 
-\item{object}{A fitted \code{mm_lmm}/\code{mm_glmm} model.}
+\item{correlation}{Logical; accepted for S3 compatibility with \code{\link[=vcov]{vcov()}}.}
 }
 \value{
 A named integer vector of group counts.

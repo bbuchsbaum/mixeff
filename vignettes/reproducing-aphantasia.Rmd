@@ -116,9 +116,10 @@ unlist(reference$models$primary$fixef)
 
 The same fixture supports the manuscript sensitivity and specificity fits:
 the sensitivity model assigns the four intermediate VVIQ participants to the
-control group, the intact model repeats the GLMM on intact images, and the
-combined model tests the group by masking cost difference between occluded and
-intact stimuli.
+control group. The intact and combined high-baseline Bernoulli models keep the
+runnable profiled path in the opt-in reproduction gate and are checked against
+the parity ledger. The labelled joint route is available as
+`method = "joint_laplace"`, but it is a slower audit path on these data.
 
 ```{r additional-glmms, eval = run_live}
 sensitivity <- subset(trials, bubbled == "yes" & !is.na(correct))

@@ -33,16 +33,23 @@ certified 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"
 
 \item{random}{Reserved for the native random-effect constructor path.}
 
-\item{weights, subset, na.action, contrasts}{Reserved for future parity with
-\code{\link[=lmm]{lmm()}}.}
+\item{weights}{Optional prior weights. For binomial models these are trial
+counts for proportion responses; weights must be positive and finite.}
 
-\item{method}{GLMM estimation method. \code{"pirls_profiled"} is available in
-this build; \code{"joint_laplace"} requires the optional upstream \code{nlopt}
-backend and raises a typed \code{mm_fit_error} when unavailable.}
+\item{offset}{Optional fixed linear-predictor offset; values must be finite.}
+
+\item{subset, na.action, contrasts}{Reserved for future parity with \code{\link[=lmm]{lmm()}}.}
+
+\item{method}{GLMM estimation method. \code{"pirls_profiled"} is the default
+fast-PIRLS profiled path. \code{"joint_laplace"} requests the labelled joint
+Laplace route and requires \code{nAGQ <= 1}. The joint route tracks the lme4
+joint-Laplace reference far more closely than the profiled path on
+high-baseline models, at a higher optimizer cost; cap that cost with
+\code{mm_control(max_feval = )}.}
 
 \item{nAGQ}{Number of adaptive Gauss-Hermite quadrature points. \code{1} is the
-Laplace setting; values above \code{1} request AGQ metadata from the profiled
-path.}
+Laplace setting. Values above \code{1} are allowed on the profiled path and
+are rejected for \code{method = "joint_laplace"} in the R wrapper.}
 
 \item{inference}{Requested inference method.}
 
@@ -58,7 +65,7 @@ An object of class \code{mm_glmm}, also inheriting from \code{mm_fit} and
 \code{glmm()} validates the R-side family/link request, compiles the model
 formula, and delegates the numerical fit to the upstream Rust
 \code{GeneralizedLinearMixedModel}. The default \code{method = "pirls_profiled"} is
-the labelled fast-PIRLS path. \code{method = "joint_laplace"} is refused in this
-build because the vendored Rust engine is compiled without the optional
-\code{nlopt} backend.
+the labelled fast-PIRLS path. \code{method = "joint_laplace"} uses the upstream
+labelled joint Laplace route (\code{fast = FALSE}, \code{nAGQ = 1}) backed by the
+native dependency-light optimizer in this vendored build.
 }

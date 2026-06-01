@@ -87,9 +87,10 @@ pub(crate) fn build_dataframe(
             let levels = cat_levels_map.remove(name).ok_or_else(|| {
                 format!("mm_data_error: categorical column '{name}' is missing its `levels` entry")
             })?;
-            df.add_categorical_with_levels(name, values, levels).map_err(|e| {
-                format!("mm_data_error: failed to add categorical column '{name}': {e}")
-            })?;
+            df.add_categorical_with_levels(name, values, levels)
+                .map_err(|e| {
+                    format!("mm_data_error: failed to add categorical column '{name}': {e}")
+                })?;
             continue;
         }
 

@@ -160,23 +160,25 @@ test_that("mm_glmm revive preserves durable extractor behavior", {
                class = "mm_inference_unavailable")
 })
 
-test_that("glmm() validates family metadata and reports unavailable joint backend", {
+test_that("glmm() validates family metadata and labelled joint backend", {
   df <- data.frame(
     y = c(0, 1, 0, 1, 1, 0),
     x = c(0, 0, 1, 1, 0, 1),
     subject = factor(rep(1:3, each = 2))
   )
-  err <- tryCatch(
+  joint <- glmm(y ~ x + (1 | subject), df, family = binomial(),
+                method = "joint_laplace", nAGQ = 1L,
+                control = mm_control(verbose = -1))
+  expect_s3_class(joint, "mm_glmm")
+  expect_equal(joint$method, "joint_laplace")
+  expect_equal(joint$nAGQ, 1L)
+  expect_true(is.finite(as.numeric(logLik(joint))))
+  expect_error(
     glmm(y ~ x + (1 | subject), df, family = binomial(),
-         method = "joint_laplace", control = mm_control(verbose = -1)),
-    mm_fit_error = function(cnd) cnd
+         method = "joint_laplace", nAGQ = 3L,
+         control = mm_control(verbose = -1)),
+    class = "mm_arg_error"
   )
-  expect_s3_class(err, "mm_fit_error")
-  expect_match(conditionMessage(err), "estimation_method_unavailable",
-               fixed = TRUE)
-  expect_equal(err$metadata$family$family, "binomial")
-  expect_equal(err$metadata$family$link, "logit")
-  expect_equal(err$metadata$method, "joint_laplace")
   unsupported <- tryCatch(
     glmm(y ~ x + (1 | subject), df, family = gaussian(),
          control = mm_control(verbose = -1)),

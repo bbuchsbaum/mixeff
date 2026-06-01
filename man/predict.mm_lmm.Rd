@@ -69,6 +69,9 @@ certifies them.}
 \item{level}{Confidence level for future interval support.}
 
 \item{...}{Reserved for generic compatibility.}
+
+\item{scaled}{Logical; when \code{TRUE}, residuals are divided by the residual
+scale.}
 }
 \value{
 A numeric vector, or a list with \code{fit} and \code{se.fit} when

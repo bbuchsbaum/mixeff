@@ -26,13 +26,11 @@ library(mixeff)
 cat("The executable cbpp examples in this vignette require the `lme4` package.\n")
 ```
 
-This vignette shows the current GLMM contract in `mixeff`. The available path
+This vignette shows the current GLMM contract in `mixeff`. The default path
 is `glmm(..., method = "pirls_profiled")`, which delegates to the upstream
-profiled PIRLS GLMM fitter. `nAGQ = 1` is the Laplace-scale setting; larger
-`nAGQ` values ask the same profiled path to evaluate with more quadrature
-points. The separate joint-Laplace backend remains a typed boundary in this
-CRAN-oriented build because the vendored Rust engine is compiled without the
-optional `nlopt` backend.
+profiled PIRLS GLMM fitter. `method = "joint_laplace"` requests the labelled
+joint route (`fast = FALSE`, `nAGQ = 1`) and is available in the dependency-light
+vendored build through the native optimizer.
 
 The example uses the `lme4::cbpp` data. `glmm()` does not yet expose binomial
 case weights, so the grouped counts are expanded to Bernoulli rows before
@@ -114,8 +112,9 @@ c(
 
 ## Quadrature Sensitivity
 
-`nAGQ` is part of the fit request and is recorded on the object. This is a
-small sensitivity check, not a claim that the joint optimizer is enabled.
+`nAGQ` is part of the fit request and is recorded on the object. Values above
+one are a profiled-path sensitivity check; the labelled joint-Laplace path is
+restricted to `nAGQ = 1`.
 
 ```{r agq-sensitivity}
 glmm_fit_agq3 <- glmm(
@@ -141,10 +140,11 @@ data.frame(
 In-sample `fitted()` and `residuals()` are available, and
 `summary(fit, tests = "coefficients")` now returns a Wald-z fixed-effect
 table built from the upstream PIRLS/Laplace working-Hessian covariance
-payload (reliability label: `moderate`). GLMM prediction, simulation/refit
-methods, and the joint-Laplace backend remain uncertified by the current
-Rust contract; the package exposes those as ordinary R conditions rather
-than silently filling in values.
+payload (reliability label: `moderate`). GLMM prediction and
+simulation/refit methods remain uncertified by the current Rust contract; the
+package exposes those as ordinary R conditions rather than silently filling in
+values. The joint-Laplace fit route is available and labelled separately from
+the profiled fast-PIRLS default.
 
 ```{r boundaries}
 glmm_boundary <- function(expr) {
@@ -204,5 +204,5 @@ boundaries <- rbind(
 )
 stopifnot(identical(boundaries["predict", "class"], "mm_inference_unavailable"))
 stopifnot(identical(boundaries["coefficient_tests", "status"], "available"))
-stopifnot(identical(boundaries["joint_laplace", "class"], "mm_fit_error"))
+stopifnot(identical(boundaries["joint_laplace", "status"], "available"))
 ```

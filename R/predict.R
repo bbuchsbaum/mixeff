@@ -27,6 +27,8 @@
 #'   standard errors and therefore raise `mm_inference_unavailable` until Rust
 #'   certifies them.
 #' @param level Confidence level for future interval support.
+#' @param scaled Logical; when `TRUE`, residuals are divided by the residual
+#'   scale.
 #' @param ... Reserved for generic compatibility.
 #'
 #' @return A numeric vector, or a list with `fit` and `se.fit` when

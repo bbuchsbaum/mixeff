@@ -140,6 +140,17 @@ aphantasia_s1_case_ids <- function(ref) {
   grep("^S1_", names(ref$models), value = TRUE)
 }
 
+aphantasia_use_joint_glmm <- function() {
+  identical(tolower(Sys.getenv("MIXEFF_APHANTASIA_JOINT")), "true")
+}
+
+aphantasia_glmm_method <- function(id) {
+  if (id %in% c("intact", "combined") && aphantasia_use_joint_glmm()) {
+    return("joint_laplace")
+  }
+  "pirls_profiled"
+}
+
 aphantasia_lme4_key <- function(x) {
   gsub(": ", "", as.character(x), fixed = TRUE)
 }
@@ -273,6 +284,7 @@ test_that("aphantasia core fit-side reproduction matches cached lme4 references 
                   control = mixeff::mm_control(verbose = -1))
     } else {
       mixeff::glmm(form, cases[[id]]$data, family = cases[[id]]$family,
+                   method = aphantasia_glmm_method(id), nAGQ = 1L,
                    control = mixeff::mm_control(verbose = -1))
     }
     aphantasia_expect_fit_matches_reference(fit, model_ref, id)

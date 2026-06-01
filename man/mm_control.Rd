@@ -4,18 +4,25 @@
 \alias{mm_control}
 \title{Control mixeff fitting behavior}
 \usage{
-mm_control(verbose = 0L)
+mm_control(verbose = 0L, max_feval = NULL)
 }
 \arguments{
 \item{verbose}{Integer verbosity level. Use \code{-1} to suppress the automatic
 model explanation.}
+
+\item{max_feval}{Optional positive integer capping the optimizer's objective
+evaluations. This is most useful for \code{\link[=glmm]{glmm()}} with
+\code{method = "joint_laplace"}, whose native joint optimizer otherwise runs to
+an engine-chosen budget that can be expensive on large high-baseline
+models. Lower values trade some accuracy for speed. \code{NULL} (default) leaves
+the engine default in place.}
 }
 \value{
 A list of class \code{mm_control}.
 }
 \description{
-\code{mm_control()} collects small R-side controls for \code{\link[=lmm]{lmm()}}. It currently
-exposes \code{verbose} only: \code{verbose = -1} suppresses the pre-fit
-\code{\link[=explain_model]{explain_model()}} printout; non-negative values print it once before
-optimization.
+\code{mm_control()} collects small R-side controls for \code{\link[=lmm]{lmm()}} and \code{\link[=glmm]{glmm()}}.
+\code{verbose = -1} suppresses the pre-fit \code{\link[=explain_model]{explain_model()}} printout;
+non-negative values print it once before optimization. \code{max_feval} caps the
+number of objective evaluations the optimizer may use.
 }

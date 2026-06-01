@@ -1038,7 +1038,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
   mm_json_parse_fixed_effect_inference_table(table)
 }
 
-mm_rust_term_table <- function(fit, method) {
+mm_rust_term_table <- function(fit, method, type = "III") {
   bridge <- mm_rust_fit_bridge_payload(fit)
   json <- tryCatch(
     mm_fixed_effect_term_json(
@@ -1050,7 +1050,8 @@ mm_rust_term_table <- function(fit, method) {
       bridge$spec_data$categorical_levels,
       bridge$weights,
       bridge$control_json,
-      method
+      method,
+      mm_fixed_effect_term_type_label(type)
     ),
     error = function(cnd) cnd
   )
@@ -1070,6 +1071,28 @@ mm_rust_term_table <- function(fit, method) {
     }
   )
   mm_json_parse_fixed_effect_inference_table(table)
+}
+
+mm_fixed_effect_term_type_label <- function(type) {
+  type <- as.character(type)
+  if (length(type) != 1L || is.na(type) || !nzchar(type)) {
+    mm_abort(
+      message = "`type` must be one of `I`, `II`, or `III`.",
+      class = "mm_arg_error",
+      input = type
+    )
+  }
+  switch(
+    toupper(type),
+    I = "type_i",
+    II = "type_ii",
+    III = "type_iii",
+    mm_abort(
+      message = "`type` must be one of `I`, `II`, or `III`.",
+      class = "mm_arg_error",
+      input = type
+    )
+  )
 }
 
 mm_rust_fit_bridge_payload <- function(fit) {

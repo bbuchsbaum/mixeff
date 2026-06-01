@@ -74,9 +74,9 @@ mm_fit_lmm_json <- function(formula, reml, column_order, numeric_columns, catego
 #' This is the Stage B.1 GLMM fit primitive. The R layer owns formula/data
 #' validation and user-facing S3 shape; Rust owns construction of the upstream
 #' `GeneralizedLinearMixedModel`, the PIRLS fit, and the compiler artifact.
-#' `method = "pirls_profiled"` maps to upstream `fast = true`. The joint
-#' Laplace path requires the upstream `nlopt` feature, which this CRAN-oriented
-#' wrapper build intentionally does not enable.
+#' `method = "pirls_profiled"` maps to upstream `fast = true`. `method =
+#' "joint_laplace"` maps to the labelled upstream `fast = false, n_agq = 1`
+#' joint route.
 #'
 #' @noRd
 mm_fit_glmm_json <- function(formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, weights, offset, control_json) .Call(wrap__mm_fit_glmm_json, formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, weights, offset, control_json)
@@ -112,7 +112,7 @@ mm_fixed_effect_bootstrap_term_json <- function(formula, reml, column_order, num
 #' Evaluate fixed-effect term rows through Rust-owned term hypotheses.
 #'
 #' @noRd
-mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, method) .Call(wrap__mm_fixed_effect_term_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, method)
+mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, method, term_test_type) .Call(wrap__mm_fixed_effect_term_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, method, term_test_type)
 
 #' Run a parametric bootstrap likelihood-ratio test between two LMMs fitted
 #' to the same data. Both models must be ML (the upstream engine refuses

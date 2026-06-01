@@ -43,3 +43,5 @@ src/rust/vendor.tar.xz
 # published from CI, not committed; /vendor/ is a local unpack, not source.
 /docs/
 /vendor/
+# scratch (also in .Rbuildignore as ^tmp$)
+tmp/

@@ -287,7 +287,7 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I"),
   if (identical(method, "none")) {
     table <- mm_unavailable_effect_table(terms, method)
   } else {
-    parsed <- mm_rust_term_table(object, method)
+    parsed <- mm_rust_term_table(object, method, type = type)
     table <- parsed$table[parsed$table$term %in% terms, , drop = FALSE]
     table$requested_method <- method
     table <- table[, c("term", "numerator_df", "denominator_df", "statistic",

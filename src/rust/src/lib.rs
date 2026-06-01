@@ -1,8 +1,9 @@
 use extendr_api::prelude::*;
 use mixeff_rs::compiler::{
     compile_formula_ir, CompiledModelArtifact, ContrastMatrix, ContrastRhs, FixedEffectHypothesis,
-    FixedEffectInferenceRowKind, FixedEffectInferenceTable, FixedEffectTestMethod,
-    FIXED_EFFECT_INFERENCE_TABLE_SCHEMA, FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION,
+    FixedEffectInferenceRowKind, FixedEffectInferenceTable, FixedEffectTermTestType,
+    FixedEffectTestMethod, FIXED_EFFECT_INFERENCE_TABLE_SCHEMA,
+    FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION,
 };
 use mixeff_rs::formula::parse_formula;
 use mixeff_rs::model::{
@@ -450,9 +451,9 @@ fn mm_fit_lmm_json(
 /// This is the Stage B.1 GLMM fit primitive. The R layer owns formula/data
 /// validation and user-facing S3 shape; Rust owns construction of the upstream
 /// `GeneralizedLinearMixedModel`, the PIRLS fit, and the compiler artifact.
-/// `method = "pirls_profiled"` maps to upstream `fast = true`. The joint
-/// Laplace path requires the upstream `nlopt` feature, which this CRAN-oriented
-/// wrapper build intentionally does not enable.
+/// `method = "pirls_profiled"` maps to upstream `fast = true`. `method =
+/// "joint_laplace"` maps to the labelled upstream `fast = false, n_agq = 1`
+/// joint route.
 ///
 /// @noRd
 #[extendr]
@@ -491,23 +492,13 @@ fn mm_fit_glmm_json(
     let weights = optional_case_weights(&weights, df.nrow())?;
     let offset = optional_offset(&offset, df.nrow())?;
     let mut model = match (weights, offset) {
-        (None, None) => {
-            GeneralizedLinearMixedModel::new(parsed, &df, family, Some(link))
+        (None, None) => GeneralizedLinearMixedModel::new(parsed, &df, family, Some(link)),
+        (Some(w), None) => {
+            GeneralizedLinearMixedModel::new_with_weights(parsed, &df, family, Some(link), w)
         }
-        (Some(w), None) => GeneralizedLinearMixedModel::new_with_weights(
-            parsed,
-            &df,
-            family,
-            Some(link),
-            w,
-        ),
-        (None, Some(o)) => GeneralizedLinearMixedModel::new_with_offset(
-            parsed,
-            &df,
-            family,
-            Some(link),
-            o,
-        ),
+        (None, Some(o)) => {
+            GeneralizedLinearMixedModel::new_with_offset(parsed, &df, family, Some(link), o)
+        }
         (Some(w), Some(o)) => GeneralizedLinearMixedModel::new_with_weights_and_offset(
             parsed,
             &df,
@@ -518,6 +509,20 @@ fn mm_fit_glmm_json(
         ),
     }
     .map_err(|e| format!("mm_fit_error: failed to construct GLMM: {}", e))?;
+
+    // Optional optimizer evaluation cap from mm_control(max_feval=). The native
+    // joint path (`method = "joint_laplace"`, nlopt disabled in this vendored
+    // build) otherwise runs to an engine-chosen budget that is expensive on
+    // large high-baseline models; `optsum.max_feval` is honoured by
+    // `joint_glmm_configured_maxeval` and the native COBYLA/TrustBQ fallbacks.
+    // `lmm_mut()`/`optsum_mut()` are the unstable-internals surface this bridge
+    // already depends on for the `compiler` module.
+    if let Some(max_feval) = _control.get("max_feval").and_then(Value::as_i64) {
+        if max_feval > 0 {
+            model.lmm_mut().optsum_mut().max_feval = max_feval;
+        }
+    }
+
     model
         .fit_with_options(fast, n_agq, false)
         .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
@@ -918,6 +923,7 @@ fn mm_fixed_effect_term_json(
     weights: Doubles,
     control_json: &str,
     method: &str,
+    term_test_type: &str,
 ) -> std::result::Result<String, String> {
     let model = fit_lmm_from_bridge_data(
         formula,
@@ -930,8 +936,9 @@ fn mm_fixed_effect_term_json(
         control_json,
     )?;
     let method = fixed_effect_test_method(method)?;
+    let term_test_type = fixed_effect_term_test_type(term_test_type)?;
 
-    serde_json::to_string(&model.fixed_effect_term_inference_table(method))
+    serde_json::to_string(&model.fixed_effect_term_inference_table_for_type(method, term_test_type))
         .map_err(|e| format!("mm_schema_error: failed to serialize term table: {}", e))
 }
 
@@ -1261,10 +1268,7 @@ fn glmm_method(method: &str, n_agq: i32) -> std::result::Result<(bool, &'static 
                     "mm_arg_error: method='joint_laplace' currently requires nAGQ <= 1".to_string(),
                 );
             }
-            Err(
-                "mm_fit_error: estimation_method_unavailable: method='joint_laplace' requires the upstream nlopt backend, which is disabled in this vendored build"
-                    .to_string(),
-            )
+            Ok((false, "joint_laplace"))
         }
         other => Err(format!("mm_arg_error: unsupported GLMM method `{other}`")),
     }
@@ -1509,6 +1513,19 @@ fn fixed_effect_test_method(method: &str) -> std::result::Result<FixedEffectTest
         "bootstrap" => Ok(FixedEffectTestMethod::ParametricBootstrap),
         other => Err(format!(
             "mm_inference_unavailable: unsupported fixed-effect inference method `{other}`"
+        )),
+    }
+}
+
+fn fixed_effect_term_test_type(
+    term_test_type: &str,
+) -> std::result::Result<FixedEffectTermTestType, String> {
+    match term_test_type {
+        "I" | "1" | "type_i" | "type_1" => Ok(FixedEffectTermTestType::TypeI),
+        "II" | "2" | "type_ii" | "type_2" => Ok(FixedEffectTermTestType::TypeII),
+        "III" | "3" | "type_iii" | "type_3" => Ok(FixedEffectTermTestType::TypeIII),
+        other => Err(format!(
+            "mm_inference_unavailable: unsupported fixed-effect term test type `{other}`"
         )),
     }
 }

@@ -5,7 +5,11 @@
 #' rebuilt lazily from the serialized artifact, so these methods do not require
 #' a live Rust handle after `saveRDS()` / `readRDS()`.
 #'
-#' @param object,x,formula A fitted `mm_lmm` object.
+#' @param object,x,formula,fit A fitted `mm_lmm` or `mm_glmm` object.
+#' @param REML Ignored; included for S3 compatibility with likelihood and
+#'   deviance generics.
+#' @param scale Ignored; included for S3 compatibility with [extractAIC()].
+#' @param correlation Logical; accepted for S3 compatibility with [vcov()].
 #' @param condVar Logical; when `TRUE`, Phase 2 returns the random-effects
 #'   tables with an `NA` `postVar` array and an `mm_unavailable_reason`
 #'   attribute rather than fabricating conditional variances.
@@ -442,8 +446,6 @@ model.frame.mm_glmm <- model.frame.mm_lmm
 #' `ngrps()` returns a named integer vector giving the number of levels of each
 #' random-effect grouping factor, mirroring `lme4::ngrps()`.
 #'
-#' @param object A fitted `mm_lmm`/`mm_glmm` model.
-#' @param ... Unused.
 #' @return A named integer vector of group counts.
 #' @rdname mm_lmm-methods
 #' @export
@@ -561,7 +563,6 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
 #' conditional standard deviation, taken from the `postVar` attribute when the
 #' modes were extracted with `condVar = TRUE`, and `NA` otherwise.
 #'
-#' @param x An `mm_ranef` object from [ranef()].
 #' @param row.names,optional Ignored; present for S3 consistency.
 #' @param ... Unused.
 #' @rdname mm_lmm-methods

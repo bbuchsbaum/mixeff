@@ -3,9 +3,9 @@
 #' `glmm()` validates the R-side family/link request, compiles the model
 #' formula, and delegates the numerical fit to the upstream Rust
 #' `GeneralizedLinearMixedModel`. The default `method = "pirls_profiled"` is
-#' the labelled fast-PIRLS path. `method = "joint_laplace"` is refused in this
-#' build because the vendored Rust engine is compiled without the optional
-#' `nlopt` backend.
+#' the labelled fast-PIRLS path. `method = "joint_laplace"` uses the upstream
+#' labelled joint Laplace route (`fast = FALSE`, `nAGQ = 1`) backed by the
+#' native dependency-light optimizer in this vendored build.
 #'
 #' @param formula A two-sided lme4-style formula.
 #' @param data A `data.frame`.
@@ -14,14 +14,19 @@
 #'   `"cloglog"` links; [poisson()] with `"log"` or `"sqrt"` links; and
 #'   [Gamma()] with `"log"` link.
 #' @param random Reserved for the native random-effect constructor path.
-#' @param weights,subset,na.action,contrasts Reserved for future parity with
-#'   [lmm()].
-#' @param method GLMM estimation method. `"pirls_profiled"` is available in
-#'   this build; `"joint_laplace"` requires the optional upstream `nlopt`
-#'   backend and raises a typed `mm_fit_error` when unavailable.
+#' @param weights Optional prior weights. For binomial models these are trial
+#'   counts for proportion responses; weights must be positive and finite.
+#' @param offset Optional fixed linear-predictor offset; values must be finite.
+#' @param subset,na.action,contrasts Reserved for future parity with [lmm()].
+#' @param method GLMM estimation method. `"pirls_profiled"` is the default
+#'   fast-PIRLS profiled path. `"joint_laplace"` requests the labelled joint
+#'   Laplace route and requires `nAGQ <= 1`. The joint route tracks the lme4
+#'   joint-Laplace reference far more closely than the profiled path on
+#'   high-baseline models, at a higher optimizer cost; cap that cost with
+#'   `mm_control(max_feval = )`.
 #' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` is the
-#'   Laplace setting; values above `1` request AGQ metadata from the profiled
-#'   path.
+#'   Laplace setting. Values above `1` are allowed on the profiled path and
+#'   are rejected for `method = "joint_laplace"` in the R wrapper.
 #' @param inference Requested inference method.
 #' @param control A list from [mm_control()].
 #' @param ... Reserved for future use.
@@ -307,7 +312,7 @@ mm_glmm_validate_nagq <- function(nAGQ, method) {
   nAGQ <- as.integer(nAGQ)
   if (identical(method, "joint_laplace") && nAGQ > 1L) {
     mm_abort(
-      message = "`method = \"joint_laplace\"` requires `nAGQ <= 1` in this slice.",
+      message = "`method = \"joint_laplace\"` requires `nAGQ <= 1`.",
       class = "mm_arg_error",
       input = nAGQ
     )

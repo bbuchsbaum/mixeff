@@ -121,7 +121,7 @@ test_that("GLMM lme4 parity cases are declared in the manifest", {
     expect_true(case$family %in% c("binomial", "poisson", "gamma"))
     expect_identical(case$expected_status, "expected_mismatch")
     for (field in c("fixef", "theta", "logLik", "deviance")) {
-      entry <- mm_parity_lookup(case$id, field)
+      entry <- mixeff:::mm_parity_lookup(case$id, field)
       expect_false(is.null(entry),
                    info = sprintf("missing GLMM parity ledger entry for %s/%s",
                                   case$id, field))

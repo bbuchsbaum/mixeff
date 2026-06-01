@@ -161,8 +161,14 @@ mm_assert_parity <- function(observed, expected, case_id, field,
                              mode = c("relative", "absolute")) {
   mode <- match.arg(mode)
   d <- mm_parity_diffs(observed, expected)
-  entry <- tryCatch(mm_parity_lookup(case_id, field),
-                    error = function(cnd) NULL)
+  # Resolve the internal ledger helper explicitly via `mixeff:::` so it works
+  # whether or not the package namespace is attached (a bare call fails under a
+  # raw `testthat::test_dir()` invocation). Do NOT swallow lookup errors: a
+  # missing/malformed ledger or unresolvable helper must surface loudly rather
+  # than silently degrade every ledgered case to a strict-tolerance "pass" and
+  # quietly disable the parity safety net. `mm_parity_lookup()` already returns
+  # NULL for a legitimate no-match, which is the only "no entry" signal we honor.
+  entry <- mixeff:::mm_parity_lookup(case_id, field)
 
   status <- entry$status %||% "pass"
   reason <- entry$reason %||% NA_character_

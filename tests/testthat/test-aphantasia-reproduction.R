@@ -157,15 +157,19 @@ aphantasia_use_joint_glmm <- function() {
   identical(tolower(Sys.getenv("MIXEFF_APHANTASIA_JOINT")), "true")
 }
 
+aphantasia_use_joint_for_case <- function(id) {
+  identical(id, "intact") && aphantasia_use_joint_glmm()
+}
+
 aphantasia_glmm_method <- function(id) {
-  if (id %in% c("intact", "combined") && aphantasia_use_joint_glmm()) {
+  if (aphantasia_use_joint_for_case(id)) {
     return("joint_laplace")
   }
   "pirls_profiled"
 }
 
 aphantasia_glmm_control <- function(id) {
-  if (id %in% c("intact", "combined") && aphantasia_use_joint_glmm()) {
+  if (aphantasia_use_joint_for_case(id)) {
     return(mixeff::mm_control(verbose = -1, max_feval = aphantasia_joint_budget()))
   }
   mixeff::mm_control(verbose = -1)

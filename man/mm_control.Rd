@@ -4,18 +4,41 @@
 \alias{mm_control}
 \title{Control mixeff fitting behavior}
 \usage{
-mm_control(verbose = 0L, max_feval = NULL)
+mm_control(
+  verbose = 0L,
+  max_feval = NULL,
+  optimizer = NULL,
+  start = NULL,
+  ftol_rel = NULL,
+  ftol_abs = NULL,
+  xtol_rel = NULL
+)
 }
 \arguments{
 \item{verbose}{Integer verbosity level. Use \code{-1} to suppress the automatic
-model explanation.}
+model explanation (and the GLMM estimator notice).}
 
 \item{max_feval}{Optional positive integer capping the optimizer's objective
-evaluations. This is most useful for \code{\link[=glmm]{glmm()}} with
-\code{method = "joint_laplace"}, whose native joint optimizer otherwise runs to
-an engine-chosen budget that can be expensive on large high-baseline
-models. Lower values trade some accuracy for speed. \code{NULL} (default) leaves
-the engine default in place.}
+evaluations. Most useful for \code{\link[=glmm]{glmm()}} with \code{method = "joint_laplace"},
+whose native joint optimizer otherwise runs to an engine-chosen budget.
+\code{NULL} (default) leaves the engine default in place.}
+
+\item{optimizer}{Optional optimizer name, overriding the driver's automatic
+choice. One of \code{"auto"} (default behaviour), \code{"bobyqa"}, \code{"newuoa"},
+\code{"cobyla"}, \code{"pattern_search"}, \code{"trust_bq"}, or the PRIMA variants
+(\code{"prima_bobyqa"}, \code{"prima_cobyla"}, \code{"prima_lincoa"}, \code{"prima_newuoa"}).
+An unsupported or not-compiled choice raises a typed error rather than
+silently falling back. \code{NULL}/\code{"auto"} keep automatic selection.}
+
+\item{start}{Optional numeric warm-start vector for the covariance
+parameters (theta). Its length must match the model's theta dimension
+(the engine validates this). \code{NULL} (default) cold-starts.}
+
+\item{ftol_rel, ftol_abs}{Optional positive relative/absolute convergence
+tolerances on the objective. \code{NULL} keeps the engine default.}
+
+\item{xtol_rel}{Optional positive relative convergence tolerance on the
+optimizer parameters. \code{NULL} keeps the engine default.}
 }
 \value{
 A list of class \code{mm_control}.
@@ -23,6 +46,17 @@ A list of class \code{mm_control}.
 \description{
 \code{mm_control()} collects small R-side controls for \code{\link[=lmm]{lmm()}} and \code{\link[=glmm]{glmm()}}.
 \code{verbose = -1} suppresses the pre-fit \code{\link[=explain_model]{explain_model()}} printout;
-non-negative values print it once before optimization. \code{max_feval} caps the
-number of objective evaluations the optimizer may use.
+non-negative values print it once before optimization.
+}
+\details{
+By default the fit driver selects the optimizer and its tolerances
+automatically (see \code{\link[=optimizer_certificate]{optimizer_certificate()}} to inspect what ran). The
+\code{optimizer}, \code{start}, and \verb{ftol_*}/\code{xtol_rel} arguments are a narrow,
+opt-in escape hatch — for recourse when the default fails to converge, for
+warm starts, and for explicit tolerance overrides. Any override you supply is
+recorded in the optimizer certificate, so the fit stays auditable.
+}
+\seealso{
+\code{\link[=optimizer_certificate]{optimizer_certificate()}} to inspect which optimizer ran and whether
+a caller override was applied.
 }

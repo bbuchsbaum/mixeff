@@ -19,7 +19,12 @@ wrapper work, add a routine test, and remove the row here.
 | mixeff bead | feature | upstream `mixeff-rs` bead | wrapper work once it lands |
 |---|---|---|---|
 | `bd-01KT2N1GGD61RHZ68KZFM9KD49` (T11) | negative-binomial GLMM family | `bd-01KT40XMMR7QC1TXKNX7DXZ6K5` | add `negative.binomial`/`MASS::negative.binomial(theta)` to the `glmm()` family allow-list (`R/glmm.R:204`), map to the engine NB family, pass `theta`, add a `glmer.nb` parity test |
-| `bd-01KT2N1GKAQCZ1K8FYWHDC98KF` (T12) | caller optimizer / tolerance / `start=` warm-start control | `bd-01KT40AHAY9Z7SYM2B0FTVF53Z` | expose `mm_control(optimizer=, reltol=/abstol=, start=)`; surface the override + `optimizer_certificate()` source; add tests; reconcile PRD §8.3 from "engine-owned (documented)" to "engine-owned default + opt-in override" |
+
+### Landed and wired (kept for history)
+
+| mixeff bead | feature | upstream bead | resolution |
+|---|---|---|---|
+| `bd-01KT2N1GKAQCZ1K8FYWHDC98KF` (T12) | caller optimizer / tolerance / `start=` warm-start control | `bd-01KT40AHAY9Z7SYM2B0FTVF53Z` ✅ shipped (`368a3fa`) | re-pinned to `368a3fa`; `mm_control(optimizer=, start=, ftol_rel=/ftol_abs=/xtol_rel=)` wired through the bridge; override recorded in `optimizer_certificate()`; PRD §8.3 reconciled. T12 closed. |
 
 ## Related (R-side already works; upstream is an enhancement, not a blocker)
 

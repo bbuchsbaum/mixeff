@@ -285,6 +285,19 @@ default.
 
 Flat named list, mirroring `lmerControl`. Serializes 1:1 to the Rust `CompilerPolicy` JSON.
 
+**As built (caller optimizer controls, 2026-06-02).** The shipped `mm_control()`
+realizes the optimizer-control intent of this section against the engine's
+`OptimizerControl` surface (mixeff-rs `368a3fa`): `verbose`, `max_feval`,
+`optimizer` (`"auto"` default, or a named optimizer — `bobyqa`, `newuoa`,
+`cobyla`, `pattern_search`, `trust_bq`, PRIMA variants), `start` (warm-start
+theta), and `ftol_rel`/`ftol_abs`/`xtol_rel`. The default remains
+**driver-chosen** optimizer + tolerances — the fit driver owns optimizer
+selection, and the above are a narrow, opt-in, certificate-recorded escape
+hatch for recourse / warm starts / explicit tolerances, *not* the full
+`lmerControl` surface. `reml`/`nAGQ` are `lmm()`/`glmm()` arguments rather than
+control fields; `parallel_threads`/`seed`/`bridge_timeout_s`/`verify_convergence`
+remain unimplemented. The block below is the original aspirational sketch.
+
 ```r
 mm_control(
   optimizer = "auto",            # "auto" | "nlopt_bobyqa" | "cobyla" | "lbfgsb"

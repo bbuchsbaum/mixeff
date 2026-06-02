@@ -8,10 +8,11 @@ use mixeff_rs::compiler::{
 use mixeff_rs::formula::parse_formula;
 use mixeff_rs::model::{
     parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
-    BootstrapSeedRecord, BootstrapTarget, Family, FixedEffectBootstrapOptions,
-    GeneralizedLinearMixedModel, LinearMixedModel, LinkFunction, MixedModelBootstrap,
-    MixedModelFit, NewReLevels,
+    BootstrapSeedRecord, BootstrapTarget, Family, FitOptions, FitToleranceOverrides,
+    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GlmmFitOptions, LinearMixedModel,
+    LinkFunction, MixedModelBootstrap, MixedModelFit, NewReLevels, OptimizerControl,
 };
+use mixeff_rs::types::Optimizer;
 use mixeff_rs::stats::{
     profile_confint_payload, BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit,
     ModelComparisonMethod, ModelComparisonOptions, ModelComparisonRefitPolicy,
@@ -23,6 +24,100 @@ use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+
+// ---- caller optimizer controls (mm_control optimizer/tolerance/start) -------
+//
+// mixeff-rs 368a3fa added a narrow, audit-recorded escape hatch over the
+// "driver chooses the optimizer" default (OptimizerControl on FitOptions /
+// GlmmFitOptions). These helpers translate the optional mm_control() fields
+// from the control JSON into that engine surface. Absent fields keep the
+// driver's automatic selection; the chosen optimizer/source is recorded in the
+// optimizer certificate by the engine.
+
+/// Map a caller optimizer name (mm_control(optimizer=)) to the engine enum.
+fn parse_optimizer_name(name: &str) -> std::result::Result<Optimizer, String> {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "bobyqa" | "nlopt_bobyqa" => Ok(Optimizer::NloptBobyqa),
+        "newuoa" | "nlopt_newuoa" => Ok(Optimizer::NloptNewuoa),
+        "cobyla" => Ok(Optimizer::Cobyla),
+        "pattern_search" => Ok(Optimizer::PatternSearch),
+        "trust_bq" => Ok(Optimizer::TrustBq),
+        "prima_bobyqa" => Ok(Optimizer::PrimaBobyqa),
+        "prima_cobyla" => Ok(Optimizer::PrimaCobyla),
+        "prima_lincoa" => Ok(Optimizer::PrimaLincoa),
+        "prima_newuoa" => Ok(Optimizer::PrimaNewuoa),
+        other => Err(format!(
+            "mm_arg_error: unknown optimizer '{}'; supported: auto, bobyqa, newuoa, cobyla, \
+             pattern_search, trust_bq, prima_bobyqa, prima_cobyla, prima_lincoa, prima_newuoa",
+            other
+        )),
+    }
+}
+
+/// Coerce a JSON value to a Vec<f64>, rejecting non-numeric entries. Accepts a
+/// bare number too, since jsonlite(auto_unbox = TRUE) collapses a length-1 R
+/// vector (e.g. a single-theta warm start) to a JSON scalar.
+fn control_f64_vec(value: &Value) -> std::result::Result<Vec<f64>, String> {
+    if let Some(scalar) = value.as_f64() {
+        return Ok(vec![scalar]);
+    }
+    value
+        .as_array()
+        .ok_or_else(|| "mm_arg_error: expected a numeric array in control".to_string())?
+        .iter()
+        .map(|v| {
+            v.as_f64()
+                .ok_or_else(|| "mm_arg_error: control vector entries must be numeric".to_string())
+        })
+        .collect()
+}
+
+/// Build an engine `OptimizerControl` from the mm_control() JSON. Every field is
+/// optional; when none are set this is `OptimizerControl::default()` (the
+/// driver's automatic behaviour, unchanged).
+fn parse_optimizer_control(control: &Value) -> std::result::Result<OptimizerControl, String> {
+    let present = |key: &str| control.get(key).filter(|v| !v.is_null());
+    let mut oc = OptimizerControl::default();
+    if let Some(opt) = present("optimizer").and_then(Value::as_str) {
+        if !opt.eq_ignore_ascii_case("auto") {
+            oc = oc.with_optimizer(parse_optimizer_name(opt)?);
+        }
+    }
+    let mut tol = FitToleranceOverrides::default();
+    let mut tol_set = false;
+    if let Some(v) = present("ftol_rel").and_then(Value::as_f64) {
+        tol = tol.with_ftol_rel(v);
+        tol_set = true;
+    }
+    if let Some(v) = present("ftol_abs").and_then(Value::as_f64) {
+        tol = tol.with_ftol_abs(v);
+        tol_set = true;
+    }
+    if let Some(v) = present("xtol_rel").and_then(Value::as_f64) {
+        tol = tol.with_xtol_rel(v);
+        tol_set = true;
+    }
+    if let Some(v) = present("xtol_abs") {
+        tol = tol.with_xtol_abs(control_f64_vec(v)?);
+        tol_set = true;
+    }
+    if let Some(v) = present("initial_step") {
+        tol = tol.with_initial_step(control_f64_vec(v)?);
+        tol_set = true;
+    }
+    if tol_set {
+        oc = oc.with_tolerances(tol);
+    }
+    if let Some(v) = present("start") {
+        oc = oc.with_start_theta(control_f64_vec(v)?);
+    }
+    if let Some(mf) = present("max_feval").and_then(Value::as_i64) {
+        if mf > 0 {
+            oc = oc.with_max_feval(mf as usize);
+        }
+    }
+    Ok(oc)
+}
 
 mod data;
 
@@ -366,8 +461,14 @@ fn mm_fit_lmm_json(
 
     let mut model = LinearMixedModel::new(parsed, &df, weights.as_deref())
         .map_err(|e| format!("mm_fit_error: failed to construct LMM: {}", e))?;
+    // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval);
+    // default keeps the driver's automatic selection. Applied here and in the
+    // recompute helper so refits (predict/inference) reproduce the same fit.
+    let optimizer_control = parse_optimizer_control(&_control)?;
+    let fit_options = if reml { FitOptions::reml() } else { FitOptions::ml() }
+        .with_optimizer_control(optimizer_control);
     model
-        .fit(reml)
+        .fit_with_options(fit_options)
         .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
 
     let artifact_json = serde_json::to_string(model.compiler_artifact()).map_err(|e| {
@@ -510,21 +611,22 @@ fn mm_fit_glmm_json(
     }
     .map_err(|e| format!("mm_fit_error: failed to construct GLMM: {}", e))?;
 
-    // Optional optimizer evaluation cap from mm_control(max_feval=). The native
-    // joint path (`method = "joint_laplace"`, nlopt disabled in this vendored
-    // build) otherwise runs to an engine-chosen budget that is expensive on
-    // large high-baseline models; `optsum.max_feval` is honoured by
-    // `joint_glmm_configured_maxeval` and the native COBYLA/TrustBQ fallbacks.
-    // `lmm_mut()`/`optsum_mut()` are the unstable-internals surface this bridge
-    // already depends on for the `compiler` module.
-    if let Some(max_feval) = _control.get("max_feval").and_then(Value::as_i64) {
-        if max_feval > 0 {
-            model.lmm_mut().optsum_mut().max_feval = max_feval;
-        }
+    // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval)
+    // route through the GLMM optimizer-control surface; absent fields keep the
+    // driver's automatic selection. max_feval still caps the joint path's
+    // otherwise engine-chosen budget, now via OptimizerControl rather than a
+    // direct optsum poke.
+    let optimizer_control = parse_optimizer_control(&_control)?;
+    let glmm_options = if fast {
+        GlmmFitOptions::fast_laplace()
+    } else {
+        GlmmFitOptions::joint_laplace()
     }
-
+    .with_n_agq(n_agq)
+    .with_verbose(false)
+    .with_optimizer_control(optimizer_control);
     model
-        .fit_with_options(fast, n_agq, false)
+        .fit_with_glmm_options(glmm_options)
         .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
 
     let artifact_json = serde_json::to_string(model.compiler_artifact()).map_err(|e| {
@@ -1192,8 +1294,14 @@ fn fit_lmm_from_bridge_data(
     let weights = optional_case_weights(weights, df.nrow())?;
     let mut model = LinearMixedModel::new(parsed, &df, weights.as_deref())
         .map_err(|e| format!("mm_fit_error: failed to construct LMM: {}", e))?;
+    // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval);
+    // default keeps the driver's automatic selection. Applied here and in the
+    // recompute helper so refits (predict/inference) reproduce the same fit.
+    let optimizer_control = parse_optimizer_control(&_control)?;
+    let fit_options = if reml { FitOptions::reml() } else { FitOptions::ml() }
+        .with_optimizer_control(optimizer_control);
     model
-        .fit(reml)
+        .fit_with_options(fit_options)
         .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
     Ok(model)
 }

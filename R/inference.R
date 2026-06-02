@@ -895,6 +895,77 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
   mm_new_confint(out)
 }
 
+#' Confidence intervals for fixed effects of a mixeff GLMM
+#'
+#' Asymptotic Wald intervals (`estimate +/- z * SE`) built from the stored
+#' fixed-effect standard errors, matching `glmer`'s default inference scale.
+#' Profile and bootstrap intervals are not certified for GLMMs by the upstream
+#' contract and are refused with a typed reason rather than approximated.
+#'
+#' @param object A fitted `mm_glmm`.
+#' @param parm Optional fixed-effect names or indices; defaults to all.
+#' @param level Confidence level.
+#' @param method `"wald"` (default) or its synonym `"asymptotic"`.
+#' @param ... Unused.
+#'
+#' @return An `mm_confint` matrix of lower/upper bounds.
+#'
+#' @method confint mm_glmm
+#' @export
+confint.mm_glmm <- function(object, parm, level = 0.95,
+                            method = c("wald", "asymptotic", "profile",
+                                       "bootstrap"), ...) {
+  method <- match.arg(method)
+  if (method %in% c("profile", "bootstrap")) {
+    mm_abort(
+      message = sprintf(
+        paste0("`confint(method = \"%s\")` is not available for GLMM fits; the ",
+               "upstream contract certifies only asymptotic Wald intervals for ",
+               "generalized models. Use method = \"wald\"."),
+        method
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "glmm_confint_method_unavailable",
+      input = method
+    )
+  }
+  if (identical(method, "asymptotic")) method <- "wald"
+  if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
+      level <= 0 || level >= 1) {
+    mm_abort(
+      message = "`level` must be a single number between 0 and 1.",
+      class = "mm_arg_error",
+      input = level
+    )
+  }
+  terms <- names(object$beta)
+  if (missing(parm)) {
+    parm <- terms
+  }
+  if (is.numeric(parm)) {
+    parm <- terms[parm]
+  }
+  unknown <- setdiff(parm, terms)
+  if (length(unknown)) {
+    mm_abort(
+      message = sprintf("Unknown fixed-effect parameter(s): %s.",
+                        paste(unknown, collapse = ", ")),
+      class = "mm_arg_error",
+      input = unknown
+    )
+  }
+  alpha <- 1 - level
+  crit <- stats::qnorm(1 - alpha / 2)
+  est <- object$beta[parm]
+  se <- object$std_errors[parm]
+  out <- cbind(est - crit * se, est + crit * se)
+  colnames(out) <- c(sprintf("%.1f %%", 100 * alpha / 2),
+                     sprintf("%.1f %%", 100 * (1 - alpha / 2)))
+  attr(out, "method") <- "wald_asymptotic_from_stored_standard_errors"
+  attr(out, "status") <- "not_certified_by_rust_inference_contract"
+  mm_new_confint(out)
+}
+
 #' @method print mm_confint
 #' @export
 print.mm_confint <- function(x, ...) {

@@ -38,6 +38,22 @@
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.
 #'
+#' @examples
+#' set.seed(1)
+#' df <- data.frame(
+#'   y = rbinom(120, 1, 0.5),
+#'   x = rnorm(120),
+#'   g = factor(rep(seq_len(12), each = 10))
+#' )
+#' fit <- glmm(y ~ x + (1 | g), df, family = binomial(),
+#'             control = mm_control(verbose = -1))
+#' fixef(fit)
+#' # glmer-equivalent (joint Laplace) estimates:
+#' fit_joint <- glmm(y ~ x + (1 | g), df, family = binomial(),
+#'                   method = "joint_laplace",
+#'                   control = mm_control(verbose = -1))
+#' fixef(fit_joint)
+#'
 #' @importFrom stats na.omit
 #' @export
 glmm <- function(formula,

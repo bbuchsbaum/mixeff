@@ -33,16 +33,16 @@
 #'   `mm_compiled`.
 #'
 #' @examples
-#' \dontrun{
+#' set.seed(1)
 #' df <- data.frame(
-#'   y = rnorm(40),
-#'   x = rep(0:3, 10),
-#'   subject = factor(rep(seq_len(10), each = 4))
+#'   y = rnorm(80),
+#'   x = rnorm(80),
+#'   subject = factor(rep(seq_len(20), each = 4))
 #' )
-#' fit <- lmm(y ~ x + (1 + x | subject), df, control = mm_control(verbose = -1))
+#' fit <- lmm(y ~ x + (1 | subject), df, control = mm_control(verbose = -1))
 #' fixef(fit)
 #' VarCorr(fit)
-#' }
+#' summary(fit)
 #'
 #' @export
 lmm <- function(formula, data, REML = TRUE, weights = NULL,

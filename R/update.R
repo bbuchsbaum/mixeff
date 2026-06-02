@@ -36,14 +36,17 @@
 #'   call when `evaluate = FALSE`.
 #'
 #' @examples
-#' \dontrun{
-#' fit <- lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,
-#'            control = mm_control(verbose = -1))
-#' # drop the fixed slope, keep the random slope
-#' fit2 <- update(fit, . ~ . - Days)
+#' set.seed(1)
+#' df <- data.frame(
+#'   y = rnorm(80), x = rnorm(80), z = rnorm(80),
+#'   g = factor(rep(seq_len(10), each = 8))
+#' )
+#' fit <- lmm(y ~ x + z + (1 | g), df, control = mm_control(verbose = -1))
+#' # drop a fixed term
+#' fit2 <- update(fit, . ~ . - z)
 #' # refit by ML for a likelihood-ratio comparison
 #' fit_ml <- update(fit, REML = FALSE)
-#' }
+#' fixef(fit2)
 #'
 #' @name update.mm
 #' @importFrom stats update update.formula formula model.frame

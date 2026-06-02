@@ -188,3 +188,18 @@ Produces the long form returned by \code{as.data.frame(lme4::ranef(.))}: columns
 conditional standard deviation, taken from the \code{postVar} attribute when the
 modes were extracted with \code{condVar = TRUE}, and \code{NA} otherwise.
 }
+\examples{
+set.seed(1)
+df <- data.frame(
+  y = rnorm(60), x = rnorm(60),
+  g = factor(rep(seq_len(10), each = 6))
+)
+fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+fixef(fit)
+VarCorr(fit)
+head(ranef(fit)$g)
+sigma(fit)
+logLik(fit)
+nobs(fit)
+
+}

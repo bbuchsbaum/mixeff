@@ -338,3 +338,9 @@ cat(sprintf(
   length(vendored_crates)
 ))
 cat("[vendor-rust.R] next: devtools::check(document = FALSE)\n")
+cat(paste0(
+  "[vendor-rust.R] REMINDER: you just pulled new engine code. Consult\n",
+  "                planning/upstream-blocked.md and unblock any downstream\n",
+  "                beads whose upstream mixeff-rs feature has now shipped\n",
+  "                (mote ls --tag upstream-blocked).\n"
+))

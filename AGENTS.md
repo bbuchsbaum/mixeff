@@ -37,6 +37,12 @@ snapshot*:
   commit. Never hand-edit `src/rust/upstream/` (it is regenerated and
   git-ignored; it ships only inside the tarball). The pinned commit must be
   pushed to `bbuchsbaum/mixeff-rs` or a clean clone/CI cannot resolve it.
+- **On every bump, consult `planning/upstream-blocked.md`.** It maps mixeff
+  beads that are blocked on engine changes to their upstream `mixeff-rs` bead.
+  For each whose upstream feature has now shipped, unblock the mixeff bead
+  (`mote set <id> status=open`), do the wrapper work, and remove its row.
+  `tools/vendor-rust.R` prints this reminder at the end of a re-vendor run, and
+  the blocked beads are tagged `upstream-blocked` (`mote ls --tag upstream-blocked`).
 
 ## Issue tracking and planning: mote
 

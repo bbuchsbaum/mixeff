@@ -147,14 +147,188 @@ residuals.mm_glmm <- function(object, type = c("response"), ...) {
   out
 }
 
-#' @rdname predict.mm_lmm
+#' Predict from a fitted mixeff GLMM
+#'
+#' GLMM predictions are computed on the R side from the stored fixed effects
+#' (population, `re.form = NA`) or fixed effects plus conditional modes
+#' (`re.form = NULL`), then mapped through the family link. This mirrors
+#' `lme4::predict.merMod` for generalized models: `type = "link"` returns the
+#' linear predictor and `type = "response"` the mean.
+#'
+#' In-sample response predictions reuse the engine's certified fitted values;
+#' all other paths are an explicit R-side plug-in (not engine-certified), so
+#' `se.fit` returns `NA` with a reason and `interval` is refused. An
+#' engine-certified `GeneralizedLinearMixedModel::predict_new` (symmetry with
+#' the LMM `predict_new` path) is tracked upstream in mixeff-rs as
+#' bd-01KT3XJD6SE54G7GT3Z2T6HMEX; when it lands the R-side reconstruction below
+#' can be replaced by an FFI call.
+#'
+#' @inheritParams predict.mm_lmm
+#' @param object A fitted `mm_glmm` object.
+#' @return A numeric vector, or a list with `fit` and `se.fit` when
+#'   `se.fit = TRUE`.
+#' @method predict mm_glmm
 #' @export
-predict.mm_glmm <- function(object, ...) {
-  mm_abort(
-    message = "GLMM prediction is not certified by the current Rust contract.",
-    class = "mm_inference_unavailable",
-    input = object$formula
+predict.mm_glmm <- function(object,
+                            newdata = NULL,
+                            re.form = NULL,
+                            allow.new.levels = FALSE,
+                            type = c("response", "link"),
+                            se.fit = FALSE,
+                            interval = c("none", "confidence", "prediction"),
+                            level = 0.95,
+                            ...) {
+  type <- match.arg(type)
+  interval <- match.arg(interval)
+  mm_reject_unsupported_dots(
+    list(...), "predict",
+    c(random.only = "use `re.form = NA` for population-level (fixed-only) predictions or `re.form = NULL` for conditional predictions.")
   )
+  if (!is.logical(allow.new.levels) || length(allow.new.levels) != 1L ||
+      is.na(allow.new.levels)) {
+    mm_abort(
+      message = "`allow.new.levels` must be TRUE or FALSE.",
+      class = "mm_arg_error",
+      input = allow.new.levels
+    )
+  }
+  if (!identical(interval, "none")) {
+    mm_abort(
+      message = paste(
+        "`interval` prediction requires prediction standard errors, which are",
+        "not certified for GLMMs by the current Rust inference contract."
+      ),
+      class = "mm_inference_unavailable",
+      input = interval
+    )
+  }
+  target <- mm_prediction_target(re.form)
+  if (identical(target, "unsupported")) {
+    mm_abort(
+      message = paste(
+        "`re.form` values other than NULL, NA, or ~0 are not supported by the",
+        "current GLMM prediction path."
+      ),
+      class = "mm_inference_unavailable",
+      input = re.form
+    )
+  }
+  if (!is.null(object$offset) && !is.null(newdata)) {
+    mm_abort(
+      message = paste(
+        "Prediction on `newdata` is not supported for a GLMM fitted with an",
+        "`offset`; the offset cannot be reconstructed for new rows."
+      ),
+      class = "mm_inference_unavailable",
+      input = "offset"
+    )
+  }
+
+  family <- mm_glmm_family_from_info(object$family)
+
+  if (is.null(newdata)) {
+    if (identical(target, "conditional")) {
+      # Engine-certified conditional mean; eta via the link.
+      mu <- object$fitted
+      eta <- family$linkfun(mu)
+      nm <- rownames(object$model_frame)
+    } else {
+      eta <- as.numeric(mm_predict_fixed_only(object, object$model_frame))
+      if (!is.null(object$offset)) eta <- eta + as.numeric(object$offset)
+      mu <- family$linkinv(eta)
+      nm <- rownames(object$model_frame)
+    }
+  } else {
+    needed <- all.vars(stats::delete.response(stats::terms(object$formula)))
+    missing_vars <- setdiff(needed, names(newdata))
+    if (length(missing_vars)) {
+      mm_abort(
+        message = sprintf(
+          "`newdata` is missing variable(s) required by the model formula: %s.",
+          paste(missing_vars, collapse = ", ")
+        ),
+        class = "mm_data_error",
+        input = newdata,
+        missing = missing_vars
+      )
+    }
+    eta <- as.numeric(mm_predict_fixed_only(object, newdata))
+    if (identical(target, "conditional")) {
+      eta <- eta + mm_glmm_re_eta(object, newdata, allow.new.levels)
+    }
+    mu <- family$linkinv(eta)
+    nm <- rownames(newdata)
+  }
+
+  pred <- if (identical(type, "response")) as.numeric(mu) else as.numeric(eta)
+  names(pred) <- nm
+
+  if (isTRUE(se.fit)) {
+    se <- rep(NA_real_, length(pred))
+    attr(se, "mm_unavailable_reason") <- "glmm_prediction_se_unavailable"
+    out <- list(fit = pred, se.fit = se)
+    attr(out, "mm_unavailable_reason") <- "glmm_prediction_se_unavailable"
+    return(out)
+  }
+  pred
+}
+
+# Random-effect contribution to the GLMM linear predictor for arbitrary `data`,
+# reconstructed from the stored conditional modes (BLUPs). For each random
+# term, look up each row's grouping level in the BLUP table and accumulate
+# basis_value * mode over the term's basis columns. Unseen levels contribute
+# zero when allow_new_levels = TRUE, otherwise raise a typed condition (matching
+# lme4's allow.new.levels semantics).
+mm_glmm_re_eta <- function(fit, data, allow_new_levels) {
+  terms <- fit$artifact$semantic_model$random_terms %||% list()
+  eta <- numeric(nrow(data))
+  for (i in seq_along(terms)) {
+    term <- terms[[i]]
+    group_label <- mm_random_term_group_label(fit, term, i)
+    group <- as.character(mm_group_factor(data, group_label))
+    blup <- fit$random_effects[[group_label]]
+    if (is.null(blup)) {
+      mm_abort(
+        message = sprintf("No conditional modes stored for grouping factor `%s`.",
+                          group_label),
+        class = "mm_inference_unavailable",
+        input = group_label
+      )
+    }
+    idx <- match(group, rownames(blup))
+    unseen <- is.na(idx)
+    if (any(unseen) && !isTRUE(allow_new_levels)) {
+      mm_abort(
+        message = sprintf(
+          paste0("`newdata` has %d row(s) with grouping level(s) of `%s` not ",
+                 "seen during fitting. Set allow.new.levels = TRUE to predict ",
+                 "them at the population mean (zero random effect)."),
+          sum(unseen), group_label
+        ),
+        class = "mm_inference_unavailable",
+        group = group_label
+      )
+    }
+    basis <- term$basis %||% list()
+    basis_labels <- if (length(basis)) {
+      vapply(basis, mm_basis_label, character(1))
+    } else {
+      "(Intercept)"
+    }
+    basis_values <- if (length(basis)) {
+      lapply(basis, mm_basis_values, frame = data)
+    } else {
+      list(rep(1, nrow(data)))
+    }
+    for (j in seq_along(basis_values)) {
+      lab <- basis_labels[[j]]
+      if (!lab %in% names(blup)) next
+      modes <- blup[[lab]][idx]
+      modes[is.na(modes)] <- 0  # unseen levels -> zero RE (allow.new.levels)
+      eta <- eta + basis_values[[j]] * modes
+    }
+  }
+  eta
 }
 
 mm_prediction_target <- function(re.form) {

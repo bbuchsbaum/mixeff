@@ -79,7 +79,7 @@ test_that("standard extractors return stored fit quantities", {
   expect_named(se, c("fit", "se.fit"))
   expect_true(all(is.na(se$se.fit)))
   expect_identical(attr(se, "mm_unavailable_reason"),
-                   "prediction_se_unavailable_phase_2")
+                   "conditional_prediction_se_unavailable")
 })
 
 test_that("lmm() accepts positive case weights and preserves them for inference", {

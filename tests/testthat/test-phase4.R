@@ -156,8 +156,9 @@ test_that("mm_glmm revive preserves durable extractor behavior", {
   expect_equal(fixef(restored), fixef(fit))
   expect_equal(ranef(restored), ranef(fit))
   expect_equal(VarCorr(restored)$table, VarCorr(fit)$table)
-  expect_error(stats::predict(restored),
-               class = "mm_inference_unavailable")
+  # GLMM predict() is now available (R-side plug-in); revive must preserve it,
+  # so the revived fit reproduces the original predictions.
+  expect_equal(stats::predict(restored), stats::predict(fit))
 })
 
 test_that("glmm() validates family metadata and labelled joint backend", {

@@ -514,7 +514,7 @@ mm_expect_prediction_lme4_parity <- function(case) {
                         info = sprintf("predict(se.fit=TRUE) should expose unavailable SEs for case `%s`",
                                        case$id))
   testthat::expect_identical(attr(se, "mm_unavailable_reason"),
-                             "prediction_se_unavailable_phase_2")
+                             "conditional_prediction_se_unavailable")
 
   # newdata prediction is wired through mm_lmm_predict_new_json (Stage C.1,
   # bd-01KRCKCZJ5B5AQS5BV77VMM8ZF). Re-running on the training rows must

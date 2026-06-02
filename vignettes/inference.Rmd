@@ -161,26 +161,39 @@ if (identical(boot$table$status[[2L]], "available")) {
 
 ## Unavailable is still useful information
 
-Not every uncertainty request is available. Prediction standard errors are a
-current boundary, so `predict(se.fit = TRUE)` returns the fitted values plus
-`NA` standard errors and a reason.
+Population-level prediction standard errors and intervals are available via
+`re.form = NA` (the Wald SE of the fixed-effect linear predictor):
+
+```{r prediction-se-population}
+pop <- predict(fit, re.form = NA, se.fit = TRUE)
+head(pop$se.fit)
+head(predict(fit, re.form = NA, interval = "confidence"))
+```
+
+*Conditional* prediction standard errors (the default, `re.form = NULL`) remain
+a boundary: they need random-effect posterior variances the contract does not
+certify (lme4's `predict()` likewise returns no conditional SE). So a
+conditional `predict(se.fit = TRUE)` returns the fitted values plus `NA`
+standard errors and a reason.
 
 ```{r prediction-se}
 pred <- predict(fit, se.fit = TRUE)
 head(pred$fit)
 head(pred$se.fit)
-attr(pred, "mm_unavailable_reason")
+attr(pred$se.fit, "mm_unavailable_reason")
 ```
 
-Asking for a prediction interval raises a typed error because an interval would
-look more certain than the fitted object can justify.
+Asking for a *conditional* prediction interval raises a typed error, because an
+interval would look more certain than the conditional fitted object can justify
+(population intervals via `re.form = NA` are available, as shown above).
 
 ```{r prediction-interval-error, error = TRUE}
 predict(fit, interval = "confidence")
 ```
 
 ```{r unavailable-checks, include = FALSE}
+stopifnot(all(is.finite(pop$se.fit)))
 stopifnot(all(is.na(pred$se.fit)))
-stopifnot(identical(attr(pred, "mm_unavailable_reason"),
-                    "prediction_se_unavailable_phase_2"))
+stopifnot(identical(attr(pred$se.fit, "mm_unavailable_reason"),
+                    "conditional_prediction_se_unavailable"))
 ```

@@ -138,13 +138,15 @@ data.frame(
 ## Current Boundaries
 
 In-sample `fitted()` and `residuals()` are available, and
-`summary(fit, tests = "coefficients")` now returns a Wald-z fixed-effect
+`summary(fit, tests = "coefficients")` returns a Wald-z fixed-effect
 table built from the upstream PIRLS/Laplace working-Hessian covariance
-payload (reliability label: `moderate`). GLMM prediction and
-simulation/refit methods remain uncertified by the current Rust contract; the
-package exposes those as ordinary R conditions rather than silently filling in
-values. The joint-Laplace fit route is available and labelled separately from
-the profiled fast-PIRLS default.
+payload (reliability label: `moderate`). GLMM `predict()` (population and
+conditional, on the link or response scale), `confint()` (Wald), `contrast()`,
+`drop1()`, and multi-model `anova()` are now available as R-side computations
+on top of that certified covariance. `simulate()` and `refit()` for GLMMs are
+not yet implemented and are exposed as ordinary R conditions rather than
+silently filled in. The joint-Laplace fit route is available and labelled
+separately from the profiled fast-PIRLS default.
 
 ```{r boundaries}
 glmm_boundary <- function(expr) {
@@ -166,6 +168,7 @@ glmm_boundary <- function(expr) {
 
 rbind(
   predict = glmm_boundary(predict(glmm_fit)),
+  confint = glmm_boundary(confint(glmm_fit)),
   coefficient_tests = glmm_boundary(summary(glmm_fit, tests = "coefficients")),
   simulate = glmm_boundary(stats::simulate(glmm_fit, nsim = 1L)),
   refit = glmm_boundary(refit(glmm_fit, fitted(glmm_fit))),
@@ -193,7 +196,9 @@ stopifnot(length(residuals(glmm_fit)) == nrow(cbpp_binary))
 
 boundaries <- rbind(
   predict = glmm_boundary(predict(glmm_fit)),
+  confint = glmm_boundary(confint(glmm_fit)),
   coefficient_tests = glmm_boundary(summary(glmm_fit, tests = "coefficients")),
+  simulate = glmm_boundary(stats::simulate(glmm_fit, nsim = 1L)),
   joint_laplace = glmm_boundary(glmm(
     cbpp_formula,
     cbpp_binary,
@@ -202,7 +207,11 @@ boundaries <- rbind(
     control = mm_control(verbose = -1)
   ))
 )
-stopifnot(identical(boundaries["predict", "class"], "mm_inference_unavailable"))
+# predict / confint / coefficient tests are now available; simulate remains a
+# boundary (no mm_glmm method yet); the joint-Laplace route is available.
+stopifnot(identical(boundaries["predict", "status"], "available"))
+stopifnot(identical(boundaries["confint", "status"], "available"))
 stopifnot(identical(boundaries["coefficient_tests", "status"], "available"))
+stopifnot(identical(boundaries["simulate", "status"], "unavailable"))
 stopifnot(identical(boundaries["joint_laplace", "status"], "available"))
 ```

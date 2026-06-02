@@ -807,6 +807,19 @@ allowed) **and** the listed tests pass **and** the listed vignette renders.
   `refit`, `compare`, multi-model `anova`, `drop1`, parametric bootstrap. Vignette:
   `glmm.Rmd`.
 
+  > **GLMM estimator default (decision, 2026-06-02).** `glmm()` keeps
+  > `method = "pirls_profiled"` (the fast profiled PIRLS path) as its default —
+  > this preserves the package's speed positioning and does not silently change
+  > existing results. The profiled path is **not** `glmer()`'s estimator and its
+  > coefficients differ; the native `method = "joint_laplace"` route is the
+  > glmer-equivalent estimator and is certified against `glmer` within tolerance
+  > (`test-glmm-joint-laplace-parity.R`: ~5e-4 fixef on cbpp/poisson). To honour
+  > "no silent surgery" on the estimator choice, `glmm()` emits an informational
+  > notice (class `mm_estimator_notice`) when `method` is left at its default and
+  > `verbose >= 0`, pointing users to `joint_laplace` for glmer parity. We chose
+  > the notice over flipping the default so the change is opt-in and visible
+  > rather than a silent numerical shift for current users.
+
 - **Phase 5 — emmeans + multivariate + profile CIs.** `recover_data.mm_fit`,
   `emm_basis.mm_fit`, `profile()`, `cbind(y1, y2) ~ ...` shared-theta multivariate.
   Vignette: `emmeans-and-multivariate.Rmd`.

@@ -45,7 +45,11 @@ fast-PIRLS profiled path. \code{"joint_laplace"} requests the labelled joint
 Laplace route and requires \code{nAGQ <= 1}. The joint route tracks the lme4
 joint-Laplace reference far more closely than the profiled path on
 high-baseline models, at a higher optimizer cost; cap that cost with
-\code{mm_control(max_feval = )}.}
+\code{mm_control(max_feval = )}. The default profiled path is \strong{not} glmer's
+estimator and its coefficients do not match \code{glmer()} exactly; when
+\code{method} is left at its default, \code{glmm()} emits an informational notice
+to that effect (suppress with \code{mm_control(verbose = -1)}). Use
+\code{method = "joint_laplace"} for glmer-equivalent estimates.}
 
 \item{nAGQ}{Number of adaptive Gauss-Hermite quadrature points. \code{1} is the
 Laplace setting. Values above \code{1} are allowed on the profiled path and

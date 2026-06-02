@@ -23,7 +23,11 @@
 #'   Laplace route and requires `nAGQ <= 1`. The joint route tracks the lme4
 #'   joint-Laplace reference far more closely than the profiled path on
 #'   high-baseline models, at a higher optimizer cost; cap that cost with
-#'   `mm_control(max_feval = )`.
+#'   `mm_control(max_feval = )`. The default profiled path is **not** glmer's
+#'   estimator and its coefficients do not match `glmer()` exactly; when
+#'   `method` is left at its default, `glmm()` emits an informational notice
+#'   to that effect (suppress with `mm_control(verbose = -1)`). Use
+#'   `method = "joint_laplace"` for glmer-equivalent estimates.
 #' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` is the
 #'   Laplace setting. Values above `1` are allowed on the profiled path and
 #'   are rejected for `method = "joint_laplace"` in the R wrapper.
@@ -51,6 +55,7 @@ glmm <- function(formula,
                  control = mm_control(),
                  ...) {
   call <- match.call()
+  method_explicit <- !missing(method)
   method <- match.arg(method)
   inference <- match.arg(inference)
   control <- mm_validate_control(control)
@@ -81,6 +86,13 @@ glmm <- function(formula,
   mm_validate_fit_structure(spec, lmm = FALSE)
   if (control$verbose >= 0L) {
     print(explain_model(spec))
+    # No silent surgery on the estimator choice: when the user did not pick a
+    # method, surface that the default profiled path is NOT glmer's estimator
+    # and point to the certified glmer-equivalent route. Suppressed by
+    # mm_control(verbose = -1) (as used in loops/bootstrap).
+    if (!method_explicit && identical(method, "pirls_profiled")) {
+      mm_inform(mm_glmm_profiled_default_notice(), class = "mm_estimator_notice")
+    }
   }
 
   spec_data <- mm_translate_data(spec$model_frame)
@@ -171,6 +183,16 @@ glmm <- function(formula,
   )
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
   fit
+}
+
+mm_glmm_profiled_default_notice <- function() {
+  paste0(
+    "glmm() is using the default method = \"pirls_profiled\": a fast profiled ",
+    "(PIRLS) approximation whose coefficients do NOT exactly match ",
+    "lme4::glmer(). For glmer-equivalent (joint Laplace) estimates, use ",
+    "method = \"joint_laplace\". Silence this message with ",
+    "mm_control(verbose = -1)."
+  )
 }
 
 mm_glmm_family_info <- function(family) {

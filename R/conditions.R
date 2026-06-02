@@ -63,6 +63,25 @@ mm_abort <- function(message,
   )
 }
 
+# Signal a typed *informational* message (not an error or warning). Inherits
+# "mm_condition" so it can be caught/muffled like other mixeff signals, and
+# routes through rlang::inform so it goes to stderr, is suppressible, and
+# honours rlang's message-frequency controls.
+mm_inform <- function(message,
+                      class,
+                      ...,
+                      .frequency = c("always", "regularly", "once"),
+                      .frequency_id = NULL) {
+  .frequency <- match.arg(.frequency)
+  rlang::inform(
+    message = message,
+    class = c(class, "mm_condition"),
+    ...,
+    .frequency = .frequency,
+    .frequency_id = .frequency_id
+  )
+}
+
 # Strip the "mm_<name>: " prefix that the Rust bridge attaches to errors so
 # they can be routed to the right typed condition on the R side. Returns a
 # list with `tag` (character or NA) and `message` (the residual text).

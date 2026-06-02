@@ -1,5 +1,25 @@
 # mixeff (development version)
 
+## lme4 functional-equivalence layer
+
+* `update()` for `mm_lmm` / `mm_glmm`: formula edits (`. ~ . - x`,
+  preserving random-effect bars and `||`), `REML`/`weights`/`family`/
+  `offset`/`method`/`control` overrides, new `data`, and `evaluate = FALSE`.
+* `broom` / `broom.mixed` support: `tidy()`, `glance()`, and `augment()`
+  methods for `mm_lmm` / `mm_glmm` (registered with `generics`).
+* `confint.mm_glmm()`: asymptotic Wald intervals for GLMM fixed effects
+  (refuses profile/bootstrap with a typed reason).
+* `predict.mm_glmm()`: `type = "link"`/`"response"`, population and
+  conditional (`re.form = NULL`/`NA`) predictions with `allow.new.levels`,
+  replacing the previous refusal. Validated against the engine's `fitted()`.
+* GLMM fixed-effect inference: `contrast.mm_glmm()` (Wald), `drop1.mm_glmm()`
+  (refit LRT), and `anova.mm_glmm()` (sequential LRT for nested models).
+* GLMM estimator transparency: the native `method = "joint_laplace"` path is
+  certified against `lme4::glmer` within tolerance, and `glmm()` now emits an
+  informational notice (class `mm_estimator_notice`) when the default
+  `pirls_profiled` estimator is used, since its coefficients are not
+  glmer-equivalent (use `method = "joint_laplace"` for parity).
+
 # mixeff 0.1.0
 
 First public release of `mixeff`, an audit-first R wrapper around the

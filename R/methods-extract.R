@@ -516,9 +516,7 @@ terms.mm_glmm <- terms.mm_lmm
 #' holds the (co)variance and `sdcor` the standard deviation (diagonal) or
 #' correlation (off-diagonal). This is the shape `broom.mixed::tidy()` expects.
 #'
-#' @param x An `mm_varcorr` object from [VarCorr()].
 #' @param row.names,optional Ignored; present for S3 consistency.
-#' @param ... Unused.
 #' @rdname mm_lmm-methods
 #' @export
 as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
@@ -563,8 +561,6 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
 #' conditional standard deviation, taken from the `postVar` attribute when the
 #' modes were extracted with `condVar = TRUE`, and `NA` otherwise.
 #'
-#' @param row.names,optional Ignored; present for S3 consistency.
-#' @param ... Unused.
 #' @rdname mm_lmm-methods
 #' @export
 as.data.frame.mm_ranef <- function(x, row.names = NULL, optional = FALSE, ...) {

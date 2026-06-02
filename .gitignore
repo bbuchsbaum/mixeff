@@ -45,3 +45,7 @@ src/rust/vendor.tar.xz
 /vendor/
 # scratch (also in .Rbuildignore as ^tmp$)
 tmp/
+relib/
+
+# testthat auto-generated failure dump — regenerated on failing runs, not source
+tests/testthat/testthat-problems.rds

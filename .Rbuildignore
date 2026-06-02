@@ -27,3 +27,9 @@
 ^examples$
 ^vendor$
 ^tmp$
+^relib$
+^assessment$
+^.*\.Rcheck$
+^vignettes/.*\.css$
+^vignettes/.*\.js$
+^tests/testthat/testthat-problems\.rds$

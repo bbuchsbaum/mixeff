@@ -26,6 +26,7 @@ Imports:
     rlang,
     stats
 Suggests:
+    broom,
     broom.mixed,
     generics,
     ggplot2,

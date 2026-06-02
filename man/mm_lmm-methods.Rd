@@ -142,13 +142,11 @@ ngrps(object, ...)
 \arguments{
 \item{object, x, formula, fit}{A fitted \code{mm_lmm} or \code{mm_glmm} object.}
 
-\item{...}{Unused.}
+\item{...}{Reserved for generic compatibility.}
 
 \item{condVar}{Logical; when \code{TRUE}, Phase 2 returns the random-effects
 tables with an \code{NA} \code{postVar} array and an \code{mm_unavailable_reason}
 attribute rather than fabricating conditional variances.}
-
-\item{x}{An \code{mm_varcorr} object from \code{\link[=VarCorr]{VarCorr()}}.}
 
 \item{REML}{Ignored; included for S3 compatibility with likelihood and
 deviance generics.}

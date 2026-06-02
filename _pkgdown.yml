@@ -1,3 +1,106 @@
 template:
   package: albersdown
   bootstrap: 5.0
+
+reference:
+- title: Fitting models
+  desc: Construct and fit linear and generalized linear mixed models.
+  contents:
+  - lmm
+  - glmm
+  - compile_model
+  - mm_control
+- title: Extractors (lme4-compatible)
+  desc: The familiar lme4 accessor surface.
+  contents:
+  - mm_lmm-methods
+  - getME
+  - is_singular
+  - predict.mm_lmm
+  - predict.mm_glmm
+  - update.mm
+  - refit
+  - simulate.mm_lmm
+- title: Inference
+  desc: Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
+  contents:
+  - contrast
+  - test_effect
+  - test_random_effect
+  - anova.mm_glmm
+  - drop1.mm_lmm
+  - drop1.mm_glmm
+  - confint.mm_glmm
+  - df_for_contrast
+  - estimability
+  - inference_options
+  - inference_table
+  - bootstrap_control
+  - parametric_bootstrap
+- title: Marginal effects & emmeans
+  contents:
+  - mm_grid
+  - mm_lincomb
+  - emmeans-support
+- title: Model comparison & reporting
+  contents:
+  - compare
+  - compare_covariance
+  - model_report
+- title: Audit-first verbs
+  desc: Make the model's design, reductions, and optimizer state explicit.
+  contents:
+  - audit
+  - audit_design
+  - explain_model
+  - changes
+  - diagnostics
+  - parameterization
+  - random_options
+  - random_blocks
+  - roles
+  - optimizer_certificate
+  - reproducibility
+- title: broom / broom.mixed
+  contents:
+  - mm_broom
+- title: Persistence
+  contents:
+  - as_json
+  - revive
+  - fit_handle_alive
+- title: Formula & schema internals
+  contents:
+  - mm_parse_formula
+  - mm_formula_manifest
+  - mm_json_negotiate
+  - mm_json_known_schemas
+- title: Package
+  contents:
+  - mixeff-package
+
+articles:
+- title: Get started
+  navbar: Get started
+  contents:
+  - mixeff
+  - intro
+  - lme4-migration
+- title: Models
+  navbar: Models
+  contents:
+  - lmm-basics
+  - glmm
+  - demystifying-formulas
+- title: Inference & reporting
+  navbar: Inference
+  contents:
+  - inference
+  - inference-method-glossary
+  - inference-where-lme4-says-no
+  - reporting-lmms
+- title: Performance & persistence
+  contents:
+  - benchmarking
+  - saving-and-reviving
+  - reproducing-aphantasia

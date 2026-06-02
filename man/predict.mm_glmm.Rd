@@ -39,14 +39,19 @@ the population mean (zero random effect), matching
 \item{type}{Prediction scale. Gaussian LMMs use the same values for
 \code{"response"} and \code{"link"}.}
 
-\item{se.fit}{Logical; when \code{TRUE}, returns \code{NA} standard errors with an
-unavailable-reason attribute.}
+\item{se.fit}{Logical; when \code{TRUE}, returns a list with \code{fit} and \code{se.fit}.
+For population predictions (\code{re.form = NA}) the standard error is the
+Wald SE of the fixed-effect linear predictor, \verb{sqrt(diag(X V X'))}. For
+conditional predictions (\code{re.form = NULL}) the SE is \code{NA} with a reason
+(random-effect posterior variances are not certified; lme4 likewise
+returns no conditional SE).}
 
-\item{interval}{Prediction interval type. Intervals require prediction
-standard errors and therefore raise \code{mm_inference_unavailable} until Rust
-certifies them.}
+\item{interval}{Interval type for population (\code{re.form = NA}) predictions:
+\code{"confidence"} for the mean (\verb{fit +/- z*se}) or \code{"prediction"} for a new
+observation (adds the residual variance). Conditional intervals raise
+\code{mm_inference_unavailable}. Returns a matrix with \code{fit}/\code{lwr}/\code{upr}.}
 
-\item{level}{Confidence level for future interval support.}
+\item{level}{Confidence level for \code{interval} / \code{se.fit} intervals.}
 
 \item{...}{Reserved for generic compatibility.}
 }

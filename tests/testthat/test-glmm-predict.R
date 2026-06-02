@@ -77,12 +77,24 @@ test_that("predict.mm_glmm refuses intervals and re.form subsets", {
                class = "mm_inference_unavailable")
 })
 
-test_that("predict.mm_glmm se.fit returns NA with a reason", {
+test_that("predict.mm_glmm conditional se.fit is NA with a reason", {
   fit <- glmm(y ~ x + (1 | g), mm_pred_binom_data(), family = binomial(),
               control = mm_control(verbose = -1))
-  out <- predict(fit, se.fit = TRUE)
+  out <- predict(fit, se.fit = TRUE)  # default re.form = NULL (conditional)
   expect_true(is.list(out) && all(c("fit", "se.fit") %in% names(out)))
   expect_true(all(is.na(out$se.fit)))
-  expect_identical(attr(out, "mm_unavailable_reason"),
-                   "glmm_prediction_se_unavailable")
+  expect_identical(attr(out$se.fit, "mm_unavailable_reason"),
+                   "conditional_prediction_se_unavailable")
+})
+
+test_that("predict.mm_glmm population se.fit gives finite Wald SEs", {
+  fit <- glmm(y ~ x + (1 | g), mm_pred_binom_data(), family = binomial(),
+              control = mm_control(verbose = -1))
+  link <- predict(fit, re.form = NA, type = "link", se.fit = TRUE)
+  expect_true(all(is.finite(link$se.fit)))
+  expect_true(all(link$se.fit > 0))
+  resp <- predict(fit, re.form = NA, type = "response", se.fit = TRUE)
+  expect_true(all(is.finite(resp$se.fit)))
+  # response-scale SE = link SE * |d mu / d eta|, which is < link SE for logit
+  expect_true(all(resp$se.fit <= link$se.fit + 1e-9))
 })

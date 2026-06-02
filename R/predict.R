@@ -21,12 +21,17 @@
 #'   `lme4::predict(allow.new.levels = TRUE)`.
 #' @param type Prediction scale. Gaussian LMMs use the same values for
 #'   `"response"` and `"link"`.
-#' @param se.fit Logical; when `TRUE`, returns `NA` standard errors with an
-#'   unavailable-reason attribute.
-#' @param interval Prediction interval type. Intervals require prediction
-#'   standard errors and therefore raise `mm_inference_unavailable` until Rust
-#'   certifies them.
-#' @param level Confidence level for future interval support.
+#' @param se.fit Logical; when `TRUE`, returns a list with `fit` and `se.fit`.
+#'   For population predictions (`re.form = NA`) the standard error is the
+#'   Wald SE of the fixed-effect linear predictor, `sqrt(diag(X V X'))`. For
+#'   conditional predictions (`re.form = NULL`) the SE is `NA` with a reason
+#'   (random-effect posterior variances are not certified; lme4 likewise
+#'   returns no conditional SE).
+#' @param interval Interval type for population (`re.form = NA`) predictions:
+#'   `"confidence"` for the mean (`fit +/- z*se`) or `"prediction"` for a new
+#'   observation (adds the residual variance). Conditional intervals raise
+#'   `mm_inference_unavailable`. Returns a matrix with `fit`/`lwr`/`upr`.
+#' @param level Confidence level for `interval` / `se.fit` intervals.
 #' @param scaled Logical; when `TRUE`, residuals are divided by the residual
 #'   scale.
 #' @param ... Reserved for generic compatibility.
@@ -58,17 +63,6 @@ predict.mm_lmm <- function(object,
       input = allow.new.levels
     )
   }
-  if (!identical(interval, "none")) {
-    mm_abort(
-      message = paste(
-        "`interval` prediction requires prediction standard errors, which are",
-        "not certified by the current Rust inference contract."
-      ),
-      class = "mm_inference_unavailable",
-      input = interval
-    )
-  }
-
   target <- mm_prediction_target(re.form)
   if (identical(target, "unsupported")) {
     mm_abort(
@@ -88,18 +82,68 @@ predict.mm_lmm <- function(object,
       population  = object$fixed_fitted
     )
     names(pred) <- rownames(object$model_frame)
+    se_data <- object$model_frame
   } else {
     pred <- mm_predict_newdata(object, newdata, target, allow.new.levels)
+    se_data <- newdata
   }
 
-  if (isTRUE(se.fit)) {
+  want_se <- isTRUE(se.fit) || !identical(interval, "none")
+  if (!want_se) {
+    return(pred)
+  }
+
+  # Standard errors / intervals are defined here only for the population
+  # (fixed-effect-only) target: se = sqrt(diag(X V X')). Conditional SEs need
+  # random-effect posterior variances, which the contract does not certify
+  # (lme4's predict() likewise returns no conditional SE) -> NA / refuse.
+  if (!identical(target, "population")) {
+    if (!identical(interval, "none")) {
+      mm_abort(
+        message = paste(
+          "Conditional (`re.form = NULL`) prediction intervals require",
+          "random-effect posterior variances, which are not certified. Use",
+          "`re.form = NA` for population-level intervals."
+        ),
+        class = "mm_inference_unavailable",
+        input = interval
+      )
+    }
     se <- rep(NA_real_, length(pred))
-    attr(se, "mm_unavailable_reason") <- "prediction_se_unavailable_phase_2"
+    attr(se, "mm_unavailable_reason") <- "conditional_prediction_se_unavailable"
     out <- list(fit = pred, se.fit = se)
-    attr(out, "mm_unavailable_reason") <- "prediction_se_unavailable_phase_2"
+    attr(out, "mm_unavailable_reason") <- "conditional_prediction_se_unavailable"
     return(out)
   }
-  pred
+
+  se <- mm_fixed_prediction_se(object, se_data)
+  if (!identical(interval, "none")) {
+    crit <- stats::qnorm((1 + level) / 2)
+    extra <- if (identical(interval, "prediction")) object$sigma^2 else 0
+    half <- crit * sqrt(se^2 + extra)
+    out <- cbind(fit = pred, lwr = pred - half, upr = pred + half)
+    rownames(out) <- names(pred)
+    attr(out, "interval") <- interval
+    attr(out, "level") <- level
+    if (isTRUE(se.fit)) {
+      return(list(fit = out, se.fit = se))
+    }
+    return(out)
+  }
+  names(se) <- names(pred)
+  list(fit = pred, se.fit = se)
+}
+
+# Standard error of the population (fixed-effect-only) linear predictor for the
+# rows of `data`: sqrt(diag(X V X')) with X the engine-basis fixed-effect design
+# and V the stored fixed-effect covariance. Used by predict() for se.fit and
+# population (re.form = NA) confidence/prediction intervals.
+mm_fixed_prediction_se <- function(fit, data) {
+  X <- mm_engine_fixed_matrix(fit, data)
+  V <- as.matrix(unclass(fit$fixed_effect_vcov))
+  dimnames(V) <- list(names(fit$beta), names(fit$beta))
+  V <- V[colnames(X), colnames(X), drop = FALSE]
+  sqrt(pmax(0, rowSums((X %*% V) * X)))
 }
 
 #' @rdname predict.mm_lmm
@@ -264,10 +308,23 @@ predict.mm_glmm <- function(object,
   names(pred) <- nm
 
   if (isTRUE(se.fit)) {
-    se <- rep(NA_real_, length(pred))
-    attr(se, "mm_unavailable_reason") <- "glmm_prediction_se_unavailable"
+    # Population (fixed-only) Wald SE of the link-scale linear predictor; for
+    # type="response" map through the link with the delta method. Conditional
+    # SEs need RE posterior variances (not certified) -> NA with a reason.
+    if (identical(target, "population")) {
+      se_data <- if (is.null(newdata)) object$model_frame else newdata
+      se_link <- mm_fixed_prediction_se(object, se_data)
+      se <- if (identical(type, "response")) {
+        se_link * abs(family$mu.eta(eta))
+      } else {
+        se_link
+      }
+    } else {
+      se <- rep(NA_real_, length(pred))
+      attr(se, "mm_unavailable_reason") <- "conditional_prediction_se_unavailable"
+    }
+    names(se) <- nm
     out <- list(fit = pred, se.fit = se)
-    attr(out, "mm_unavailable_reason") <- "glmm_prediction_se_unavailable"
     return(out)
   }
   pred

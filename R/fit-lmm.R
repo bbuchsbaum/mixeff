@@ -17,6 +17,16 @@
 #' @param REML Logical; fit by restricted maximum likelihood when `TRUE`.
 #' @param weights Optional positive numeric case weights, either a vector with
 #'   one value per row or an expression evaluated in `data`.
+#' @param subset Optional expression selecting rows of `data`, evaluated in
+#'   `data` (as in [stats::lm()]).
+#' @param na.action Optional function controlling missing-value handling,
+#'   applied to the model variables before fitting (e.g. [stats::na.omit]).
+#'   The default (`NULL`) refuses any `NA` in a model variable with a typed
+#'   `mm_data_error` (audit-first: missing-data dropping must be opt-in). Pass
+#'   `na.action = na.omit` for lme4's complete-case behaviour.
+#' @param contrasts Optional named list of factor contrasts. The engine codes
+#'   all factors with treatment contrasts; a request for any other coding is
+#'   refused (recode the factor instead).
 #' @param control A list from [mm_control()].
 #'
 #' @return An object of class `mm_lmm`, also inheriting from `mm_fit` and
@@ -36,9 +46,11 @@
 #'
 #' @export
 lmm <- function(formula, data, REML = TRUE, weights = NULL,
+                subset = NULL, na.action = NULL, contrasts = NULL,
                 control = mm_control()) {
   call <- match.call()
   control <- mm_validate_control(control)
+  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts)
   weights <- mm_lmm_weights(substitute(weights), data, parent.frame())
   if (!is.logical(REML) || length(REML) != 1L || is.na(REML)) {
     mm_abort(
@@ -47,6 +59,13 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       input = REML
     )
   }
+
+  # lme4-style data preparation: row subset, then NA handling. Both run before
+  # the design is compiled so the engine sees a clean, complete frame.
+  prep <- mm_prepare_fit_data(formula, data, substitute(subset), na.action,
+                              weights, parent.frame())
+  data <- prep$data
+  weights <- prep$weights
 
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec)
@@ -203,6 +222,84 @@ mm_spec_grouping_columns <- function(spec) {
     }
   }
   out
+}
+
+# lme4-style data preparation shared by the fit drivers: apply a `subset`
+# expression and an `na.action` to `data` (and the already-evaluated `weights`
+# vector, kept aligned). Returns the processed `data` and `weights`. The NA
+# policy is applied by *calling* the supplied na.action on the model variables,
+# so na.omit / na.exclude / na.fail / na.pass all behave as their authors
+# intend; the default (NULL) leaves NAs for compile_model() to refuse.
+mm_prepare_fit_data <- function(formula, data, subset_expr, na.action,
+                                weights, enclos) {
+  if (!is.data.frame(data)) {
+    mm_abort(message = "`data` must be a data.frame.", class = "mm_data_error",
+             input = data)
+  }
+  n0 <- nrow(data)
+
+  # ---- subset ----
+  if (!identical(subset_expr, quote(NULL)) && !is.null(subset_expr)) {
+    keep <- eval(subset_expr, data, enclos)
+    if (is.logical(keep)) {
+      if (length(keep) != n0) {
+        mm_abort(
+          message = sprintf("`subset` must have one value per row of `data` (%d).", n0),
+          class = "mm_arg_error", input = keep
+        )
+      }
+      keep[is.na(keep)] <- FALSE
+      idx <- which(keep)
+    } else if (is.numeric(keep)) {
+      idx <- as.integer(keep)
+      idx <- idx[!is.na(idx)]
+    } else {
+      mm_abort(message = "`subset` must evaluate to a logical or integer index.",
+               class = "mm_arg_error", input = keep)
+    }
+    data <- data[idx, , drop = FALSE]
+    if (!is.null(weights)) weights <- weights[idx]
+  }
+
+  # ---- na.action ----
+  if (!is.null(na.action)) {
+    if (!is.function(na.action)) na.action <- match.fun(na.action)
+    vars <- intersect(all.vars(formula), names(data))
+    sub <- data[, vars, drop = FALSE]
+    cleaned <- na.action(sub)                 # may error (na.fail) or drop rows
+    omitted <- attr(cleaned, "na.action")
+    if (!is.null(omitted)) {
+      drop_idx <- as.integer(omitted)
+      data <- data[-drop_idx, , drop = FALSE]
+      if (!is.null(weights)) weights <- weights[-drop_idx]
+    }
+  }
+
+  list(data = data, weights = weights)
+}
+
+# The Rust engine codes every factor with treatment (dummy) contrasts. Accept a
+# `contrasts` request only if it asks for that coding; otherwise refuse rather
+# than silently fit a differently-coded design than the user asked for.
+mm_reject_nontreatment_contrasts <- function(contrasts) {
+  is_treatment <- function(x) {
+    is.character(x) && length(x) == 1L &&
+      x %in% c("contr.treatment", "contr.SAS")
+  }
+  ok <- is.list(contrasts) && length(contrasts) &&
+    all(vapply(contrasts, is_treatment, logical(1)))
+  if (!ok) {
+    mm_abort(
+      message = paste(
+        "Custom `contrasts` are not supported: the engine codes all factors",
+        "with treatment contrasts. Recode the factor (e.g. relevel(), or",
+        "construct the desired numeric columns) to obtain a different coding."
+      ),
+      class = "mm_arg_error",
+      input = contrasts
+    )
+  }
+  invisible(TRUE)
 }
 
 mm_lmm_weights <- function(expr, data, enclos) {

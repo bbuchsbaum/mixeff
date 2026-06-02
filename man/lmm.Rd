@@ -4,7 +4,16 @@
 \alias{lmm}
 \title{Fit a linear mixed-effects model}
 \usage{
-lmm(formula, data, REML = TRUE, weights = NULL, control = mm_control())
+lmm(
+  formula,
+  data,
+  REML = TRUE,
+  weights = NULL,
+  subset = NULL,
+  na.action = NULL,
+  contrasts = NULL,
+  control = mm_control()
+)
 }
 \arguments{
 \item{formula}{A two-sided lme4-style formula, e.g.
@@ -16,6 +25,19 @@ lmm(formula, data, REML = TRUE, weights = NULL, control = mm_control())
 
 \item{weights}{Optional positive numeric case weights, either a vector with
 one value per row or an expression evaluated in \code{data}.}
+
+\item{subset}{Optional expression selecting rows of \code{data}, evaluated in
+\code{data} (as in \code{\link[stats:lm]{stats::lm()}}).}
+
+\item{na.action}{Optional function controlling missing-value handling,
+applied to the model variables before fitting (e.g. \link[stats:na.fail]{stats::na.omit}).
+The default (\code{NULL}) refuses any \code{NA} in a model variable with a typed
+\code{mm_data_error} (audit-first: missing-data dropping must be opt-in). Pass
+\code{na.action = na.omit} for lme4's complete-case behaviour.}
+
+\item{contrasts}{Optional named list of factor contrasts. The engine codes
+all factors with treatment contrasts; a request for any other coding is
+refused (recode the factor instead).}
 
 \item{control}{A list from \code{\link[=mm_control]{mm_control()}}.}
 }

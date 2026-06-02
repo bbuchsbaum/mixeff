@@ -25,11 +25,22 @@ mm_register_external_s3 <- function() {
     function(...) mm_register_emmeans_s3(),
     action = "append"
   )
+  # tidy/glance/augment are owned by `generics` (re-exported by broom /
+  # broom.mixed). Register into the generics namespace so those generics
+  # dispatch to our mm_lmm / mm_glmm methods.
+  setHook(
+    packageEvent("generics", "onLoad"),
+    function(...) mm_register_broom_s3(),
+    action = "append"
+  )
   if ("lme4" %in% loadedNamespaces()) {
     mm_register_lme4_s3()
   }
   if ("emmeans" %in% loadedNamespaces()) {
     mm_register_emmeans_s3()
+  }
+  if ("generics" %in% loadedNamespaces()) {
+    mm_register_broom_s3()
   }
 }
 
@@ -48,5 +59,16 @@ mm_register_lme4_s3 <- function() {
 
 mm_register_emmeans_s3 <- function() {
   emmeans::.emm_register("mm_lmm", "mixeff")
+  invisible(TRUE)
+}
+
+mm_register_broom_s3 <- function() {
+  ns <- asNamespace("generics")
+  registerS3method("tidy", "mm_lmm", tidy.mm_lmm, envir = ns)
+  registerS3method("tidy", "mm_glmm", tidy.mm_glmm, envir = ns)
+  registerS3method("glance", "mm_lmm", glance.mm_lmm, envir = ns)
+  registerS3method("glance", "mm_glmm", glance.mm_glmm, envir = ns)
+  registerS3method("augment", "mm_lmm", augment.mm_lmm, envir = ns)
+  registerS3method("augment", "mm_glmm", augment.mm_glmm, envir = ns)
   invisible(TRUE)
 }

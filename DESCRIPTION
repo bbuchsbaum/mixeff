@@ -26,6 +26,8 @@ Imports:
     rlang,
     stats
 Suggests:
+    broom.mixed,
+    generics,
     ggplot2,
     emmeans (>= 1.4),
     estimability,

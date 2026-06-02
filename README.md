@@ -3,12 +3,15 @@
 > **Audit-first mixed-effects models in R, powered by the `mixeff-rs` Rust crate.**
 
 `mixeff` fits linear and generalized linear mixed-effects models from
-lme4-style formulas. In everyday terms it is a drop-in replacement
-for `lme4::lmer()`: the formula syntax is the same, the extractors
+lme4-style formulas. It aims to be *functionally equivalent* to
+`lme4`: the formula syntax is the same, the extractor surface
 (`fixef`, `ranef`, `VarCorr`, `predict`, `simulate`, `anova`,
-`summary`) are the same, and statistical answers agree within
-documented tolerances on the parity datasets shipped with the
-package.
+`summary`, `update`, `broom::tidy`) is the same, and statistical
+answers agree within documented tolerances on the parity datasets
+shipped with the package. It is not a literal *drop-in* replacement,
+by design: you call `lmm()` / `glmm()` (not `lmer()` / `glmer()`),
+results are not bit-exact, and the package is audit-first — it
+refuses or reports rather than silently transforming a model.
 
 What it adds is *provenance*. Every printed claim — a coefficient,
 a standard error, a variance component, a p-value — traces back to

@@ -1,0 +1,145 @@
+---
+title: Migrating from lme4
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Migrating from lme4}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+has_lme4 <- requireNamespace("lme4", quietly = TRUE)
+```
+
+```{r load}
+library(mixeff)
+```
+
+```{r sleepstudy-helper, include = FALSE}
+# vignette-local convenience so chunks run whether or not lme4 is attached;
+# use lme4::sleepstudy directly in your own code.
+sleepstudy_data <- function() {
+  if (requireNamespace("lme4", quietly = TRUE)) {
+    e <- new.env()
+    utils::data("sleepstudy", package = "lme4", envir = e)
+    e$sleepstudy
+  } else {
+    set.seed(1)
+    data.frame(
+      Reaction = rnorm(180, 300, 50),
+      Days = rep(0:9, 18),
+      Subject = factor(rep(seq_len(18), each = 10))
+    )
+  }
+}
+```
+
+`mixeff` aims to be *functionally equivalent* to `lme4`: the same formula
+language, the same extractor surface, and statistical answers that agree within
+documented tolerances. It is **not** a literal drop-in — you call `lmm()` /
+`glmm()` rather than `lmer()` / `glmer()`, results are not bit-exact, and the
+package is audit-first (it reports or refuses rather than silently transforming
+a model). This vignette is the verb-for-verb, argument-for-argument map.
+
+## The two edits
+
+An `lmer` script becomes an `lmm` script with two changes: the fitting verb and
+the control object.
+
+```{r fit, eval = TRUE}
+fit <- lmm(Reaction ~ Days + (Days | Subject), sleepstudy_data(),
+           control = mm_control(verbose = -1))
+fixef(fit)
+```
+
+```{r fit-lme4, eval = has_lme4}
+m <- lme4::lmer(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)
+lme4::fixef(m)
+```
+
+(`sleepstudy_data()` above just returns `lme4::sleepstudy` when lme4 is
+installed; use `lme4::sleepstudy` directly in your own code.)
+
+## Verb map
+
+| lme4 | mixeff | Notes |
+|------|--------|-------|
+| `lmer(y ~ x + (x \| g), data)` | `lmm(y ~ x + (x \| g), data)` | same formula language, incl. `(x\|\|g)`, `(1\|g1/g2)`, crossed |
+| `glmer(y ~ ..., family = binomial)` | `glmm(y ~ ..., family = binomial())` | pass a family **object** (`binomial()`), not a string |
+| `lmerControl(...)` / `glmerControl(...)` | `mm_control(verbose=, max_feval=)` | optimizer/tolerance knobs are engine-chosen (see below) |
+| `fixef`, `ranef`, `VarCorr`, `coef`, `sigma`, `vcov` | identical | same generics |
+| `logLik`, `AIC`, `BIC`, `deviance`, `nobs`, `confint` | identical | `confint` supports Wald, profile (LMM), bootstrap (LMM) |
+| `predict`, `fitted`, `residuals`, `simulate`, `refit` | identical | `predict()` supports `re.form = NULL/NA`, `se.fit`, `interval` (population) |
+| `update(fit, . ~ . - x)` | identical | formula edits, `REML=`, `weights=`, etc. |
+| `anova(m1, m2)`, `drop1`, `getME`, `ngrps`, `isSingular` | identical | `isSingular()` is `is_singular()` |
+| `broom.mixed::tidy/glance/augment` | identical | registered for `mm_lmm`/`mm_glmm` |
+| `emmeans::emmeans(fit, ~ x)` | identical | mixeff registers an emmeans basis |
+| `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package |
+
+## Argument map for `lmm()` / `glmm()`
+
+| lme4 argument | mixeff | Notes |
+|---------------|--------|-------|
+| `REML` | `lmm(..., REML=)` | same |
+| `weights` | `weights=` | LMM and GLMM |
+| `offset` | `glmm(..., offset=)` | GLMM only; LMM in-fit offset is not yet supported |
+| `subset` | `lmm(..., subset=)` | supported for `lmm()` |
+| `na.action` | `lmm(..., na.action=)` | **default refuses NA**; pass `na.action = na.omit` for lme4's complete-case behaviour |
+| `contrasts` | partial | engine uses treatment contrasts; other codings are refused — recode the factor |
+| `family = "binomial"` | `family = binomial()` | string families are not accepted |
+| `nAGQ` | `glmm(..., nAGQ=)` | `>1` on the profiled path |
+| `control = lmerControl(optimizer=, optCtrl=)` | not exposed | the engine selects the optimizer/tolerances itself |
+| `start` | not exposed | warm starts are engine-managed |
+
+## Three things that will bite, and the fix
+
+**1. Coefficient names for factors differ.** The engine labels factor levels
+as `"factor: level"` (e.g. `"recipe: B"`), where lme4 writes `"recipeB"`. If you
+match coefficients by name across the two packages, normalise first:
+
+```{r coefnames, eval = FALSE}
+nm <- names(fixef(fit))
+nm_lme4_style <- gsub(": ", "", nm)   # "recipe: B" -> "recipeB"
+```
+
+**2. Grouped binomial responses.** `glmm()` accepts the
+`cbind(successes, failures)` spelling like `glmer`:
+
+```{r cbind, eval = FALSE}
+glmm(cbind(incidence, size - incidence) ~ period + (1 | herd),
+     lme4::cbpp, family = binomial())
+```
+
+**3. The default GLMM estimator is not glmer's.** `glmm()` defaults to a fast
+profiled (PIRLS) estimator whose coefficients do **not** match `glmer()`
+exactly; it prints a notice saying so. For glmer-equivalent (joint Laplace)
+estimates, ask for them:
+
+```{r joint, eval = FALSE}
+glmm(y ~ x + (1 | g), data, family = binomial(),
+     method = "joint_laplace")
+```
+
+## What is `NA`-with-a-reason (and why)
+
+`mixeff` never fabricates inference it cannot certify. Where lme4 would silently
+return a number (or silently drop data), mixeff returns `NA` with a machine-
+readable reason or raises a typed condition:
+
+| Situation | lme4 | mixeff |
+|-----------|------|--------|
+| `NA` in a model variable | silently dropped | refused unless `na.action = na.omit` |
+| Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
+| Satterthwaite df at a boundary | may print unreliable df | refused with a reason; use bootstrap |
+| Conditional prediction SE | not provided | `NA` with reason (population SE *is* provided) |
+| GLMM `confint(method="profile")` | computed | refused (only Wald is certified for GLMMs) |
+
+Use `inference_options(fit)` to see, before you run anything, which inference
+routes are available on a given fit and why.
+```

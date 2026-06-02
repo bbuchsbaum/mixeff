@@ -120,18 +120,32 @@ mm_print_optimizer_line <- function(x) {
 #' @export
 print.mm_varcorr <- function(x, ...) {
   cat("Variance components:\n")
+  weak_groups <- attr(x, "mm_design_weak_identifiability_groups") %||% character()
   if (nrow(x$table)) {
     out <- x$table
     out$variance <- signif(out$variance, 6)
     out$std_dev <- signif(out$std_dev, 6)
     boundary <- if (!is.null(out$boundary)) isTRUE(any(out$boundary)) else FALSE
+    if (!"note" %in% names(out)) {
+      out$note <- ""
+    }
     if (!is.null(out$boundary)) {
-      out$note <- ifelse(out$boundary, "[boundary]", "")
+      out$note <- mm_note_append(out$note, ifelse(out$boundary, "[boundary]", ""))
       out$boundary <- NULL
+    }
+    if (!any(nzchar(out$note))) {
+      out$note <- NULL
     }
     print(out, row.names = FALSE)
     if (boundary) {
       cat("[boundary]: variance component is at the boundary of the parameter space.\n")
+    }
+    if (length(weak_groups)) {
+      groups <- paste(sprintf("`%s`", weak_groups), collapse = ", ")
+      cat(sprintf(
+        "[design_weak_identifiability]: random intercept variance for %s is weakly interpretable because its grouping indicators are aliased with the fixed-effect design.\n",
+        groups
+      ))
     }
   } else {
     cat("  none\n")

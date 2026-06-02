@@ -12,7 +12,8 @@ test_that("lme4 parity mismatch ledger is shipped and well-formed", {
                   info = sprintf("ledger entry missing `%s` key", key))
     }
     expect_true(entry$status %in% c("expected_mismatch", "upstream_bug",
-                                    "unsupported", "pass"),
+                                    "unsupported",
+                                    "design_weak_identifiability", "pass"),
                 info = sprintf("ledger entry has unrecognized status `%s` for case `%s` field `%s`",
                                entry$status, entry$case_id, entry$field))
     if (entry$status %in% c("expected_mismatch", "upstream_bug")) {

@@ -287,12 +287,53 @@ VarCorr <- function(x, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 VarCorr.mm_lmm <- function(x, ...) {
-  x$varcorr
+  mm_varcorr_with_design_notes(x)
 }
 
 #' @rdname mm_lmm-methods
 #' @export
 VarCorr.mm_glmm <- VarCorr.mm_lmm
+
+mm_varcorr_with_design_notes <- function(fit) {
+  out <- fit$varcorr
+  groups <- mm_design_weak_identifiability_groups(fit)
+  attr(out, "mm_design_weak_identifiability_groups") <- groups
+  if (!length(groups) || !is.data.frame(out$table) || !nrow(out$table)) {
+    return(out)
+  }
+  if (!"note" %in% names(out$table)) {
+    out$table$note <- ""
+  }
+  hit <- out$table$group %in% groups & out$table$name == "(Intercept)"
+  out$table$note[hit] <- mm_note_append(
+    out$table$note[hit],
+    "[design_weak_identifiability]"
+  )
+  out
+}
+
+mm_note_append <- function(existing, note) {
+  existing <- as.character(existing)
+  if (!length(existing)) return(character())
+  existing[is.na(existing)] <- ""
+  note <- as.character(note)
+  if (length(note) == 1L) {
+    note <- rep(note, length(existing))
+  }
+  if (length(note) != length(existing)) {
+    note <- rep(note, length.out = length(existing))
+  }
+  note[is.na(note)] <- ""
+  for (i in seq_along(existing)) {
+    if (!nzchar(note[[i]])) next
+    if (!nzchar(existing[[i]])) {
+      existing[[i]] <- note[[i]]
+    } else if (!grepl(note[[i]], existing[[i]], fixed = TRUE)) {
+      existing[[i]] <- paste(existing[[i]], note[[i]])
+    }
+  }
+  existing
+}
 
 #' @rdname mm_lmm-methods
 #' @export

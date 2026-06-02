@@ -22,8 +22,7 @@ diagnostics <- function(fit, severity = NULL, stage = NULL, ...) {
 #' @rdname diagnostics
 #' @export
 diagnostics.mm_compiled <- function(fit, severity = NULL, stage = NULL, ...) {
-  artifact <- mm_compiled_artifact(fit)
-  raw <- mm_artifact_diagnostics(artifact)
+  raw <- mm_model_diagnostics(fit)
   table <- mm_diagnostics_table(raw)
   keep <- seq_along(raw)
   if (!is.null(severity)) {
@@ -109,6 +108,120 @@ mm_artifact_diagnostics <- function(artifact) {
     artifact$design_audit$diagnostics %||% list(),
     artifact$optimizer_certificate$diagnostics %||% list()
   )
+}
+
+mm_model_diagnostics <- function(fit) {
+  artifact <- mm_compiled_artifact(fit)
+  c(mm_artifact_diagnostics(artifact), mm_r_design_diagnostics(fit))
+}
+
+mm_r_design_diagnostics <- function(fit) {
+  c(mm_design_weak_identifiability_diagnostics(fit))
+}
+
+mm_design_weak_identifiability_diagnostics <- function(
+    fit, tolerance = sqrt(.Machine$double.eps)) {
+  if (!inherits(fit, "mm_compiled") || !is.data.frame(fit$model_frame)) {
+    return(list())
+  }
+  terms <- fit$artifact$semantic_model$random_terms %||% list()
+  if (!length(terms)) return(list())
+
+  X <- tryCatch(
+    stats::model.matrix(mm_fixed_formula(fit), data = fit$model_frame),
+    error = function(cnd) NULL
+  )
+  if (is.null(X) || !nrow(X) || !ncol(X)) return(list())
+  qr_x <- qr(X, tol = tolerance)
+  fixed_rank <- qr_x$rank
+
+  out <- list()
+  for (i in seq_along(terms)) {
+    term <- terms[[i]]
+    if (!mm_random_term_is_intercept_only(term)) next
+
+    group_label <- tryCatch(
+      mm_random_term_group_label(fit, term, i),
+      error = function(cnd) NA_character_
+    )
+    if (is.na(group_label) || !nzchar(group_label)) next
+
+    group <- tryCatch(
+      mm_group_factor(fit$model_frame, group_label),
+      error = function(cnd) NULL
+    )
+    if (is.null(group)) next
+
+    G <- stats::model.matrix(~ 0 + group)
+    fitted <- tryCatch(qr.fitted(qr_x, G), error = function(cnd) NULL)
+    if (is.null(fitted)) next
+
+    residual <- G - fitted
+    rel <- norm(residual, type = "F") / max(norm(G, type = "F"), .Machine$double.eps)
+    if (!is.finite(rel) || rel > tolerance) next
+
+    term_id <- mm_scalar_text(term$id, sprintf("r%d", i - 1L))
+    source <- term$source_syntax$text %||% sprintf("(1 | %s)", group_label)
+    n_levels <- length(levels(group))
+    group_rank <- qr(G, tol = tolerance)$rank
+    message <- sprintf(
+      paste0(
+        "random intercept `%s` is aliased with the fixed-effect design ",
+        "(projection residual %.2e); VarCorr(%s) is weakly interpretable. ",
+        "Fixed effects and fitted values can remain stable, but this ",
+        "variance component should not be treated as a certified lme4-equivalent target."
+      ),
+      group_label, rel, group_label
+    )
+    out[[length(out) + 1L]] <- list(
+      code = "design_weak_identifiability",
+      severity = "warning",
+      stage = "design_audit",
+      message = message,
+      affected_terms = list(term_id),
+      suggested_actions = list(
+        sprintf("fit a reduced comparison model without `%s`", source),
+        sprintf("use a less saturated fixed-effect structure if %s-level variance is substantively important", group_label)
+      ),
+      payload = list(
+        group = group_label,
+        term_id = term_id,
+        source = source,
+        n_levels = n_levels,
+        fixed_rank = fixed_rank,
+        group_rank = group_rank,
+        projection_residual_rel = rel,
+        tolerance = tolerance,
+        diagnostic_class = "design_weak_identifiability"
+      )
+    )
+  }
+  out
+}
+
+mm_random_term_is_intercept_only <- function(term) {
+  basis <- term$basis %||% list()
+  if (!length(basis)) return(TRUE)
+  length(basis) == 1L && identical(mm_basis_label(basis[[1L]]), "(Intercept)")
+}
+
+mm_design_weak_identifiability_groups <- function(fit) {
+  diagnostics <- mm_design_weak_identifiability_diagnostics(fit)
+  groups <- vapply(diagnostics, function(d) {
+    d$payload$group %||% ""
+  }, character(1))
+  unique(groups[nzchar(groups)])
+}
+
+mm_append_r_design_diagnostic_text <- function(text, diagnostics) {
+  design <- diagnostics[vapply(diagnostics, function(d) {
+    identical(mm_diagnostic_bucket(d$code), "design_note")
+  }, logical(1))]
+  if (!length(design)) return(text)
+  lines <- unique(vapply(design, function(d) {
+    sprintf("  %s: %s", mm_scalar_text(d$code), d$message)
+  }, character(1)))
+  paste(c(text, "", "Wrapper design notes:", lines), collapse = "\n")
 }
 
 mm_diagnostics_table <- function(raw) {
@@ -214,6 +327,10 @@ mm_diagnostic_code_registry <- list(
   unsupported                          = list(bucket = "repair")
 )
 
+mm_r_diagnostic_code_registry <- list(
+  design_weak_identifiability = list(bucket = "design_note")
+)
+
 # Stable registry for `ResponseDiagnosticReason` (mixeff-rs
 # src/model/batch.rs). No R-side surface currently exposes the batch
 # engine's per-column response diagnostics; this registry is the
@@ -247,7 +364,8 @@ mm_diagnostic_bucket <- function(code) {
   if (!length(code)) return(NA_character_)
   code <- as.character(code)
   if (!nzchar(code)) return(NA_character_)
-  spec <- mm_diagnostic_code_registry[[code]]
+  spec <- mm_diagnostic_code_registry[[code]] %||%
+    mm_r_diagnostic_code_registry[[code]]
   if (is.null(spec)) return(NA_character_)
   spec$bucket
 }
@@ -260,7 +378,7 @@ mm_diagnostics_guard <- function(table) {
   codes <- table$code
   if (!length(codes)) return(table)
   codes <- unique(codes[nzchar(codes)])
-  known <- names(mm_diagnostic_code_registry)
+  known <- c(names(mm_diagnostic_code_registry), names(mm_r_diagnostic_code_registry))
   unknown <- setdiff(codes, known)
   if (!length(unknown)) return(table)
   attr(table, "mm_unrecognized_diagnostic_code") <- unknown

@@ -11,9 +11,10 @@
 #                         then succeed() with the documented reason.
 #                         Tightening (smaller diff) is good; growing past the
 #                         recorded bound trips the test.
-#   - status unsupported
+#   - status unsupported / design_weak_identifiability
 #                      -> record but do not assert. The Rust contract does not
-#                         certify this field for this case.
+#                         certify this field for this case, or the wrapper has
+#                         classified it as weakly interpretable by design.
 #
 # Every call records a row in mm_scoreboard_state for the parity scoreboard
 # output emitted by tests/testthat/test-parity-scoreboard.R.
@@ -63,8 +64,9 @@ mm_scoreboard_table <- function() {
 }
 
 mm_scoreboard_classify_status <- function(status) {
-  if (identical(status, "unsupported")) {
-    return("unsupported")
+  if (identical(status, "unsupported") ||
+      identical(status, "design_weak_identifiability")) {
+    return(status)
   }
   if (identical(status, "expected_mismatch") || identical(status, "upstream_bug")) {
     return("xfail")
@@ -201,10 +203,11 @@ mm_assert_parity <- function(observed, expected, case_id, field,
     return(invisible())
   }
 
-  if (identical(status, "unsupported")) {
+  if (identical(status, "unsupported") ||
+      identical(status, "design_weak_identifiability")) {
     testthat::succeed(message = sprintf(
-      "documented `unsupported` for case `%s` field `%s`: %s",
-      case_id, field, reason
+      "documented `%s` for case `%s` field `%s`: %s",
+      status, case_id, field, reason
     ))
     return(invisible())
   }

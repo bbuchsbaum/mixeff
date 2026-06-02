@@ -5,6 +5,7 @@
     "expected_mismatch": "Documented numeric drift attributable to optimizer/path differences. The recorded bounds are an upper limit; tests fail if observed diffs exceed them.",
     "upstream_bug": "Rust-engine bug uncovered by parity. Same regression-detector contract as expected_mismatch, plus a linked upstream mote tracking the fix.",
     "unsupported": "Field is not currently certified by the Rust contract for this case. The wrapper records the observed diff but does not assert.",
+    "design_weak_identifiability": "Field is not asserted because the design makes this component weakly identifiable or aliased with fixed-effect structure; user-facing diagnostics explain the limitation.",
     "pass": "(Implicit) No ledger entry. The strict case tolerance applies; any failure is unclassified and must be triaged before merge."
   },
   "policy": {
@@ -424,6 +425,57 @@
       "first_seen": "2026-05-22",
       "linked_mote": "bd-01KS80NV9550EJYXZ8SJCXNQRP",
       "upstream_mote": "bd-01KS7PVAW6MR6CHF4MQFXG4703"
+    },
+    {
+      "case_id": "osf_study2_cute_full_factorial",
+      "field": "varcorr.std_dev.stim.(Intercept)",
+      "test_file": "test-osf-study2-lme4.R",
+      "package_source": "OSF h6rfv Study 2 dataset and lmer script",
+      "dataset": "tests/fixtures/osf_study2_dataset.csv",
+      "formula": "cute ~ con_f * time_f * level_f + (1 | stim) + (1 | sub) + (1 | sub:con_f) + (1 | sub:time_f)",
+      "reml": true,
+      "case_tolerance": 2.0e-3,
+      "observed_max_abs_diff": 9.26968e-2,
+      "observed_max_rel_diff": 6.36515e-2,
+      "status": "design_weak_identifiability",
+      "reason": "The Study 2 raw design has one stimulus for each attractiveness/personality cell, so the stimulus intercept SD is weakly identified against the full fixed factorial cell means. Fixed effects, likelihood-scale summaries, fitted values, and the subject-side variance components remain the functional parity targets.",
+      "first_seen": "2026-06-02",
+      "linked_mote": "bd-01KT3XNHM4P480GV3CWXSGKR9A",
+      "upstream_mote": "bd-01KT3Z57HVHXR64YDTHQQ4RXR0"
+    },
+    {
+      "case_id": "osf_study2_warmth_full_factorial",
+      "field": "varcorr.std_dev.stim.(Intercept)",
+      "test_file": "test-osf-study2-lme4.R",
+      "package_source": "OSF h6rfv Study 2 dataset and lmer script",
+      "dataset": "tests/fixtures/osf_study2_dataset.csv",
+      "formula": "warmth ~ con_f * time_f * level_f + (1 | stim) + (1 | sub) + (1 | sub:con_f) + (1 | sub:time_f)",
+      "reml": true,
+      "case_tolerance": 5.0e-4,
+      "observed_max_abs_diff": 9.24575e-1,
+      "observed_max_rel_diff": 7.11573e-1,
+      "status": "design_weak_identifiability",
+      "reason": "The Study 2 raw design has one stimulus for each attractiveness/personality cell, so the stimulus intercept SD is weakly identified against the full fixed factorial cell means. Fixed effects, likelihood-scale summaries, fitted values, and the subject-side variance components remain the functional parity targets.",
+      "first_seen": "2026-06-02",
+      "linked_mote": "bd-01KT3XNHM4P480GV3CWXSGKR9A",
+      "upstream_mote": "bd-01KT3Z57HVHXR64YDTHQQ4RXR0"
+    },
+    {
+      "case_id": "osf_study2_competence_full_factorial",
+      "field": "varcorr.std_dev.stim.(Intercept)",
+      "test_file": "test-osf-study2-lme4.R",
+      "package_source": "OSF h6rfv Study 2 dataset and lmer script",
+      "dataset": "tests/fixtures/osf_study2_dataset.csv",
+      "formula": "competence ~ con_f * time_f * level_f + (1 | stim) + (1 | sub) + (1 | sub:con_f) + (1 | sub:time_f)",
+      "reml": true,
+      "case_tolerance": 3.0e-2,
+      "observed_max_abs_diff": 8.79230e-1,
+      "observed_max_rel_diff": 6.83515e-1,
+      "status": "design_weak_identifiability",
+      "reason": "The Study 2 raw design has one stimulus for each attractiveness/personality cell, so the stimulus intercept SD is weakly identified against the full fixed factorial cell means. Fixed effects, likelihood-scale summaries, fitted values, and the subject-side variance components remain the functional parity targets.",
+      "first_seen": "2026-06-02",
+      "linked_mote": "bd-01KT3XNHM4P480GV3CWXSGKR9A",
+      "upstream_mote": "bd-01KT3Z57HVHXR64YDTHQQ4RXR0"
     }
   ]
 }

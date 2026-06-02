@@ -88,17 +88,24 @@ test_that("mm_response_diagnostic_reason_registry covers every Rust ResponseDiag
 })
 
 test_that("every registered diagnostic code is bound to a valid bucket", {
-  buckets <- vapply(mixeff:::mm_diagnostic_code_registry,
-                    function(spec) spec$bucket, character(1))
+  registries <- c(mixeff:::mm_diagnostic_code_registry,
+                  mixeff:::mm_r_diagnostic_code_registry)
+  buckets <- vapply(registries, function(spec) spec$bucket, character(1))
   expect_true(all(buckets %in% c("design_note", "repair", "fit_note", "raw_only")),
               info = sprintf("invalid buckets: %s",
                              paste(setdiff(unique(buckets),
                                            c("design_note", "repair",
                                              "fit_note", "raw_only")),
                                    collapse = ", ")))
+  expect_false("design_weak_identifiability" %in%
+                 names(mixeff:::mm_diagnostic_code_registry))
+  expect_identical(
+    mixeff:::mm_r_diagnostic_code_registry$design_weak_identifiability$bucket,
+    "design_note"
+  )
   raw_only <- buckets == "raw_only"
   if (any(raw_only)) {
-    rationales <- vapply(mixeff:::mm_diagnostic_code_registry[raw_only],
+    rationales <- vapply(registries[raw_only],
                          function(spec) spec$rationale %||% "", character(1))
     expect_true(all(nzchar(rationales)),
                 info = sprintf(
@@ -116,6 +123,7 @@ test_that("each formattable bucket has a non-empty advice-line renderer", {
   }
   ds <- list(
     diag("scope_note", "scope note message"),
+    diag("design_weak_identifiability", "stim block is aliased"),
     diag("boundary_parameter", "theta on boundary", stage = "optimization"),
     diag("structural_refusal", "refusal message",
          suggested_actions = list("rewrite the term"))
@@ -177,7 +185,8 @@ test_that("mm_diagnostics_table warns once and attaches attribute on unknown cod
 })
 
 test_that("formatted code keeps mm_diagnostic_bucket aligned with the formatter family", {
-  reg <- mixeff:::mm_diagnostic_code_registry
+  reg <- c(mixeff:::mm_diagnostic_code_registry,
+           mixeff:::mm_r_diagnostic_code_registry)
   for (code in names(reg)) {
     expect_identical(
       mixeff:::mm_diagnostic_bucket(code), reg[[code]]$bucket,

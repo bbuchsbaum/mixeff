@@ -104,6 +104,8 @@ audit_design <- function(spec) {
     )
   }
   report <- mm_json_parse_audit_report(report_json)
+  supplemental <- mm_r_design_diagnostics(spec)
+  text <- mm_append_r_design_diagnostic_text(text, supplemental)
 
   out <- list(
     text                   = text,
@@ -111,7 +113,8 @@ audit_design <- function(spec) {
     report                 = report,
     random_term_cards      = report$random_term_cards %||% list(),
     cross_card_constraints = report$cross_card_constraints %||% list(),
-    diagnostics            = report$diagnostics %||% artifact$diagnostics %||% list()
+    diagnostics            = c(report$diagnostics %||% artifact$diagnostics %||% list(),
+                               supplemental)
   )
   class(out) <- "mm_audit"
   out

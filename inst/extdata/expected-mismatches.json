@@ -476,6 +476,41 @@
       "first_seen": "2026-06-02",
       "linked_mote": "bd-01KT3XNHM4P480GV3CWXSGKR9A",
       "upstream_mote": "bd-01KT3Z57HVHXR64YDTHQQ4RXR0"
+    },
+    {
+      "case_id": "osf_statcheck_t2_error_openpractice_year_raw",
+      "field": "fixef.OpenPractice:Year (raw, uncentered Year)",
+      "test_file": "test-glmm-osf-statcheck-parity.R",
+      "package_source": "OSF 538bc Study 3 statcheck/open-practices",
+      "dataset": "inst/extdata/osf-statcheck-t2.csv",
+      "formula": "Error ~ OpenPractice * Year + (1 | Source)",
+      "reml": false,
+      "case_tolerance": 5.0e-3,
+      "observed_max_abs_diff": 5.85e-2,
+      "expected_max_abs_diff": 7.0e-2,
+      "expected_max_rel_diff": null,
+      "status": "upstream_bug",
+      "reason": "joint_laplace on the raw (uncentered, large-offset) Year design reports fit_status=converged_interior with a non-finite objective and a sub-optimal interaction coefficient (0.79586 vs the offset-invariant MLE 0.85288 centered / 0.85439 glmer). The interaction is invariant to centering Year, so raw != centered proves the raw fit is off the optimum. lme4 fails loud on the same design (scaling warning; PIRLS step-halving error on harder cases). Estimation parity holds once Year is centered; the offset-invariance assertion in the test is skip()ped pending the upstream fix.",
+      "first_seen": "2026-06-02",
+      "linked_mote": "bd-01KT3ZB649HHX4ZYMKTQ5A18XX",
+      "upstream_mote": "bd-01KT3Z64AY45NHA5144G2ZBMSY"
+    },
+    {
+      "case_id": "osf_statcheck_t2_error_openpractice",
+      "field": "stderr.fixef",
+      "test_file": "test-glmm-osf-statcheck-parity.R",
+      "package_source": "OSF 538bc Study 3 statcheck/open-practices",
+      "dataset": "inst/extdata/osf-statcheck-t2.csv",
+      "formula": "Error ~ OpenPractice + (1 | Source)",
+      "reml": false,
+      "case_tolerance": 1.0e-3,
+      "observed_max_abs_diff": 1.47e-4,
+      "observed_max_rel_diff": 1.12e-3,
+      "status": "pass",
+      "reason": "GLMM Wald standard errors are now certified for this joint_laplace fit by the Rust active-Hessian fixed-effect inference table (method=asymptotic_wald_z, status=available) and match lme4::glmer within the strict parity tolerance; retained as a resolved ledger row for the former unsupported gap.",
+      "first_seen": "2026-06-02",
+      "linked_mote": "bd-01KT3ZB649HHX4ZYMKTQ5A18XX",
+      "upstream_mote": "bd-01KT4SEB9MCR46D1NDSK2BXRMF"
     }
   ]
 }

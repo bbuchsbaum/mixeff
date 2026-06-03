@@ -116,6 +116,23 @@ summary.mm_glmm <- function(object, tests = c("none", "coefficients"), ...) {
 ## available for univariate Wald z, but the mm_vcov_status attribute
 ## still flags the moderate / unavailable reliability for callers.
 mm_glmm_wald_z_inference <- function(object) {
+  parsed <- mm_json_parse_fixed_effect_inference_table(
+    object$artifact$fixed_effect_inference_table %||% NULL
+  )
+  if (!is.null(parsed)) {
+    rows <- parsed$table
+    if ("kind" %in% names(rows)) {
+      rows <- rows[rows$kind == "coefficient", , drop = FALSE]
+    }
+    if (nrow(rows)) {
+      rows <- rows[match(names(object$beta), rows$label), , drop = FALSE]
+      out <- list(table = rows, raw = parsed$raw)
+      class(out) <- c("mm_inference_table", "list")
+      attr(out, "mm_vcov_status") <- mm_glmm_inference_rows_status(rows)
+      return(out)
+    }
+  }
+
   beta <- as.numeric(object$beta)
   names(beta) <- names(object$beta)
   Vfull <- stats::vcov(object)
@@ -165,6 +182,26 @@ mm_glmm_wald_z_inference <- function(object) {
   out
 }
 
+mm_glmm_inference_rows_status <- function(rows) {
+  compact <- function(x) {
+    x <- unique(as.character(x))
+    x <- x[!is.na(x) & nzchar(x)]
+    if (length(x)) paste(x, collapse = ", ") else NA_character_
+  }
+  reason <- compact(rows$reason)
+  list(
+    status = if (length(rows$status) &&
+                 all(!is.na(rows$status) & rows$status == "available")) {
+      "available"
+    } else {
+      compact(rows$status)
+    },
+    method = compact(rows$method),
+    reliability = compact(rows$reliability),
+    reason = reason
+  )
+}
+
 #' @method print summary.mm_glmm
 #' @export
 print.summary.mm_glmm <- function(x, ...) {
@@ -206,15 +243,23 @@ mm_summary_verbose <- function(...) {
 }
 
 mm_summary_coefficients <- function(object, inference) {
+  beta_names <- names(object$beta)
+  beta <- unname(object$beta)
+  se <- if (!is.null(object$std_errors) &&
+            length(object$std_errors) == length(object$beta)) {
+    unname(object$std_errors)
+  } else {
+    rep(NA_real_, length(object$beta))
+  }
   rows <- if (!is.null(inference)) inference$table else NULL
   if (!is.null(rows) && nrow(rows) && "kind" %in% names(rows)) {
     rows <- rows[rows$kind == "coefficient", , drop = FALSE]
   }
   if (is.null(rows) || !nrow(rows)) {
     rows <- data.frame(
-      label = names(object$beta),
-      estimate = unname(object$beta),
-      std_error = unname(object$std_errors),
+      label = beta_names,
+      estimate = beta,
+      std_error = se,
       denominator_df = NA_real_,
       statistic = NA_real_,
       statistic_name = NA_character_,
@@ -223,12 +268,12 @@ mm_summary_coefficients <- function(object, inference) {
       stringsAsFactors = FALSE
     )
   } else {
-    rows <- rows[match(names(object$beta), rows$label), , drop = FALSE]
+    rows <- rows[match(beta_names, rows$label), , drop = FALSE]
     missing <- is.na(rows$label)
     if (any(missing)) {
-      rows$label[missing] <- names(object$beta)[missing]
-      rows$estimate[missing] <- unname(object$beta)[missing]
-      rows$std_error[missing] <- unname(object$std_errors)[missing]
+      rows$label[missing] <- beta_names[missing]
+      rows$estimate[missing] <- beta[missing]
+      rows$std_error[missing] <- se[missing]
       rows$denominator_df[missing] <- NA_real_
       rows$statistic[missing] <- NA_real_
       rows$statistic_name[missing] <- NA_character_

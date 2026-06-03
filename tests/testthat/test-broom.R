@@ -88,11 +88,23 @@ test_that("augment.mm_lmm adds .fitted and .resid", {
 
 test_that("tidy.mm_glmm returns Wald p-values for fixed effects", {
   skip_if_not_installed("generics")
+  # Certified Wald p-values require the joint_laplace estimator; the default
+  # fast-PIRLS path is uncertified and (correctly) yields NA std.error / p.value.
   fit <- glmm(y ~ x + (1 | g), mm_broom_binom_data(), family = binomial(),
-              control = mm_control(verbose = -1))
+              method = "joint_laplace", control = mm_control(verbose = -1))
   td <- generics::tidy(fit, effects = "fixed")
   expect_true("p.value" %in% names(td))
   expect_true(all(td$p.value >= 0 & td$p.value <= 1))
+  expect_equal(td$estimate, unname(fixef(fit)), tolerance = 1e-8)
+})
+
+test_that("tidy.mm_glmm withholds Wald p-values for uncertified PIRLS fits", {
+  skip_if_not_installed("generics")
+  fit <- glmm(y ~ x + (1 | g), mm_broom_binom_data(), family = binomial(),
+              method = "pirls_profiled", control = mm_control(verbose = -1))
+  td <- generics::tidy(fit, effects = "fixed")
+  expect_true(all(is.na(td$std.error)))
+  expect_true(all(is.na(td$p.value)))
   expect_equal(td$estimate, unname(fixef(fit)), tolerance = 1e-8)
 })
 

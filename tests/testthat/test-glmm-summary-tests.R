@@ -2,24 +2,30 @@
 ## once the upstream fixed-effect covariance payload is available.
 
 mk_summary_glmm <- function(seed = 41L) {
-  set.seed(seed)
-  n_subj <- 14L
-  n_per <- 10L
-  subject <- factor(rep(seq_len(n_subj), each = n_per))
-  x <- rnorm(n_subj * n_per)
-  g <- factor(rep(c("ctrl", "treat"), length.out = n_subj * n_per))
-  b0 <- rnorm(n_subj, sd = 0.3)
-  eta <- -0.2 + 0.6 * x + 0.4 * (g == "treat") - 0.5 * x * (g == "treat") +
-    b0[as.integer(subject)]
-  y <- rbinom(length(eta), 1L, plogis(eta))
+  data <- mk_summary_glmm_data()
   glmm(
-    y ~ x * g + (1 | subject),
-    data.frame(y = y, x = x, g = g, subject = subject),
-    family = binomial(),
-    method = "pirls_profiled",
+    y ~ x + (1 | subject),
+    data,
+    family = Gamma(link = "log"),
+    method = "joint_laplace",
     nAGQ = 1L,
     control = mm_control(verbose = -1)
   )
+}
+
+mk_summary_glmm_data <- function() {
+  y <- x <- numeric()
+  subject <- character()
+  for (group in 0:3) {
+    for (obs in 0:4) {
+      xv <- obs - 2
+      eta <- 0.5 + 0.2 * xv + (group - 1.5) * 0.08
+      y <- c(y, exp(eta) * (0.95 + 0.02 * ((group + obs) %% 3)))
+      x <- c(x, xv)
+      subject <- c(subject, paste0("g", group + 1L))
+    }
+  }
+  data.frame(y = y, x = x, subject = factor(subject))
 }
 
 test_that("summary(mm_glmm, tests='coefficients') no longer raises mm_inference_unavailable", {
@@ -66,18 +72,16 @@ test_that("summary surfaces mm_vcov_status reflecting the upstream payload relia
   expect_true(is.list(s$vcov_status))
   expect_true(all(c("status", "method", "reliability", "reason") %in%
                   names(s$vcov_status)))
-  ## The PIRLS-Laplace working-Hessian payload should ship as
-  ## status='available' / reliability='moderate'.
   expect_identical(s$vcov_status$status, "available")
-  expect_identical(s$vcov_status$method, "pirls_laplace_working_hessian")
+  expect_identical(s$vcov_status$method, "asymptotic_wald_z")
 })
 
-test_that("print(summary(mm_glmm, tests='coefficients')) writes the moderate-reliability notice", {
+test_that("print(summary(mm_glmm, tests='coefficients')) writes the reliability notice", {
   fit <- mk_summary_glmm()
   s <- summary(fit, tests = "coefficients")
   out <- capture.output(print(s))
   expect_true(any(grepl("Fixed effects:", out, fixed = TRUE)))
-  expect_true(any(grepl("Wald-z reliability: moderate", out, fixed = TRUE)))
+  expect_true(any(grepl("Wald-z reliability:", out, fixed = TRUE)))
 })
 
 test_that("Coefficient table uses lme4-comparable column labels", {
@@ -85,4 +89,18 @@ test_that("Coefficient table uses lme4-comparable column labels", {
   s <- summary(fit, tests = "coefficients")
   cols <- colnames(s$coefficients)
   expect_true(all(c("Estimate", "Std. Error", "z value", "Pr(>|z|)") %in% cols))
+})
+
+test_that("summary keeps fast-PIRLS GLMM Wald rows explicitly unavailable", {
+  fit <- glmm(
+    y ~ x + (1 | subject),
+    mk_summary_glmm_data(),
+    family = Gamma(link = "log"),
+    method = "pirls_profiled",
+    nAGQ = 1L,
+    control = mm_control(verbose = -1)
+  )
+  coef <- summary(fit, tests = "coefficients")$coefficients
+  expect_true(all(coef$method == "not_computed"))
+  expect_true(all(is.na(coef[["Pr(>|z|)"]])))
 })

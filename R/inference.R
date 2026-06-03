@@ -897,10 +897,10 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 
 #' Confidence intervals for fixed effects of a mixeff GLMM
 #'
-#' Asymptotic Wald intervals (`estimate +/- z * SE`) built from the stored
-#' fixed-effect standard errors, matching `glmer`'s default inference scale.
-#' Profile and bootstrap intervals are not certified for GLMMs by the upstream
-#' contract and are refused with a typed reason rather than approximated.
+#' Asymptotic Wald intervals (`estimate +/- z * SE`) built from the Rust
+#' fixed-effect inference table. Profile and bootstrap intervals are not
+#' certified for GLMMs by the upstream contract and are refused with a typed
+#' reason rather than approximated.
 #'
 #' @param object A fitted `mm_glmm`.
 #' @param parm Optional fixed-effect names or indices; defaults to all.
@@ -954,15 +954,39 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
       input = unknown
     )
   }
+  inference <- mm_glmm_wald_z_inference(object)
+  rows <- inference$table
+  rows <- rows[match(parm, rows$label), , drop = FALSE]
+  bad <- is.na(rows$label) |
+    is.na(rows$status) |
+    rows$status != "available" |
+    !is.finite(rows$std_error) |
+    rows$std_error <= 0
+  if (any(bad)) {
+    reason <- rows$reason[bad]
+    reason <- reason[!is.na(reason) & nzchar(reason)]
+    if (!length(reason)) {
+      reason <- "certified GLMM Wald inference is unavailable"
+    }
+    mm_abort(
+      message = paste(
+        "`confint(method = \"wald\")` is unavailable for this GLMM fit because",
+        paste(unique(reason), collapse = "; ")
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "glmm_wald_confint_unavailable",
+      input = parm[bad]
+    )
+  }
   alpha <- 1 - level
   crit <- stats::qnorm(1 - alpha / 2)
-  est <- object$beta[parm]
-  se <- object$std_errors[parm]
+  est <- stats::setNames(rows$estimate, rows$label)
+  se <- stats::setNames(rows$std_error, rows$label)
   out <- cbind(est - crit * se, est + crit * se)
   colnames(out) <- c(sprintf("%.1f %%", 100 * alpha / 2),
                      sprintf("%.1f %%", 100 * (1 - alpha / 2)))
-  attr(out, "method") <- "wald_asymptotic_from_stored_standard_errors"
-  attr(out, "status") <- "not_certified_by_rust_inference_contract"
+  attr(out, "method") <- "wald_asymptotic_from_rust_inference_table"
+  attr(out, "status") <- "available"
   mm_new_confint(out)
 }
 

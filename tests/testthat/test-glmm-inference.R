@@ -13,8 +13,11 @@ mm_glmm_inf_data <- function() {
 }
 
 test_that("contrast.mm_glmm gives Wald z inference matching the coefficient", {
+  # joint_laplace is the glmer-equivalent estimator whose fixed-effect Wald
+  # inference is certified by the engine; contrast consumes that certified
+  # covariance, so SE/z/p are available and match fit$std_errors.
   fit <- glmm(y ~ x + z + (1 | g), mm_glmm_inf_data(), family = binomial(),
-              control = mm_control(verbose = -1))
+              method = "joint_laplace", control = mm_control(verbose = -1))
   # contrast selecting the 'x' coefficient
   L <- c(0, 1, 0)
   ct <- contrast(fit, L)
@@ -27,9 +30,25 @@ test_that("contrast.mm_glmm gives Wald z inference matching the coefficient", {
   expect_true(ct$table$p_value >= 0 && ct$table$p_value <= 1)
 })
 
+test_that("contrast.mm_glmm withholds Wald inference for uncertified PIRLS fits", {
+  # The default fast-PIRLS path is not certified for fixed-effect Wald
+  # inference, so contrast reports the estimate but withholds SE/z/p with a
+  # reason rather than fabricating numbers from the uncertified working Hessian
+  # (no fake certainty), matching summary()/confint()/tidy().
+  fit <- glmm(y ~ x + z + (1 | g), mm_glmm_inf_data(), family = binomial(),
+              method = "pirls_profiled", control = mm_control(verbose = -1))
+  ct <- contrast(fit, c(0, 1, 0))
+  expect_equal(ct$table$estimate, unname(fixef(fit)["x"]), tolerance = 1e-8)
+  expect_true(is.na(ct$table$std_error))
+  expect_true(is.na(ct$table$statistic))
+  expect_true(is.na(ct$table$p_value))
+  expect_identical(ct$table$method, "not_computed")
+  expect_true(is.character(ct$table$reason) && nzchar(ct$table$reason))
+})
+
 test_that("contrast.mm_glmm honours rhs and the wald alias", {
   fit <- glmm(y ~ x + z + (1 | g), mm_glmm_inf_data(), family = binomial(),
-              control = mm_control(verbose = -1))
+              method = "joint_laplace", control = mm_control(verbose = -1))
   a <- contrast(fit, c(0, 1, 0), rhs = 0.5, method = "wald")
   expect_equal(a$table$estimate, unname(fixef(fit)["x"]) - 0.5, tolerance = 1e-8)
   expect_identical(a$table$method, "asymptotic")

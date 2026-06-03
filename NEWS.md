@@ -10,6 +10,15 @@
   suppressible notice (class `mm_grouping_coercion_notice`; silence with
   `mm_control(verbose = -1)`), never silent. Surfaced by an in-the-wild OSF
   `glmer` reproduction with crossed `(1 | ID) + (1 | Title)` effects.
+* Certified GLMM Wald inference: when fit with `method = "joint_laplace"`,
+  `summary()`, `confint(method = "wald")`, `contrast()`, and `tidy()` now report
+  engine-certified fixed-effect standard errors, Wald *z* statistics, and
+  *p*-values that match `lme4::glmer()` within tolerance. The default
+  `method = "pirls_profiled"` path is not certified for fixed-effect inference,
+  so all four surfaces withhold SE/*z*/*p* (returning `NA` with a reason and a
+  `vcov_status` of `"unsupported"`) rather than fabricate them from the
+  uncertified working Hessian — consistent with the package's "no fake
+  certainty" contract.
 * `update()` for `mm_lmm` / `mm_glmm`: formula edits (`. ~ . - x`,
   preserving random-effect bars and `||`), `REML`/`weights`/`family`/
   `offset`/`method`/`control` overrides, new `data`, and `evaluate = FALSE`.

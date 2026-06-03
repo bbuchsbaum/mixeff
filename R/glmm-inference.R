@@ -22,9 +22,31 @@ contrast.mm_glmm <- function(fit, L, rhs = 0,
   dimnames(V) <- list(names(beta), names(beta))
 
   estimate <- as.numeric(L %*% beta) - rhs
-  se <- sqrt(diag(L %*% V %*% t(L)))
-  statistic <- estimate / se
-  p <- 2 * stats::pnorm(abs(statistic), lower.tail = FALSE)
+
+  # Gate Wald inference on the certified fixed-effect inference table -- the same
+  # signal summary()/confint() consume. vcov()'s mm_status reads "available" even
+  # for the uncertified fast-PIRLS working Hessian, so it cannot be the gate (see
+  # the GLMM Wald uptake / upstream bd-01KT3Z64YE5QN7626PQRJSJJVA). For an
+  # uncertified fit we report the contrast estimate but withhold SE/z/p rather
+  # than fabricate inference from an uncertified covariance ("no fake certainty"),
+  # matching summary.mm_glmm / confint.mm_glmm and tidy.mm_glmm.
+  status <- attr(mm_glmm_wald_z_inference(fit), "mm_vcov_status")
+  certified <- identical(status$status %||% "available", "available")
+  if (certified) {
+    se <- sqrt(diag(L %*% V %*% t(L)))
+    statistic <- estimate / se
+    p <- 2 * stats::pnorm(abs(statistic), lower.tail = FALSE)
+    statistic_name <- "z"
+    row_method <- "asymptotic"
+    reason <- NA_character_
+  } else {
+    se <- rep(NA_real_, nrow(L))
+    statistic <- rep(NA_real_, nrow(L))
+    p <- rep(NA_real_, nrow(L))
+    statistic_name <- NA_character_
+    row_method <- "not_computed"
+    reason <- status$reason %||% "certified GLMM Wald inference is unavailable"
+  }
 
   table <- data.frame(
     contrast = rownames(L),
@@ -33,14 +55,14 @@ contrast.mm_glmm <- function(fit, L, rhs = 0,
     std_error = se,
     df = NA_real_,
     statistic = statistic,
-    statistic_name = "z",
+    statistic_name = statistic_name,
     p_value = p,
-    method = "asymptotic",
+    method = row_method,
     requested_method = method,
-    status = mm_lincomb_status_from_vcov(Vfull),
+    status = status,
     reliability = "asymptotic_wald",
     estimability = "not_assessed",
-    reason = NA_character_,
+    reason = reason,
     stringsAsFactors = FALSE,
     check.names = FALSE
   )

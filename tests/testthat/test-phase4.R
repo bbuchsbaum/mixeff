@@ -73,13 +73,16 @@ test_that("glmm() fits expanded cbpp binomial smoke through profiled PIRLS", {
   expect_s3_class(summary(fit), "summary.mm_glmm")
   expect_true(all(is.finite(diag(vcov(fit)))))
   expect_equal(nrow(model.matrix(fit)), nrow(df))
-  ## Upstream payload now serializes the GLMM fixed-effect covariance,
-  ## so Wald-z coefficient tests are available with moderate reliability.
+  ## The default fast-PIRLS path is NOT certified for fixed-effect Wald
+  ## inference: summary() flags the covariance status unsupported and withholds
+  ## SE/z/p (no fake certainty) rather than reporting certified glmer-style
+  ## columns. Certified Wald requires method = "joint_laplace" (see
+  ## test-glmm-summary-tests.R / test-glmm-confint.R).
   s_coef <- summary(fit, tests = "coefficients")
   expect_s3_class(s_coef, "summary.mm_glmm")
-  expect_true(all(c("Estimate", "Std. Error", "z value", "Pr(>|z|)") %in%
-                  colnames(s_coef$coefficients)))
-  expect_identical(s_coef$vcov_status$status, "available")
+  expect_identical(s_coef$vcov_status$status, "unsupported")
+  expect_true("Estimate" %in% colnames(s_coef$coefficients))
+  expect_true(all(is.na(s_coef$coefficients[, "p.value"])))
 })
 
 test_that("glmm() family/link surface matches the upstream support contract", {

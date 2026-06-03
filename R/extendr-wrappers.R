@@ -189,6 +189,34 @@ mm_lmm_cond_var_json <- function(formula, reml, column_order, numeric_columns, c
 #' @noRd
 mm_lmm_predict_new_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, allow_new_levels_policy) .Call(wrap__mm_lmm_predict_new_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, allow_new_levels_policy)
 
+#' New-data prediction VARIANCE / intervals through
+#' `LinearMixedModel::predict_new_variance_with_level`.
+#'
+#' Returns the engine `PredictionVariancePayload` JSON (serde): one row per
+#' `newdata` row carrying `se_fit`, the fixed / random / covariance variance
+#' components, `confidence_*` / `prediction_*` bounds at `level`, and a
+#' row-level `status` / `reason` (unavailable for new grouping levels). The R
+#' side maps unavailable rows to `NA` with the reason, preserving the
+#' no-fake-certainty contract.
+#'
+#' `allow_new_levels_policy` is the string form of `NewReLevels`
+#' ("error" | "population" | "missing").
+#'
+#' @noRd
+mm_lmm_predict_new_variance_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, allow_new_levels_policy, level) .Call(wrap__mm_lmm_predict_new_variance_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, allow_new_levels_policy, level)
+
+#' New-data prediction VARIANCE / intervals for a GLMM through
+#' `GeneralizedLinearMixedModel::predict_new_variance_with_level`.
+#'
+#' `scale` is the string form of `GlmmPredictionScale` ("link" | "response");
+#' `allow_new_levels_policy` is the string form of `NewReLevels`. Returns the
+#' engine `PredictionVariancePayload` JSON. Certified (joint-Laplace) fits
+#' return available conditional rows; fast-PIRLS / new-level rows are marked
+#' degraded / unavailable with a row-level reason.
+#'
+#' @noRd
+mm_glmm_predict_new_variance_json <- function(formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, weights, offset, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, scale, allow_new_levels_policy, level) .Call(wrap__mm_glmm_predict_new_variance_json, formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, weights, offset, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, scale, allow_new_levels_policy, level)
+
 #' Profile-likelihood confidence intervals through
 #' `mixeff_rs::stats::profile_confint_payload`.
 #'

@@ -9,8 +9,9 @@ use mixeff_rs::formula::parse_formula;
 use mixeff_rs::model::{
     parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
     BootstrapSeedRecord, BootstrapTarget, Family, FitOptions, FitToleranceOverrides,
-    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GlmmFitOptions, LinearMixedModel,
-    LinkFunction, MixedModelBootstrap, MixedModelFit, NewReLevels, OptimizerControl,
+    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GlmmFitOptions, GlmmPredictionScale,
+    LinearMixedModel, LinkFunction, MixedModelBootstrap, MixedModelFit, NewReLevels,
+    OptimizerControl,
 };
 use mixeff_rs::types::Optimizer;
 use mixeff_rs::stats::{
@@ -1964,6 +1965,239 @@ fn mm_lmm_predict_new_json(
     })
 }
 
+/// New-data prediction VARIANCE / intervals through
+/// `LinearMixedModel::predict_new_variance_with_level`.
+///
+/// Returns the engine `PredictionVariancePayload` JSON (serde): one row per
+/// `newdata` row carrying `se_fit`, the fixed / random / covariance variance
+/// components, `confidence_*` / `prediction_*` bounds at `level`, and a
+/// row-level `status` / `reason` (unavailable for new grouping levels). The R
+/// side maps unavailable rows to `NA` with the reason, preserving the
+/// no-fake-certainty contract.
+///
+/// `allow_new_levels_policy` is the string form of `NewReLevels`
+/// ("error" | "population" | "missing").
+///
+/// @noRd
+#[extendr]
+#[allow(clippy::too_many_arguments)]
+fn mm_lmm_predict_new_variance_json(
+    formula: &str,
+    reml: bool,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    weights: Doubles,
+    control_json: &str,
+    new_column_order: Strings,
+    new_numeric_columns: List,
+    new_categorical_values: List,
+    new_categorical_levels: List,
+    allow_new_levels_policy: &str,
+    level: f64,
+) -> std::result::Result<String, String> {
+    let model = fit_lmm_from_bridge_data(
+        formula,
+        reml,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &weights,
+        control_json,
+    )?;
+    let newdf = data::build_dataframe(
+        &new_numeric_columns,
+        &new_categorical_values,
+        &new_categorical_levels,
+        &new_column_order,
+    )?;
+    let policy = match allow_new_levels_policy {
+        "error" => NewReLevels::Error,
+        "population" => NewReLevels::Population,
+        "missing" => NewReLevels::Missing,
+        other => {
+            return Err(format!(
+                "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
+                other
+            ));
+        }
+    };
+    let payload = model
+        .predict_new_variance_with_level(&newdf, policy, level)
+        .map_err(|e| {
+            format!(
+                "mm_inference_unavailable: predict_new_variance failed: {}",
+                e
+            )
+        })?;
+    serde_json::to_string(&payload).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize predict_new_variance payload: {}",
+            e
+        )
+    })
+}
+
+/// Reconstruct and fit a `GeneralizedLinearMixedModel` from R-side bridge data.
+/// Mirrors the construction/fit in `mm_fit_glmm_json` so post-fit queries
+/// (e.g. prediction variance) reproduce the same fit. Kept separate from the
+/// fit-result bridge so the latter's serialization path is left untouched.
+#[allow(clippy::too_many_arguments)]
+fn fit_glmm_from_bridge_data(
+    formula: &str,
+    family: &str,
+    link: &str,
+    method: &str,
+    n_agq: i32,
+    column_order: &Strings,
+    numeric_columns: &List,
+    categorical_values: &List,
+    categorical_levels: &List,
+    weights: &Doubles,
+    offset: &Doubles,
+    control_json: &str,
+) -> std::result::Result<GeneralizedLinearMixedModel, String> {
+    let _control: Value = serde_json::from_str(control_json)
+        .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
+    let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
+    let df = data::build_dataframe(
+        numeric_columns,
+        categorical_values,
+        categorical_levels,
+        column_order,
+    )?;
+    let family = glmm_family(family)?;
+    let link = glmm_link(link)?;
+    let (fast, _method_label) = glmm_method(method, n_agq)?;
+    let n_agq = usize::try_from(n_agq)
+        .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
+    let weights = optional_case_weights(weights, df.nrow())?;
+    let offset = optional_offset(offset, df.nrow())?;
+    let mut model = match (weights, offset) {
+        (None, None) => GeneralizedLinearMixedModel::new(parsed, &df, family, Some(link)),
+        (Some(w), None) => {
+            GeneralizedLinearMixedModel::new_with_weights(parsed, &df, family, Some(link), w)
+        }
+        (None, Some(o)) => {
+            GeneralizedLinearMixedModel::new_with_offset(parsed, &df, family, Some(link), o)
+        }
+        (Some(w), Some(o)) => GeneralizedLinearMixedModel::new_with_weights_and_offset(
+            parsed,
+            &df,
+            family,
+            Some(link),
+            w,
+            o,
+        ),
+    }
+    .map_err(|e| format!("mm_fit_error: failed to construct GLMM: {}", e))?;
+    let optimizer_control = parse_optimizer_control(&_control)?;
+    let glmm_options = if fast {
+        GlmmFitOptions::fast_laplace()
+    } else {
+        GlmmFitOptions::joint_laplace()
+    }
+    .with_n_agq(n_agq)
+    .with_verbose(false)
+    .with_optimizer_control(optimizer_control);
+    model
+        .fit_with_glmm_options(glmm_options)
+        .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
+    Ok(model)
+}
+
+/// New-data prediction VARIANCE / intervals for a GLMM through
+/// `GeneralizedLinearMixedModel::predict_new_variance_with_level`.
+///
+/// `scale` is the string form of `GlmmPredictionScale` ("link" | "response");
+/// `allow_new_levels_policy` is the string form of `NewReLevels`. Returns the
+/// engine `PredictionVariancePayload` JSON. Certified (joint-Laplace) fits
+/// return available conditional rows; fast-PIRLS / new-level rows are marked
+/// degraded / unavailable with a row-level reason.
+///
+/// @noRd
+#[extendr]
+#[allow(clippy::too_many_arguments)]
+fn mm_glmm_predict_new_variance_json(
+    formula: &str,
+    family: &str,
+    link: &str,
+    method: &str,
+    n_agq: i32,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    weights: Doubles,
+    offset: Doubles,
+    control_json: &str,
+    new_column_order: Strings,
+    new_numeric_columns: List,
+    new_categorical_values: List,
+    new_categorical_levels: List,
+    scale: &str,
+    allow_new_levels_policy: &str,
+    level: f64,
+) -> std::result::Result<String, String> {
+    let model = fit_glmm_from_bridge_data(
+        formula,
+        family,
+        link,
+        method,
+        n_agq,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &weights,
+        &offset,
+        control_json,
+    )?;
+    let newdf = data::build_dataframe(
+        &new_numeric_columns,
+        &new_categorical_values,
+        &new_categorical_levels,
+        &new_column_order,
+    )?;
+    let scale = match scale {
+        "link" => GlmmPredictionScale::Link,
+        "response" => GlmmPredictionScale::Response,
+        other => {
+            return Err(format!(
+                "mm_arg_error: unsupported prediction scale `{}`; expected one of link|response",
+                other
+            ));
+        }
+    };
+    let policy = match allow_new_levels_policy {
+        "error" => NewReLevels::Error,
+        "population" => NewReLevels::Population,
+        "missing" => NewReLevels::Missing,
+        other => {
+            return Err(format!(
+                "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
+                other
+            ));
+        }
+    };
+    let payload = model
+        .predict_new_variance_with_level(&newdf, scale, policy, level)
+        .map_err(|e| {
+            format!(
+                "mm_inference_unavailable: GLMM predict_new_variance failed: {}",
+                e
+            )
+        })?;
+    serde_json::to_string(&payload).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize GLMM predict_new_variance payload: {}",
+            e
+        )
+    })
+}
+
 /// Profile-likelihood confidence intervals through
 /// `mixeff_rs::stats::profile_confint_payload`.
 ///
@@ -2061,6 +2295,8 @@ extendr_module! {
     fn mm_audit_report_json;
     fn mm_lmm_cond_var_json;
     fn mm_lmm_predict_new_json;
+    fn mm_lmm_predict_new_variance_json;
+    fn mm_glmm_predict_new_variance_json;
     fn mm_lmm_profile_confint_json;
     fn mm_interrupt_demo;
 }

@@ -27,8 +27,8 @@
 An \code{mm_confint} matrix of lower/upper bounds.
 }
 \description{
-Asymptotic Wald intervals (\verb{estimate +/- z * SE}) built from the stored
-fixed-effect standard errors, matching \code{glmer}'s default inference scale.
-Profile and bootstrap intervals are not certified for GLMMs by the upstream
-contract and are refused with a typed reason rather than approximated.
+Asymptotic Wald intervals (\verb{estimate +/- z * SE}) built from the Rust
+fixed-effect inference table. Profile and bootstrap intervals are not
+certified for GLMMs by the upstream contract and are refused with a typed
+reason rather than approximated.
 }

@@ -67,6 +67,12 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   data <- prep$data
   weights <- prep$weights
 
+  # lme4 parity: grouping variables must be categorical. Coerce non-factor /
+  # non-character grouping columns to factors (announced, not silent) so an
+  # integer subject/item ID does not hit the native "grouping factor not
+  # categorical" refusal.
+  data <- mm_apply_grouping_coercion(formula, data, control$verbose)
+
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec)
   if (control$verbose >= 0L) {
@@ -222,6 +228,105 @@ mm_spec_grouping_columns <- function(spec) {
     }
   }
   out
+}
+
+# Recursively collect the random-effect bar terms (`(... | g)`, including the
+# `||` uncorrelated form) from a formula's right-hand side. A pared-down
+# equivalent of lme4::findbars() that takes no lme4 dependency. Returns a list
+# of `call` objects, each a `|`/`||` expression whose third element is the
+# grouping expression.
+mm_find_bars <- function(term) {
+  if (!is.call(term)) {
+    return(list())
+  }
+  op <- term[[1L]]
+  if (identical(op, quote(`|`)) || identical(op, quote(`||`))) {
+    return(list(term))
+  }
+  if (identical(op, quote(`(`))) {
+    return(mm_find_bars(term[[2L]]))
+  }
+  # Recurse into the operands of +, *, :, etc.
+  do.call(c, lapply(as.list(term)[-1L], mm_find_bars))
+}
+
+# Names of the variables that appear as grouping factors (right of a `|`) in an
+# lme4-style formula. `(1 + x | a:b)` and `(1 | a/b)` both contribute `a` and
+# `b`. Used to decide which columns must be categorical before the fit.
+mm_formula_grouping_vars <- function(formula) {
+  if (!inherits(formula, "formula")) {
+    return(character(0))
+  }
+  rhs <- formula[[length(formula)]]
+  bars <- mm_find_bars(rhs)
+  if (!length(bars)) {
+    return(character(0))
+  }
+  unique(unlist(lapply(bars, function(b) all.vars(b[[3L]])), use.names = FALSE))
+}
+
+# Coerce any grouping variable that is not already categorical (factor or
+# character) to a factor, matching lme4 / nlme / glmmTMB, which all silently
+# factor() their grouping variables. The engine's data bridge sends
+# numeric/integer/logical columns as numeric, so an integer ID column would
+# otherwise be rejected by the native fit constructor ("grouping factor not
+# categorical"). This is *not* silent surgery: the caller surfaces a typed,
+# suppressible notice naming every coerced column (see
+# `mm_grouping_coercion_notice()`).
+#
+# Character grouping columns are left untouched — they are already categorical
+# in the bridge, and re-leveling them would only churn random-effect labels.
+#
+# @return list(data, coerced, classes): the (possibly modified) data frame, the
+#   names of coerced columns, and a named character vector of their original
+#   storage classes (parallel to `coerced`).
+mm_coerce_grouping_factors <- function(formula, data) {
+  gvars <- intersect(mm_formula_grouping_vars(formula), names(data))
+  coerced <- character(0)
+  classes <- character(0)
+  for (v in gvars) {
+    col <- data[[v]]
+    if (is.factor(col) || is.character(col)) {
+      next
+    }
+    classes[[v]] <- paste(class(col), collapse = "/")
+    data[[v]] <- factor(col)
+    coerced <- c(coerced, v)
+  }
+  list(data = data, coerced = coerced, classes = classes)
+}
+
+# Human-readable, suppressible notice describing a grouping-factor coercion.
+mm_grouping_coercion_notice <- function(coerced, classes) {
+  items <- vapply(
+    coerced,
+    function(v) sprintf("`%s` (%s)", v, classes[[v]]),
+    character(1)
+  )
+  sprintf(
+    paste0(
+      "Coerced grouping variable%s %s to a factor for the random-effects ",
+      "structure (lme4 does the same). The fit is unaffected; wrap the ",
+      "variable in `factor()` yourself to control the level order. Silence ",
+      "this notice with mm_control(verbose = -1)."
+    ),
+    if (length(coerced) > 1L) "s" else "",
+    paste(items, collapse = ", ")
+  )
+}
+
+# Coerce grouping variables to factors and (unless silenced) emit the notice.
+# Shared by lmm() and glmm(); call before compile_model() so the whole audit /
+# explain / fit pipeline sees consistent categorical grouping.
+mm_apply_grouping_coercion <- function(formula, data, verbose) {
+  res <- mm_coerce_grouping_factors(formula, data)
+  if (length(res$coerced) && isTRUE(verbose >= 0L)) {
+    mm_inform(
+      mm_grouping_coercion_notice(res$coerced, res$classes),
+      class = "mm_grouping_coercion_notice"
+    )
+  }
+  res$data
 }
 
 # lme4-style data preparation shared by the fit drivers: apply a `subset`

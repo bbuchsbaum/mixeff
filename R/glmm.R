@@ -98,6 +98,12 @@ glmm <- function(formula,
   weights <- prep$weights
   engine_family <- prep$engine_family
 
+  # lme4 parity: grouping variables must be categorical. Coerce non-factor /
+  # non-character grouping columns to factors (announced, not silent) so an
+  # integer subject/item ID does not hit the native "grouping factor not
+  # categorical" refusal.
+  data <- mm_apply_grouping_coercion(formula, data, control$verbose)
+
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec, lmm = FALSE)
   if (control$verbose >= 0L) {

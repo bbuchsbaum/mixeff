@@ -2,6 +2,14 @@
 
 ## lme4 functional-equivalence layer
 
+* Grouping-variable coercion: `lmm()` / `glmm()` now coerce a non-categorical
+  grouping variable (e.g. an integer subject id or numeric item code) to a
+  factor for the random-effects structure, matching `lme4`/`nlme`/`glmmTMB`.
+  Previously such a column was rejected by the native fit with
+  "grouping factor not categorical". The coercion is announced via a
+  suppressible notice (class `mm_grouping_coercion_notice`; silence with
+  `mm_control(verbose = -1)`), never silent. Surfaced by an in-the-wild OSF
+  `glmer` reproduction with crossed `(1 | ID) + (1 | Title)` effects.
 * `update()` for `mm_lmm` / `mm_glmm`: formula edits (`. ~ . - x`,
   preserving random-effect bars and `||`), `REML`/`weights`/`family`/
   `offset`/`method`/`control` overrides, new `data`, and `evaluate = FALSE`.

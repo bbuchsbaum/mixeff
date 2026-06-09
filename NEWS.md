@@ -19,6 +19,21 @@
   `vcov_status` of `"unsupported"`) rather than fabricate them from the
   uncertified working Hessian — consistent with the package's "no fake
   certainty" contract.
+* Conditional prediction standard errors and intervals: `predict()` for
+  `mm_lmm` / `mm_glmm` with `re.form = NULL` now routes `se.fit` and
+  `interval` through the engine's prediction-variance payload, which includes
+  the random-effect (BLUP) variance and the fixed/random covariance — a
+  surface `lme4::predict.merMod` does not offer at all. LMMs get conditional
+  `se.fit` plus `"confidence"` and `"prediction"` intervals; GLMMs fit with
+  `method = "joint_laplace"` get conditional `se.fit` and `"confidence"`
+  intervals on the link or response scale (variance propagated through the
+  link by the engine). Rows the engine does not certify are withheld, not
+  fabricated: the default `pirls_profiled` GLMM estimator (engine status
+  `"degraded"`, uncertified working-Hessian variance) and unseen grouping
+  levels under `allow.new.levels = TRUE` return `NA` with the engine's reason
+  in the `mm_reason` attribute. GLMM prediction (future-observation)
+  intervals remain refused because the payload omits the family variance
+  term. Population (`re.form = NA`) SEs/intervals are unchanged.
 * `update()` for `mm_lmm` / `mm_glmm`: formula edits (`. ~ . - x`,
   preserving random-effect bars and `||`), `REML`/`weights`/`family`/
   `offset`/`method`/`control` overrides, new `data`, and `evaluate = FALSE`.

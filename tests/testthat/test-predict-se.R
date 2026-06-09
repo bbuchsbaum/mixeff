@@ -1,4 +1,6 @@
-# Tests for population (fixed-effect) prediction standard errors and intervals.
+# Tests for prediction standard errors and intervals: population
+# (fixed-effect Wald, R-side) and conditional (engine prediction-variance
+# payload including the random-effect contribution).
 
 mm_se_data <- function() {
   set.seed(321)
@@ -52,15 +54,41 @@ test_that("population se.fit works on newdata", {
   expect_true(all(is.finite(out$se.fit) & out$se.fit > 0))
 })
 
-test_that("conditional SE/intervals are refused or NA", {
+test_that("conditional se.fit comes from the engine prediction variance", {
   df <- mm_se_data()
   fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
-  # conditional (default re.form = NULL) interval is refused
-  expect_error(predict(fit, interval = "confidence"),
-               class = "mm_inference_unavailable")
-  # conditional se.fit is NA with a reason
-  out <- predict(fit, se.fit = TRUE)
+  out <- predict(fit, se.fit = TRUE)  # default re.form = NULL (conditional)
+  expect_true(is.list(out) && all(c("fit", "se.fit") %in% names(out)))
+  expect_true(all(is.finite(out$se.fit) & out$se.fit > 0))
+  # the engine payload's fixed component must reproduce the population Wald SE
+  pop <- predict(fit, re.form = NA, se.fit = TRUE)
+  pv <- mm_lmm_prediction_variance(fit, fit$model_frame, FALSE, 0.95)
+  expect_equal(sqrt(pv$fixed_variance), unname(pop$se.fit), tolerance = 1e-6)
+  expect_true(all(pv$status == "available"))
+})
+
+test_that("conditional intervals bracket fit and prediction is wider", {
+  df <- mm_se_data()
+  fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+  ci <- predict(fit, interval = "confidence", level = 0.95)
+  pi <- predict(fit, interval = "prediction", level = 0.95)
+  expect_true(is.matrix(ci) && all(is.finite(ci)))
+  expect_equal(colnames(ci), c("fit", "lwr", "upr"))
+  expect_true(all(ci[, "lwr"] < ci[, "fit"] & ci[, "fit"] < ci[, "upr"]))
+  se <- predict(fit, se.fit = TRUE)$se.fit
+  expect_equal(unname(ci[, "upr"] - ci[, "fit"]),
+               unname(qnorm(0.975) * as.numeric(se)), tolerance = 1e-6)
+  expect_true(all((pi[, "upr"] - pi[, "lwr"]) > (ci[, "upr"] - ci[, "lwr"])))
+})
+
+test_that("conditional se.fit on unseen levels is NA with an engine reason", {
+  df <- mm_se_data()
+  fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+  nd <- data.frame(x = c(0, 1), g = factor(c("999", "998")))
+  out <- predict(fit, newdata = nd, re.form = NULL, se.fit = TRUE,
+                 allow.new.levels = TRUE)
+  expect_true(all(is.finite(out$fit)))
   expect_true(all(is.na(out$se.fit)))
-  expect_identical(attr(out$se.fit, "mm_unavailable_reason"),
-                   "conditional_prediction_se_unavailable")
+  reasons <- attr(out$se.fit, "mm_reason")
+  expect_true(is.character(reasons) && all(!is.na(reasons)))
 })

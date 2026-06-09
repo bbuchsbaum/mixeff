@@ -505,16 +505,25 @@ mm_expect_prediction_lme4_parity <- function(case) {
                          ignore_attr = TRUE,
                          info = sprintf("predict()/fitted() mismatch for case `%s`",
                                         case$id))
+  # lme4::predict.merMod offers no conditional se.fit, so there is no lme4
+  # reference value here. Assert the engine prediction-variance contract
+  # instead: finite positive SEs whose fixed component reproduces the
+  # population (re.form = NA) Wald SE.
   se <- stats::predict(pair$mixeff, se.fit = TRUE)
   testthat::expect_equal(se$fit, stats::predict(pair$mixeff),
                          ignore_attr = TRUE,
                          info = sprintf("predict(se.fit=TRUE)$fit mismatch for case `%s`",
                                         case$id))
-  testthat::expect_true(all(is.na(se$se.fit)),
-                        info = sprintf("predict(se.fit=TRUE) should expose unavailable SEs for case `%s`",
+  testthat::expect_true(all(is.finite(se$se.fit)) && all(se$se.fit > 0),
+                        info = sprintf("conditional se.fit should be finite and positive for case `%s`",
                                        case$id))
-  testthat::expect_identical(attr(se, "mm_unavailable_reason"),
-                             "conditional_prediction_se_unavailable")
+  pop_se <- stats::predict(pair$mixeff, re.form = NA, se.fit = TRUE)$se.fit
+  pv <- mm_lmm_prediction_variance(pair$mixeff, pair$mixeff$model_frame,
+                                   FALSE, 0.95)
+  testthat::expect_equal(sqrt(pv$fixed_variance), unname(pop_se),
+                         tolerance = 1e-6,
+                         info = sprintf("engine fixed_variance should match population se for case `%s`",
+                                        case$id))
 
   # newdata prediction is wired through mm_lmm_predict_new_json (Stage C.1,
   # bd-01KRCKCZJ5B5AQS5BV77VMM8ZF). Re-running on the training rows must
@@ -538,9 +547,17 @@ mm_expect_prediction_lme4_parity <- function(case) {
                    case$id, "predict_re_form_zero", tol$fitted,
                    "predict re.form=~0 on in-sample data")
 
-  testthat::expect_error(
-    stats::predict(pair$mixeff, interval = "confidence"),
-    class = "mm_inference_unavailable"
-  )
+  ci <- stats::predict(pair$mixeff, interval = "confidence")
+  testthat::expect_true(is.matrix(ci) && all(is.finite(ci)),
+                        info = sprintf("conditional confidence interval should be finite for case `%s`",
+                                       case$id))
+  testthat::expect_true(all(ci[, "lwr"] < ci[, "fit"]) && all(ci[, "fit"] < ci[, "upr"]),
+                        info = sprintf("conditional confidence interval should bracket fit for case `%s`",
+                                       case$id))
+  testthat::expect_equal(unname(ci[, "upr"] - ci[, "fit"]),
+                         unname(stats::qnorm(0.975) * as.numeric(se$se.fit)),
+                         tolerance = 1e-6,
+                         info = sprintf("confidence half-width should equal z*se for case `%s`",
+                                        case$id))
   invisible(pair)
 }

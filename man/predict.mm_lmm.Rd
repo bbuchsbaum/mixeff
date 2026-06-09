@@ -59,14 +59,18 @@ the population mean (zero random effect), matching
 \item{se.fit}{Logical; when \code{TRUE}, returns a list with \code{fit} and \code{se.fit}.
 For population predictions (\code{re.form = NA}) the standard error is the
 Wald SE of the fixed-effect linear predictor, \verb{sqrt(diag(X V X'))}. For
-conditional predictions (\code{re.form = NULL}) the SE is \code{NA} with a reason
-(random-effect posterior variances are not certified; lme4 likewise
-returns no conditional SE).}
+conditional predictions (\code{re.form = NULL}) the SE comes from the engine
+prediction-variance payload, which adds the random-effect contribution
+(BLUP variance and the fixed/random covariance). Rows the engine cannot
+certify — e.g. unseen grouping levels under \code{allow.new.levels = TRUE} —
+return \code{NA} with the engine's reason in the \code{mm_reason} attribute.
+(\code{lme4::predict.merMod} offers no conditional SE at all.)}
 
-\item{interval}{Interval type for population (\code{re.form = NA}) predictions:
-\code{"confidence"} for the mean (\verb{fit +/- z*se}) or \code{"prediction"} for a new
-observation (adds the residual variance). Conditional intervals raise
-\code{mm_inference_unavailable}. Returns a matrix with \code{fit}/\code{lwr}/\code{upr}.}
+\item{interval}{Interval type: \code{"confidence"} for the fitted mean or
+\code{"prediction"} for a new observation (adds the residual variance).
+Population (\code{re.form = NA}) intervals are \verb{fit +/- z*se} computed R-side;
+conditional (\code{re.form = NULL}) bounds come from the engine
+prediction-variance payload. Returns a matrix with \code{fit}/\code{lwr}/\code{upr}.}
 
 \item{level}{Confidence level for \code{interval} / \code{se.fit} intervals.}
 

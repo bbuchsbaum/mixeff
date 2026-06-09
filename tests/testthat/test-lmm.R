@@ -77,9 +77,7 @@ test_that("standard extractors return stored fit quantities", {
 
   se <- stats::predict(fit, se.fit = TRUE)
   expect_named(se, c("fit", "se.fit"))
-  expect_true(all(is.na(se$se.fit)))
-  expect_identical(attr(se, "mm_unavailable_reason"),
-                   "conditional_prediction_se_unavailable")
+  expect_true(all(is.finite(se$se.fit) & se$se.fit > 0))
 })
 
 test_that("lmm() accepts positive case weights and preserves them for inference", {

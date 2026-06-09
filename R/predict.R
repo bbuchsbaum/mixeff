@@ -24,13 +24,17 @@
 #' @param se.fit Logical; when `TRUE`, returns a list with `fit` and `se.fit`.
 #'   For population predictions (`re.form = NA`) the standard error is the
 #'   Wald SE of the fixed-effect linear predictor, `sqrt(diag(X V X'))`. For
-#'   conditional predictions (`re.form = NULL`) the SE is `NA` with a reason
-#'   (random-effect posterior variances are not certified; lme4 likewise
-#'   returns no conditional SE).
-#' @param interval Interval type for population (`re.form = NA`) predictions:
-#'   `"confidence"` for the mean (`fit +/- z*se`) or `"prediction"` for a new
-#'   observation (adds the residual variance). Conditional intervals raise
-#'   `mm_inference_unavailable`. Returns a matrix with `fit`/`lwr`/`upr`.
+#'   conditional predictions (`re.form = NULL`) the SE comes from the engine
+#'   prediction-variance payload, which adds the random-effect contribution
+#'   (BLUP variance and the fixed/random covariance). Rows the engine cannot
+#'   certify — e.g. unseen grouping levels under `allow.new.levels = TRUE` —
+#'   return `NA` with the engine's reason in the `mm_reason` attribute.
+#'   (`lme4::predict.merMod` offers no conditional SE at all.)
+#' @param interval Interval type: `"confidence"` for the fitted mean or
+#'   `"prediction"` for a new observation (adds the residual variance).
+#'   Population (`re.form = NA`) intervals are `fit +/- z*se` computed R-side;
+#'   conditional (`re.form = NULL`) bounds come from the engine
+#'   prediction-variance payload. Returns a matrix with `fit`/`lwr`/`upr`.
 #' @param level Confidence level for `interval` / `se.fit` intervals.
 #' @param scaled Logical; when `TRUE`, residuals are divided by the residual
 #'   scale.
@@ -93,27 +97,30 @@ predict.mm_lmm <- function(object,
     return(pred)
   }
 
-  # Standard errors / intervals are defined here only for the population
-  # (fixed-effect-only) target: se = sqrt(diag(X V X')). Conditional SEs need
-  # random-effect posterior variances, which the contract does not certify
-  # (lme4's predict() likewise returns no conditional SE) -> NA / refuse.
+  # Population (fixed-effect-only) SEs/intervals are computed R-side below from
+  # sqrt(diag(X V X')). Conditional (`re.form = NULL`) SEs and intervals come
+  # from the engine prediction-variance payload, which adds the random-effect
+  # contribution (per-row se_fit and confidence/prediction bounds; new grouping
+  # levels return NA with a reason).
   if (!identical(target, "population")) {
+    pv <- mm_lmm_prediction_variance(object, se_data, allow.new.levels, level)
+    se <- pv$se_fit
+    names(se) <- names(pred)
+    if (anyNA(se)) attr(se, "mm_reason") <- pv$reason
     if (!identical(interval, "none")) {
-      mm_abort(
-        message = paste(
-          "Conditional (`re.form = NULL`) prediction intervals require",
-          "random-effect posterior variances, which are not certified. Use",
-          "`re.form = NA` for population-level intervals."
-        ),
-        class = "mm_inference_unavailable",
-        input = interval
-      )
+      lwr <- if (identical(interval, "prediction")) pv$prediction_lower else pv$confidence_lower
+      upr <- if (identical(interval, "prediction")) pv$prediction_upper else pv$confidence_upper
+      out <- cbind(fit = pred, lwr = lwr, upr = upr)
+      rownames(out) <- names(pred)
+      attr(out, "interval") <- interval
+      attr(out, "level") <- level
+      if (anyNA(out)) attr(out, "mm_reason") <- pv$reason
+      if (isTRUE(se.fit)) {
+        return(list(fit = out, se.fit = se))
+      }
+      return(out)
     }
-    se <- rep(NA_real_, length(pred))
-    attr(se, "mm_unavailable_reason") <- "conditional_prediction_se_unavailable"
-    out <- list(fit = pred, se.fit = se)
-    attr(out, "mm_unavailable_reason") <- "conditional_prediction_se_unavailable"
-    return(out)
+    return(list(fit = pred, se.fit = se))
   }
 
   se <- mm_fixed_prediction_se(object, se_data)
@@ -199,13 +206,19 @@ residuals.mm_glmm <- function(object, type = c("response"), ...) {
 #' `lme4::predict.merMod` for generalized models: `type = "link"` returns the
 #' linear predictor and `type = "response"` the mean.
 #'
-#' In-sample response predictions reuse the engine's certified fitted values;
-#' all other paths are an explicit R-side plug-in (not engine-certified), so
-#' `se.fit` returns `NA` with a reason and `interval` is refused. An
-#' engine-certified `GeneralizedLinearMixedModel::predict_new` (symmetry with
-#' the LMM `predict_new` path) is tracked upstream in mixeff-rs as
-#' bd-01KT3XJD6SE54G7GT3Z2T6HMEX; when it lands the R-side reconstruction below
-#' can be replaced by an FFI call.
+#' In-sample response predictions reuse the engine's certified fitted values.
+#'
+#' Standard errors and confidence intervals: population (`re.form = NA`)
+#' SEs are the fixed-effect Wald SE mapped through the link by the delta
+#' method; conditional (`re.form = NULL`) SEs and confidence bounds come from
+#' the engine prediction-variance payload, which the engine only certifies
+#' for `method = "joint_laplace"` fits (per-row status `"available"`). The
+#' default `pirls_profiled` estimator carries only the uncertified
+#' working-Hessian variance (status `"degraded"`), so its conditional SEs and
+#' bounds are withheld as `NA` with the engine's reason in the `mm_reason`
+#' attribute — consistent with the package's "no fake certainty" contract.
+#' Prediction (future-observation) intervals are refused for GLMMs because
+#' the payload omits the family variance term.
 #'
 #' @inheritParams predict.mm_lmm
 #' @param object A fitted `mm_glmm` object.
@@ -236,11 +249,12 @@ predict.mm_glmm <- function(object,
       input = allow.new.levels
     )
   }
-  if (!identical(interval, "none")) {
+  if (identical(interval, "prediction")) {
     mm_abort(
       message = paste(
-        "`interval` prediction requires prediction standard errors, which are",
-        "not certified for GLMMs by the current Rust inference contract."
+        "GLMM prediction (future-observation) intervals require the family",
+        "variance term, which the engine prediction-variance payload omits. Use",
+        "`interval = \"confidence\"` for fitted-mean intervals."
       ),
       class = "mm_inference_unavailable",
       input = interval
@@ -307,27 +321,50 @@ predict.mm_glmm <- function(object,
   pred <- if (identical(type, "response")) as.numeric(mu) else as.numeric(eta)
   names(pred) <- nm
 
-  if (isTRUE(se.fit)) {
-    # Population (fixed-only) Wald SE of the link-scale linear predictor; for
-    # type="response" map through the link with the delta method. Conditional
-    # SEs need RE posterior variances (not certified) -> NA with a reason.
-    if (identical(target, "population")) {
-      se_data <- if (is.null(newdata)) object$model_frame else newdata
-      se_link <- mm_fixed_prediction_se(object, se_data)
-      se <- if (identical(type, "response")) {
-        se_link * abs(family$mu.eta(eta))
-      } else {
-        se_link
-      }
-    } else {
-      se <- rep(NA_real_, length(pred))
-      attr(se, "mm_unavailable_reason") <- "conditional_prediction_se_unavailable"
-    }
+  want_se <- isTRUE(se.fit) || !identical(interval, "none")
+  if (!want_se) {
+    return(pred)
+  }
+
+  if (identical(target, "population")) {
+    # Population (fixed-only) Wald SE of the linear predictor; for
+    # type = "response" map through the link with the delta method. Confidence
+    # intervals are estimate +/- z * SE on the requested scale.
+    se_data <- if (is.null(newdata)) object$model_frame else newdata
+    se_link <- mm_fixed_prediction_se(object, se_data)
+    se <- if (identical(type, "response")) se_link * abs(family$mu.eta(eta)) else se_link
     names(se) <- nm
-    out <- list(fit = pred, se.fit = se)
+    if (!identical(interval, "none")) {
+      crit <- stats::qnorm((1 + level) / 2)
+      out <- cbind(fit = pred, lwr = pred - crit * se, upr = pred + crit * se)
+      rownames(out) <- nm
+      attr(out, "interval") <- interval
+      attr(out, "level") <- level
+      if (isTRUE(se.fit)) return(list(fit = out, se.fit = se))
+      return(out)
+    }
+    return(list(fit = pred, se.fit = se))
+  }
+
+  # Conditional (re.form = NULL): engine prediction-variance payload on the
+  # requested scale (the engine propagates variance through the link). Certified
+  # (joint_laplace) fits return finite se_fit / confidence bounds; uncertified
+  # fast-PIRLS or new-grouping-level rows return NA with a reason.
+  se_data <- if (is.null(newdata)) object$model_frame else newdata
+  pv <- mm_glmm_prediction_variance(object, se_data, type, allow.new.levels, level)
+  se <- pv$se_fit
+  names(se) <- nm
+  if (anyNA(se)) attr(se, "mm_reason") <- pv$reason
+  if (!identical(interval, "none")) {
+    out <- cbind(fit = pred, lwr = pv$confidence_lower, upr = pv$confidence_upper)
+    rownames(out) <- nm
+    attr(out, "interval") <- interval
+    attr(out, "level") <- level
+    if (anyNA(out)) attr(out, "mm_reason") <- pv$reason
+    if (isTRUE(se.fit)) return(list(fit = out, se.fit = se))
     return(out)
   }
-  pred
+  list(fit = pred, se.fit = se)
 }
 
 # Random-effect contribution to the GLMM linear predictor for arbitrary `data`,
@@ -511,6 +548,159 @@ mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
   }
   names(out) <- rownames(newdata)
   out
+}
+
+# Parse an engine `PredictionVariancePayload` (schema
+# "mixedmodels.prediction_variance") into a per-row data.frame. Unavailable /
+# degraded rows carry `se_fit = NA` (encoded as JSON null by the engine) plus a
+# stable `reason`, preserving the no-fake-certainty contract.
+mm_parse_prediction_variance <- function(json, n) {
+  payload <- tryCatch(
+    jsonlite::fromJSON(json, simplifyVector = FALSE),
+    error = function(cnd) {
+      mm_abort(
+        message = sprintf("Failed to parse prediction-variance JSON: %s",
+                          conditionMessage(cnd)),
+        class = "mm_schema_error", parent = cnd
+      )
+    }
+  )
+  if (!identical(as.character(payload$schema_name), "mixedmodels.prediction_variance")) {
+    mm_abort(
+      message = "prediction-variance payload has an unknown schema header.",
+      class = "mm_schema_error", input = payload
+    )
+  }
+  rows <- payload$rows %||% list()
+  if (length(rows) != n) {
+    mm_abort(
+      message = sprintf(
+        "prediction-variance returned %d row(s) for %d input row(s).",
+        length(rows), n
+      ),
+      class = "mm_schema_error", input = payload
+    )
+  }
+  num <- function(field) vapply(rows, function(r) {
+    v <- r[[field]]
+    if (is.null(v)) NA_real_ else as.numeric(v)
+  }, numeric(1))
+  chr <- function(field) vapply(rows, function(r) {
+    v <- r[[field]]
+    if (is.null(v)) NA_character_ else as.character(v)
+  }, character(1))
+  out <- data.frame(
+    se_fit = num("se_fit"),
+    fixed_variance = num("fixed_variance"),
+    confidence_lower = num("confidence_lower"),
+    confidence_upper = num("confidence_upper"),
+    prediction_lower = num("prediction_lower"),
+    prediction_upper = num("prediction_upper"),
+    status = chr("status"),
+    reason = chr("reason"),
+    stringsAsFactors = FALSE
+  )
+  # Only engine-certified rows cross the boundary with numbers. `degraded`
+  # rows (e.g. the uncertified fast-PIRLS working-delta variance) carry finite
+  # values the engine does not certify, so they are withheld here with the
+  # engine's reason rather than reported — no fake certainty.
+  masked <- !is.na(out$status) & out$status != "available"
+  if (any(masked)) {
+    numeric_fields <- c("se_fit", "fixed_variance", "confidence_lower",
+                        "confidence_upper", "prediction_lower", "prediction_upper")
+    out[masked, numeric_fields] <- NA_real_
+    out$reason[masked & is.na(out$reason)] <-
+      "the engine did not certify the prediction variance for this row"
+  }
+  out
+}
+
+# Conditional prediction variance for an LMM via the engine
+# `predict_new_variance_with_level` FFI. The engine refits from the stored
+# training frame and computes per-row se_fit / confidence / prediction bounds
+# including the random-effect contribution. `se_data` is the frame to predict on
+# (the training model frame for in-sample, or user `newdata`).
+mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
+  policy <- if (isTRUE(allow_new_levels)) "population" else "error"
+  spec_data <- mm_translate_data(fit$model_frame)
+  new_data <- mm_translate_data(se_data)
+  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
+                                   auto_unbox = TRUE, null = "null")
+  json <- tryCatch(
+    .Call(
+      wrap__mm_lmm_predict_new_variance_json,
+      mm_coerce_formula_string(fit$formula),
+      isTRUE(fit$REML),
+      spec_data$column_order,
+      spec_data$numeric_columns,
+      spec_data$categorical_values,
+      spec_data$categorical_levels,
+      mm_bridge_weights(fit$weights),
+      as.character(control_json),
+      new_data$column_order,
+      new_data$numeric_columns,
+      new_data$categorical_values,
+      new_data$categorical_levels,
+      policy,
+      as.numeric(level)
+    ),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) mm_abort_from_bridge(json, newdata = se_data)
+  mm_parse_prediction_variance(json, nrow(se_data))
+}
+
+# Engine family string as used at fit time (binomial resolves to "bernoulli"
+# for 0/1 responses and "binomial" when trial weights are present), recomputed
+# from the stored family + prepped weights so the variance refit reproduces the
+# original fit exactly.
+mm_glmm_engine_family <- function(fit) {
+  fam <- fit$family$family
+  if (identical(fam, "binomial")) {
+    if (is.null(fit$weights)) "bernoulli" else "binomial"
+  } else {
+    fam
+  }
+}
+
+# Conditional prediction variance for a GLMM via the engine
+# `predict_new_variance_with_level` FFI. `scale` is "link" or "response"; the
+# engine propagates the variance through the link, so no R-side delta method is
+# needed. Certified (joint_laplace) fits return available rows; fast-PIRLS /
+# new-level rows come back with se_fit = NA and a reason.
+mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, level) {
+  policy <- if (isTRUE(allow_new_levels)) "population" else "error"
+  spec_data <- mm_translate_data(fit$model_frame)
+  new_data <- mm_translate_data(se_data)
+  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
+                                   auto_unbox = TRUE, null = "null")
+  json <- tryCatch(
+    .Call(
+      wrap__mm_glmm_predict_new_variance_json,
+      mm_coerce_formula_string(fit$formula),
+      mm_glmm_engine_family(fit),
+      fit$family$link,
+      fit$method,
+      as.integer(fit$nAGQ),
+      spec_data$column_order,
+      spec_data$numeric_columns,
+      spec_data$categorical_values,
+      spec_data$categorical_levels,
+      mm_bridge_weights(fit$weights),
+      mm_bridge_weights(fit$offset),
+      as.character(control_json),
+      new_data$column_order,
+      new_data$numeric_columns,
+      new_data$categorical_values,
+      new_data$categorical_levels,
+      scale,
+      policy,
+      as.numeric(level)
+    ),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) mm_abort_from_bridge(json, newdata = se_data)
+  mm_parse_prediction_variance(json, nrow(se_data))
 }
 
 # Fixed-effect-only prediction (re.form = NA path). Build the FE design

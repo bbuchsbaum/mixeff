@@ -231,12 +231,13 @@ test_that("Phase 3 prediction and covariance requests do not fabricate uncertain
   expect_identical(attr(theta_vcov, "mm_unavailable_reason"),
                    "theta_covariance_unavailable")
 
+  # conditional prediction SEs/intervals are now engine-certified (status
+  # "available" rows from the prediction-variance payload), not fabricated
   se <- stats::predict(fit, se.fit = TRUE)
-  expect_true(all(is.na(se$se.fit)))
-  expect_error(
-    stats::predict(fit, interval = "confidence"),
-    class = "mm_inference_unavailable"
-  )
+  expect_true(all(is.finite(se$se.fit) & se$se.fit > 0))
+  ci <- stats::predict(fit, interval = "confidence")
+  expect_true(is.matrix(ci) && all(is.finite(ci)))
+  expect_true(all(ci[, "lwr"] < ci[, "fit"] & ci[, "fit"] < ci[, "upr"]))
 })
 
 test_that("confint(method = 'wald') is labelled as uncertified asymptotic output", {

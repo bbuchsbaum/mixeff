@@ -68,23 +68,50 @@ test_that("predict.mm_glmm respects allow.new.levels for unseen groups", {
                tolerance = 1e-8)
 })
 
-test_that("predict.mm_glmm refuses intervals and re.form subsets", {
+test_that("predict.mm_glmm refuses prediction intervals and re.form subsets", {
   fit <- glmm(y ~ x + (1 | g), mm_pred_binom_data(), family = binomial(),
               control = mm_control(verbose = -1))
-  expect_error(predict(fit, interval = "confidence"),
+  # future-observation intervals require the family variance, which the
+  # engine payload does not include for GLMMs
+  expect_error(predict(fit, interval = "prediction"),
                class = "mm_inference_unavailable")
   expect_error(predict(fit, re.form = ~ (1 | g)),
                class = "mm_inference_unavailable")
 })
 
-test_that("predict.mm_glmm conditional se.fit is NA with a reason", {
+test_that("pirls conditional se.fit is withheld with the engine reason", {
   fit <- glmm(y ~ x + (1 | g), mm_pred_binom_data(), family = binomial(),
               control = mm_control(verbose = -1))
   out <- predict(fit, se.fit = TRUE)  # default re.form = NULL (conditional)
   expect_true(is.list(out) && all(c("fit", "se.fit") %in% names(out)))
+  # the default pirls_profiled fit only carries the uncertified working-delta
+  # variance (engine status "degraded"), so the SE is withheld, not reported
   expect_true(all(is.na(out$se.fit)))
-  expect_identical(attr(out$se.fit, "mm_unavailable_reason"),
-                   "conditional_prediction_se_unavailable")
+  reasons <- attr(out$se.fit, "mm_reason")
+  expect_true(is.character(reasons) && all(!is.na(reasons)))
+  # same for the confidence interval: fit column real, bounds withheld
+  ci <- predict(fit, interval = "confidence")
+  expect_true(is.matrix(ci))
+  expect_true(all(is.finite(ci[, "fit"])))
+  expect_true(all(is.na(ci[, "lwr"])) && all(is.na(ci[, "upr"])))
+})
+
+test_that("joint_laplace conditional se.fit and CI come from the engine", {
+  fit <- glmm(y ~ x + (1 | g), mm_pred_binom_data(), family = binomial(),
+              method = "joint_laplace",
+              control = mm_control(verbose = -1))
+  out <- predict(fit, type = "response", se.fit = TRUE)
+  expect_true(all(is.finite(out$se.fit) & out$se.fit > 0))
+  # response-scale bounds are symmetric delta-method bounds, so they bracket
+  # the fit but are not guaranteed to stay inside (0, 1) near the boundary
+  ci <- predict(fit, type = "response", interval = "confidence")
+  expect_true(is.matrix(ci) && all(is.finite(ci)))
+  expect_true(all(ci[, "lwr"] < ci[, "fit"] & ci[, "fit"] < ci[, "upr"]))
+  # link-scale interval half-width must be z * link-scale se
+  link_se <- predict(fit, type = "link", se.fit = TRUE)$se.fit
+  link_ci <- predict(fit, type = "link", interval = "confidence")
+  expect_equal(unname(link_ci[, "upr"] - link_ci[, "fit"]),
+               unname(qnorm(0.975) * as.numeric(link_se)), tolerance = 1e-6)
 })
 
 test_that("predict.mm_glmm population se.fit gives finite Wald SEs", {

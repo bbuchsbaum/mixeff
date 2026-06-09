@@ -170,30 +170,26 @@ head(pop$se.fit)
 head(predict(fit, re.form = NA, interval = "confidence"))
 ```
 
-*Conditional* prediction standard errors (the default, `re.form = NULL`) remain
-a boundary: they need random-effect posterior variances the contract does not
-certify (lme4's `predict()` likewise returns no conditional SE). So a
-conditional `predict(se.fit = TRUE)` returns the fitted values plus `NA`
-standard errors and a reason.
+*Conditional* prediction standard errors (the default, `re.form = NULL`) come
+from the engine's prediction-variance payload, which adds the random-effect
+(BLUP) variance and the fixed/random covariance to the fixed-effect Wald
+variance — a surface `lme4::predict()` does not offer at all. Conditional
+confidence and prediction intervals come from the same payload.
 
 ```{r prediction-se}
 pred <- predict(fit, se.fit = TRUE)
 head(pred$fit)
 head(pred$se.fit)
-attr(pred$se.fit, "mm_unavailable_reason")
+head(predict(fit, interval = "confidence"))
 ```
 
-Asking for a *conditional* prediction interval raises a typed error, because an
-interval would look more certain than the conditional fitted object can justify
-(population intervals via `re.form = NA` are available, as shown above).
-
-```{r prediction-interval-error, error = TRUE}
-predict(fit, interval = "confidence")
-```
+The boundary has moved, not vanished: rows the engine cannot certify — for
+example an unseen grouping level predicted with `allow.new.levels = TRUE`,
+where there is no posterior variance for the missing level — still return
+`NA` with the engine's reason in the `mm_reason` attribute rather than a
+fabricated number.
 
 ```{r unavailable-checks, include = FALSE}
 stopifnot(all(is.finite(pop$se.fit)))
-stopifnot(all(is.na(pred$se.fit)))
-stopifnot(identical(attr(pred$se.fit, "mm_unavailable_reason"),
-                    "conditional_prediction_se_unavailable"))
+stopifnot(all(is.finite(pred$se.fit)), all(pred$se.fit > 0))
 ```

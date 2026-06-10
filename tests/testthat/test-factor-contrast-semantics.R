@@ -41,3 +41,18 @@ test_that("no-intercept factor random slopes use cell-means coding", {
     expect_setequal(ref_names, c("fa", "fb"))
   }
 })
+
+test_that("as.data.frame.mm_varcorr var1/var2 use lme4-compatible concatenated names", {
+  dat <- factor_contrast_design()
+  fit <- lmm(y ~ f + (0 + f | g), dat, control = mm_control(verbose = -1))
+
+  # Display path keeps human-readable "f: a" format
+  expect_true(all(c("f: a", "f: b") %in% VarCorr(fit)$table$name))
+
+  # Serialisation path (as.data.frame) must match lme4's "fa"/"fb" convention
+  df <- as.data.frame(VarCorr(fit))
+  diag_names <- df$var1[df$grp == "g" & is.na(df$var2)]
+  expect_false(any(grepl(": ", diag_names, fixed = TRUE)),
+               info = "var1 must not contain ': ' — use lme4 concatenated form")
+  expect_setequal(diag_names, c("fa", "fb"))
+})

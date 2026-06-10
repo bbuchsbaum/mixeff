@@ -579,7 +579,7 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
   grp <- character(0); var1 <- character(0); var2 <- character(0)
   vcov <- numeric(0); sdcor <- numeric(0)
   for (comp in x$components_raw %||% list()) {
-    nm <- comp$names
+    nm <- gsub(": *", "", comp$names)  # lme4 concatenates: "sex: female" -> "sexfemale"
     sd <- comp$std_dev
     corr <- comp$correlations
     p <- length(nm)

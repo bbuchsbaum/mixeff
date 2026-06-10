@@ -320,6 +320,31 @@ mm_glmm_binomial_prep <- function(formula, data, family_info, weights) {
     data[[respname]] <- succ / n
     weights <- as.numeric(n)
     formula[[2L]] <- as.name(respname)
+  } else {
+    response_name <- as.character(lhs)
+    col <- data[[response_name]]
+    if (is.factor(col)) {
+      lvls <- levels(col)
+      if (length(lvls) != 2L) {
+        mm_abort(
+          message = sprintf(
+            "Binomial response '%s' is a factor with %d level(s); exactly 2 are required. Levels found: %s",
+            response_name, length(lvls), paste(lvls, collapse = ", ")
+          ),
+          class = "mm_data_error"
+        )
+      }
+      mm_inform(
+        sprintf(
+          "Coercing factor response '%s' to 0/1: treating '%s' as 1 (success).",
+          response_name, lvls[[2L]]
+        ),
+        class = "mm_factor_coercion"
+      )
+      data[[response_name]] <- as.integer(col) - 1L
+    } else if (is.logical(col)) {
+      data[[response_name]] <- as.integer(col)
+    }
   }
   engine_family <- if (is.null(weights)) "bernoulli" else "binomial"
   list(formula = formula, data = data, weights = weights,

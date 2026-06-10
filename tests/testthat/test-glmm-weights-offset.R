@@ -70,6 +70,67 @@ test_that("plain 0/1 binomial still routes to Bernoulli (no regression)", {
   expect_null(fit$weights)
 })
 
+test_that("glmm() coerces two-level factor response to 0/1", {
+  testthat::skip_if_not_installed("lme4")
+  set.seed(7)
+  n <- 200
+  g <- factor(rep(1:20, each = 10))
+  b <- rnorm(20, sd = 0.4)
+  eta <- 0.3 + 0.5 * rnorm(n) + b[as.integer(g)]
+  y_int <- rbinom(n, 1, plogis(eta))
+  d <- data.frame(y_int = y_int,
+                  y_fac = factor(ifelse(y_int == 1L, "Yes", "No"),
+                                 levels = c("No", "Yes")),
+                  x = rnorm(n), g = g)
+
+  fit_int <- glmm(y_int ~ x + (1 | g), d, family = binomial, control = ctl)
+  fit_fac <- suppressMessages(
+    glmm(y_fac ~ x + (1 | g), d, family = binomial, control = ctl)
+  )
+  expect_equal(unname(fixef(fit_fac)), unname(fixef(fit_int)), tolerance = 1e-10)
+})
+
+test_that("glmm() coerces logical response to 0/1", {
+  testthat::skip_if_not_installed("lme4")
+  set.seed(8)
+  n <- 200
+  g <- factor(rep(1:20, each = 10))
+  b <- rnorm(20, sd = 0.4)
+  eta <- 0.3 + 0.5 * rnorm(n) + b[as.integer(g)]
+  y_int <- rbinom(n, 1, plogis(eta))
+  d <- data.frame(y_int = y_int,
+                  y_lgl = as.logical(y_int),
+                  x = rnorm(n), g = g)
+
+  fit_int <- glmm(y_int ~ x + (1 | g), d, family = binomial, control = ctl)
+  fit_lgl <- glmm(y_lgl ~ x + (1 | g), d, family = binomial, control = ctl)
+  expect_equal(unname(fixef(fit_lgl)), unname(fixef(fit_int)), tolerance = 1e-10)
+})
+
+test_that("glmm() aborts with mm_data_error for factor response with != 2 levels", {
+  d <- data.frame(
+    y = factor(c("a", "b", "c", "a", "b"), levels = c("a", "b", "c")),
+    x = rnorm(5),
+    g = factor(c(1, 1, 2, 2, 2))
+  )
+  expect_error(
+    glmm(y ~ x + (1 | g), d, family = binomial, control = ctl),
+    class = "mm_data_error"
+  )
+})
+
+test_that("factor coercion emits mm_factor_coercion message", {
+  set.seed(9)
+  n <- 200
+  g <- factor(rep(1:20, each = 10))
+  y_fac <- factor(sample(c("No", "Yes"), n, replace = TRUE), levels = c("No", "Yes"))
+  d <- data.frame(y_fac = y_fac, x = rnorm(n), g = g)
+  expect_message(
+    glmm(y_fac ~ x + (1 | g), d, family = binomial, control = ctl),
+    class = "mm_factor_coercion"
+  )
+})
+
 test_that("invalid weights/offset are rejected with a typed condition", {
   set.seed(1)
   d <- data.frame(y = rpois(50, 2), x = rnorm(50), g = factor(rep(1:5, each = 10)))

@@ -116,13 +116,14 @@ unlist(reference$models$primary$fixef)
 
 The same fixture supports the manuscript sensitivity and specificity fits:
 the sensitivity model assigns the four intermediate VVIQ participants to the
-control group. The intact and combined high-baseline Bernoulli models keep the
-runnable profiled path in the opt-in reproduction gate and are checked against
-the parity ledger. For the intact model, the labelled joint audit route
-(`method = "joint_laplace"`, `mm_control(max_feval = 40)`) substantially
-reduces the lme4 gap, but still returns an explicit budget-limited,
-non-certified optimizer diagnostic. The combined model remains on the profiled
-ledger path at this pin.
+control group. The intact high-baseline Bernoulli model defaults to the
+full-budget joint-Laplace route (`method = "joint_laplace"`) in the opt-in
+reproduction gate, reaching near-exact lme4 fixed-effect and log-likelihood
+parity on a release build (~40 s per fit; only the AIC parameter-count
+semantics for the double-bar factor expansion remain ledgered). The combined
+model stays on the profiled ledger path: the engine rejects its joint
+candidate for that case and falls back to fast-PIRLS with an explicit
+`documented_divergence` diagnostic.
 
 ```{r additional-glmms, eval = run_live}
 sensitivity <- subset(trials, bubbled == "yes" & !is.na(correct))

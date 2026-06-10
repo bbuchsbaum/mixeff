@@ -153,8 +153,21 @@ aphantasia_s1_case_ids <- function(ref) {
   grep("^S1_", names(ref$models), value = TRUE)
 }
 
+# Intact defaults to full-budget joint Laplace: at pin b7086ef a release
+# build reaches near-exact lme4 parity (max|dfixef| 0.0067 vs strict tol
+# 2.5e-2, ~40s/fit) while still beating lme4's own fit time (~157s). See
+# bd-01KT241N8FS5WV8ZK7QDBPMGCQ for the measured sweep.
+# Combined stays on profiled: the engine's joint candidate is rejected for
+# that case and falls back to fast-PIRLS with a documented_divergence
+# diagnostic (JOINT_LAPLACE_FALLBACK_FAST_PIRLS, measured at b7086ef), so
+# routing it joint just spends ~22s to land on the profiled answer; its
+# fixef ledger entry remains the contract.
+# MIXEFF_APHANTASIA_JOINT=false is the debug-build escape hatch (the intact
+# joint fit takes ~20+ min under devtools::load_all); profiled intact drifts
+# far past the strict tolerances (max|dfixef| ~0.47), so expect intact
+# parity failures when the hatch is engaged.
 aphantasia_use_joint_glmm <- function() {
-  identical(tolower(Sys.getenv("MIXEFF_APHANTASIA_JOINT")), "true")
+  !identical(tolower(Sys.getenv("MIXEFF_APHANTASIA_JOINT")), "false")
 }
 
 aphantasia_use_joint_for_case <- function(id) {
@@ -169,9 +182,6 @@ aphantasia_glmm_method <- function(id) {
 }
 
 aphantasia_glmm_control <- function(id) {
-  if (aphantasia_use_joint_for_case(id)) {
-    return(mixeff::mm_control(verbose = -1, max_feval = aphantasia_joint_budget()))
-  }
   mixeff::mm_control(verbose = -1)
 }
 

@@ -733,25 +733,27 @@ mm_varcorr_from_result <- function(varcorr, artifact = NULL) {
   out
 }
 
+# Map each varcorr component's OWN group to its lme4-style label. The engine
+# spells interaction/cell groups "a & b" (GroupingFactor::Interaction joins
+# with " & "); lme4 writes "a:b". Labels must come from the component itself:
+# the engine emits varcorr components in optimizer order, which need not
+# match `semantic_model$random_terms` (formula) order, so any positional
+# pairing of components with semantic terms swaps labels between crossed
+# groups (caught by the test-bw-lme-tutorial.R crossed intercept cases).
 mm_varcorr_group_labels <- function(components, artifact = NULL) {
-  fallback <- vapply(
+  vapply(
     components,
-    function(component) as.character(component$group %||% ""),
+    function(component) {
+      mm_group_lme4_label(component$group,
+                          fallback = as.character(component$group %||% ""))
+    },
     character(1)
   )
-  terms <- artifact$semantic_model$random_terms %||% list()
-  if (!length(terms) || length(terms) != length(fallback)) {
-    return(fallback)
-  }
-  labels <- vapply(seq_along(terms), function(i) {
-    mm_group_lme4_label(terms[[i]]$group, fallback[[i]])
-  }, character(1))
-  ifelse(nzchar(labels), labels, fallback)
 }
 
 mm_group_lme4_label <- function(group, fallback = "") {
   if (is.character(group) && length(group) == 1L && nzchar(group)) {
-    return(group)
+    return(gsub(" & ", ":", group, fixed = TRUE))
   }
   if (is.list(group)) {
     if (!is.null(group$single$name)) {

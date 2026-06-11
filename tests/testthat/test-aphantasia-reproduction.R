@@ -157,11 +157,17 @@ aphantasia_s1_case_ids <- function(ref) {
 # build reaches near-exact lme4 parity (max|dfixef| 0.0067 vs strict tol
 # 2.5e-2, ~40s/fit) while still beating lme4's own fit time (~157s). See
 # bd-01KT241N8FS5WV8ZK7QDBPMGCQ for the measured sweep.
-# Combined stays on profiled: the engine's joint candidate is rejected for
-# that case and falls back to fast-PIRLS with a documented_divergence
-# diagnostic (JOINT_LAPLACE_FALLBACK_FAST_PIRLS, measured at b7086ef), so
-# routing it joint just spends ~22s to land on the profiled answer; its
-# fixef ledger entry remains the contract.
+# Combined stays on profiled: its residual gap to lme4 is structural, not an
+# optimizer defect. The native `||` semantics drop the within-factor
+# correlation for the factor term (4 theta), while lme4's `||` expansion
+# keeps a full 2x2 covariance block for `mask` (6 theta) whose fitted
+# off-diagonal the native family cannot represent. At pin 6731062 the joint
+# route descends from the profiled start without falling back but plateaus
+# at the native-family optimum ~1.9 logLik above the lme4 reference
+# (upstream root-cause: bd-01KTQJFZNF; semantics pinned in
+# docs/random_effects_formulas.md R3, product decision bd-01KTRQRZKB).
+# Combined's fixef ledger entry remains the contract. (Intact reaches strict
+# parity because lme4's fitted mask block degenerates to diagonal there.)
 # MIXEFF_APHANTASIA_JOINT=false is the debug-build escape hatch (the intact
 # joint fit takes ~20+ min under devtools::load_all); profiled intact drifts
 # far past the strict tolerances (max|dfixef| ~0.47), so expect intact

@@ -384,7 +384,7 @@
       "expected_max_abs_diff": 3.5e-1,
       "expected_max_rel_diff": null,
       "status": "expected_mismatch",
-      "reason": "Combined real-data GLMM fixed effects have a bounded profiled fast-PIRLS versus lme4 joint-Laplace beta gap, dominated by the intercept and stimtype main effect. Relative bounds are omitted because one interaction coefficient is near zero. The engine's own joint-Laplace route rejects its candidate for this case and falls back to fast-PIRLS with a documented_divergence diagnostic (JOINT_LAPLACE_FALLBACK_FAST_PIRLS at pin b7086ef), so the profiled answer is the certified result here.",
+      "reason": "Combined real-data GLMM fixed effects have a bounded gap versus the lme4 reference that is structural, not an optimizer defect: the native double-bar semantics drop the within-factor correlation for the factor term (4 theta), while lme4's || expansion keeps a full 2x2 covariance block for mask (6 theta) whose fitted off-diagonal the native family cannot represent. The joint route descends without falling back at pin 6731062 but plateaus at the native-family optimum ~1.9 logLik above lme4 (upstream root-cause bd-01KTQJFZNF; semantics pinned in docs/random_effects_formulas.md R3, product decision bd-01KTRQRZKB). Relative bounds are omitted because one interaction coefficient is near zero. Intact reaches strict parity because lme4's fitted mask block degenerates to diagonal there.",
       "first_seen": "2026-05-22",
       "linked_mote": "bd-01KT241N8FS5WV8ZK7QDBPMGCQ",
       "upstream_mote": "bd-01KS7PVAW6MR6CHF4MQFXG4703"

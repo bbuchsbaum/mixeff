@@ -211,14 +211,22 @@ residuals.mm_glmm <- function(object, type = c("response"), ...) {
 #' Standard errors and confidence intervals: population (`re.form = NA`)
 #' SEs are the fixed-effect Wald SE mapped through the link by the delta
 #' method; conditional (`re.form = NULL`) SEs and confidence bounds come from
-#' the engine prediction-variance payload, which the engine only certifies
-#' for `method = "joint_laplace"` fits (per-row status `"available"`). The
-#' default `pirls_profiled` estimator carries only the uncertified
-#' working-Hessian variance (status `"degraded"`), so its conditional SEs and
+#' the engine prediction-variance payload. The engine certifies these rows
+#' for `method = "joint_laplace"` fits and for default `pirls_profiled` fits
+#' whose post-fit profiled-optimum certificate is issued (per-row status
+#' `"available"`). Uncertified fits (e.g. singular fits, or fits whose
+#' certificate fails) keep status `"degraded"`, and their conditional SEs and
 #' bounds are withheld as `NA` with the engine's reason in the `mm_reason`
 #' attribute — consistent with the package's "no fake certainty" contract.
-#' Prediction (future-observation) intervals are refused for GLMMs because
-#' the payload omits the family variance term.
+#'
+#' Prediction (future-observation) intervals (`interval = "prediction"`) are
+#' available for conditional, response-scale predictions: the engine returns
+#' quantiles of the plug-in predictive distribution (the family conditional
+#' distribution mixed over link-scale fitted-mean uncertainty), so bounds are
+#' integers for count families and support points for Bernoulli. They are
+#' refused with a typed condition on the link scale (future observations are
+#' response-scale objects), for population-level requests, and for grouped
+#' binomial fits (the future trial count is not representable in `newdata`).
 #'
 #' @inheritParams predict.mm_lmm
 #' @param object A fitted `mm_glmm` object.
@@ -249,18 +257,43 @@ predict.mm_glmm <- function(object,
       input = allow.new.levels
     )
   }
-  if (identical(interval, "prediction")) {
-    mm_abort(
-      message = paste(
-        "GLMM prediction (future-observation) intervals require the family",
-        "variance term, which the engine prediction-variance payload omits. Use",
-        "`interval = \"confidence\"` for fitted-mean intervals."
-      ),
-      class = "mm_inference_unavailable",
-      input = interval
-    )
-  }
   target <- mm_prediction_target(re.form)
+  if (identical(interval, "prediction")) {
+    if (identical(type, "link")) {
+      mm_abort(
+        message = paste(
+          "GLMM prediction (future-observation) intervals are response-scale",
+          "objects; the engine refuses them on the link scale. Use",
+          "`type = \"response\"`, or `interval = \"confidence\"` for",
+          "fitted-mean intervals on the link scale."
+        ),
+        class = "mm_inference_unavailable",
+        input = interval
+      )
+    }
+    if (!identical(target, "conditional")) {
+      mm_abort(
+        message = paste(
+          "GLMM prediction (future-observation) intervals are only available",
+          "for conditional predictions (`re.form = NULL`); the population",
+          "Wald path carries no family variance term."
+        ),
+        class = "mm_inference_unavailable",
+        input = re.form
+      )
+    }
+    if (identical(mm_glmm_engine_family(object), "binomial")) {
+      mm_abort(
+        message = paste(
+          "GLMM prediction intervals are unavailable for grouped binomial",
+          "fits: the future trial count is not representable in `newdata`,",
+          "so the engine refuses the rows."
+        ),
+        class = "mm_inference_unavailable",
+        input = interval
+      )
+    }
+  }
   if (identical(target, "unsupported")) {
     mm_abort(
       message = paste(
@@ -356,7 +389,9 @@ predict.mm_glmm <- function(object,
   names(se) <- nm
   if (anyNA(se)) attr(se, "mm_reason") <- pv$reason
   if (!identical(interval, "none")) {
-    out <- cbind(fit = pred, lwr = pv$confidence_lower, upr = pv$confidence_upper)
+    lwr <- if (identical(interval, "prediction")) pv$prediction_lower else pv$confidence_lower
+    upr <- if (identical(interval, "prediction")) pv$prediction_upper else pv$confidence_upper
+    out <- cbind(fit = pred, lwr = lwr, upr = upr)
     rownames(out) <- nm
     attr(out, "interval") <- interval
     attr(out, "level") <- level

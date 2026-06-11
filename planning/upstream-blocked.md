@@ -18,7 +18,7 @@ wrapper work, add a routine test, and remove the row here.
 
 | mixeff bead | feature | upstream `mixeff-rs` bead | wrapper work once it lands |
 |---|---|---|---|
-| `bd-01KT2N1GGD61RHZ68KZFM9KD49` (T11) | negative-binomial GLMM family | `bd-01KT40XMMR7QC1TXKNX7DXZ6K5` | add `negative.binomial`/`MASS::negative.binomial(theta)` to the `glmm()` family allow-list (`R/glmm.R:204`), map to the engine NB family, pass `theta`, add a `glmer.nb` parity test |
+| `bd-01KT2N1GGD61RHZ68KZFM9KD49` (T11) | negative-binomial GLMM family | `bd-01KT40XMMR7QC1TXKNX7DXZ6K5` ✅ shipped (closed; pin `6731062` also carries NB prediction intervals) — mixeff bead UNBLOCKED 2026-06-11, wiring pending | add `negative.binomial`/`MASS::negative.binomial(theta)` to the `glmm()` family allow-list (`R/glmm.R:204`), map to the engine NB family, pass `theta`, add a `glmer.nb` parity test; remove this row when wired |
 
 ### Landed and wired (kept for history)
 

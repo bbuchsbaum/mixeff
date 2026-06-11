@@ -24,16 +24,34 @@
   `interval` through the engine's prediction-variance payload, which includes
   the random-effect (BLUP) variance and the fixed/random covariance — a
   surface `lme4::predict.merMod` does not offer at all. LMMs get conditional
-  `se.fit` plus `"confidence"` and `"prediction"` intervals; GLMMs fit with
-  `method = "joint_laplace"` get conditional `se.fit` and `"confidence"`
-  intervals on the link or response scale (variance propagated through the
-  link by the engine). Rows the engine does not certify are withheld, not
-  fabricated: the default `pirls_profiled` GLMM estimator (engine status
-  `"degraded"`, uncertified working-Hessian variance) and unseen grouping
+  `se.fit` plus `"confidence"` and `"prediction"` intervals; GLMMs get
+  conditional `se.fit` and `"confidence"` intervals on the link or response
+  scale (variance propagated through the link by the engine). The engine
+  certifies these rows for `method = "joint_laplace"` fits and — via a
+  post-fit profiled-optimum certificate — for default `pirls_profiled` fits,
+  so the default estimator now reports conditional SEs too. Rows the engine
+  does not certify are withheld, not fabricated: uncertified fits (e.g.
+  singular fits, whose certificate is never issued) and unseen grouping
   levels under `allow.new.levels = TRUE` return `NA` with the engine's reason
-  in the `mm_reason` attribute. GLMM prediction (future-observation)
-  intervals remain refused because the payload omits the family variance
-  term. Population (`re.form = NA`) SEs/intervals are unchanged.
+  in the `mm_reason` attribute. Population (`re.form = NA`) SEs/intervals are
+  unchanged.
+* GLMM prediction (future-observation) intervals:
+  `predict(interval = "prediction")` now works for conditional,
+  response-scale GLMM predictions. Bounds are quantiles of the plug-in
+  predictive distribution (the family conditional distribution mixed over
+  link-scale fitted-mean uncertainty via Gauss–Hermite quadrature), so they
+  are integers for count families and support points for Bernoulli; the
+  interval is at least as wide as the corresponding confidence interval.
+  Typed refusals remain for link-scale requests (future observations are
+  response-scale objects), population-level requests, and grouped binomial
+  fits (the future trial count is not representable in `newdata`).
+* Binomial response coercion: `glmm()` with `family = binomial()` now
+  accepts a logical response (coerced 0/1 silently) or a two-level factor
+  response (coerced with the second level as success, announced via a
+  suppressible `mm_factor_coercion` message), matching `stats::glm()` /
+  `lme4::glmer()`. A factor with any other number of levels aborts with a
+  typed `mm_data_error`. Previously these responses surfaced as an opaque
+  engine error.
 * `update()` for `mm_lmm` / `mm_glmm`: formula edits (`. ~ . - x`,
   preserving random-effect bars and `||`), `REML`/`weights`/`family`/
   `offset`/`method`/`control` overrides, new `data`, and `evaluate = FALSE`.

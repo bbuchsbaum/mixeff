@@ -76,12 +76,20 @@ In-sample response predictions reuse the engine's certified fitted values.
 Standard errors and confidence intervals: population (\code{re.form = NA})
 SEs are the fixed-effect Wald SE mapped through the link by the delta
 method; conditional (\code{re.form = NULL}) SEs and confidence bounds come from
-the engine prediction-variance payload, which the engine only certifies
-for \code{method = "joint_laplace"} fits (per-row status \code{"available"}). The
-default \code{pirls_profiled} estimator carries only the uncertified
-working-Hessian variance (status \code{"degraded"}), so its conditional SEs and
+the engine prediction-variance payload. The engine certifies these rows
+for \code{method = "joint_laplace"} fits and for default \code{pirls_profiled} fits
+whose post-fit profiled-optimum certificate is issued (per-row status
+\code{"available"}). Uncertified fits (e.g. singular fits, or fits whose
+certificate fails) keep status \code{"degraded"}, and their conditional SEs and
 bounds are withheld as \code{NA} with the engine's reason in the \code{mm_reason}
 attribute — consistent with the package's "no fake certainty" contract.
-Prediction (future-observation) intervals are refused for GLMMs because
-the payload omits the family variance term.
+
+Prediction (future-observation) intervals (\code{interval = "prediction"}) are
+available for conditional, response-scale predictions: the engine returns
+quantiles of the plug-in predictive distribution (the family conditional
+distribution mixed over link-scale fitted-mean uncertainty), so bounds are
+integers for count families and support points for Bernoulli. They are
+refused with a typed condition on the link scale (future observations are
+response-scale objects), for population-level requests, and for grouped
+binomial fits (the future trial count is not representable in \code{newdata}).
 }

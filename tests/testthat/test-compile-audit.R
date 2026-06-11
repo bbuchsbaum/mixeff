@@ -260,4 +260,25 @@ test_that("a factor inside || emits the double_bar_factor_term diagnostic", {
            spec_exp$artifact$diagnostics %||% list()),
     0L
   )
+
+  # No error-severity diagnostics on any of these healthy compiles. Guards
+  # the upstream split theta-map regression (mixeff-rs bd-01KTVEQFPD, fixed
+  # at e7f19a8): pre-fix, every ||-with-factor compile left a spurious
+  # severity=error "split random-term missing from optimizer basis" behind.
+  error_diags <- function(spec) {
+    Filter(function(d) identical(d$severity, "error"),
+           spec$artifact$diagnostics %||% list())
+  }
+  expect_length(error_diags(spec), 0L)
+  expect_length(error_diags(spec_num), 0L)
+  expect_length(error_diags(spec_exp), 0L)
+
+  # 3+-level factors exercise the multi-contrast Diagonal split map
+  df$f3 <- factor(rep(c("a", "b", "c"), 40))
+  spec3 <- compile_model(y ~ x + f3 + (1 + f3 || g), df)
+  hit3 <- Filter(function(d) identical(d$payload$reason, "double_bar_factor_term"),
+                 spec3$artifact$diagnostics %||% list())
+  expect_length(hit3, 1L)
+  expect_identical(hit3[[1L]]$payload$n_levels, 3L)
+  expect_length(error_diags(spec3), 0L)
 })

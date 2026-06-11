@@ -45,6 +45,18 @@
   Typed refusals remain for link-scale requests (future observations are
   response-scale objects), population-level requests, and grouped binomial
   fits (the future trial count is not representable in `newdata`).
+* `||` factor-term semantics documented and contract-tested: in mixeff,
+  zero-correlation syntax fully decorrelates the block — a factor's
+  treatment-coded level contrasts get independent variances with no
+  within-factor covariances (the principled reading, shared by
+  `afex::mixed(expand_re = TRUE)`, `glmmTMB::diag()`, and
+  `MixedModels.jl zerocorr()`). `lme4`'s `||` instead leaves factor terms
+  intact with a full within-factor covariance block, so the same formula
+  fits a larger (and over-parameterized) model there. Fits announce the
+  situation with an info diagnostic (`covariance_assumption`, reason
+  `double_bar_factor_term`) naming the correlated-block rewrite
+  (`(0 + f | g)`); the lme4-migration and formula vignettes carry the
+  recipe.
 * Binomial response coercion: `glmm()` with `family = binomial()` now
   accepts a logical response (coerced 0/1 silently) or a two-level factor
   response (coerced with the second level as success, announced via a

@@ -203,6 +203,16 @@ stopifnot(grepl("covariance_assumption", split_text, fixed = TRUE))
 stopifnot(grepl("covariance_assumption", double_text, fixed = TRUE))
 ```
 
+One caveat when a **factor** appears inside `||`: mixeff decorrelates
+*everything* in the block, including the factor's level contrasts — each
+treatment-coded contrast receives an independent variance and no
+within-factor covariances are estimated (announced via a
+`covariance_assumption` diagnostic with reason `double_bar_factor_term`).
+Implementations differ here — `lme4`'s `||` leaves factor terms intact with
+a full within-factor covariance block — so when matching an external fit,
+write the intended expansion explicitly: `(1 | g) + (0 + f | g) + (0 + x | g)`
+keeps `f`'s level covariances, while `(1 + f + x || g)` does not.
+
 ## What are the three kinds of help?
 
 The audit surface separates three situations that are often mixed together in

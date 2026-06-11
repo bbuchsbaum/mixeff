@@ -337,6 +337,58 @@ test_that("aphantasia core fit-side reproduction matches cached lme4 references 
   }
 })
 
+test_that("combined reaches the lme4 optimum via the explicit || expansion formula", {
+  # The combined case's ledgered fixef gap is a model-FAMILY divergence: the
+  # native `||` drops within-factor level covariances that lme4's expansion
+  # keeps (see the routing comment above). This test locks in the documented
+  # escape hatch end-to-end through the R wrapper: writing lme4's expansion
+  # explicitly -- the factor gets its own correlated block -- fits the
+  # lme4-exact family, and joint Laplace then reaches/beats the glmer
+  # reference from a default start (upstream bd-01KTQJFZNF final probe).
+  # Measured at pin 6731062 (release build, ~9 min): max|dfixef| 0.0217,
+  # logLik -11283.929 vs ref -11284.046 (we end 0.117 BETTER), AIC rel gap
+  # ~1e-5, df = 23 = lme4's parameter count. The optimizer stops at MAXEVAL
+  # on lme4's over-parameterized theta ridge (4 covariance parameters for 3
+  # identifiable dof), so bounds below carry modest headroom over the
+  # measured values rather than the strict ledger tolerances.
+  testthat::skip_on_cran()
+  mm_skip_if_no_lme4()
+  testthat::skip_if_not(
+    aphantasia_run_full(),
+    "Set MIXEFF_RUN_APHANTASIA=true to run the core aphantasia reproduction."
+  )
+
+  ref <- aphantasia_reference()
+  data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
+  cases <- aphantasia_fit_cases(ref, data_sets)
+  model_ref <- ref$models$combined
+  expanded <- correct ~ group * mask * soa_s * stimtype + block +
+    (1 | participant) + (0 + mask | participant) +
+    (0 + soa_s | participant) + (1 | item)
+
+  fit <- mixeff::glmm(expanded, cases$combined$data,
+                      family = cases$combined$family,
+                      method = "joint_laplace", nAGQ = 1L,
+                      control = mixeff::mm_control(verbose = -1))
+
+  # joint candidate retained, not a fast-PIRLS fallback
+  expect_match(fit$fit$optimizer$return_value, "^JOINT_LAPLACE")
+  # the expanded family has lme4's parameter count (17 fixef + 6 theta)
+  expect_identical(as.integer(attr(stats::logLik(fit), "df")), 23L)
+
+  observed <- mixeff::fixef(fit)
+  names(observed) <- aphantasia_lme4_key(names(observed))
+  expected <- unlist(model_ref$fixef, use.names = TRUE)
+  common <- intersect(names(expected), names(observed))
+  expect_equal(length(common), length(expected))
+  expect_lt(max(abs(observed[common] - expected[common])), 3e-2)
+
+  # logLik at (or beyond) the glmer optimum; AIC inherits it at equal df
+  expect_lt(abs(as.numeric(stats::logLik(fit)) - model_ref$logLik), 0.5)
+  expect_gte(as.numeric(stats::logLik(fit)), model_ref$logLik - 0.5)
+  expect_lt(abs(stats::AIC(fit) - model_ref$AIC) / abs(model_ref$AIC), 1e-3)
+})
+
 test_that("aphantasia intact budgeted joint Laplace proof improves the profiled gap when enabled", {
   testthat::skip_on_cran()
   mm_skip_if_no_lme4()

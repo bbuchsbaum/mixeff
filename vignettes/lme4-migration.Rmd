@@ -126,6 +126,28 @@ glmm(y ~ x + (1 | g), data, family = binomial(),
      method = "joint_laplace")
 ```
 
+**4. `||` with a factor means full decorrelation.** In mixeff, `||` fixes
+*every* covariance in the block at zero — including the covariances among a
+factor's level contrasts (each treatment-coded contrast gets an independent
+variance). lme4's `||` does **not** split factor terms: a factor keeps its
+full within-factor covariance block. So `(1 + cond + x || subj)` with a
+factor `cond` fits a strictly larger model in lme4 than in mixeff, and the
+two disagree on the parameter count (hence `df`, AIC, and — when the fitted
+within-factor covariance is non-zero — the optimum itself). mixeff announces
+the situation at compile time with an info diagnostic
+(`covariance_assumption`, reason `double_bar_factor_term`). To reproduce
+lme4's model family exactly, write the expansion explicitly and give the
+factor its own correlated block:
+
+```{r doublebar-factor, eval = FALSE}
+# mixeff `||`: independent variances for every column, factor levels included
+glmm(y ~ cond * x + (1 + cond + x || subj), data, family = binomial())
+
+# lme4-equivalent family: the factor keeps its within-factor covariance block
+glmm(y ~ cond * x + (1 | subj) + (0 + cond | subj) + (0 + x | subj),
+     data, family = binomial())
+```
+
 ## What is `NA`-with-a-reason (and why)
 
 `mixeff` never fabricates inference it cannot certify. Where lme4 would silently

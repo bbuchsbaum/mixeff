@@ -216,3 +216,48 @@ test_that("compile_model() preserves input column order through the FFI", {
   expect_identical(spec$artifact$requested_formula,
                    mm_parse_formula(Reaction ~ Days + (1 | Subject)))
 })
+
+test_that("a factor inside || emits the double_bar_factor_term diagnostic", {
+  # Contract for the || factor-term semantics decision (upstream
+  # bd-01KTRQRZKB): mixeff's || fully decorrelates the block, INCLUDING a
+  # factor's level contrasts (each treatment-coded contrast gets an
+  # independent variance; no within-factor covariances). lme4's || instead
+  # leaves factor terms intact with a full within-factor covariance block,
+  # so the same formula fits a smaller model family here. The compatibility
+  # bridge is this Info diagnostic naming the divergence and the
+  # correlated-block rewrite -- a pin bump that drops it should fail here.
+  set.seed(3)
+  df <- data.frame(
+    y = rnorm(120), x = rnorm(120),
+    f = factor(rep(c("a", "b"), 60)),
+    g = factor(rep(seq_len(10), each = 12))
+  )
+  spec <- compile_model(y ~ x + f + (1 + f + x || g), df)
+  hit <- Filter(function(d) {
+    identical(d$code, "covariance_assumption") &&
+      identical(d$payload$reason, "double_bar_factor_term")
+  }, spec$artifact$diagnostics %||% list())
+  expect_length(hit, 1L)
+  d <- hit[[1L]]
+  expect_identical(d$severity, "info")
+  expect_match(d$message, "fully decorrelates factor 'f'")
+  expect_identical(d$payload$factor, "f")
+  expect_identical(d$payload$group, "g")
+  expect_identical(d$payload$correlated_block_equivalent, "(0 + f | g)")
+
+  # numeric-only || terms do not emit it
+  spec_num <- compile_model(y ~ x + (1 + x || g), df)
+  expect_length(
+    Filter(function(d) identical(d$payload$reason, "double_bar_factor_term"),
+           spec_num$artifact$diagnostics %||% list()),
+    0L
+  )
+
+  # the explicit correlated-block expansion (lme4's family) does not either
+  spec_exp <- compile_model(y ~ x + f + (1 | g) + (0 + f | g) + (0 + x | g), df)
+  expect_length(
+    Filter(function(d) identical(d$payload$reason, "double_bar_factor_term"),
+           spec_exp$artifact$diagnostics %||% list()),
+    0L
+  )
+})

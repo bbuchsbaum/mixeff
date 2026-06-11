@@ -201,7 +201,10 @@ glmm <- function(formula,
     fitted         = as.numeric(unlist(fit_result$fitted, use.names = FALSE)),
     residuals      = as.numeric(unlist(fit_result$residuals, use.names = FALSE)),
     random_effects = mm_ranef_from_terms(fit_result$ranef),
-    varcorr        = mm_varcorr_from_result(fit_summary$varcorr %||% fit_result$varcorr)
+    varcorr        = mm_varcorr_from_result(
+      fit_summary$varcorr %||% fit_result$varcorr,
+      artifact = artifact
+    )
   )
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
   fit

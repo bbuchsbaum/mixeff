@@ -440,7 +440,7 @@ mm_report_random_terms <- function(fit) {
 mm_report_random_effects <- function(fit) {
   has_fit_summary <- is.list(fit$fit_summary) && is.list(fit$fit_summary$varcorr)
   vc_obj <- if (has_fit_summary) {
-    mm_varcorr_from_result(fit$fit_summary$varcorr)
+    mm_varcorr_from_result(fit$fit_summary$varcorr, artifact = fit$artifact)
   } else {
     VarCorr(fit)
   }

@@ -673,27 +673,31 @@ mm_ranef_from_terms <- function(terms) {
   out
 }
 
-mm_varcorr_from_result <- function(varcorr) {
+mm_varcorr_from_result <- function(varcorr, artifact = NULL) {
+  components_in <- varcorr$components %||% list()
+  group_labels <- mm_varcorr_group_labels(components_in, artifact)
   # Keep the raw (full-precision) per-group covariance pieces so
   # as.data.frame.mm_varcorr() can reconstruct the lme4 long form
   # (grp/var1/var2/vcov/sdcor); the printed `table` only retains a rounded
   # correlation string.
-  components_raw <- lapply(varcorr$components %||% list(), function(component) {
+  components_raw <- lapply(seq_along(components_in), function(i) {
+    component <- components_in[[i]]
     list(
-      group = as.character(component$group),
+      group = group_labels[[i]],
       names = as.character(unlist(component$names, use.names = FALSE)),
       std_dev = as.numeric(unlist(component$std_dev, use.names = FALSE)),
       correlations = as.numeric(unlist(component$correlations, use.names = FALSE))
     )
   })
-  components <- lapply(varcorr$components %||% list(), function(component) {
+  components <- lapply(seq_along(components_in), function(component_index) {
+    component <- components_in[[component_index]]
     names <- as.character(unlist(component$names, use.names = FALSE))
     std_dev <- as.numeric(unlist(component$std_dev, use.names = FALSE))
     correlations <- as.numeric(unlist(component$correlations, use.names = FALSE))
     rows <- vector("list", length(names))
     for (i in seq_along(names)) {
       rows[[i]] <- data.frame(
-        group = as.character(component$group),
+        group = group_labels[[component_index]],
         name = names[[i]],
         variance = std_dev[[i]]^2,
         std_dev = std_dev[[i]],
@@ -727,6 +731,42 @@ mm_varcorr_from_result <- function(varcorr) {
   )
   class(out) <- c("mm_varcorr", "list")
   out
+}
+
+mm_varcorr_group_labels <- function(components, artifact = NULL) {
+  fallback <- vapply(
+    components,
+    function(component) as.character(component$group %||% ""),
+    character(1)
+  )
+  terms <- artifact$semantic_model$random_terms %||% list()
+  if (!length(terms) || length(terms) != length(fallback)) {
+    return(fallback)
+  }
+  labels <- vapply(seq_along(terms), function(i) {
+    mm_group_lme4_label(terms[[i]]$group, fallback[[i]])
+  }, character(1))
+  ifelse(nzchar(labels), labels, fallback)
+}
+
+mm_group_lme4_label <- function(group, fallback = "") {
+  if (is.character(group) && length(group) == 1L && nzchar(group)) {
+    return(group)
+  }
+  if (is.list(group)) {
+    if (!is.null(group$single$name)) {
+      return(as.character(group$single$name))
+    }
+    if (!is.null(group$cell$names)) {
+      return(paste(as.character(unlist(group$cell$names, use.names = FALSE)),
+                   collapse = ":"))
+    }
+    if (!is.null(group$interaction$names)) {
+      return(paste(as.character(unlist(group$interaction$names, use.names = FALSE)),
+                   collapse = ":"))
+    }
+  }
+  as.character(fallback %||% "")
 }
 
 # PRD §9.4: boundary fits are reported model state, not a warning.

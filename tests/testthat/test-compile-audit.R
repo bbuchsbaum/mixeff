@@ -282,3 +282,51 @@ test_that("a factor inside || emits the double_bar_factor_term diagnostic", {
   expect_identical(hit3[[1L]]$payload$n_levels, 3L)
   expect_length(error_diags(spec3), 0L)
 })
+
+test_that("factor || and explicit correlated expansion fit different covariance families", {
+  set.seed(4)
+  n_group <- 24L
+  df <- expand.grid(
+    g = factor(seq_len(n_group)),
+    f = factor(c("a", "b", "c")),
+    rep = seq_len(3L)
+  )
+  df$x <- rnorm(nrow(df))
+  group_shift <- rnorm(n_group, sd = 0.3)
+  f_shift <- matrix(rnorm(n_group * 3L, sd = 0.2), nrow = n_group)
+  df$y <- 1 + 0.25 * df$x + group_shift[as.integer(df$g)] +
+    f_shift[cbind(as.integer(df$g), as.integer(df$f))] +
+    rnorm(nrow(df), sd = 0.5)
+
+  native <- lmm(
+    y ~ x + f + (1 + f + x || g),
+    df,
+    control = mm_control(verbose = -1)
+  )
+  expanded <- lmm(
+    y ~ x + f + (1 | g) + (0 + f | g) + (0 + x | g),
+    df,
+    control = mm_control(verbose = -1)
+  )
+
+  native_theta <- parameterization(native)$table
+  expanded_theta <- parameterization(expanded)$table
+
+  native_f <- native_theta[native_theta$source_syntax == "(0 + f | g)", ]
+  expanded_f <- expanded_theta[expanded_theta$source_syntax == "(0 + f | g)", ]
+
+  expect_identical(length(native$theta), 4L)
+  expect_identical(length(expanded$theta), 8L)
+
+  expect_equal(nrow(native_f), 2L)
+  expect_true(all(native_f$covariance_family == "diagonal"))
+  expect_true(all(native_f$lambda_row == native_f$lambda_col))
+  expect_setequal(native_f$lambda_row_basis, c("f: b", "f: c"))
+  expect_false(any(grepl("correlation[", native_f$varcorr_entries, fixed = TRUE)))
+
+  expect_equal(nrow(expanded_f), 6L)
+  expect_true(all(expanded_f$covariance_family == "full_cholesky"))
+  expect_setequal(expanded_f$lambda_row_basis, c("f: a", "f: b", "f: c"))
+  expect_true(any(expanded_f$lambda_row != expanded_f$lambda_col))
+  expect_true(any(grepl("correlation[", expanded_f$varcorr_entries, fixed = TRUE)))
+})

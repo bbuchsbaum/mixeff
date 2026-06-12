@@ -1,8 +1,8 @@
 ---
-title: Inference Where lme4 Says No
+title: Inference Where Standard Mixed-Model p-values Break Down
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Inference Where lme4 Says No}
+  %\VignetteIndexEntry{Inference Where Standard Mixed-Model p-values Break Down}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -20,44 +20,57 @@ knitr::opts_chunk$set(
 library(mixeff)
 ```
 
-Some mixed-model fits are exactly the cases where ordinary
-asymptotic p-values (Wald, Satterthwaite, Kenward-Roger) are least
-trustworthy: boundary fits, reduced-rank covariance estimates, and
-designs whose degrees-of-freedom approximations stop being defined.
+Mixed models sometimes converge but still leave us in a difficult
+inference situation. The fit exists, the estimates are usable, and
+the model may be scientifically reasonable, but some familiar
+p-values are no longer well justified.
 
-The mathematics behind these limits is well established. Self and
-Liang (1987) showed that the likelihood-ratio statistic does not
-follow its standard χ² distribution when a parameter lies on the
-boundary of its parameter space; Stram and Lee (1994) specialised
-the result to variance components in linear mixed models. Kenward
-and Roger (1997), who introduced the most widely used small-sample
-adjustment for fixed-effect tests, derived it from a Taylor
-expansion of the variance estimator that requires an *interior*
-solution for the variance parameters. At the boundary the
-adjustment is undefined by construction. `lme4` typically returns
-the Wald number alongside a one-line `boundary (singular) fit`
-warning, leaving the analyst to decide what to make of the
-situation.
+This vignette focuses on one common case: boundary or singular fits.
+In a mixed model, this can happen when a variance component is
+estimated very close to zero, or when random-effect terms are
+estimated as perfectly or nearly perfectly correlated. Equivalently,
+the fitted random-effect covariance matrix has lower effective rank
+than the model requested.
 
-`mixeff` does two things differently. First, it labels the
-asymptotic row with a
-[closed-enum reliability reason](inference-method-glossary.html) that names
-why the number is suspect on this fit — for example,
-`*_unavailable_at_boundary` when a variance-parameter derivative is
-not defined. Second, when bootstrap is the defensible route, it
-routes the analyst through a parametric bootstrap as a labelled
-first-class peer to the asymptotic methods. The parametric
-bootstrap has a long pedigree in this setting — Halekoh and
-Højsgaard (2014) implemented it in `pbkrtest` for exactly the
-small-sample and boundary cases where Kenward-Roger needs help. It
-is not a fallback trick; it is the path the inference contract
-documents for this situation.
+These are exactly the situations where ordinary large-sample tests
+can become least trustworthy. Wald tests, Satterthwaite
+approximations, and Kenward-Roger adjustments all rely on regularity
+conditions that are strained or broken when a variance parameter is
+on the boundary of its parameter space.
+
+The statistical reason is well known. Self and Liang (1987) showed
+that likelihood-ratio statistics do not necessarily follow their
+usual chi-square reference distributions when a parameter lies on
+the boundary. Stram and Lee (1994) specialized this issue to
+variance components in linear mixed models. Kenward and Roger (1997)
+derived their fixed-effect adjustment from a Taylor expansion of the
+variance estimator; that derivation assumes a regular interior
+solution for the variance parameters. At a boundary, those
+derivatives may not exist or may not behave regularly.
+
+`mixeff` handles this by making the inference contract explicit.
+First, it does not silently present every number as equally
+reliable. Asymptotic rows are labelled with a
+[closed-enum reliability reason](inference-method-glossary.html),
+such as `asymptotic_wald_z_fallback` or
+`*_unavailable_at_boundary`. Second, when bootstrap inference is the
+better-supported route, `mixeff` exposes it as a labelled method
+rather than an informal workaround. Parametric bootstrap methods
+have a long history in this setting; for example, Halekoh and
+Højsgaard (2014) implemented parametric bootstrap tests in
+`pbkrtest` for small-sample and boundary cases where Kenward-Roger
+methods may need support.
+
+The goal is not to say that a singular fit is automatically useless.
+The goal is to keep the covariance state attached to the inference
+result, so that available numbers and unavailable numbers are both
+documented.
 
 ## What fit are we worried about?
 
-This small repeated-measures example has subject-specific intercepts and slopes
-that are nearly collinear. That is enough to create a reduced-rank random-effect
-covariance.
+This small repeated-measures example has subject-specific intercepts and slopes.
+In this data set, those two random effects are nearly collinear, which is enough
+to produce a reduced-rank random-effect covariance estimate.
 
 ```{r singular-data, include = FALSE}
 set.seed(3)
@@ -93,19 +106,28 @@ stopifnot(isTRUE(is_singular(fit)))
 stopifnot(identical(fit_status(fit), "converged_reduced_rank"))
 ```
 
-The fit is usable, but the covariance state matters for inference. The audit
-verbs keep that state attached to the object.
+The fit converged, but the covariance estimate is singular. That matters for
+inference, so `mixeff` records it in the model diagnostics.
 
 ```{r covariance-diagnostics}
 diagnostics(fit)$table[, c("code", "severity", "stage", "message")]
 ```
 
+The requested random-effect covariance for `(1 + days | subj)` has rank 2: one
+dimension for the subject intercept and one for the subject slope. The fitted
+covariance has effective rank 1. In plain language, the model asked for two
+random-effect dimensions, but the data support only one effective dimension.
+
+That does not automatically invalidate the model. It does mean that inference
+methods relying on a regular full-rank covariance estimate need to be treated
+carefully.
+
 ## Which inference routes are available?
 
-Ask before you test. `inference_options()` is an audit map, not a
-recommender. Each row enumerates one inference method that the
-engine knows about, along with a status, a warrant, and a rough
-cost.
+Before testing a term, ask which inference routes are defined for this fit.
+`inference_options()` is an audit map, not a recommender. Each row describes one
+method that `mixeff` knows about. The row says whether the method can run, why
+it can or cannot run, and what the rough computational cost is.
 
 The printed object is the reader-facing map. It keeps the raw enum
 columns in `routes$table` for scripts, but explains the route status
@@ -123,28 +145,43 @@ satt <- routes$table[routes$table$method == "satterthwaite", ]
 stopifnot(identical(satt$expected_status, "not_assessed"))
 ```
 
-Read the table top to bottom. **Wald** runs now; its reliability
-warrant lives in `inference_table()` (next chunk). **Satterthwaite**
-and **Kenward-Roger** refuse at the boundary for the structural
-reason discussed above. **Bootstrap** runs now at a cost of roughly
-four seconds for `nsim = 200`; this is the route the contract
-documents for boundary fits. **Bootstrap-LRT** refuses here because
-the example fit is REML and the LRT route requires ML. **Cluster
-bootstrap** refuses fixed-effect p-values because the current
-cluster-resample target describes estimator distributions, not null
-hypothesis tests. **Profile CI** is not certified for this boundary
-fit.
+Read this table as follows. The Wald route can run immediately, but it is
+labelled as a low-reliability asymptotic fallback. Satterthwaite and
+Kenward-Roger are refused because the variance-parameter derivatives needed by
+those approximations are not available at the boundary. The parametric bootstrap
+route can run and is the documented fixed-effect testing route for this fit. The
+bootstrap LRT route is refused here because this model was fit by REML, while
+that route requires an ML fit. The cluster bootstrap route is refused for
+fixed-effect p-values because its current target is an estimator distribution,
+not a null hypothesis test. Profile confidence intervals are not certified for
+this boundary fit.
 
 ```{r wald-status}
 inference_table(fit)$table[, c("term", "method", "status",
                                "reliability", "reliability_reason")]
 ```
 
+The important point is that `mixeff` distinguishes three cases:
+
+1. A method can run and is considered available.
+2. A method can produce a number, but the number is labelled as low reliability.
+3. A method is refused because the method's assumptions or target are not
+   defined for this fit.
+
+That distinction is especially useful in scripts and reports, because
+unavailable inference is recorded with stable reason codes rather than
+disappearing as an error message.
+
 ## How do I test the term anyway?
 
-For the fixed-effect term, request the bootstrap route explicitly. Rust builds
-the fixed-effect-null target, simulates from that target, refits each replicate,
-and returns a labelled term row.
+For the fixed-effect term `days`, request the parametric bootstrap route
+explicitly. Here the bootstrap target is a fixed-effect null model. `mixeff`
+simulates data under the null hypothesis for the tested term, refits the model
+to each simulated data set, and compares the observed test statistic with the
+bootstrap reference distribution.
+
+The small `nsim` value below keeps the vignette fast. For a real analysis, use
+more bootstrap replicates.
 
 ```{r bootstrap-term}
 term_boot <- test_effect(
@@ -164,8 +201,12 @@ stopifnot(identical(term_boot$table$method, "bootstrap"))
 stopifnot(is.finite(term_boot$table$p_value))
 ```
 
-The p-value is not reconstructed in R. The row carries the Rust run payload in
-`details`, including replicate accounting.
+The p-value is returned as part of the labelled result row. It is not
+reconstructed by hand in R.
+
+The result also carries a bootstrap payload in `details`, including the
+requested number of replicates, the number of successful refits, the boundary
+rate among bootstrap refits, and the Monte Carlo standard error.
 
 ```{r bootstrap-payload}
 run <- term_boot$table$details[[1]]$bootstrap
@@ -177,11 +218,25 @@ data.frame(
 )
 ```
 
+The boundary rate is not a failure count. It reports how often the bootstrap
+refits also ended on a covariance boundary. That is useful diagnostic
+information: it tells you that the boundary behavior is not just a one-off
+feature of the observed data set.
+
+With `nsim = 50`, the bootstrap p-value is also necessarily coarse. For example,
+a p-value of about 0.0196 corresponds to the smallest non-zero value possible
+under a common plus-one bootstrap adjustment, `1 / (50 + 1)`. Use more
+replicates when the p-value itself will be reported or compared with a decision
+threshold.
+
 ## What about confidence intervals?
 
 For fixed-effect confidence intervals, use `confint(method = "bootstrap")`.
-This is a different bootstrap target: a full-model distribution used for
-intervals and diagnostics, not for p-values.
+This bootstrap has a different target from the fixed-effect test above. It
+simulates from the full fitted model and summarizes the resulting estimator
+distribution. That target is appropriate for percentile-style confidence
+intervals and diagnostics, but it is not the same as a null distribution for a
+fixed-effect p-value.
 
 ```{r bootstrap-ci}
 ci <- confint(
@@ -203,20 +258,32 @@ stopifnot(length(payload$replicate_statistics) >= payload$metadata$successful_re
           length(payload$replicate_statistics) <= payload$metadata$completed_replicates)
 ```
 
-The attached payload says what was simulated. A full-model bootstrap interval
-does not certify a hypothesis-test p-value, and the payload records that caveat.
+The attached bootstrap payload records what was simulated and why the interval
+should not be reinterpreted as a fixed-effect hypothesis test.
 
 ```{r ci-payload}
+payload <- attr(ci, "bootstrap")[[1]]
 payload$metadata$target$kind
 payload$metadata$notes
 ```
 
+This distinction is central:
+
+- `test_effect(..., method = "bootstrap")` uses a fixed-effect null target and
+  returns a p-value.
+- `confint(..., method = "bootstrap")` uses a full-model estimator-distribution
+  target and returns an interval.
+- The second result should not be used to reverse-engineer the first.
+
 ## Where does cluster bootstrap stand?
 
-Cluster resampling is available upstream as an estimator-distribution target:
-it resamples grouping levels and summarizes the resulting estimator
-distribution. In the current schema it does not certify fixed-effect p-values,
-so a term test refuses cleanly instead of inventing a null distribution.
+Cluster resampling is available as an estimator-distribution target. It
+resamples grouping levels and summarizes how estimates vary across those
+resamples.
+
+In the current schema, that target does not certify fixed-effect p-values.
+Therefore a request for a fixed-effect cluster-bootstrap p-value refuses cleanly
+instead of inventing a null distribution.
 
 ```{r cluster-refusal}
 cluster_row <- test_effect(
@@ -236,15 +303,23 @@ stopifnot(identical(cluster_row$table$reason_code,
                     "bootstrap_cluster_resample_p_value_unavailable"))
 ```
 
-That refusal is part of the same contract as the available bootstrap rows:
-available numbers are labelled, and unavailable numbers carry stable reasons.
+That refusal is part of the same inference contract as the available bootstrap
+result. Available numbers are labelled with their method and reliability reason.
+Unavailable numbers are labelled with stable reason codes explaining why they
+are unavailable.
 
 ## Variance-component boundary tests
 
 The boundary likelihood-ratio route is for random-effect variance components,
-not fixed effects. `test_random_effect()` makes that distinction explicit. In
-the one-component case the reference distribution is the Self-Liang 50:50
-mixture: `0.5 * chi-square(0) + 0.5 * chi-square(1)`.
+not ordinary fixed effects.
+
+This is a different testing problem. For a variance component, the null
+hypothesis can put the parameter exactly on the boundary of the parameter space,
+because variances cannot be negative. In the simplest one-component case, the
+reference distribution is the Self-Liang 50:50 mixture:
+`0.5 * chi-square(0) + 0.5 * chi-square(1)`.
+
+Fit a simpler random-intercept model by ML:
 
 ```{r boundary-lrt}
 ri_fit <- lmm(
@@ -271,22 +346,47 @@ stopifnot(identical(re_lrt$table$reference_distribution,
 stopifnot(is.finite(re_lrt$table$p_value))
 ```
 
-Asking for the same method on a fixed effect returns a typed refusal with a
-stable reason code. This is not a software gap; it is the methodological
-boundary. Self and Liang (1987), Stram and Lee (1994), and Crainiceanu and
-Ruppert (2004) address variance-component tests at the boundary, not ordinary
-fixed-effect Wald rows.
+The reporting table keeps the reference distribution attached to the result.
+
+Asking for the same method on a fixed effect returns a typed refusal.
 
 ```{r boundary-fixed-refusal}
 fixed_boundary <- test_effect(ri_fit, "days", method = "boundary_lrt")
 fixed_boundary$table[, c("term", "method", "status", "reason_code")]
 ```
 
+This is not a software gap. It is a methodological distinction. Boundary
+likelihood-ratio theory applies naturally to variance-component tests, where
+the null hypothesis places a variance on the edge of the parameter space. It is
+not the reference distribution for an ordinary fixed-effect Wald row.
+
 ```{r boundary-fixed-checks, include = FALSE}
 stopifnot(identical(fixed_boundary$table$status, "unsupported"))
 stopifnot(identical(fixed_boundary$table$reason_code,
                     "boundary_lrt_not_applicable_to_fixed_effects"))
 ```
+
+## Summary
+
+A singular mixed-model fit can still be useful, but it changes the inference
+problem.
+
+For this fit:
+
+- the model converges, but the random-effect covariance is reduced rank;
+- Wald inference is available but labelled as low reliability;
+- Satterthwaite and Kenward-Roger routes are refused because the
+  variance-parameter derivatives are not defined at the boundary;
+- parametric bootstrap testing is available for the fixed effect;
+- bootstrap confidence intervals are available, but they use a full-model
+  estimator-distribution target, not a fixed-effect null target;
+- cluster bootstrap currently reports estimator distributions, not fixed-effect
+  p-values;
+- boundary LRTs are available for variance-component tests, not fixed-effect
+  tests.
+
+The main design principle is that `mixeff` does not make the analyst guess.
+Every route either returns a labelled result or refuses with a stable reason.
 
 ## References
 

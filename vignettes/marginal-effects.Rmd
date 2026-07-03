@@ -1,0 +1,253 @@
+---
+title: Marginal Means and Comparisons
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Marginal Means and Comparisons}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+A fixed-effects coefficient is not a group mean. For a model with multiple
+predictors and interactions, `fixef(fit)["trt: active"]` is the treatment
+effect *at the reference level of every other predictor* — not the
+average treatment effect across the population. Marginal means give you the
+latter: population-level averages at each combination of interest, properly
+accounting for the reference grid and the fixed-effect covariance.
+
+`mixeff` provides a native marginal-quantities surface — `mm_grid()`,
+`mm_predictions()`, `mm_means()`, `mm_comparisons()` — that routes all
+inference through the same contract machinery as `contrast()`. Each row in
+the returned table carries `method`, `status`, `reliability`, and `reason`
+fields so you know exactly what you are reporting and when to be cautious.
+
+## The study
+
+A rehabilitation trial assigns patients to coached or usual-care treatment.
+Each patient is assessed before and after the intervention. Patients are
+grouped within clinics.
+
+```{r rehab-data, include = FALSE}
+set.seed(101)
+n_clinic <- 4L
+n_subj   <- 24L
+spc      <- n_subj %/% n_clinic   # subjects per clinic
+
+clinic <- factor(rep(paste0("C", seq_len(n_clinic)), each = spc))
+trt    <- factor(
+  rep(c("control", "active"), times = n_clinic * spc / 2L),
+  levels = c("control", "active")
+)
+subj <- factor(paste0("S", seq_len(n_subj)))
+
+rehab <- data.frame(
+  subj   = rep(subj,   each = 2L),
+  clinic = rep(clinic, each = 2L),
+  trt    = rep(trt,    each = 2L),
+  time   = factor(rep(c("pre", "post"), times = n_subj), levels = c("pre", "post"))
+)
+
+clinic_re <- c(-1.2, 0.4, 0.9, -0.1)
+subj_re   <- rnorm(n_subj, sd = 0.8)
+
+rehab$score <- 52 +
+  -2.1 * (rehab$trt  == "active") +
+  -3.8 * (rehab$time == "post") +
+  -2.9 * (rehab$trt  == "active") * (rehab$time == "post") +
+  clinic_re[as.integer(rehab$clinic)] +
+  subj_re[as.integer(rehab$subj)] +
+  rnorm(nrow(rehab), sd = 0.4)
+```
+
+```{r show-data}
+head(rehab)
+```
+
+Clinics are not perfectly balanced between treatment arms — clinic C1 has
+more control patients than average, and clinic C3 has more active-arm
+patients. This imbalance means raw group means are confounded by clinic
+effects: a naive `tapply(rehab$score, rehab$trt, mean)` will not answer
+the treatment question you actually want.
+
+## Fit the model
+
+```{r fit}
+fit <- lmm(score ~ trt * time + (1 | clinic) + (1 | subj), rehab)
+summary(fit, tests = "coefficients")
+```
+
+The interaction coefficient `trt: active:time: post` tells you the
+*additional* post-treatment change for the active arm relative to control.
+It is not the average treatment effect. For that you need marginal means.
+
+## Reference grids with `mm_grid()`
+
+`mm_grid()` constructs the cross-product of all fixed-predictor levels. By
+default, factor predictors expand to all their levels; numeric predictors
+collapse to their mean.
+
+```{r grid}
+g <- mm_grid(fit, specs = ~ trt * time)
+g
+```
+
+The grid has four rows — one for each treatment × timepoint cell — and
+retains the model matrix needed for inference.
+
+## Cell predictions with `mm_predictions()`
+
+`mm_predictions()` evaluates the fixed-effect prediction at each grid row,
+with a confidence interval from the certified covariance.
+
+```{r predictions}
+preds <- mm_predictions(fit, specs = ~ trt * time)
+preds$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
+```
+
+These are the four population-level cell means. Each row carries its
+inference method so the provenance is visible without digging into model
+objects.
+
+## Marginal means with `mm_means()`
+
+Marginal means average the reference grid over dimensions you want to
+collapse. Here: average over timepoints to get the *overall* treatment effect.
+
+```{r means-trt}
+mt <- mm_means(fit, specs = ~ trt)
+mt$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
+```
+
+Compare these to the raw means:
+
+```{r raw-means}
+tapply(rehab$score, rehab$trt, mean)
+```
+
+The raw means are shifted by the clinic imbalance; the marginal means are
+not. This difference is small in a balanced simulation but can be substantial
+in real data.
+
+## Pairwise comparisons with `mm_comparisons()`
+
+`mm_comparisons()` takes all pairwise differences among the marginal means
+and applies the same inference method.
+
+```{r comparisons-trt}
+ct <- mm_comparisons(fit, specs = ~ trt)
+ct$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
+```
+
+The `active - control` row is the average treatment effect across both
+timepoints, with a Satterthwaite *t* test and its certified provenance.
+
+## Conditional comparisons with `by =`
+
+The `by` argument splits comparisons within levels of another variable —
+the analogue of simple effects in a factorial design.
+
+```{r comparisons-by-time}
+ct_by <- mm_comparisons(fit, specs = ~ trt | time)
+ct_by$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
+```
+
+Two rows: the treatment difference *at pre-intervention* and the treatment
+difference *at post-intervention*. The post-intervention gap is larger because
+the interaction drives additional improvement in the active arm.
+
+## Constraining the grid with `at =`
+
+For numeric predictors, `at` pins specific values rather than collapsing to
+the mean.
+
+```{r at-example}
+mt_time <- mm_means(fit, specs = ~ time, at = list(trt = "active"))
+mt_time$table[, c("label", "estimate", "conf_low", "conf_high")]
+```
+
+This gives the pre/post means *within the active arm* only, holding `trt`
+constant at `"active"`.
+
+## Custom contrasts with `mm_lincomb()`
+
+For hypotheses that are not pairwise differences of marginal means, build
+the contrast weights directly with `mm_lincomb()`. The interaction effect
+expressed as a contrast: (active post − active pre) − (control post − control pre).
+
+```{r lincomb}
+beta <- fixef(fit)
+names(beta)
+
+# Interaction row: coefficient named "trt: active:time: post"
+w <- setNames(numeric(length(beta)), names(beta))
+w["trt: active:time: post"] <- 1
+
+lc <- mm_lincomb(fit, weights = w)
+lc[, c("estimate", "lower", "upper", "p_value", "method")]
+```
+
+`mm_lincomb()` applies the same contract-preserving inference as `contrast()`,
+so the method and status fields are populated identically.
+
+## The `emmeans` bridge
+
+When `emmeans` is installed, `mixeff` registers a basis so you can call
+`emmeans::emmeans()` directly on `mm_lmm` objects.
+
+```{r emmeans-bridge, eval = requireNamespace("emmeans", quietly = TRUE)}
+if (requireNamespace("emmeans", quietly = TRUE)) {
+  em <- emmeans::emmeans(fit, ~ trt)
+  print(em)
+  print(pairs(em))
+}
+```
+
+`emmeans` uses the same `mixedmodels.fixed_effect_covariance_matrix` payload
+as `mm_means()`, so the point estimates and standard errors agree. The bridge
+prints an informational message noting which covariance it used.
+
+**When to prefer the native verbs over `emmeans`:** `mm_means()` and
+`mm_comparisons()` carry the full `status`, `reliability`, and `reason`
+row-level audit fields from the underlying `contrast()` call. `emmeans`
+does not propagate these fields; if a row is `"unavailable"` for a
+documented reason, that information disappears in the `emmeans` output.
+Use `emmeans` for its richer contrasts grammar (Tukey correction,
+back-transformation, custom correction methods); prefer the native verbs
+when auditability and report-ready provenance matter.
+
+## Reading `status` and `reason`
+
+Every table returned by the marginal-quantities surface has these columns:
+
+| Column | Meaning |
+|---|---|
+| `status` | `"available"` / `"unavailable"` |
+| `reliability` | `"certified"` / `"indicative"` / `"unavailable"` |
+| `reason` | stable code (see `vignette("inference-method-glossary")`) |
+| `method` | the inference method that was applied |
+
+A row with `status = "unavailable"` contains `NA` for standard error and
+p-value — the package refuses to invent them. The `reason` code tells you
+why (rank deficiency, missing covariance payload, etc.) and is stable across
+package versions so you can guard on it in reproducible scripts.
+
+## Where to read next
+
+- `vignette("inference")` — how the underlying `contrast()` machinery works
+  and what inference methods are available.
+- `vignette("inference-method-glossary")` — reference table of every
+  `reason` code.
+- `vignette("reporting-lmms")` — building a full results section from a
+  fitted object.

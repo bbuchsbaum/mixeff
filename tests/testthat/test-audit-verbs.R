@@ -22,6 +22,48 @@ test_that("audit() is the post-fit audit_design() surface", {
   expect_identical(audit_design(fit)$text, a$text)
 })
 
+test_that("print.mm_audit defaults to the upstream-rendered compact summary", {
+  set.seed(19)
+  # 20 levels keeps the information budget above the v0 full-covariance
+  # threshold (15), so the only model change is the NotAReduction
+  # canonicalization and the audit is clean.
+  n_subjects <- 20L
+  n_per <- 4L
+  subject <- factor(rep(seq_len(n_subjects), each = n_per))
+  x <- rep(seq_len(n_per) - 1L, n_subjects)
+  df <- data.frame(y = rnorm(length(x)), x = x, subject = subject)
+  audit <- audit_design(compile_model(y ~ x + (x | subject), df))
+
+  compact_lines <- capture.output(print(audit))
+  compact <- paste(compact_lines, collapse = "\n")
+  full_lines <- strsplit(audit$text, "\n", fixed = TRUE)[[1L]]
+  full <- paste(capture.output(print(audit, full = TRUE)), collapse = "\n")
+
+  # The compact default is the upstream render_summary, verbatim.
+  expect_identical(sub("\n$", "", audit$summary_text), compact)
+  expect_match(compact, "Audit Summary:", fixed = TRUE)
+  expect_match(compact, "Requested Model:", fixed = TRUE)
+  expect_false(grepl("Model State:", compact, fixed = TRUE))
+  expect_false(grepl("Optimizer:", compact, fixed = TRUE))
+
+  # A correctly specified pre-fit model is clean: canonicalization is INFO,
+  # and pre-fit optimizer/inference lines are "not applicable", not warnings.
+  expect_match(compact, "overall [OK]", fixed = TRUE)
+  expect_match(
+    compact,
+    "attention [OK]: no warnings or unchecked inference-critical items",
+    fixed = TRUE
+  )
+  expect_false(grepl("NOT CHECKED", compact, fixed = TRUE))
+
+  expect_match(full, "Model State:", fixed = TRUE)
+  expect_match(full, "changes [INFO]: Diagnostic:NotAReduction", fixed = TRUE)
+  expect_match(full, "not applicable before fitting", fixed = TRUE)
+  expect_false(grepl("attention \\[NOT CHECKED\\]", full))
+  expect_gt(nchar(full), nchar(compact))
+  expect_true(all(compact_lines[nzchar(compact_lines)] %in% full_lines))
+})
+
 test_that("diagnostics() and fit_status() expose artifact status fields", {
   fit <- mk_audit_fit()
   d <- diagnostics(fit)
@@ -53,6 +95,53 @@ test_that("changes() reports requested/effective/fitted transitions", {
   expect_true("semantic_ir" %in% ch$table$stage)
   expect_true("certificate_time" %in% ch$table$stage)
   expect_true(any(ch$table$status %in% c("full_rank", "reduced_rank")))
+})
+
+test_that("print(changes()) renders sentences, not the raw stage table", {
+  fit <- mk_audit_fit()
+  printed <- paste(capture.output(print(changes(fit))), collapse = "\n")
+  expect_match(printed, "Model changes:", fixed = TRUE)
+  expect_match(printed, "Stage-by-stage records available via $table.",
+               fixed = TRUE)
+  # the misleading formula-display row must not print
+  expect_false(grepl("formula display", printed, fixed = TRUE))
+  expect_false(grepl("semantic_ir", printed, fixed = TRUE))
+})
+
+test_that("print(changes()) on a converged unchanged fit says so plainly", {
+  set.seed(42)
+  df <- data.frame(
+    t = rep(seq_len(6), 12),
+    s = factor(rep(seq_len(12), each = 6))
+  )
+  df$y <- 2 + 0.5 * df$t + rnorm(12)[as.integer(df$s)] * 2 + rnorm(72)
+  fit <- lmm(y ~ t + (1 | s), df, control = mm_control(verbose = -1))
+  skip_if(!startsWith(fit$fit_status, "converged_interior"),
+          "fixture did not converge interior on this build")
+  printed <- paste(capture.output(print(changes(fit))), collapse = "\n")
+  expect_match(printed, "none: the model was fitted as requested.",
+               fixed = TRUE)
+})
+
+test_that("print(changes()) on a stopped-early fit names the optimizer state", {
+  set.seed(42)
+  df <- data.frame(
+    t = rep(seq_len(6), 12),
+    s = factor(rep(seq_len(12), each = 6))
+  )
+  df$y <- 2 + 0.5 * df$t + rnorm(12)[as.integer(df$s)] * 2 + rnorm(72)
+  fit <- suppressWarnings(
+    lmm(y ~ t + (1 | s), df,
+        control = mm_control(verbose = -1, max_feval = 2))
+  )
+  skip_if(startsWith(fit$fit_status, "converged"),
+          "max_feval = 2 unexpectedly converged on this build")
+  printed <- paste(capture.output(print(changes(fit))), collapse = "\n")
+  expect_match(
+    printed,
+    "no structural change was made; the optimizer stopped early",
+    fixed = TRUE
+  )
 })
 
 test_that("parameterization() exposes theta/Lambda trace rows", {

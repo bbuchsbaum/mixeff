@@ -73,13 +73,34 @@ mm_singular_render_lines <- function(fit) {
     }
   }
   group <- mm_singular_first_group(fit)
-  lines <- c(
-    lines,
-    "Use changes(fit) to see which dimension was unsupported.",
-    sprintf("Use random_options(spec, group = %s) to inspect lower-dimensional covariance choices.",
-            group)
-  )
+  lines <- c(lines, "Use changes(fit) to see which dimension was unsupported.")
+  # Only advertise random_options() when it can actually run: it enumerates
+  # slope-bearing spellings, so a model with no slope candidate anywhere
+  # (intercept-only random terms and no non-intercept fixed effect) makes it
+  # refuse -- a printed pointer must not error on the very fit that printed it.
+  if (mm_singular_has_slope_candidate(fit)) {
+    lines <- c(lines, sprintf(
+      "Use random_options(spec, group = %s) to inspect lower-dimensional covariance choices.",
+      group
+    ))
+  }
   lines
+}
+
+# Mirror of mm_default_slope()'s candidate search, from fit-artifact facts
+# alone: a slope on any random-term card, else any non-intercept fixed term.
+mm_singular_has_slope_candidate <- function(fit) {
+  cards <- fit$artifact$design_audit$random_term_cards %||% list()
+  for (card in cards) {
+    slopes <- unlist(
+      lapply(card$blocks %||% list(), function(block) block$slopes %||% list()),
+      use.names = FALSE
+    )
+    if (length(slopes)) return(TRUE)
+  }
+  fixed <- unlist(fit$artifact$semantic_model$fixed_terms %||% list(),
+                  use.names = FALSE)
+  length(setdiff(fixed, "1")) > 0L
 }
 
 # Find the first random-effect grouping factor recorded on the fit, so the
@@ -125,6 +146,12 @@ print.mm_varcorr <- function(x, ...) {
     out <- x$table
     out$variance <- signif(out$variance, 6)
     out$std_dev <- signif(out$std_dev, 6)
+    corr_cols <- grep("^correlation[0-9]*$", names(out), value = TRUE)
+    if (length(corr_cols)) {
+      display <- mm_varcorr_correlation_display(out)
+      out[setdiff(corr_cols, "correlation")] <- NULL
+      out$correlation <- display
+    }
     boundary <- if (!is.null(out$boundary)) isTRUE(any(out$boundary)) else FALSE
     if (!"note" %in% names(out)) {
       out$note <- ""

@@ -60,6 +60,7 @@ reference:
   - random_blocks
   - roles
   - optimizer_certificate
+  - verify_convergence
   - reproducibility
 - title: broom / broom.mixed
   contents:
@@ -83,6 +84,7 @@ articles:
 - title: Get started
   navbar: Get started
   contents:
+  - tutorial
   - mixeff
   - intro
   - lme4-migration
@@ -92,6 +94,10 @@ articles:
   - lmm-basics
   - glmm
   - demystifying-formulas
+- title: Marginal effects
+  navbar: Marginal effects
+  contents:
+  - marginal-effects
 - title: Inference & reporting
   navbar: Inference
   contents:

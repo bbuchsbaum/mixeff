@@ -55,7 +55,7 @@ test_that("manifest capabilities accurately advertise the current phase", {
       "fixed_effect_inference_table", "satterthwaite",
       "kenward_roger_explicit", "bootstrap_fixed_effect_payload",
       "model_comparison_table", "fit_summary_payload", "marginal_quantity_table",
-      "marginal_quantities"),
+      "marginal_quantities", "verify_convergence"),
     ignore.order = TRUE
   )
   # Shipped: Phase 0 (parse_formula) and Phase 1.A-F (compile/audit,

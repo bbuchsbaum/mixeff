@@ -161,7 +161,10 @@ mm_fixed_effect_inference_row <- function(row) {
     method = mm_scalar_text(row$method, "not_computed"),
     status = mm_scalar_text(row$status, "not_assessed"),
     reliability = mm_scalar_text(row$reliability, "not_available"),
-    reliability_reason = mm_scalar_text(row$reliability_reason, "not_available"),
+    # No default here: the engine's closed-enum warrant is passed through
+    # verbatim, and an absent field stays NA rather than being dressed up
+    # as a reason string the engine never authored.
+    reliability_reason = mm_optional_text(row$reliability_reason),
     reason = mm_optional_text(row$reason),
     reason_code = mm_optional_text(row$reason_code),
     reason_detail = mm_optional_text(row$reason_detail),

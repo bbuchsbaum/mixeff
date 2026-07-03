@@ -194,8 +194,10 @@ test_that("test_effect() and single-model anova() consume Rust term rows", {
 test_that("R inference surfaces preserve Rust detail payloads", {
   fit <- mk_inference_fit()
 
+  # summary(method = "auto") resolves to satterthwaite on this feasible fit,
+  # so compare against the same recomputed surface, not the cached table.
   sm <- summary(fit, tests = "coefficients", method = "auto")
-  inf <- inference_table(fit)
+  inf <- inference_table(fit, method = "satterthwaite")
   expect_identical(sm$inference$table$details, inf$table$details)
 
   boot <- contrast(
@@ -315,17 +317,78 @@ test_that("summary() renders Rust coefficient inference rows", {
   expect_true(any(is.finite(sm$coefficients[[p_cols]])))
 })
 
-test_that("summary() does not compute p-values missing from Rust rows", {
+test_that("summary(method = 'auto') resolves to satterthwaite on a feasible fit", {
+  fit <- mk_inference_fit()
+  sm <- summary(fit, tests = "coefficients", method = "auto")
+  inf <- sm$inference$table
+
+  expect_true(all(inf$method == "satterthwaite"))
+  expect_true(all(inf$status == "available"))
+  expect_true(all(is.finite(inf$df)))
+  expect_true(all(inf$statistic_name == "t"))
+  # The grade always names its closed-enum warrant (engine-authored).
+  expect_true(all(inf$reliability_reason ==
+                    "satterthwaite_finite_difference_approximation"))
+
+  # df is finite, so the coefficient table keeps its df column.
+  expect_true("df" %in% names(sm$coefficients))
+  expect_true(all(is.finite(sm$coefficients$df)))
+
+  # The engine's prose warrant is printed beneath the inference block.
+  printed <- paste(capture.output(print(sm)), collapse = "\n")
+  expect_match(printed, "Notes:", fixed = TRUE)
+  expect_match(printed, "Satterthwaite denominator df", fixed = TRUE)
+})
+
+test_that("summary auto keeps the labeled asymptotic table when satterthwaite is refused", {
+  # Variance pinned at zero: satterthwaite finite-difference df are refused,
+  # but is_singular() does not flag the fit, so the refusal-aware path is
+  # exercised (not the is_singular gate).
+  set.seed(1)
+  g <- factor(rep(1:6, each = 5))
+  x <- rep(0:4, 6)
+  df <- data.frame(y = rnorm(30), x = x, g = g)
+  fit <- suppressMessages(
+    lmm(y ~ x + (1 + x | g), df, control = mm_control(verbose = -1))
+  )
+  satt <- inference_table(fit, method = "satterthwaite")$table
+  skip_if(any(satt$status == "available"),
+          "satterthwaite unexpectedly available on this fit")
+
+  sm <- summary(fit, tests = "coefficients", method = "auto")
+  inf <- sm$inference$table
+  expect_true(all(inf$method == "asymptotic_wald_z"))
+  expect_true(all(inf$status == "available"))
+  expect_true(all(inf$reliability_reason == "asymptotic_wald_z_fallback"))
+
+  # df is undefined for z rows; the all-NA column is dropped, not printed.
+  expect_false("df" %in% names(sm$coefficients))
+  printed <- paste(capture.output(print(sm)), collapse = "\n")
+  expect_match(printed, "labeled fallback", fixed = TRUE)
+})
+
+test_that("inference rows never fabricate reliability_reason", {
+  # Engine row without the field: the parser must leave NA, not invent
+  # a "not_available" string the engine never authored.
+  row <- mixeff:::mm_fixed_effect_inference_row(list(label = "x"))
+  expect_true(is.na(row$reliability_reason))
+})
+
+test_that("summary rendering does not compute p-values missing from Rust rows", {
   fit <- mk_inference_fit()
   fit$artifact$fixed_effect_inference_table$rows[[1L]]$p_value <- NULL
   fit$artifact$fixed_effect_inference_table$rows[[1L]]$status <- "p_value_unavailable"
   fit$artifact$fixed_effect_inference_table$rows[[1L]]$reason <- "unit_test_missing_p_value"
 
-  sm <- summary(fit, tests = "coefficients")
-  p_cols <- grep("^Pr\\(|^p\\.value$", names(sm$coefficients), value = TRUE)
+  # summary(method = "auto") no longer reads the cached table on a feasible
+  # fit, so exercise the contract on the rendering layer directly: given
+  # engine rows with a missing p-value, R must render NA, never fill it in.
+  inf <- inference_table(fit)
+  coef <- mixeff:::mm_summary_coefficients(fit, inf)
+  p_cols <- grep("^Pr\\(|^p\\.value$", names(coef), value = TRUE)
   expect_length(p_cols, 1L)
-  expect_true(is.na(sm$coefficients[[p_cols]][[1L]]))
-  expect_identical(sm$inference$table$reason[[1L]], "unit_test_missing_p_value")
+  expect_true(is.na(coef[[p_cols]][[1L]]))
+  expect_identical(inf$table$reason[[1L]], "unit_test_missing_p_value")
 })
 
 test_that("saved fits preserve Rust artifact inference rows", {

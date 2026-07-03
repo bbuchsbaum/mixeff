@@ -1,9 +1,10 @@
 #' Fit a linear mixed-effects model
 #'
 #' `lmm()` is mixeff's Phase 1 linear mixed-model fit driver. It compiles the
-#' requested lme4-style formula, prints the same [explain_model()] view that
-#' pre-fit audit users see, then delegates the numerical fit to the upstream
-#' Rust `LinearMixedModel`.
+#' requested lme4-style formula, emits the same [explain_model()] view that
+#' pre-fit audit users see as a message (silence it with `suppressMessages()`
+#' or `mm_control(verbose = -1)`), then delegates the numerical fit to the
+#' upstream Rust `LinearMixedModel`.
 #'
 #' The returned object is deliberately serializable: fixed effects, theta,
 #' sigma, likelihood summaries, fitted values, residuals, random effects, and
@@ -76,7 +77,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec)
   if (control$verbose >= 0L) {
-    print(explain_model(spec))
+    mm_inform_explanation(spec)
   }
 
   spec_data <- mm_translate_data(spec$model_frame)

@@ -28,7 +28,7 @@
 #'     `parameterization`, `roles`, `as_json`, `simulate`, `inference`,
 #'     `model_comparison_table`, `fit_summary_payload`,
 #'     `marginal_quantity_table`,
-#'     `marginal_quantities`). The
+#'     `marginal_quantities`, `verify_convergence`). The
 #'     `marginal_quantity_table` schema may be available before the
 #'     corresponding `marginal_quantities` verbs are implemented.}
 #' }

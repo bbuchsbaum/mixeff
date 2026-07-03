@@ -460,7 +460,7 @@ mm_report_random_effects <- function(fit) {
       kind = "variance",
       variance = vc$variance,
       std_dev = vc$std_dev,
-      correlation = vc$correlation,
+      correlation = mm_varcorr_correlation_display(vc),
       covariance_family = NA_character_,
       status = varcorr_status,
       reason = NA_character_,

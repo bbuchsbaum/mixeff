@@ -6,6 +6,7 @@ use mixeff_rs::compiler::{
     FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION,
 };
 use mixeff_rs::formula::parse_formula;
+use mixeff_rs::model::linear::ConvergenceVerificationOptions;
 use mixeff_rs::model::{
     parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
     BootstrapSeedRecord, BootstrapTarget, Family, FitOptions, FitToleranceOverrides,
@@ -13,13 +14,13 @@ use mixeff_rs::model::{
     LinearMixedModel, LinkFunction, MixedModelBootstrap, MixedModelFit, NewReLevels,
     OptimizerControl,
 };
-use mixeff_rs::types::Optimizer;
 use mixeff_rs::stats::{
     profile_confint_payload, BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit,
     ModelComparisonMethod, ModelComparisonOptions, ModelComparisonRefitPolicy,
     ModelComparisonTable, BOUNDARY_LRT_SCHEMA, BOUNDARY_LRT_SCHEMA_VERSION, FIT_SUMMARY_SCHEMA,
     FIT_SUMMARY_SCHEMA_VERSION, PROFILE_LIKELIHOOD_CI_SCHEMA, PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION,
 };
+use mixeff_rs::types::Optimizer;
 use nalgebra::{DMatrix, DVector};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -335,6 +336,7 @@ fn mm_formula_manifest() -> List {
         fit_summary_payload = TRUE,
         marginal_quantity_table = TRUE,
         marginal_quantities = TRUE,
+        verify_convergence = TRUE,
     );
 
     list!(
@@ -466,8 +468,12 @@ fn mm_fit_lmm_json(
     // default keeps the driver's automatic selection. Applied here and in the
     // recompute helper so refits (predict/inference) reproduce the same fit.
     let optimizer_control = parse_optimizer_control(&_control)?;
-    let fit_options = if reml { FitOptions::reml() } else { FitOptions::ml() }
-        .with_optimizer_control(optimizer_control);
+    let fit_options = if reml {
+        FitOptions::reml()
+    } else {
+        FitOptions::ml()
+    }
+    .with_optimizer_control(optimizer_control);
     model
         .fit_with_options(fit_options)
         .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
@@ -1273,6 +1279,78 @@ fn mm_boundary_lrt_json(
         .map_err(|e| format!("mm_schema_error: failed to serialize boundary LRT: {e}"))
 }
 
+/// Bounded convergence verification for a fitted LMM.
+///
+/// Rebuilds and refits the model from the R-side bridge payload (the same
+/// payload `mm_compare_models_json` / `mm_boundary_lrt_json` use), then runs
+/// the engine's verification workflow: restart from the optimum, jittered
+/// restarts, and (optionally) an alternate-optimizer consensus pass. The
+/// verifier re-runs its own fits internally, so no optimizer state has to
+/// cross the boundary. `options_json` carries R-side overrides; absent
+/// fields keep the engine defaults.
+///
+/// @noRd
+#[extendr]
+fn mm_verify_convergence_json(
+    fit_payload: Robj,
+    options_json: &str,
+) -> std::result::Result<String, String> {
+    let overrides: Value = serde_json::from_str(options_json)
+        .map_err(|e| format!("mm_arg_error: invalid verification options JSON: {}", e))?;
+
+    let mut options = ConvergenceVerificationOptions::default();
+    if let Some(v) = overrides
+        .get("restart_from_optimum")
+        .and_then(Value::as_bool)
+    {
+        options.restart_from_optimum = v;
+    }
+    if let Some(v) = overrides.get("jitter_starts").and_then(Value::as_u64) {
+        options.jitter_starts = v as usize;
+    }
+    if let Some(v) = overrides.get("jitter_scale").and_then(Value::as_f64) {
+        options.jitter_scale = v;
+    }
+    if let Some(v) = overrides
+        .get("run_optimizer_consensus")
+        .and_then(Value::as_bool)
+    {
+        options.run_optimizer_consensus = v;
+    }
+    if let Some(v) = overrides
+        .get("max_function_evaluations")
+        .and_then(Value::as_u64)
+    {
+        options.max_function_evaluations = v as usize;
+    }
+    if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
+        options.objective_tolerance = v;
+    }
+    if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
+        options.theta_tolerance = v;
+    }
+    if let Some(v) = overrides.get("beta_tolerance").and_then(Value::as_f64) {
+        options.beta_tolerance = v;
+    }
+
+    let mut model = fit_lmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let verification = model
+        .verify_convergence_with_options(options)
+        .map_err(|e| {
+            format!(
+                "mm_inference_unavailable: convergence verification failed: {}",
+                e
+            )
+        })?;
+
+    serde_json::to_string(&verification).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize convergence verification: {}",
+            e
+        )
+    })
+}
+
 fn fit_lmm_from_bridge_data(
     formula: &str,
     reml: bool,
@@ -1299,8 +1377,12 @@ fn fit_lmm_from_bridge_data(
     // default keeps the driver's automatic selection. Applied here and in the
     // recompute helper so refits (predict/inference) reproduce the same fit.
     let optimizer_control = parse_optimizer_control(&_control)?;
-    let fit_options = if reml { FitOptions::reml() } else { FitOptions::ml() }
-        .with_optimizer_control(optimizer_control);
+    let fit_options = if reml {
+        FitOptions::reml()
+    } else {
+        FitOptions::ml()
+    }
+    .with_optimizer_control(optimizer_control);
     model
         .fit_with_options(fit_options)
         .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
@@ -1772,6 +1854,22 @@ fn mm_audit_report_text(artifact_json: &str) -> std::result::Result<String, Stri
     let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
         .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
     Ok(artifact.audit_report().to_text())
+}
+
+/// Render the compact `audit_design()` summary as text.
+///
+/// The compact counterpart to `mm_audit_report_text`: it returns the
+/// upstream `ModelAuditReport::render_summary` rendering (Audit Summary
+/// plus the Requested Model section). R's default `print.mm_audit()`
+/// emits this, so the compact view stays fully upstream-authored — the
+/// R9 "no advice creep" contract holds without R slicing rendered text.
+///
+/// @noRd
+#[extendr]
+fn mm_audit_report_summary_text(artifact_json: &str) -> std::result::Result<String, String> {
+    let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
+        .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
+    Ok(artifact.audit_report().render_summary())
 }
 
 /// Serialize the structured `ModelAuditReport` for an `audit_design()` artifact.
@@ -2291,7 +2389,9 @@ extendr_module! {
     fn mm_bootstrap_lrt_json;
     fn mm_compare_models_json;
     fn mm_boundary_lrt_json;
+    fn mm_verify_convergence_json;
     fn mm_audit_report_text;
+    fn mm_audit_report_summary_text;
     fn mm_audit_report_json;
     fn mm_lmm_cond_var_json;
     fn mm_lmm_predict_new_json;

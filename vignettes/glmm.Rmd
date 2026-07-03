@@ -141,10 +141,12 @@ In-sample `fitted()` and `residuals()` are available, and
 `summary(fit, tests = "coefficients")` returns a Wald-z fixed-effect
 table built from the upstream PIRLS/Laplace working-Hessian covariance
 payload (reliability label: `moderate`). GLMM `predict()` (population and
-conditional, on the link or response scale), `confint()` (Wald), `contrast()`,
-`drop1()`, and multi-model `anova()` are now available as R-side computations
-on top of that certified covariance. `simulate()` and `refit()` for GLMMs are
-not yet implemented and are exposed as ordinary R conditions rather than
+conditional, on the link or response scale), `contrast()`, `drop1()`, and
+multi-model `anova()` are available as R-side computations on top of that
+certified covariance. `confint()` (Wald) requires a joint-Laplace fit: the
+fast-PIRLS/profiled covariance is a working-Hessian payload and the engine
+does not certify Wald intervals for it. `simulate()` and `refit()` for GLMMs
+are not yet implemented and are exposed as ordinary R conditions rather than
 silently filled in. The joint-Laplace fit route is available and labelled
 separately from the profiled fast-PIRLS default.
 
@@ -207,10 +209,11 @@ boundaries <- rbind(
     control = mm_control(verbose = -1)
   ))
 )
-# predict / confint / coefficient tests are now available; simulate remains a
-# boundary (no mm_glmm method yet); the joint-Laplace route is available.
+# predict / coefficient tests are available for PIRLS-profiled fits;
+# confint requires joint-Laplace (PIRLS working-Hessian not certified for Wald);
+# simulate remains unavailable; joint-Laplace route is available.
 stopifnot(identical(boundaries["predict", "status"], "available"))
-stopifnot(identical(boundaries["confint", "status"], "available"))
+stopifnot(identical(boundaries["confint", "status"], "unavailable"))
 stopifnot(identical(boundaries["coefficient_tests", "status"], "available"))
 stopifnot(identical(boundaries["simulate", "status"], "unavailable"))
 stopifnot(identical(boundaries["joint_laplace", "status"], "available"))

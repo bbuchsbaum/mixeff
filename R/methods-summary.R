@@ -13,7 +13,25 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
     } else {
       "auto"
     }
-    inference_table(object, method = inf_method)
+    if (identical(inf_method, "auto") &&
+        !mm_boundary_df_method_unavailable(object, "satterthwaite")) {
+      # "auto" resolves to the finite-sample Satterthwaite route whenever it
+      # is feasible; the engine's fit-time cached table is the asymptotic
+      # Wald-z fallback and stays the honest answer only where Satterthwaite
+      # df are refused (singular / boundary optimum).
+      inf_method <- "satterthwaite"
+    }
+    tbl <- inference_table(object, method = inf_method)
+    if (identical(inf_method, "satterthwaite") && identical(method, "auto") &&
+        !any(tbl$table$status == "available")) {
+      # Satterthwaite was refused for every coefficient (the boundary can be
+      # reached without is_singular() flagging it, e.g. a variance pinned at
+      # zero on a not_optimized fit). Only an unrequested route may be
+      # swapped: the cached rows are labeled asymptotic_wald_z and carry
+      # their own engine fallback note, so nothing is hidden.
+      tbl <- inference_table(object, method = "auto")
+    }
+    tbl
   } else {
     NULL
   }
@@ -48,7 +66,8 @@ print.summary.mm_lmm <- function(x, ...) {
   cat(sprintf("Fit status: %s\n\n", x$fit_status))
   print(x$varcorr)
   cat("\nFixed effects:\n")
-  print(x$coefficients)
+  print(mm_summary_format_coef(x$coefficients))
+  notes <- mm_fit_status_note(x$fit_status)
   if (!is.null(x$inference)) {
     inf <- x$inference$table
     cat("\nInference status:\n")
@@ -68,7 +87,14 @@ print.summary.mm_lmm <- function(x, ...) {
                     with_reason$reason[[i]]))
       }
     }
+    # Engine-authored row notes are the prose warrant behind the method and
+    # reliability columns (e.g. why a fallback or finite-difference route was
+    # used); surface them instead of leaving them buried in the table.
+    row_notes <- unique(unlist(inf$notes %||% list(), use.names = FALSE))
+    row_notes <- row_notes[!is.na(row_notes) & nzchar(row_notes)]
+    notes <- c(notes, row_notes)
   }
+  mm_summary_print_notes(notes)
   if (mm_summary_verbose(...)) {
     cat("\nInference rows are supplied by Rust; `reliability_reason` is a closed-enum warrant for the reliability grade.\n")
   }
@@ -77,7 +103,11 @@ print.summary.mm_lmm <- function(x, ...) {
 
 #' @method summary mm_glmm
 #' @export
-summary.mm_glmm <- function(object, tests = c("none", "coefficients"), ...) {
+summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...) {
+  # Coefficient tests are the default (matching lme4::glmer's summary): the
+  # inference rows carry their own status/reliability labels, so when the fit
+  # method cannot certify SE/z/p the columns are withheld WITH the reason
+  # printed, rather than silently absent under a tests = "none" default.
   tests <- match.arg(tests)
   inference <- NULL
   vcov_status <- NULL
@@ -212,7 +242,8 @@ print.summary.mm_glmm <- function(x, ...) {
   cat(sprintf("Fit status: %s\n\n", x$fit_status))
   print(x$varcorr)
   cat("\nFixed effects:\n")
-  print(x$coefficients)
+  print(mm_summary_format_coef(x$coefficients))
+  reason_printed <- FALSE
   if (!is.null(x$vcov_status) && !is.null(x$inference)) {
     rel <- x$vcov_status$reliability
     if (!is.na(rel) && nzchar(rel) && !identical(rel, "available")) {
@@ -223,11 +254,50 @@ print.summary.mm_glmm <- function(x, ...) {
       ))
       if (!is.na(x$vcov_status$reason) && nzchar(x$vcov_status$reason)) {
         cat(sprintf(" Reason: %s.", x$vcov_status$reason))
+        reason_printed <- TRUE
       }
       cat("\n")
     }
   }
+  notes <- c(
+    mm_fit_status_note(x$fit_status),
+    mm_glmm_withheld_inference_note(x, include_reason = !reason_printed)
+  )
+  mm_summary_print_notes(notes)
   invisible(x)
+}
+
+# One plain-language sentence when every test statistic in the table is
+# withheld, so a summary() full of NA columns is never left unexplained.
+# Points at the certified estimator when the fit used the uncertified
+# default -- an available option reported as fact, not a model prescription.
+mm_glmm_withheld_inference_note <- function(x, include_reason = TRUE) {
+  coef <- x$coefficients
+  stat_cols <- intersect(c("z value", "t value", "statistic"), names(coef))
+  if (!length(stat_cols)) return(character())
+  stats <- coef[[stat_cols[[1L]]]]
+  if (!length(stats) || !all(is.na(stats))) return(character())
+  note <- paste0(
+    "test statistics and p-values are withheld: the fit's covariance payload ",
+    "does not certify fixed-effect inference"
+  )
+  # The engine reason is skipped when the Wald-z reliability line above the
+  # notes already printed it verbatim; repeating a paragraph-length warrant
+  # twice reads as noise, not honesty.
+  reason <- x$vcov_status$reason %||% NA_character_
+  if (include_reason && !is.na(reason) && nzchar(reason)) {
+    note <- sprintf("%s (engine reason: %s)", note, reason)
+  }
+  if (identical(x$method, "pirls_profiled")) {
+    note <- paste0(
+      note,
+      ". Engine-certified Wald inference is available from a fit with ",
+      'method = "joint_laplace".'
+    )
+  } else {
+    note <- paste0(note, ".")
+  }
+  note
 }
 
 # Gate the long inference-rows footer behind explicit verbosity. Default
@@ -240,6 +310,46 @@ mm_summary_verbose <- function(...) {
   args <- list(...)
   if (isTRUE(args$verbose)) return(TRUE)
   isTRUE(getOption("mixeff.verbose", 0L) >= 1L)
+}
+
+# A non-converged optimum is model state the user must not read past: repeat
+# it as a plain-language note next to the tests, not only in the header line.
+# Reports what happened; prescribes nothing (PRD R9).
+mm_fit_status_note <- function(fit_status) {
+  status <- as.character(fit_status %||% "")
+  if (!nzchar(status) || startsWith(status, "converged")) return(character())
+  sprintf(
+    paste0(
+      "fit status `%s`: the optimizer stopped without certifying an optimum; ",
+      "estimates, variance components, and any tests above are reported from ",
+      "the last accepted iterate."
+    ),
+    status
+  )
+}
+
+mm_summary_print_notes <- function(notes) {
+  notes <- unique(notes[!is.na(notes) & nzchar(notes)])
+  if (!length(notes)) return(invisible(NULL))
+  cat("\nNotes:\n")
+  for (n in notes) {
+    cat(sprintf("  %s\n", n))
+  }
+  invisible(NULL)
+}
+
+# Display copy of the coefficient table: p-values render through
+# format.pval() so an underflowed value prints "< 1e-16" instead of the
+# fabricated-certainty "0.000000e+00". The stored table stays numeric.
+mm_summary_format_coef <- function(coef) {
+  p_col <- intersect(c("Pr(>|t|)", "Pr(>|z|)", "Pr(>F)", "Pr(>Chisq)", "p.value"),
+                     names(coef))
+  if (!length(p_col)) return(coef)
+  out <- coef
+  for (col in p_col) {
+    out[[col]] <- format.pval(out[[col]], digits = 4, eps = 1e-16)
+  }
+  out
 }
 
 mm_summary_coefficients <- function(object, inference) {
@@ -293,8 +403,13 @@ mm_summary_coefficients <- function(object, inference) {
   )
   coef[[stat_col]] <- rows$statistic
   coef[[p_col]] <- rows$p_value
-  coef <- coef[, c("Estimate", "Std. Error", "df", stat_col, p_col, "method"),
-               drop = FALSE]
+  cols <- c("Estimate", "Std. Error", "df", stat_col, p_col, "method")
+  if (all(is.na(coef$df))) {
+    # df is undefined for every row (e.g. asymptotic Wald z); an all-NA
+    # column reads as breakage, so omit it rather than print NA.
+    cols <- setdiff(cols, "df")
+  }
+  coef <- coef[, cols, drop = FALSE]
   rownames(coef) <- rows$label
   coef
 }

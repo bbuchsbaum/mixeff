@@ -357,6 +357,19 @@ mm_response_diagnostic_reason_registry <- list(
   unsupported_mode = list(
     bucket    = "raw_only",
     rationale = "Batch-engine response diagnostic; no R surface currently exposes ResponseColumnDiagnostic."
+  ),
+  # A streaming sink requested stop before this column was fitted
+  # (engine 1.0.0-rc.1, SinkFlow::Stop).
+  sink_stopped = list(
+    bucket    = "raw_only",
+    rationale = "Batch-engine response diagnostic; no R surface currently exposes ResponseColumnDiagnostic."
+  ),
+  # Adaptive grouping refit this column individually because the group
+  # theta missed its probe objective by more than the refinement tolerance
+  # (engine 1.0.0-rc.1).
+  adaptive_refinement = list(
+    bucket    = "raw_only",
+    rationale = "Batch-engine response diagnostic; no R surface currently exposes ResponseColumnDiagnostic."
   )
 )
 

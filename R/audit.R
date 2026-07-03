@@ -13,8 +13,8 @@
 #' Model State, Fixed/Random Effects, Information Budget, Dependence
 #' Paths, Parameterization Trace, Effective Covariance, Policy
 #' Recommendations, Optimizer, Inference, Diagnostics). Sections that
-#' depend on a fit (Optimizer / Inference) report `not assessed` until
-#' Phase 1.E lands `lmm()`.
+#' depend on a fit (Optimizer / Inference) report `not applicable
+#' before fitting` on a pre-fit spec.
 #'
 #' @param spec An `mm_spec` produced by [compile_model()] (Phase 1.A) or
 #'   an `mm_fit` (post-Phase-1.E).
@@ -23,6 +23,9 @@
 #' \describe{
 #'   \item{`text`}{the rendered report text (a single character string,
 #'     newline-separated)}
+#'   \item{`summary_text`}{the compact report rendered by the upstream
+#'     `ModelAuditReport::render_summary` (Audit Summary plus the
+#'     Requested Model section)}
 #'   \item{`design_audit`}{the parsed `design_audit` field from the
 #'     `CompiledModelArtifact` (random-term audits, fixed-effect rank,
 #'     covariance kernel graph, ...) — `NULL` on uncompilable formulas}
@@ -35,9 +38,9 @@
 #'   \item{`diagnostics`}{the parsed report diagnostics, falling back to
 #'     artifact diagnostics when needed}
 #' }
-#' `print.mm_audit` calls `cat()` on `text`, so calling
-#' `audit_design(spec)` at the prompt prints the upstream-rendered
-#' report once.
+#' `print.mm_audit` defaults to the compact upstream-rendered summary in
+#' `summary_text`. Use `print(x, full = TRUE)` for the complete upstream
+#' report stored in `text`.
 #'
 #' @section Errors:
 #' Raises an `mm_schema_error` if the supplied object does not carry a
@@ -74,41 +77,17 @@ audit_design <- function(spec) {
     )
   }
 
-  text <- tryCatch(
-    .Call(wrap__mm_audit_report_text, raw_json),
-    error = function(cnd) cnd
-  )
-  if (inherits(text, "condition")) {
-    parts <- mm_split_tagged_error(conditionMessage(text))
-    cls <- if (!is.na(parts$tag)) parts$tag else "mm_bridge_error"
-    msg <- if (!is.na(parts$tag)) parts$message else conditionMessage(text)
-    mm_abort(
-      message = msg,
-      class = cls,
-      parent = text
-    )
-  }
-
-  report_json <- tryCatch(
-    mm_audit_report_json(raw_json),
-    error = function(cnd) cnd
-  )
-  if (inherits(report_json, "condition")) {
-    parts <- mm_split_tagged_error(conditionMessage(report_json))
-    cls <- if (!is.na(parts$tag)) parts$tag else "mm_bridge_error"
-    msg <- if (!is.na(parts$tag)) parts$message else conditionMessage(report_json)
-    mm_abort(
-      message = msg,
-      class = cls,
-      parent = report_json
-    )
-  }
+  text <- mm_audit_bridge_call(mm_audit_report_text, raw_json)
+  summary_text <- mm_audit_bridge_call(mm_audit_report_summary_text, raw_json)
+  report_json <- mm_audit_bridge_call(mm_audit_report_json, raw_json)
   report <- mm_json_parse_audit_report(report_json)
   supplemental <- mm_r_design_diagnostics(spec)
   text <- mm_append_r_design_diagnostic_text(text, supplemental)
+  summary_text <- mm_append_r_design_diagnostic_text(summary_text, supplemental)
 
   out <- list(
     text                   = text,
+    summary_text           = summary_text,
     design_audit           = artifact$design_audit,
     report                 = report,
     random_term_cards      = report$random_term_cards %||% list(),
@@ -144,8 +123,24 @@ audit.mm_fit <- function(fit, ...) {
 
 #' @method print mm_audit
 #' @export
-print.mm_audit <- function(x, ...) {
-  cat(x$text)
-  if (!grepl("\n$", x$text)) cat("\n")
+print.mm_audit <- function(x, full = FALSE, ...) {
+  text <- if (isTRUE(full)) x$text else x$summary_text %||% x$text
+  cat(text)
+  if (!grepl("\n$", text)) cat("\n")
   invisible(x)
+}
+
+mm_audit_bridge_call <- function(fn, raw_json) {
+  out <- tryCatch(fn(raw_json), error = function(cnd) cnd)
+  if (inherits(out, "condition")) {
+    parts <- mm_split_tagged_error(conditionMessage(out))
+    cls <- if (!is.na(parts$tag)) parts$tag else "mm_bridge_error"
+    msg <- if (!is.na(parts$tag)) parts$message else conditionMessage(out)
+    mm_abort(
+      message = msg,
+      class = cls,
+      parent = out
+    )
+  }
+  out
 }

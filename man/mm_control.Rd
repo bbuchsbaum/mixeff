@@ -45,8 +45,10 @@ A list of class \code{mm_control}.
 }
 \description{
 \code{mm_control()} collects small R-side controls for \code{\link[=lmm]{lmm()}} and \code{\link[=glmm]{glmm()}}.
-\code{verbose = -1} suppresses the pre-fit \code{\link[=explain_model]{explain_model()}} printout;
-non-negative values print it once before optimization.
+\code{verbose = -1} suppresses the pre-fit \code{\link[=explain_model]{explain_model()}} message;
+non-negative values emit it once before optimization (it travels on the
+message stream, so \code{suppressMessages()} and knitr's \code{message = FALSE}
+also quiet it).
 }
 \details{
 By default the fit driver selects the optimizer and its tolerances

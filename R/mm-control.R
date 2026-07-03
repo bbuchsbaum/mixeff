@@ -1,8 +1,10 @@
 #' Control mixeff fitting behavior
 #'
 #' `mm_control()` collects small R-side controls for [lmm()] and [glmm()].
-#' `verbose = -1` suppresses the pre-fit [explain_model()] printout;
-#' non-negative values print it once before optimization.
+#' `verbose = -1` suppresses the pre-fit [explain_model()] message;
+#' non-negative values emit it once before optimization (it travels on the
+#' message stream, so `suppressMessages()` and knitr's `message = FALSE`
+#' also quiet it).
 #'
 #' By default the fit driver selects the optimizer and its tolerances
 #' automatically (see [optimizer_certificate()] to inspect what ran). The

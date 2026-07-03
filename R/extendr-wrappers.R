@@ -141,6 +141,19 @@ mm_compare_models_json <- function(model_payloads, method, refit_policy) .Call(w
 #' @noRd
 mm_boundary_lrt_json <- function(reduced_payload, full_payload, reduced_formula) .Call(wrap__mm_boundary_lrt_json, reduced_payload, full_payload, reduced_formula)
 
+#' Bounded convergence verification for a fitted LMM.
+#'
+#' Rebuilds and refits the model from the R-side bridge payload (the same
+#' payload `mm_compare_models_json` / `mm_boundary_lrt_json` use), then runs
+#' the engine's verification workflow: restart from the optimum, jittered
+#' restarts, and (optionally) an alternate-optimizer consensus pass. The
+#' verifier re-runs its own fits internally, so no optimizer state has to
+#' cross the boundary. `options_json` carries R-side overrides; absent
+#' fields keep the engine defaults.
+#'
+#' @noRd
+mm_verify_convergence_json <- function(fit_payload, options_json) .Call(wrap__mm_verify_convergence_json, fit_payload, options_json)
+
 #' Render an `audit_design()` artifact as text.
 #'
 #' Takes the JSON produced by `mm_compile_model_json` and returns the
@@ -153,6 +166,17 @@ mm_boundary_lrt_json <- function(reduced_payload, full_payload, reduced_formula)
 #'
 #' @noRd
 mm_audit_report_text <- function(artifact_json) .Call(wrap__mm_audit_report_text, artifact_json)
+
+#' Render the compact `audit_design()` summary as text.
+#'
+#' The compact counterpart to `mm_audit_report_text`: it returns the
+#' upstream `ModelAuditReport::render_summary` rendering (Audit Summary
+#' plus the Requested Model section). R's default `print.mm_audit()`
+#' emits this, so the compact view stays fully upstream-authored — the
+#' R9 "no advice creep" contract holds without R slicing rendered text.
+#'
+#' @noRd
+mm_audit_report_summary_text <- function(artifact_json) .Call(wrap__mm_audit_report_summary_text, artifact_json)
 
 #' Serialize the structured `ModelAuditReport` for an `audit_design()` artifact.
 #'

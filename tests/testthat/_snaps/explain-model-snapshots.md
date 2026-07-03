@@ -269,7 +269,7 @@
       cat(refusal_audit$text)
     Output
       Audit Summary:
-        overall [WARNING]: 8 warning(s), 4 not checked item(s); review attention lines before treating inference as routine
+        overall [WARNING]: 8 warning(s); review attention lines before treating inference as routine
         attention [WARNING]: Model State / supported: status=refused; formula=y ~ 1 + between + (1 + between | g); random_terms=1; reason=design audit found at least one unsupported random-effect distribution
         attention [WARNING]: Model State / changes: Recommended:DesignTime:r0 -> basis direction(s) unsupported by within-group variation: between | Recommended:DesignTime:r0 -> number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
         attention [WARNING]: Random Effects / r0: group=g, rows=8, levels=4, obs_per_level=2..2, basis=2, covariance=full, params=3, budget=too_rich; reason=number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
@@ -278,10 +278,6 @@
         attention [WARNING]: Policy Recommendations / r0: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; recommended covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
         attention [WARNING]: Policy Recommendations / r0: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
         attention [WARNING]: Diagnostics / covariance_too_rich: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; affected=(1 + between | g)
-        attention [NOT CHECKED]: Effective Covariance / effective covariance rank: not assessed
-        attention [NOT CHECKED]: Optimizer / certificate: model has not been fitted
-        attention [NOT CHECKED]: Inference / finite-sample inference: finite-sample inference is not implemented in compiler v0
-        attention [NOT CHECKED]: Inference / covariance derivatives: compiler v0 does not expose covariance derivative certificates
       
       Requested Model:
         formula [INFO]: y ~ 1 + between + (1 + between | g)
@@ -326,18 +322,18 @@
         r0 [INFO]: source=(1 + between | g); group=g; family=FullCholesky; user_basis=intercept, between; optimizer_basis=intercept, between; theta_slots=theta[0], theta[1], theta[2]; lambda_slots=(0, 0), (1, 0), (1, 1); parmap_aligned=0/3; varcorr_entries=sd(intercept), sd(between), corr(between,intercept)
       
       Effective Covariance:
-        effective covariance rank [NOT CHECKED]: not assessed
+        effective covariance rank [INFO]: not applicable before fitting; effective covariance rank is recorded after fitting
       
       Policy Recommendations:
         r0 [WARNING]: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; recommended covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
         r0 [WARNING]: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
       
       Optimizer:
-        certificate [NOT CHECKED]: model has not been fitted
+        certificate [INFO]: not applicable before fitting; model has not been fitted
       
       Inference:
-        finite-sample inference [NOT CHECKED]: finite-sample inference is not implemented in compiler v0
-        covariance derivatives [NOT CHECKED]: compiler v0 does not expose covariance derivative certificates
+        finite-sample inference [INFO]: not applicable before fitting; finite-sample inference is not implemented in compiler v0
+        covariance derivatives [INFO]: not applicable before fitting; compiler v0 does not expose covariance derivative certificates
       
       Diagnostics:
         structural_refusal [INFO]: `between` does not vary within `g`, so a `g`-level `between` slope cannot be estimated from this design; affected=(1 + between | g); suggested=`between` does not vary within `g`, so a `g`-level `between` slope cannot be estimated from this design.

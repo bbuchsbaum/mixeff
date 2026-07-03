@@ -99,10 +99,9 @@ test_that("test_effect(method = 'bootstrap') works on a single-df term (singular
                     bootstrap = bootstrap_control(nsim = 50, seed = 1))
   expect_identical(te$table$method, "bootstrap")
   expect_identical(te$table$status, "available")
-  expect_true(te$table$reliability_reason %in% c(
-    "bootstrap_monte_carlo_replicates",
-    "not_available"
-  ))
+  # The warrant is the engine-authored closed enum, passed through verbatim.
+  expect_identical(te$table$reliability_reason,
+                   "parametric_bootstrap_monte_carlo")
   expect_identical(te$table$statistic_name, "t")
   expect_true(is.finite(te$table$p_value))
 })

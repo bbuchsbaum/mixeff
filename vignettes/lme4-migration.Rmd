@@ -97,7 +97,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `control = lmerControl(optimizer=, optCtrl=)` | not exposed | the engine selects the optimizer/tolerances itself |
 | `start` | not exposed | warm starts are engine-managed |
 
-## Three things that will bite, and the fix
+## Four things that will bite, and the fix
 
 **1. Coefficient names for factors differ.** The engine labels factor levels
 as `"factor: level"` (e.g. `"recipe: B"`), where lme4 writes `"recipeB"`. If you

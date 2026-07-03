@@ -15,6 +15,9 @@ An object of class \code{mm_audit} carrying:
 \describe{
 \item{\code{text}}{the rendered report text (a single character string,
 newline-separated)}
+\item{\code{summary_text}}{the compact report rendered by the upstream
+\code{ModelAuditReport::render_summary} (Audit Summary plus the
+Requested Model section)}
 \item{\code{design_audit}}{the parsed \code{design_audit} field from the
 \code{CompiledModelArtifact} (random-term audits, fixed-effect rank,
 covariance kernel graph, ...) — \code{NULL} on uncompilable formulas}
@@ -27,9 +30,9 @@ random-term cards}
 \item{\code{diagnostics}}{the parsed report diagnostics, falling back to
 artifact diagnostics when needed}
 }
-\code{print.mm_audit} calls \code{cat()} on \code{text}, so calling
-\code{audit_design(spec)} at the prompt prints the upstream-rendered
-report once.
+\code{print.mm_audit} defaults to the compact upstream-rendered summary in
+\code{summary_text}. Use \code{print(x, full = TRUE)} for the complete upstream
+report stored in \code{text}.
 }
 \description{
 \code{audit_design()} returns the user-facing audit report attached to an
@@ -46,8 +49,7 @@ Phase 1.A scope: \code{audit_design()} accepts an \code{mm_spec} from
 Model State, Fixed/Random Effects, Information Budget, Dependence
 Paths, Parameterization Trace, Effective Covariance, Policy
 Recommendations, Optimizer, Inference, Diagnostics). Sections that
-depend on a fit (Optimizer / Inference) report \verb{not assessed} until
-Phase 1.E lands \code{lmm()}.
+depend on a fit (Optimizer / Inference) report \verb{not applicable before fitting} on a pre-fit spec.
 }
 \section{Errors}{
 

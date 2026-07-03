@@ -589,7 +589,7 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
       vcov <- c(vcov, sd[i]^2); sdcor <- c(sdcor, sd[i])
     }
     # Covariance (off-diagonal) rows; correlations are stored row-major in the
-    # strict lower triangle (see mm_varcorr_correlation_text()).
+    # strict lower triangle (see mm_varcorr_correlation_values()).
     for (i in seq_len(p)) {
       offset <- (i - 1L) * (i - 2L) / 2L
       for (j in seq_len(i - 1L)) {
@@ -678,8 +678,7 @@ mm_varcorr_from_result <- function(varcorr, artifact = NULL) {
   group_labels <- mm_varcorr_group_labels(components_in, artifact)
   # Keep the raw (full-precision) per-group covariance pieces so
   # as.data.frame.mm_varcorr() can reconstruct the lme4 long form
-  # (grp/var1/var2/vcov/sdcor); the printed `table` only retains a rounded
-  # correlation string.
+  # (grp/var1/var2/vcov/sdcor) without reshaping `table`.
   components_raw <- lapply(seq_along(components_in), function(i) {
     component <- components_in[[i]]
     list(
@@ -689,6 +688,24 @@ mm_varcorr_from_result <- function(varcorr, artifact = NULL) {
       correlations = as.numeric(unlist(component$correlations, use.names = FALSE))
     )
   })
+  # Correlations are stored as full-precision numerics, one column per
+  # preceding term within the group: `correlation` holds each term's
+  # correlation with the group's first term, `correlation2` with the second,
+  # and so on (NA where no such pair exists). Rounding to 2 d.p. is a
+  # presentation concern handled by mm_varcorr_correlation_display().
+  n_corr_cols <- max(
+    1L,
+    vapply(
+      components_in,
+      function(component) {
+        length(unlist(component$names, use.names = FALSE)) - 1L
+      },
+      integer(1),
+      USE.NAMES = FALSE
+    ),
+    na.rm = TRUE
+  )
+  corr_col_names <- mm_varcorr_correlation_col_names(n_corr_cols)
   components <- lapply(seq_along(components_in), function(component_index) {
     component <- components_in[[component_index]]
     names <- as.character(unlist(component$names, use.names = FALSE))
@@ -696,14 +713,16 @@ mm_varcorr_from_result <- function(varcorr, artifact = NULL) {
     correlations <- as.numeric(unlist(component$correlations, use.names = FALSE))
     rows <- vector("list", length(names))
     for (i in seq_along(names)) {
-      rows[[i]] <- data.frame(
+      row <- data.frame(
         group = group_labels[[component_index]],
         name = names[[i]],
         variance = std_dev[[i]]^2,
         std_dev = std_dev[[i]],
-        correlation = mm_varcorr_correlation_text(correlations, i),
         stringsAsFactors = FALSE
       )
+      vals <- mm_varcorr_correlation_values(correlations, i)
+      row[corr_col_names] <- as.list(c(vals, rep(NA_real_, n_corr_cols - length(vals))))
+      rows[[i]] <- row
     }
     do.call(rbind, rows)
   })
@@ -712,14 +731,15 @@ mm_varcorr_from_result <- function(varcorr, artifact = NULL) {
     rownames(out) <- NULL
     out
   } else {
-    data.frame(
+    out <- data.frame(
       group = character(),
       name = character(),
       variance = numeric(),
       std_dev = numeric(),
-      correlation = character(),
       stringsAsFactors = FALSE
     )
+    out$correlation <- numeric()
+    out
   }
   residual_sd <- as.numeric(varcorr$residual_sd %||% NA_real_)
   table$boundary <- mm_varcorr_boundary_flag(table$std_dev, residual_sd)
@@ -784,11 +804,39 @@ mm_varcorr_boundary_flag <- function(std_dev, residual_sd) {
   is.finite(std_dev) & std_dev <= threshold
 }
 
-mm_varcorr_correlation_text <- function(correlations, row_index) {
+# Row `row_index` of a k-term group correlates with terms 1..row_index-1;
+# the engine stores those values row-major in the strict lower triangle.
+mm_varcorr_correlation_values <- function(correlations, row_index) {
   if (row_index <= 1L || !length(correlations)) {
-    return("")
+    return(numeric())
   }
   offset <- (row_index - 1L) * (row_index - 2L) / 2L
-  vals <- correlations[seq.int(offset + 1L, offset + row_index - 1L)]
-  paste(sprintf("%+.2f", vals), collapse = " ")
+  correlations[seq.int(offset + 1L, offset + row_index - 1L)]
+}
+
+mm_varcorr_correlation_col_names <- function(n) {
+  if (n < 1L) {
+    return(character())
+  }
+  c("correlation", if (n > 1L) paste0("correlation", seq.int(2L, n)))
+}
+
+# Presentation form of the numeric correlation columns: each row's non-NA
+# correlations rendered "%+.2f" and space-joined, "" when the row has none.
+# Shared by print.mm_varcorr() and the reporting layer so the stored table
+# can stay full-precision numeric.
+mm_varcorr_correlation_display <- function(table) {
+  cols <- grep("^correlation[0-9]*$", names(table), value = TRUE)
+  if (!length(cols) || !nrow(table)) {
+    return(character(nrow(table)))
+  }
+  vapply(
+    seq_len(nrow(table)),
+    function(i) {
+      vals <- as.numeric(table[i, cols])
+      vals <- vals[!is.na(vals)]
+      if (!length(vals)) "" else paste(sprintf("%+.2f", vals), collapse = " ")
+    },
+    character(1)
+  )
 }

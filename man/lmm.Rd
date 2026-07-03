@@ -47,9 +47,10 @@ An object of class \code{mm_lmm}, also inheriting from \code{mm_fit} and
 }
 \description{
 \code{lmm()} is mixeff's Phase 1 linear mixed-model fit driver. It compiles the
-requested lme4-style formula, prints the same \code{\link[=explain_model]{explain_model()}} view that
-pre-fit audit users see, then delegates the numerical fit to the upstream
-Rust \code{LinearMixedModel}.
+requested lme4-style formula, emits the same \code{\link[=explain_model]{explain_model()}} view that
+pre-fit audit users see as a message (silence it with \code{suppressMessages()}
+or \code{mm_control(verbose = -1)}), then delegates the numerical fit to the
+upstream Rust \code{LinearMixedModel}.
 }
 \details{
 The returned object is deliberately serializable: fixed effects, theta,

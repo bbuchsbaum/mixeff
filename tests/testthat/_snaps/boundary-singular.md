@@ -18,7 +18,7 @@
       Formula: Yield ~ 1 + (1 | Batch)
       Fit status: converged_reduced_rank
       Optimizer: pattern_search; iterations: 23; objective: 161.828
-      Artifact: mixedmodels.compiled_model_artifact v1; crate: 0.1.0
+      Artifact: mixedmodels.compiled_model_artifact v1; crate: <version>
       nobs: 30, sigma: 3.71568, logLik: -80.9141
       Fixed effects:
       (Intercept) 
@@ -28,6 +28,5 @@
       The fitted covariance matrix is rank-deficient.
         r0: requested rank 1; fitted effective rank 0.
       Use changes(fit) to see which dimension was unsupported.
-      Use random_options(spec, group = Batch) to inspect lower-dimensional covariance choices.
       Audit verbs: audit(), diagnostics(), inference_table(), model_report()
 

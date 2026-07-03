@@ -54,12 +54,26 @@ explain_model <- function(spec) {
   out
 }
 
+#' @method format mm_explanation
+#' @export
+format.mm_explanation <- function(x, ...) {
+  x$text
+}
+
 #' @method print mm_explanation
 #' @export
 print.mm_explanation <- function(x, ...) {
   cat(x$text)
   if (!grepl("\n$", x$text)) cat("\n")
   invisible(x)
+}
+
+# Emit the pre-fit explanation on the message stream (rlang::inform), not
+# stdout: suppressMessages() and knitr's message=FALSE must be able to quiet
+# the automatic printout, while an explicit print(explain_model(spec)) still
+# writes to stdout like any other print method.
+mm_inform_explanation <- function(spec) {
+  mm_inform(format(explain_model(spec)), class = "mm_explanation_notice")
 }
 
 mm_explanation_text <- function(spec, audit) {

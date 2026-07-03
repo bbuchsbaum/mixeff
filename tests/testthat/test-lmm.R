@@ -41,18 +41,26 @@ test_that("print.mm_lmm exposes artifact provenance and audit entry points", {
   expect_match(output, "Audit verbs: audit(), diagnostics(), inference_table(), model_report()", fixed = TRUE)
 })
 
-test_that("lmm() auto-prints explain_model unless verbose is -1", {
+test_that("lmm() emits the explain_model message unless verbose is -1", {
   df <- mk_lmm_fit_fixture()
-  expect_output(
+  expect_message(
     fit <- lmm(y ~ x + (1 | subject), df),
     "Random effects",
-    fixed = TRUE
+    fixed = TRUE,
+    class = "mm_explanation_notice"
   )
   expect_s3_class(fit, "mm_lmm")
   expect_silent(
     fit2 <- lmm(y ~ x + (1 | subject), df, control = mm_control(verbose = -1))
   )
   expect_s3_class(fit2, "mm_lmm")
+  # the block travels on the message stream, so standard tooling
+  # (suppressMessages, knitr message=FALSE) can quiet it; nothing may
+  # leak to stdout
+  expect_silent(
+    fit3 <- suppressMessages(lmm(y ~ x + (1 | subject), df))
+  )
+  expect_s3_class(fit3, "mm_lmm")
 })
 
 test_that("standard extractors return stored fit quantities", {

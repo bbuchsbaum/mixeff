@@ -3,6 +3,7 @@
 ^\.github$
 ^\.mote$
 ^\.omc$
+^tests/fixtures/\.omc$
 ^\.claude$
 ^AGENTS\.md$
 ^CLAUDE\.md$

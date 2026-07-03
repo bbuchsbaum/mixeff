@@ -74,7 +74,7 @@ test_that("lmm() leaves a factor grouping variable alone (no notice)", {
   d <- data.frame(y = rnorm(60), x = rnorm(60),
                   g = factor(rep(letters[1:12], each = 5)))
   expect_no_message(
-    # default verbose (explain_model prints to stdout); assert no coercion notice
+    # default verbose (explain_model message fires); assert no coercion notice
     utils::capture.output(fit <- lmm(y ~ x + (1 | g), d)),
     class = "mm_grouping_coercion_notice"
   )

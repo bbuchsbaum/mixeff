@@ -450,17 +450,19 @@ test_that("mclark GPA random slopes (1 + occasion | student) matches lme4", {
                    tol$fitted, "fitted-value")
   mclark_expect_varcorr_close(fit, ref, tol$varcorr, label)
 
-  # Check the intercept-slope correlation (stored as 2-d.p. text in mixeff).
-  # Observed: mixeff -0.10, lme4 -0.0982; tolerance 0.02 covers rounding gap.
+  # Check the intercept-slope correlation. $table$correlation is stored as a
+  # full-precision numeric (bd-01KTQHCZ0K), so parity holds at the varcorr
+  # tolerance with no rounding slack.
   vc_fit <- mixeff::VarCorr(fit)
   vc_ref <- as.data.frame(lme4::VarCorr(ref))
   corr_ref <- vc_ref$sdcor[!is.na(vc_ref$var2) & vc_ref$grp == "student"][1L]
-  corr_fit_chr <- vc_fit$table$correlation[
+  corr_fit <- vc_fit$table$correlation[
     vc_fit$table$group == "student" & vc_fit$table$name == "occasion"
   ][1L]
-  corr_fit <- suppressWarnings(as.numeric(corr_fit_chr))
+  expect_true(is.numeric(corr_fit),
+              info = "gpa_random_slopes: $table$correlation must be numeric")
   if (!is.na(corr_fit) && !is.na(corr_ref)) {
-    expect_equal(corr_fit, corr_ref, tolerance = 0.02,
+    expect_equal(corr_fit, corr_ref, tolerance = tol$varcorr,
                  info = "gpa_random_slopes: intercept-slope correlation parity failed")
   }
 })

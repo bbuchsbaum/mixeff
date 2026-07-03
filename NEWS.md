@@ -1,5 +1,65 @@
 # mixeff (development version)
 
+## Engine
+
+* The bundled `mixeff-rs` engine is now pinned to its first tagged release,
+  v1.0.0-rc.1 (`3332f3e`). The two response-batch diagnostic reasons new in
+  this release (`sink_stopped`, `adaptive_refinement`) are registered in the
+  R-side reason registry, so the coverage contract (every engine reason has
+  an R-side entry) holds.
+
+## Extractors
+
+* `VarCorr()` correlations are now stored at full precision as numeric
+  columns of `$table` (`correlation`, plus `correlation2`, ... for groups
+  with three or more random terms; `NA` where no pair exists). Previously
+  the column was a 2-decimal display string, forcing callers to parse text
+  and costing ~2% precision on well-determined correlations. Printing is
+  unchanged: rounding to 2 decimals now happens only at display time.
+
+## Diagnostic clarity
+
+* New verb `verify_convergence()`: re-runs a fitted LMM under the engine's
+  bounded verification workflow (restart from the optimum, jittered restarts,
+  opt-in alternate-optimizer consensus) and reports the engine's verdict with
+  per-run objective/theta/beta deltas. This is the check the audit surface
+  already pointed to for uncertain optima; the verdict and wording are
+  engine-owned. `consensus` defaults to `FALSE` because this vendored build
+  compiles without the optional `nlopt` backend, whose absence the consensus
+  pass would otherwise report as a spurious `fragile`.
+* `changes()` now prints one plain-language sentence per recorded change
+  (e.g. `Fitted covariance for (1 | s): requested rank 1, fitted rank 0
+  [reduced_rank].`) instead of dumping the raw stage table. The
+  certificate-time rank statement is treated as the canonical record of a
+  boundary event, so its design/covariance restatements are not repeated
+  (they remain in `$table`). A fit whose optimizer stopped early now says so
+  explicitly (`none: no structural change was made; the optimizer stopped
+  early (fit status \`not_optimized\`).`) instead of showing a misleading
+  `unchanged / formula display` row.
+* The automatic pre-fit `explain_model()` block emitted by `lmm()`/`glmm()`
+  now travels on the message stream (a typed `mm_explanation_notice`
+  condition) instead of stdout, so `suppressMessages()` and knitr's
+  `message = FALSE` can quiet it. It remains on by default;
+  `mm_control(verbose = -1)` still suppresses it entirely, and an explicit
+  `print(explain_model(spec))` still writes to stdout.
+* `summary()` on a GLMM now defaults to `tests = "coefficients"` (matching
+  `lme4::glmer`). When the fit method cannot certify fixed-effect inference
+  (the default `pirls_profiled` estimator), the SE/z/p columns are still
+  withheld — but a `Notes:` line now states why, and that engine-certified
+  Wald inference is available from a `method = "joint_laplace"` fit.
+  Previously a default `summary()` printed `NA` columns with no explanation.
+* `summary()` on a fit whose optimizer stopped without certifying an optimum
+  (e.g. fit status `not_optimized`) now repeats that state as a plain-language
+  `Notes:` line directly under the coefficient tests, instead of relying on
+  the header status line alone.
+* Displayed p-values now render through `format.pval()`: an underflowed
+  p-value prints as `< 1e-16` instead of `0.000000e+00`. Stored values are
+  unchanged.
+* The singular-fit `print()` footer only advertises
+  `random_options(spec, group = ...)` when that call can actually run for the
+  fit (a slope candidate exists); previously the printed hint could error on
+  the very fit that printed it.
+
 ## lme4 functional-equivalence layer
 
 * Grouping-variable coercion: `lmm()` / `glmm()` now coerce a non-categorical

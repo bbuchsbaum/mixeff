@@ -30,7 +30,7 @@ the analyst has to remember them, or reconstruct them from console
 output weeks after the fact.
 
 `mixeff` stores every one of them. This vignette follows a
-Davies-Meteyard–style reporting checklist — describe the data and
+structured mixed-model reporting checklist — describe the data and
 design, report the model specification, show fixed and random
 effects, label inference methods, preserve software provenance, and
 make caveats explicit instead of hiding them in prose — drawing each

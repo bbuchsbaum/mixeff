@@ -24,7 +24,7 @@ the lme4-style syntax surface.}
 \code{parameterization}, \code{roles}, \code{as_json}, \code{simulate}, \code{inference},
 \code{model_comparison_table}, \code{fit_summary_payload},
 \code{marginal_quantity_table},
-\code{marginal_quantities}). The
+\code{marginal_quantities}, \code{verify_convergence}). The
 \code{marginal_quantity_table} schema may be available before the
 corresponding \code{marginal_quantities} verbs are implemented.}
 }

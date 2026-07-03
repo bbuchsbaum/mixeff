@@ -107,7 +107,7 @@ glmm <- function(formula,
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec, lmm = FALSE)
   if (control$verbose >= 0L) {
-    print(explain_model(spec))
+    mm_inform_explanation(spec)
     # No silent surgery on the estimator choice: when the user did not pick a
     # method, surface that the default profiled path is NOT glmer's estimator
     # and point to the certified glmer-equivalent route. Suppressed by

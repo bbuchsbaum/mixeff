@@ -27,6 +27,12 @@ jobs:
           extra-packages: any::devtools, any::testthat, any::jsonvalidate, any::rmarkdown
           needs: test
 
+      # Regenerate the gitignored mixeff-rs snapshot at the pinned rev
+      # (mixeff-rs is public) so the drift/offline checks and the source
+      # install below have the vendored Rust to work with.
+      - name: Vendor the mixeff-rs Rust crate
+        run: Rscript tools/vendor-rust.R
+
       - name: License notice is current
         run: Rscript tools/check-license-note.R
 

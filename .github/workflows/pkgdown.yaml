@@ -32,13 +32,10 @@ jobs:
 
       # The bundled mixeff-rs snapshot under src/rust/upstream/ is produced by
       # tools/vendor-rust.R and is gitignored ("regenerated, not committed"),
-      # so a fresh CI checkout has no Rust source to compile. Regenerate it
-      # before the package is built. mixeff-rs is a PRIVATE repo, so cloning it
-      # needs a token with read access, supplied as the MIXEFF_RS_TOKEN secret
-      # and injected via the MIXEFF_RS_URL override the script already honours.
+      # so a fresh CI checkout has no Rust source to compile. Regenerate it at
+      # the pinned rev (mixeff-rs is public, so no auth is needed) before the
+      # package is built by the local::. install below.
       - name: Vendor the mixeff-rs Rust crate
-        env:
-          MIXEFF_RS_URL: https://x-access-token:${{ secrets.MIXEFF_RS_TOKEN }}@github.com/bbuchsbaum/mixeff-rs.git
         run: Rscript tools/vendor-rust.R
 
       - uses: r-lib/actions/setup-r-dependencies@v2

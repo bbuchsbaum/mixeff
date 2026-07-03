@@ -2,8 +2,10 @@
 
 mm_dh_data <- function() {
   set.seed(909)
-  ng <- 12L; per <- 8L
-  g <- factor(rep(seq_len(ng), each = per)); n <- ng * per
+  ng <- 12L
+  per <- 8L
+  g <- factor(rep(seq_len(ng), each = per))
+  n <- ng * per
   x <- rnorm(n)
   f <- factor(sample(c("a", "b", "c"), n, replace = TRUE))
   re <- rnorm(ng, sd = 1.0)[as.integer(g)]

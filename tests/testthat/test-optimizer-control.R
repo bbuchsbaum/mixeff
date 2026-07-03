@@ -4,8 +4,10 @@
 
 mm_oc_data <- function() {
   set.seed(1)
-  ng <- 20L; per <- 4L
-  g <- factor(rep(seq_len(ng), each = per)); n <- ng * per
+  ng <- 20L
+  per <- 4L
+  g <- factor(rep(seq_len(ng), each = per))
+  n <- ng * per
   data.frame(y = rnorm(n), x = rnorm(n), g = g)
 }
 
@@ -70,8 +72,10 @@ test_that("tolerance overrides are accepted and produce a fit", {
 
 test_that("GLMM still honors max_feval through the optimizer-control path", {
   set.seed(2)
-  ng <- 15L; per <- 12L
-  g <- factor(rep(seq_len(ng), each = per)); n <- ng * per
+  ng <- 15L
+  per <- 12L
+  g <- factor(rep(seq_len(ng), each = per))
+  n <- ng * per
   df <- data.frame(y = rbinom(n, 1, 0.5), x = rnorm(n), g = g)
   f <- glmm(y ~ x + (1 | g), df, family = binomial(), method = "joint_laplace",
             control = mm_control(verbose = -1, max_feval = 50000L))

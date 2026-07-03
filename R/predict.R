@@ -616,14 +616,18 @@ mm_parse_prediction_variance <- function(json, n) {
       class = "mm_schema_error", input = payload
     )
   }
-  num <- function(field) vapply(rows, function(r) {
-    v <- r[[field]]
-    if (is.null(v)) NA_real_ else as.numeric(v)
-  }, numeric(1))
-  chr <- function(field) vapply(rows, function(r) {
-    v <- r[[field]]
-    if (is.null(v)) NA_character_ else as.character(v)
-  }, character(1))
+  num <- function(field) {
+    vapply(rows, function(r) {
+      v <- r[[field]]
+      if (is.null(v)) NA_real_ else as.numeric(v)
+    }, numeric(1))
+  }
+  chr <- function(field) {
+    vapply(rows, function(r) {
+      v <- r[[field]]
+      if (is.null(v)) NA_character_ else as.character(v)
+    }, character(1))
+  }
   out <- data.frame(
     se_fit = num("se_fit"),
     fixed_variance = num("fixed_variance"),

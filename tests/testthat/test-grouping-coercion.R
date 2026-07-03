@@ -12,7 +12,7 @@ test_that("mm_formula_grouping_vars extracts grouping vars across RE forms", {
   expect_equal(mm_formula_grouping_vars(y ~ x + (1 | g)), "g")
   expect_equal(mm_formula_grouping_vars(y ~ x + (1 + x | ID) + (1 + x | Title)),
                c("ID", "Title"))
-  expect_equal(mm_formula_grouping_vars(y ~ x + (1 | a/b)), c("a", "b"))
+  expect_equal(mm_formula_grouping_vars(y ~ x + (1 | a / b)), c("a", "b"))
   expect_equal(mm_formula_grouping_vars(y ~ x + (1 + x || g)), "g")
   expect_equal(mm_formula_grouping_vars(y ~ x + (1 | s) + (1 | s:cond)),
                c("s", "cond"))
@@ -62,7 +62,8 @@ test_that("lmm() fits an integer grouping variable (previously refused) + announ
   expect_s3_class(fit_int, "mm_lmm")
 
   # coercion does not change the fit: identical to pre-factored grouping
-  d2 <- d; d2$g <- factor(d2$g)
+  d2 <- d
+  d2$g <- factor(d2$g)
   fit_fac <- lmm(y ~ x + (1 | g), d2, control = mm_control(verbose = -1))
   expect_equal(unname(fixef(fit_int)), unname(fixef(fit_fac)), tolerance = 1e-8)
   expect_equal(as.numeric(logLik(fit_int)), as.numeric(logLik(fit_fac)),
@@ -103,7 +104,8 @@ test_that("glmm() fits an integer grouping variable + announces it; -1 silences"
   )
   expect_s3_class(fit_int, "mm_glmm")
 
-  d2 <- d; d2$g <- factor(d2$g)
+  d2 <- d
+  d2$g <- factor(d2$g)
   fit_fac <- glmm(y ~ x + (1 | g), d2, family = binomial(),
                   method = "joint_laplace", control = mm_control(verbose = -1))
   expect_equal(unname(fixef(fit_int)), unname(fixef(fit_fac)), tolerance = 1e-6)

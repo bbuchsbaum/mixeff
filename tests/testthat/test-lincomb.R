@@ -60,7 +60,8 @@ hand_wald <- function(beta, V, weights, level = 0.95, df = NA_real_) {
 
 test_that("mm_lincomb() reproduces hand-rolled Wald z on mm_glmm", {
   fit <- mk_lincomb_glmm()
-  beta <- as.numeric(fixef(fit)); names(beta) <- names(fixef(fit))
+  beta <- as.numeric(fixef(fit))
+  names(beta) <- names(fixef(fit))
   V <- as.matrix(unclass(vcov(fit)))
   dimnames(V) <- list(names(beta), names(beta))
 
@@ -69,7 +70,8 @@ test_that("mm_lincomb() reproduces hand-rolled Wald z on mm_glmm", {
   inter_name <- grep(":", names(beta), value = TRUE)[1L]
   main_name  <- grep(":", names(beta), value = TRUE, invert = TRUE)
   main_name  <- setdiff(main_name, "(Intercept)")[1L]
-  weights <- c(0.7, 1.3); names(weights) <- c(main_name, inter_name)
+  weights <- c(0.7, 1.3)
+  names(weights) <- c(main_name, inter_name)
 
   ref <- hand_wald(beta, V, weights)
   out <- mm_lincomb(fit, weights)
@@ -97,7 +99,8 @@ test_that("mm_lincomb() exposes the underlying vcov status as an attribute", {
 
 test_that("mm_lincomb() with method='asymptotic' on mm_lmm matches hand-rolled Wald z", {
   fit <- mk_lincomb_lmm()
-  beta <- as.numeric(fixef(fit)); names(beta) <- names(fixef(fit))
+  beta <- as.numeric(fixef(fit))
+  names(beta) <- names(fixef(fit))
   V <- as.matrix(unclass(vcov(fit)))
   dimnames(V) <- list(names(beta), names(beta))
 

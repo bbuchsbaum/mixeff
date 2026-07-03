@@ -2,7 +2,8 @@
 
 mm_broom_lmm_data <- function() {
   set.seed(303)
-  ng <- 12L; per <- 8L
+  ng <- 12L
+  per <- 8L
   g <- factor(rep(seq_len(ng), each = per))
   n <- ng * per
   x <- rep(seq(-1.5, 1.5, length.out = per), ng)
@@ -14,7 +15,8 @@ mm_broom_lmm_data <- function() {
 
 mm_broom_binom_data <- function() {
   set.seed(404)
-  ng <- 15L; per <- 12L
+  ng <- 15L
+  per <- 12L
   g <- factor(rep(seq_len(ng), each = per))
   n <- ng * per
   x <- rnorm(n)

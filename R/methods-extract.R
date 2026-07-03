@@ -250,7 +250,6 @@ mm_merge_block_diag_postvar <- function(existing, incoming, group) {
   combined <- array(0, dim = c(new_p, new_p, n),
                     dimnames = list(new_names, new_names, existing_levels))
   old_p <- length(existing_names)
-  add_p <- length(incoming_names)
   combined[seq_len(old_p), seq_len(old_p), ] <- existing
   combined[(old_p + 1L):new_p, (old_p + 1L):new_p, ] <- incoming_aligned
   combined
@@ -576,8 +575,11 @@ terms.mm_glmm <- terms.mm_lmm
 #' @export
 as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
                                      ...) {
-  grp <- character(0); var1 <- character(0); var2 <- character(0)
-  vcov <- numeric(0); sdcor <- numeric(0)
+  grp <- character(0)
+  var1 <- character(0)
+  var2 <- character(0)
+  vcov <- numeric(0)
+  sdcor <- numeric(0)
   for (comp in x$components_raw %||% list()) {
     nm <- gsub(": *", "", comp$names)  # lme4 concatenates: "sex: female" -> "sexfemale"
     sd <- comp$std_dev
@@ -585,8 +587,11 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
     p <- length(nm)
     # Variance (diagonal) rows first, matching lme4's ordering.
     for (i in seq_len(p)) {
-      grp <- c(grp, comp$group); var1 <- c(var1, nm[i]); var2 <- c(var2, NA_character_)
-      vcov <- c(vcov, sd[i]^2); sdcor <- c(sdcor, sd[i])
+      grp <- c(grp, comp$group)
+      var1 <- c(var1, nm[i])
+      var2 <- c(var2, NA_character_)
+      vcov <- c(vcov, sd[i]^2)
+      sdcor <- c(sdcor, sd[i])
     }
     # Covariance (off-diagonal) rows; correlations are stored row-major in the
     # strict lower triangle (see mm_varcorr_correlation_values()).
@@ -594,16 +599,21 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
       offset <- (i - 1L) * (i - 2L) / 2L
       for (j in seq_len(i - 1L)) {
         r <- corr[offset + j]
-        grp <- c(grp, comp$group); var1 <- c(var1, nm[j]); var2 <- c(var2, nm[i])
-        vcov <- c(vcov, r * sd[i] * sd[j]); sdcor <- c(sdcor, r)
+        grp <- c(grp, comp$group)
+        var1 <- c(var1, nm[j])
+        var2 <- c(var2, nm[i])
+        vcov <- c(vcov, r * sd[i] * sd[j])
+        sdcor <- c(sdcor, r)
       }
     }
   }
   if (!is.null(x$residual_sd) && length(x$residual_sd) == 1L &&
       is.finite(x$residual_sd)) {
-    grp <- c(grp, "Residual"); var1 <- c(var1, NA_character_)
+    grp <- c(grp, "Residual")
+    var1 <- c(var1, NA_character_)
     var2 <- c(var2, NA_character_)
-    vcov <- c(vcov, x$residual_sd^2); sdcor <- c(sdcor, x$residual_sd)
+    vcov <- c(vcov, x$residual_sd^2)
+    sdcor <- c(sdcor, x$residual_sd)
   }
   data.frame(grp = grp, var1 = var1, var2 = var2, vcov = vcov, sdcor = sdcor,
              stringsAsFactors = FALSE)
@@ -619,8 +629,11 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
 #' @rdname mm_lmm-methods
 #' @export
 as.data.frame.mm_ranef <- function(x, row.names = NULL, optional = FALSE, ...) {
-  grpvar <- character(0); term <- character(0); grp <- character(0)
-  condval <- numeric(0); condsd <- numeric(0)
+  grpvar <- character(0)
+  term <- character(0)
+  grp <- character(0)
+  condval <- numeric(0)
+  condsd <- numeric(0)
   for (g in names(x)) {
     df <- x[[g]]
     pv <- attr(df, "postVar")
@@ -629,8 +642,11 @@ as.data.frame.mm_ranef <- function(x, row.names = NULL, optional = FALSE, ...) {
     for (ti in seq_along(terms)) {
       for (li in seq_along(levs)) {
         sdv <- if (!is.null(pv)) sqrt(pv[ti, ti, li]) else NA_real_
-        grpvar <- c(grpvar, g); term <- c(term, terms[ti]); grp <- c(grp, levs[li])
-        condval <- c(condval, df[li, ti]); condsd <- c(condsd, sdv)
+        grpvar <- c(grpvar, g)
+        term <- c(term, terms[ti])
+        grp <- c(grp, levs[li])
+        condval <- c(condval, df[li, ti])
+        condsd <- c(condsd, sdv)
       }
     }
   }

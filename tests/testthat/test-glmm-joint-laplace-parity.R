@@ -43,8 +43,10 @@ test_that("joint_laplace matches glmer on cbpp (binomial, grouped)", {
 test_that("joint_laplace matches glmer on a Poisson random-intercept model", {
   skip_if_not_installed("lme4")
   set.seed(11)
-  ng <- 30L; per <- 10L
-  g <- factor(rep(seq_len(ng), each = per)); n <- ng * per
+  ng <- 30L
+  per <- 10L
+  g <- factor(rep(seq_len(ng), each = per))
+  n <- ng * per
   x <- rnorm(n)
   re <- rnorm(ng, sd = 0.5)[as.integer(g)]
   y <- rpois(n, exp(0.5 + 0.3 * x + re))

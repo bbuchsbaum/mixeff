@@ -279,7 +279,10 @@ mm_diagnostic_code_registry <- list(
   # --- Formula parsing / canonicalisation
   formula_canonicalized                = list(
     bucket    = "raw_only",
-    rationale = "Duplicative of syntax_expansion / covariance_assumption which carry user-facing wording for the same canonicalisation event."
+    rationale = paste0(
+      "Duplicative of syntax_expansion / covariance_assumption which carry ",
+      "user-facing wording for the same canonicalisation event."
+    )
   ),
   formula_canonicalization_unsupported = list(bucket = "repair"),
 

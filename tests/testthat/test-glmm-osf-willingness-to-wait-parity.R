@@ -49,8 +49,10 @@ osf_ww_data <- function(which) {
 # single 0/1 `score`, exactly as the published script's tidyr::gather() does.
 osf_ww_long <- function(which) {
   d <- osf_ww_data(which)
-  a <- d; a$score <- d$Q1_correct
-  b <- d; b$score <- d$Q2_correct
+  a <- d
+  a$score <- d$Q1_correct
+  b <- d
+  b$score <- d$Q2_correct
   out <- rbind(a, b)
   out$SVScore_centered <- out$SVScore - mean(out$SVScore, na.rm = TRUE)
   out$arousal_centered <- out$arousal - mean(out$arousal, na.rm = TRUE)
@@ -122,7 +124,8 @@ test_that("joint_laplace tracks glmer on correlated-random-slope wait models", {
     m <- glmm(fo, data = d, family = binomial("logit"),
               method = "joint_laplace", control = mm_jl())
     expect_identical(m$method, "joint_laplace")
-    bg <- unname(lme4::fixef(g)); bm <- unname(fixef(m))
+    bg <- unname(lme4::fixef(g))
+    bm <- unname(fixef(m))
     expect_equal(length(bm), length(bg))
     expect_lt(max(abs(bm - bg)), 5e-3)                                   # estimates
     expect_lt(abs(as.numeric(logLik(m)) - as.numeric(logLik(g))), 5e-2)  # logLik
@@ -162,7 +165,8 @@ test_that("random-intercept comp models reach glmer parity (upstream bd-01KT40T6
                    control = lme4::glmerControl(optimizer = "bobyqa"))
   m <- glmm(fo, data = d1L, family = binomial("logit"),
             method = "joint_laplace", control = mm_jl())
-  bg <- unname(lme4::fixef(g)); bm <- unname(fixef(m))
+  bg <- unname(lme4::fixef(g))
+  bm <- unname(fixef(m))
   expect_lt(max(abs(bm - bg)), 5e-3)
   expect_lt(abs(as.numeric(logLik(m)) - as.numeric(logLik(g))), 5e-2)
   expect_true(m$fit_status %in%
@@ -196,15 +200,29 @@ test_that("full 9-model Willingness-to-Wait sweep matches glmer (slow)", {
   skip_if_not_installed("lme4")
   skip_if_not(nzchar(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")),
               "Set MIXEFF_RUN_SLOW_PARITY=true to run the full 9-model sweep.")
-  d1 <- osf_ww_data("study1a"); d1L <- osf_ww_long("study1a")
-  d2 <- osf_ww_data("study1b"); d2L <- osf_ww_long("study1b")
+  d1 <- osf_ww_data("study1a")
+  d1L <- osf_ww_long("study1a")
+  d2 <- osf_ww_data("study1b")
+  d2L <- osf_ww_long("study1b")
 
   cases <- list(
     # correlated-slope models -> tight parity (5e-3 / 5e-2)
-    list(d = d1,  tight = TRUE,  fo = wait_choice ~ 1 + Enjoyment_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)),
-    list(d = d1,  tight = TRUE,  fo = wait_choice ~ 1 + Enjoyment_centered + arousal_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)),
-    list(d = d2,  tight = TRUE,  fo = wait_choice ~ 1 + Enjoyment_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)),
-    list(d = d2,  tight = TRUE,  fo = wait_choice ~ 1 + Enjoyment_centered + arousal_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)),
+    list(
+      d = d1, tight = TRUE,
+      fo = wait_choice ~ 1 + Enjoyment_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)
+    ),
+    list(
+      d = d1, tight = TRUE,
+      fo = wait_choice ~ 1 + Enjoyment_centered + arousal_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)
+    ),
+    list(
+      d = d2, tight = TRUE,
+      fo = wait_choice ~ 1 + Enjoyment_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)
+    ),
+    list(
+      d = d2, tight = TRUE,
+      fo = wait_choice ~ 1 + Enjoyment_centered + arousal_centered + (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title)
+    ),
     # random-intercept / partial-slope comp models -> tight parity since the
     # upstream high-baseline early-stop fix (bd-01KT40T6FGVXQQ9N50G2HM0ZZE)
     list(d = d1L, tight = TRUE, fo = score ~ Enjoyment_centered + SVScore_centered + (1 | ID) + (1 | Title)),
@@ -219,7 +237,8 @@ test_that("full 9-model Willingness-to-Wait sweep matches glmer (slow)", {
       control = lme4::glmerControl(optimizer = "bobyqa")))
     m <- glmm(cs$fo, data = cs$d, family = binomial("logit"),
               method = "joint_laplace", control = mm_jl())
-    bg <- unname(lme4::fixef(g)); bm <- unname(fixef(m))
+    bg <- unname(lme4::fixef(g))
+    bm <- unname(fixef(m))
     tol_b  <- if (cs$tight) 5e-3 else 6e-2
     tol_ll <- if (cs$tight) 5e-2 else 1e-1
     expect_lt(max(abs(bm - bg)), tol_b)

@@ -287,7 +287,7 @@ test_that("mclark nurses slash notation (1|hospital/ward) equals explicit nestin
   form_explicit <- stress ~ age + sex + experience + treatment + wardtype +
                      hospsize + (1 | hospital) + (1 | hospital:ward)
   form_slash    <- stress ~ age + sex + experience + treatment + wardtype +
-                     hospsize + (1 | hospital/ward)
+                     hospsize + (1 | hospital / ward)
 
   fit_exp   <- mixeff::lmm(form_explicit, dat, REML = TRUE,
                             control = mixeff::mm_control(verbose = -1))

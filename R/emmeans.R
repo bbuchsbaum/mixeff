@@ -169,7 +169,11 @@ mm_emmeans_init_messages <- function(V) {
   method <- attr(V, "mm_method") %||% "unknown"
   if (identical(status, "available")) {
     return(sprintf(
-      "mixeff emmeans bridge: fixed-effect covariance from mixedmodels.fixed_effect_covariance_matrix (%s); prefer mm_means()/mm_comparisons() when row-level status and reasons are needed.",
+      paste0(
+        "mixeff emmeans bridge: fixed-effect covariance from ",
+        "mixedmodels.fixed_effect_covariance_matrix (%s); prefer ",
+        "mm_means()/mm_comparisons() when row-level status and reasons are needed."
+      ),
       method
     ))
   }
@@ -177,7 +181,11 @@ mm_emmeans_init_messages <- function(V) {
     attr(V, "mm_reason") %||%
     "fixed_effect_covariance_matrix_unavailable"
   sprintf(
-    "mixeff emmeans bridge: fixed-effect covariance unavailable (%s); standard errors may be unavailable. Prefer mm_means()/mm_comparisons() for contract-preserving status and reasons.",
+    paste0(
+      "mixeff emmeans bridge: fixed-effect covariance unavailable (%s); ",
+      "standard errors may be unavailable. Prefer mm_means()/mm_comparisons() ",
+      "for contract-preserving status and reasons."
+    ),
     reason
   )
 }

@@ -82,7 +82,7 @@ test_that("compile/audit surface the upstream pedagogical DiagnosticCode variant
   double_bar <- compile_model(Reaction ~ Days + (1 + Days || Subject), sleep)
   expect_true("covariance_assumption" %in% diagnostic_codes(double_bar$artifact))
 
-  nested <- compile_model(Reaction ~ Days + (1 | Subject/Days), sleep)
+  nested <- compile_model(Reaction ~ Days + (1 | Subject / Days), sleep)
   expect_true("syntax_expansion" %in% diagnostic_codes(nested$artifact))
 
   sparse <- data.frame(

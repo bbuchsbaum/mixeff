@@ -3,8 +3,10 @@
 
 mm_notice_data <- function() {
   set.seed(808)
-  ng <- 12L; per <- 10L
-  g <- factor(rep(seq_len(ng), each = per)); n <- ng * per
+  ng <- 12L
+  per <- 10L
+  g <- factor(rep(seq_len(ng), each = per))
+  n <- ng * per
   x <- rnorm(n)
   re <- rnorm(ng, sd = 0.6)[as.integer(g)]
   y <- rbinom(n, 1, plogis(-0.2 + 0.6 * x + re))

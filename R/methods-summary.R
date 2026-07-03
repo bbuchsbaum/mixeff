@@ -188,7 +188,8 @@ mm_glmm_wald_z_inference <- function(object) {
     "not_computed"
   }
   if (identical(method_used, "not_computed")) {
-    z[] <- NA_real_; p[] <- NA_real_
+    z[] <- NA_real_
+    p[] <- NA_real_
   }
   rows <- data.frame(
     label             = names(beta),

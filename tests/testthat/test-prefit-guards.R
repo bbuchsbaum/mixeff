@@ -66,7 +66,7 @@ test_that("valid models across topologies still fit (no false positives)", {
     "mm_lmm"
   )
   expect_s3_class(
-    lmm(strength ~ 1 + (1 | batch/cask), lme4::Pastes, control = ctl),
+    lmm(strength ~ 1 + (1 | batch / cask), lme4::Pastes, control = ctl),
     "mm_lmm"
   )
   expect_s3_class(

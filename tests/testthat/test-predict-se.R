@@ -4,8 +4,10 @@
 
 mm_se_data <- function() {
   set.seed(321)
-  ng <- 14L; per <- 9L
-  g <- factor(rep(seq_len(ng), each = per)); n <- ng * per
+  ng <- 14L
+  per <- 9L
+  g <- factor(rep(seq_len(ng), each = per))
+  n <- ng * per
   x <- rnorm(n)
   re <- rnorm(ng, sd = 1.0)[as.integer(g)]
   y <- 0.7 + 0.4 * x + re + rnorm(n, sd = 0.8)

@@ -170,7 +170,11 @@ print.mm_varcorr <- function(x, ...) {
     if (length(weak_groups)) {
       groups <- paste(sprintf("`%s`", weak_groups), collapse = ", ")
       cat(sprintf(
-        "[design_weak_identifiability]: random intercept variance for %s is weakly interpretable because its grouping indicators are aliased with the fixed-effect design.\n",
+        paste0(
+          "[design_weak_identifiability]: random intercept variance for %s ",
+          "is weakly interpretable because its grouping indicators are ",
+          "aliased with the fixed-effect design.\n"
+        ),
         groups
       ))
     }

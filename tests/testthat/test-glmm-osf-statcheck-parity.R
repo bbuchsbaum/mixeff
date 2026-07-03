@@ -55,7 +55,8 @@ test_that("joint_laplace tracks glmer on well-conditioned OSF models", {
     m <- glmm(fo, data = d, family = binomial("logit"),
               method = "joint_laplace", control = mm_jl())
     expect_identical(m$method, "joint_laplace")
-    bg <- unname(lme4::fixef(g)); bm <- unname(fixef(m))
+    bg <- unname(lme4::fixef(g))
+    bm <- unname(fixef(m))
     expect_equal(length(bm), length(bg))
     expect_lt(max(abs(bm - bg)), 5e-3)                                  # estimates
     expect_lt(abs(as.numeric(logLik(m)) - as.numeric(logLik(g))), 5e-2) # logLik
@@ -85,7 +86,11 @@ test_that("GLMM Wald standard errors match glmer on OSF statcheck", {
 })
 
 test_that("raw-Year joint_laplace is offset-invariant (pending upstream fix E)", {
-  skip("upstream bd-01KT3Z64AY45NHA5144G2ZBMSY: raw-Year joint_laplace converges sub-optimally (interaction 0.7959 vs offset-invariant MLE ~0.853) and reports converged_interior with a non-finite objective. Re-enable when fixed.")
+  skip(paste0(
+    "upstream bd-01KT3Z64AY45NHA5144G2ZBMSY: raw-Year joint_laplace converges sub-optimally ",
+    "(interaction 0.7959 vs offset-invariant MLE ~0.853) and reports converged_interior ",
+    "with a non-finite objective. Re-enable when fixed."
+  ))
   d <- osf_statcheck_data()
   mr <- glmm(Error ~ OpenPractice * Year  + (1 | Source), data = d,
              family = binomial("logit"), method = "joint_laplace", control = mm_jl())

@@ -284,7 +284,10 @@ mm_match_marginal_comparison <- function(comparison) {
   comparison <- match.arg(comparison, c("difference", "ratio", "odds_ratio"))
   if (!identical(comparison, "difference")) {
     mm_abort(
-      message = sprintf("`comparison = \"%s\"` is not supported; only `\"difference\"` is implemented for marginal quantities.", comparison),
+      message = sprintf(
+        "`comparison = \"%s\"` is not supported; only `\"difference\"` is implemented for marginal quantities.",
+        comparison
+      ),
       class = "mm_inference_unavailable",
       input = comparison
     )

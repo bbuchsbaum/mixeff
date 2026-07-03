@@ -2,7 +2,8 @@
 
 mm_glmm_inf_data <- function() {
   set.seed(707)
-  ng <- 18L; per <- 14L
+  ng <- 18L
+  per <- 14L
   g <- factor(rep(seq_len(ng), each = per))
   n <- ng * per
   x <- rnorm(n)

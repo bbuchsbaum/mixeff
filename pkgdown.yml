@@ -1,0 +1,23 @@
+pandoc: 3.8.3
+pkgdown: 2.2.0
+pkgdown_sha: ~
+articles:
+  benchmarking: benchmarking.html
+  demystifying-formulas: demystifying-formulas.html
+  glmm: glmm.html
+  inference-method-glossary: inference-method-glossary.html
+  inference-where-lme4-says-no: inference-where-lme4-says-no.html
+  inference: inference.html
+  intro: intro.html
+  lme4-migration: lme4-migration.html
+  lmm-basics: lmm-basics.html
+  marginal-effects: marginal-effects.html
+  mixeff: mixeff.html
+  reporting-lmms: reporting-lmms.html
+  reproducing-aphantasia: reproducing-aphantasia.html
+  saving-and-reviving: saving-and-reviving.html
+  tutorial: tutorial.html
+last_built: 2026-07-03T22:45Z
+urls:
+  reference: https://bbuchsbaum.github.io/mixeff/reference
+  article: https://bbuchsbaum.github.io/mixeff/articles

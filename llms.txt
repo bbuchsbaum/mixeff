@@ -1,0 +1,434 @@
+# mixeff
+
+> **Audit-first mixed-effects models in R, powered by the `mixeff-rs`
+> Rust crate.**
+
+`mixeff` fits linear and generalized linear mixed-effects models from
+lme4-style formulas. It aims to be *functionally equivalent* to `lme4`:
+the formula syntax is the same, the extractor surface (`fixef`, `ranef`,
+`VarCorr`, `predict`, `simulate`, `anova`, `summary`, `update`,
+[`broom::tidy`](https://generics.r-lib.org/reference/tidy.html)) is the
+same, and statistical answers agree within documented tolerances on the
+parity datasets shipped with the package. It is not a literal *drop-in*
+replacement, by design: you call
+[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) /
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) (not
+`lmer()` / `glmer()`), results are not bit-exact, and the package is
+audit-first — it refuses or reports rather than silently transforming a
+model.
+
+What it adds is *provenance*. Every printed claim — a coefficient, a
+standard error, a variance component, a p-value — traces back to a
+versioned JSON artifact produced by a named Rust compiler at a known
+schema version. It is the package to reach for when you need to *defend*
+a mixed-model analysis, not just run one.
+
+The R surface exposes the engine’s formula parser, semantic IR, design
+auditor, ThetaMap parameterization, optimizer, and inference contract as
+first-class verbs.
+
+## Why a different package?
+
+| Problem in current R practice | What `mixeff` does |
+|----|----|
+| Convergence warnings that scroll off-screen | `optimizer_certificate(fit)` is structured; status, objective, iterations are fields, not text |
+| Singular fits printed without ceremony | Singularity is reported model state with effective rank, not a shameful failure |
+| p-values from methods the software never names | Each inference row carries `method`, `status`, `reliability`, and a stable `reason_code` |
+| Refusals (non-identifiable design, unsupported slope) buried in warnings | [`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md) raises structured `mm_design_refusal` *before* the fit |
+| Reproducibility tied to a live optimizer state | The fitted object is a serializable record; [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) survives session restarts and reloads via [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md) |
+
+## Two-line install
+
+R-Universe (recommended once 0.1.0 ships):
+
+``` r
+
+install.packages("mixeff", repos = c("https://bbuchsbaum.r-universe.dev", getOption("repos")))
+```
+
+Development install (needs Rust toolchain ≥ 1.78 and `rextendr`):
+
+``` r
+
+remotes::install_github("bbuchsbaum/mixeff")
+```
+
+## A six-line tour
+
+``` r
+
+library(mixeff)
+
+fit <- lmm(Reaction ~ Days + (Days | Subject), data = lme4::sleepstudy)
+summary(fit)        # familiar lme4-style summary
+audit(fit)          # Rust-authored audit report
+changes(fit)        # what the compiler did to the requested model
+fixef(fit); VarCorr(fit); ranef(fit)
+
+saveRDS(fit, tf <- tempfile()); rm(fit); gc()
+fit2 <- readRDS(tf)
+fixef(fit2)         # works without a live Rust handle — artifact is the source of truth
+```
+
+## Audit-first workflow
+
+`mixeff` exposes the contract as first-class verbs:
+
+``` r
+
+spec <- compile_model(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)
+
+audit_design(spec)        # structured design audit, before any optimization
+explain_model(spec)       # named-form translation of every random term
+random_options(spec, Subject)   # map of nearby random-effect spellings (not a ranking)
+compare_covariance(spec)  # full / diagonal / scalar comparison per term
+```
+
+Once fit:
+
+``` r
+
+diagnostics(fit)          # structured diagnostics list
+parameterization(fit)     # ThetaMap details
+optimizer_certificate(fit)# convergence status, iterations, objective trace
+inference_table(fit)      # per-coefficient inference with method + reliability
+estimability(fit, L)      # certificate-backed estimability of contrasts
+```
+
+Where the engine cannot certify a number, the wrapper returns `NA` with
+a stable reason code — never a fabricated value.
+
+## Random-effects guidance, never recommendation
+
+`mixeff` adds a *guidance* layer for random-effects syntax. It explains
+what each formula spelling actually estimates, what the data can
+support, and which covariances the syntax fixes at zero — but it never
+ranks, recommends, or substitutes models.
+
+``` r
+
+# What does this formula actually model?
+explain_model(compile_model(score ~ week + (1 | clinic), df))
+#> Random effects:
+#>   clinic:
+#>     wrote:        (1 | clinic)
+#>     named form:   re(group = clinic, intercept = TRUE, slopes = NULL, cov = "scalar")
+#>     scope:        clinics may differ in average outcome.
+#> Design notes:
+#>   scope_note: week varies within clinic and could be a clinic-level slope.
+```
+
+The split-block, double-bar, and nested forms are all explained
+explicitly. The `(1 | a/b)` expansion to `(1 | a) + (1 | a:b)` is
+labeled as `syntax_expansion`, not silently rewritten.
+
+## Faster than lme4 on the parity benchmark
+
+On the `mixeff` lme4-scaling benchmark (3 reps per cell, harness and CSV
+under `benchmarks/lme4-scaling/` in the source tree):
+
+| scenario | scale | mixeff median | lme4 median | speedup |
+|----|----|---:|---:|---:|
+| `(1 | subject)` rows | 5000 rows | 6 ms | 13 ms | 2.2× |
+| `(1 | subject)` levels | 200 subjects | 3 ms | 9 ms | 3.0× |
+| `(1 + x | subject)` slopes | 200 subjects | 5 ms | 17 ms | 3.4× |
+| `(1 | subject) + (1 | item)` crossed | 30 each | 5 ms | 18 ms | 3.6× |
+| `(1 + x | subject) + (1 | item)` crossed slope | 30 each | 7 ms | 37 ms | 5.3× |
+
+(Median seconds per fit; full table at
+`benchmarks/lme4-scaling/lme4-scaling-summary.csv` and an installed copy
+at `inst/extdata/lme4-scaling-summary.csv` for the benchmarking vignette
+to plot.)
+
+## Numerical parity with lme4
+
+`mixeff` does **not** target bit-exact reproduction of `lme4`. The
+upstream Rust compiler defaults to a pure-Rust optimizer (cobyla /
+pattern_search) rather than the C `nlopt` library that lme4 uses for
+CRAN compatibility reasons.
+
+Statistical equivalence within documented tolerances on parity datasets
+is the bar. Every divergence from `lme4` is classified and bounded in
+`inst/extdata/expected-mismatches.json`, with regression-detector limits
+enforced by the test suite.
+
+## Status
+
+- **Phase 0** — extendr bridge, vendoring, formula round-trip, schema
+  negotiation: **shipped**.
+- **Phase 1** —
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md),
+  audit-first surface (`compile_model`, `audit_design`, `explain_model`,
+  `random_options`, `compare_covariance`, `changes`, `diagnostics`,
+  `parameterization`, `roles`), lme4-style extractors: **shipped**.
+- **Phase 2** — `saveRDS` round-trip,
+  [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md),
+  lazy extractors, `model.matrix`, `vcov`: **shipped**.
+- **Phase 3** — `contrast`, `test_effect`, `inference_table`, `confint`,
+  `anova`, `drop1`, parametric bootstrap, bootstrap LRT: **shipped**.
+- **Phase 4** —
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+  profiled-PIRLS bridge, `simulate`, `refit`, `compare`: **in progress**
+  (joint Laplace / AGQ still explicit boundaries).
+- **Phase 5** — `emmeans` integration, profile-likelihood CIs,
+  multivariate shared-theta: deferred.
+
+The audit-first contract is what the package is for. Read
+`planning/PRD.md` and `planning/mission.md` before contributing.
+
+## Acknowledgements
+
+The `mixeff-rs` Rust crate that powers `mixeff` is itself modelled on
+Julia’s [`MixedModels.jl`](https://juliastats.org/MixedModels.jl/),
+whose formula-to-fit pipeline — formula parser, semantic IR, ThetaMap
+parameterization, optimizer, and inference contract — is the basis for
+the corresponding stages here.
+
+## License
+
+MIT, plus the upstream Rust crate license bundle in `inst/LICENSE.note`.
+
+# Package index
+
+## Fitting models
+
+Construct and fit linear and generalized linear mixed models.
+
+- [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) : Fit
+  a linear mixed-effects model
+- [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) :
+  Fit a generalized linear mixed model
+- [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
+  : Compile a mixed-effects model spec without fitting
+- [`mm_control()`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md)
+  : Control mixeff fitting behavior
+
+## Extractors (lme4-compatible)
+
+The familiar lme4 accessor surface.
+
+- [`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`coef(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`coef(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`sigma(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`sigma(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`logLik(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`logLik(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`deviance(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`deviance(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`AIC(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`AIC(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`BIC(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`BIC(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`nobs(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`nobs(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`df.residual(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`df.residual(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`formula(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`formula(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`model.frame(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`model.frame(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`ngrps()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`weights(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`weights(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`extractAIC(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`extractAIC(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`terms(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`terms(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`as.data.frame(`*`<mm_varcorr>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`as.data.frame(`*`<mm_ranef>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`model.matrix(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`model.matrix(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`vcov(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  [`vcov(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  : Extract components from a fitted mixeff LMM
+- [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md) :
+  Extract low-level model components
+- [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md)
+  : Test whether a fit is singular or reduced-rank
+- [`predict(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
+  [`fitted(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
+  [`residuals(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
+  [`fitted(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
+  [`residuals(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
+  : Predict from a fitted mixeff LMM
+- [`predict(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_glmm.md)
+  : Predict from a fitted mixeff GLMM
+- [`update(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/update.mm.md)
+  [`update(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/update.mm.md)
+  : Update and re-fit a mixeff model
+- [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md) :
+  Refit a mixeff LMM with a new response
+- [`simulate(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/simulate.mm_lmm.md)
+  : Simulate from a mixeff LMM
+
+## Inference
+
+Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
+
+- [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md)
+  : Contrast fixed effects
+- [`test_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_effect.md)
+  : Test a fixed-effect term
+- [`test_random_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_random_effect.md)
+  : Test a random-effect variance component
+- [`anova(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/anova.mm_glmm.md)
+  : Analysis of deviance for GLMMs
+- [`drop1(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/drop1.mm_lmm.md)
+  : Drop one fixed-effect term at a time
+- [`drop1(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/drop1.mm_glmm.md)
+  : Drop one fixed-effect term at a time from a GLMM
+- [`confint(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/confint.mm_glmm.md)
+  : Confidence intervals for fixed effects of a mixeff GLMM
+- [`df_for_contrast()`](https://bbuchsbaum.github.io/mixeff/reference/df_for_contrast.md)
+  : Degrees of freedom for a contrast
+- [`estimability()`](https://bbuchsbaum.github.io/mixeff/reference/estimability.md)
+  : Assess contrast estimability
+- [`inference_options()`](https://bbuchsbaum.github.io/mixeff/reference/inference_options.md)
+  : Inspect inference methods available for this fit
+- [`inference_table()`](https://bbuchsbaum.github.io/mixeff/reference/inference_table.md)
+  : Fixed-effect inference table
+- [`bootstrap_control()`](https://bbuchsbaum.github.io/mixeff/reference/bootstrap_control.md)
+  : Fixed-effect bootstrap control
+- [`parametric_bootstrap()`](https://bbuchsbaum.github.io/mixeff/reference/parametric_bootstrap.md)
+  : Parametric bootstrap likelihood-ratio comparison
+
+## Marginal effects & emmeans
+
+- [`mm_grid()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
+  [`mm_predictions()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
+  [`mm_means()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
+  [`mm_comparisons()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
+  : Marginal grids, predictions, means, and comparisons
+- [`mm_lincomb()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lincomb.md)
+  : Wald inference on a linear combination of fixed effects
+- [`recover_data.mm_lmm()`](https://bbuchsbaum.github.io/mixeff/reference/emmeans-support.md)
+  [`emm_basis.mm_lmm()`](https://bbuchsbaum.github.io/mixeff/reference/emmeans-support.md)
+  [`recover_data.mm_glmm()`](https://bbuchsbaum.github.io/mixeff/reference/emmeans-support.md)
+  [`emm_basis.mm_glmm()`](https://bbuchsbaum.github.io/mixeff/reference/emmeans-support.md)
+  : Optional emmeans support for mixeff LMMs
+
+## Model comparison & reporting
+
+- [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
+  : Compare fitted mixeff models
+- [`compare_covariance()`](https://bbuchsbaum.github.io/mixeff/reference/compare_covariance.md)
+  : Compare covariance parameterizations for current random terms
+- [`model_report()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
+  [`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
+  : Produce reporting tables for a fitted mixeff model
+
+## Audit-first verbs
+
+Make the model’s design, reductions, and optimizer state explicit.
+
+- [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md) :
+  Audit a fitted mixeff model
+- [`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md)
+  : Print the structured design audit for a compiled model spec
+- [`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md)
+  : Explain the random-effects structure of a compiled model
+- [`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md)
+  : Show requested, effective, and fitted model-state changes
+- [`diagnostics()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
+  [`fit_status()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
+  : Inspect mixeff diagnostics and fit status
+- [`parameterization()`](https://bbuchsbaum.github.io/mixeff/reference/parameterization.md)
+  : Inspect covariance parameterization
+- [`random_options()`](https://bbuchsbaum.github.io/mixeff/reference/random_options.md)
+  : Inspect nearby random-effect spellings for one grouping factor
+- [`random_blocks()`](https://bbuchsbaum.github.io/mixeff/reference/random_blocks.md)
+  : Inspect random-effect blocks
+- [`roles()`](https://bbuchsbaum.github.io/mixeff/reference/roles.md) :
+  Declare or inspect design roles
+- [`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md)
+  : Inspect the optimizer certificate
+- [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
+  : Verify convergence of a fitted linear mixed model
+- [`reproducibility()`](https://bbuchsbaum.github.io/mixeff/reference/reproducibility.md)
+  : Inspect reproducibility metadata
+
+## broom / broom.mixed
+
+- [`mm_broom`](https://bbuchsbaum.github.io/mixeff/reference/mm_broom.md)
+  : Tidy, glance, and augment methods for mixeff fits
+
+## Persistence
+
+- [`as_json()`](https://bbuchsbaum.github.io/mixeff/reference/as_json.md)
+  : Serialize a mixeff spec or fit to JSON
+- [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
+  : Revive a serialized mixeff object
+- [`fit_handle_alive()`](https://bbuchsbaum.github.io/mixeff/reference/fit_handle_alive.md)
+  : Test whether a mixeff fit has a live native handle
+
+## Formula & schema internals
+
+- [`mm_parse_formula()`](https://bbuchsbaum.github.io/mixeff/reference/mm_parse_formula.md)
+  : Parse and canonicalize an lme4-style formula
+
+- [`mm_formula_manifest()`](https://bbuchsbaum.github.io/mixeff/reference/mm_formula_manifest.md)
+  : The wrapper's formula manifest
+
+- [`mm_json_negotiate()`](https://bbuchsbaum.github.io/mixeff/reference/mm_json_negotiate.md)
+  :
+
+  Negotiate a JSON schema header against what `mixeff` supports
+
+- [`mm_json_known_schemas()`](https://bbuchsbaum.github.io/mixeff/reference/mm_json_known_schemas.md)
+  : Closed list of schema/version pairs the wrapper understands
+
+## Package
+
+- [`mixeff`](https://bbuchsbaum.github.io/mixeff/reference/mixeff-package.md)
+  [`mixeff-package`](https://bbuchsbaum.github.io/mixeff/reference/mixeff-package.md)
+  : mixeff: Audit-First Mixed-Effects Models via the 'mixedmodels' Rust
+  Crate
+
+# Articles
+
+### Get started
+
+- [Your First Mixed Model with
+  mixeff](https://bbuchsbaum.github.io/mixeff/articles/tutorial.md):
+- [Why mixeff?](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md):
+- [Introduction to
+  mixeff](https://bbuchsbaum.github.io/mixeff/articles/intro.md):
+- [Migrating from
+  lme4](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md):
+
+### Models
+
+- [Fitting Linear Mixed
+  Models](https://bbuchsbaum.github.io/mixeff/articles/lmm-basics.md):
+- [GLMM Fitting and Model
+  Comparison](https://bbuchsbaum.github.io/mixeff/articles/glmm.md):
+- [Demystifying Random-Effects
+  Formulas](https://bbuchsbaum.github.io/mixeff/articles/demystifying-formulas.md):
+
+### Marginal effects
+
+- [Marginal Means and
+  Comparisons](https://bbuchsbaum.github.io/mixeff/articles/marginal-effects.md):
+
+### Inference & reporting
+
+- [Inference You Can
+  Report](https://bbuchsbaum.github.io/mixeff/articles/inference.md):
+- [Inference Method
+  Glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.md):
+- [Inference Where Standard Mixed-Model p-values Break
+  Down](https://bbuchsbaum.github.io/mixeff/articles/inference-where-lme4-says-no.md):
+- [Reporting Linear Mixed
+  Models](https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.md):
+
+### Performance & persistence
+
+- [Benchmarking
+  mixeff](https://bbuchsbaum.github.io/mixeff/articles/benchmarking.md):
+- [Saving and Reloading
+  Fits](https://bbuchsbaum.github.io/mixeff/articles/saving-and-reviving.md):
+- [Reproducing the Loo Aphantasia
+  GLMMs](https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.md):

@@ -32,7 +32,7 @@ offline_env <- c("CARGO_NET_OFFLINE=true")
 run(c("CMD", "INSTALL", "-l", lib, tarballs[[1L]]), env = offline_env)
 load_check <- file.path(work, "load-check.R")
 writeLines(c(
-  sprintf("library(mixeff, lib.loc = %s)", dQuote(lib)),
+  sprintf("library(mixeff, lib.loc = %s)", encodeString(lib, quote = "\"")),
   "stopifnot(packageVersion('mixeff') >= '0.1.0')"
 ), load_check)
 run(c("--vanilla", "-s", "-f", load_check), env = offline_env)

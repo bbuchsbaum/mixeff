@@ -5,6 +5,8 @@
 .omc/
 .claude/
 .albersdown.bak/
+AGENTS.md
+CLAUDE.md
 
 # R
 .Rproj.user

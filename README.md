@@ -153,8 +153,7 @@ with regression-detector limits enforced by the test suite.
 - **Phase 4** — `glmm()` profiled-PIRLS bridge, `simulate`, `refit`, `compare`: **in progress** (joint Laplace / AGQ still explicit boundaries).
 - **Phase 5** — `emmeans` integration, profile-likelihood CIs, multivariate shared-theta: deferred.
 
-The audit-first contract is what the package is for. Read
-`planning/PRD.md` and `planning/mission.md` before contributing.
+The audit-first contract is what the package is for.
 
 ## Acknowledgements
 

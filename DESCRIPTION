@@ -13,6 +13,8 @@ Description: An R wrapper for the 'mixeff-rs' Rust crate, providing
     See the package vignettes for migration from 'lme4' and the
     demystification surface for random-effects syntax.
 License: MIT + file LICENSE
+URL: https://bbuchsbaum.github.io/mixeff/, https://github.com/bbuchsbaum/mixeff
+BugReports: https://github.com/bbuchsbaum/mixeff/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3

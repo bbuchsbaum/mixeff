@@ -19,6 +19,8 @@ a versioned JSON artifact produced by a named Rust compiler at a
 known schema version. It is the package to reach for when you need
 to *defend* a mixed-model analysis, not just run one.
 
+Documentation: <https://bbuchsbaum.github.io/mixeff/>
+
 The R surface exposes the engine's formula parser, semantic IR,
 design auditor, ThetaMap parameterization, optimizer, and inference
 contract as first-class verbs.

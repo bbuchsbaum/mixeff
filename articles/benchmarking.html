@@ -64,6 +64,7 @@
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json">
 </form></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/bbuchsbaum/mixeff/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul>
 </div>
 
@@ -80,14 +81,14 @@
       <h1>Benchmarking mixeff</h1>
             
       
-
+      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/benchmarking.Rmd" class="external-link"><code>vignettes/benchmarking.Rmd</code></a></small>
       <div class="d-none name"><code>benchmarking.Rmd</code></div>
     </div>
 
     
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">mixeff</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
 <p>Speed matters most when a workflow repeats the same fit many times.
 Parametric bootstrap is the canonical case: a 1,000-replicate bootstrap
 means roughly 1,000 refits, plus the original fit and summary work. The

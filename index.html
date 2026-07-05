@@ -66,6 +66,7 @@
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="search.json">
 </form></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/bbuchsbaum/mixeff/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul>
 </div>
 
@@ -81,6 +82,7 @@
 </blockquote>
 <p><code>mixeff</code> fits linear and generalized linear mixed-effects models from lme4-style formulas. It aims to be <em>functionally equivalent</em> to <code>lme4</code>: the formula syntax is the same, the extractor surface (<code>fixef</code>, <code>ranef</code>, <code>VarCorr</code>, <code>predict</code>, <code>simulate</code>, <code>anova</code>, <code>summary</code>, <code>update</code>, <code><a href="https://generics.r-lib.org/reference/tidy.html" class="external-link">broom::tidy</a></code>) is the same, and statistical answers agree within documented tolerances on the parity datasets shipped with the package. It is not a literal <em>drop-in</em> replacement, by design: you call <code><a href="reference/lmm.html">lmm()</a></code> / <code><a href="reference/glmm.html">glmm()</a></code> (not <code>lmer()</code> / <code>glmer()</code>), results are not bit-exact, and the package is audit-first — it refuses or reports rather than silently transforming a model.</p>
 <p>What it adds is <em>provenance</em>. Every printed claim — a coefficient, a standard error, a variance component, a p-value — traces back to a versioned JSON artifact produced by a named Rust compiler at a known schema version. It is the package to reach for when you need to <em>defend</em> a mixed-model analysis, not just run one.</p>
+<p>Documentation: <a href="https://bbuchsbaum.github.io/mixeff/" class="uri">https://bbuchsbaum.github.io/mixeff/</a></p>
 <p>The R surface exposes the engine’s formula parser, semantic IR, design auditor, ThetaMap parameterization, optimizer, and inference contract as first-class verbs.</p>
 <div class="section level2">
 <h2 id="why-a-different-package">Why a different package?<a class="anchor" aria-label="anchor" href="#why-a-different-package"></a>
@@ -136,7 +138,7 @@
 <h2 id="a-six-line-tour">A six-line tour<a class="anchor" aria-label="anchor" href="#a-six-line-tour"></a>
 </h2>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">mixeff</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/lmm.html">lmm</a></span><span class="op">(</span><span class="va">Reaction</span> <span class="op">~</span> <span class="va">Days</span> <span class="op">+</span> <span class="op">(</span><span class="va">Days</span> <span class="op">|</span> <span class="va">Subject</span><span class="op">)</span>, data <span class="op">=</span> <span class="fu">lme4</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/lme4/man/sleepstudy.html" class="external-link">sleepstudy</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>        <span class="co"># familiar lme4-style summary</span></span>
@@ -284,7 +286,15 @@
 <p>MIT, plus the upstream Rust crate license bundle in <code>inst/LICENSE.note</code>.</p>
 </div>
 </div>
-  </main><aside class="col-md-3"><div class="license">
+  </main><aside class="col-md-3"><div class="links">
+<h2 data-toc-skip>Links</h2>
+<ul class="list-unstyled">
+<li><a href="https://github.com/bbuchsbaum/mixeff/" class="external-link">Browse source code</a></li>
+<li><a href="https://github.com/bbuchsbaum/mixeff/issues" class="external-link">Report a bug</a></li>
+</ul>
+</div>
+
+<div class="license">
 <h2 data-toc-skip>License</h2>
 <ul class="list-unstyled">
 <li>

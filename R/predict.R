@@ -711,6 +711,8 @@ mm_glmm_engine_family <- function(fit) {
   fam <- fit$family$family
   if (identical(fam, "binomial")) {
     if (is.null(fit$weights)) "bernoulli" else "binomial"
+  } else if (identical(fam, "negative_binomial")) {
+    mm_glmm_nb_engine_spec(fit$family)
   } else {
     fam
   }

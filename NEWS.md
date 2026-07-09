@@ -37,6 +37,16 @@
   and costing ~2% precision on well-determined correlations. Printing is
   unchanged: rounding to 2 decimals now happens only at display time.
 
+## Negative-binomial GLMMs
+
+* `glmm()` now fits NB2 negative-binomial models (log link) on the default
+  profiled path. `family = mm_negative_binomial()` estimates the size
+  parameter theta alongside the model (the `lme4::glmer.nb()` route);
+  `family = MASS::negative.binomial(theta)` or `mm_negative_binomial(theta)`
+  fits conditional on a fixed theta. The fitted/fixed theta is recorded as
+  `fit$family$nb_theta`. `method = "joint_laplace"` is not yet wired for this
+  family at the pinned engine and is refused with a typed error.
+
 ## Contrasts
 
 * Ordered factors are now coded with orthonormal polynomial contrasts

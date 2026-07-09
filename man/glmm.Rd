@@ -28,8 +28,10 @@ glmm(
 
 \item{family}{A supported GLMM family object or family constructor. The
 certified 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or
-\code{"cloglog"} links; \code{\link[=poisson]{poisson()}} with \code{"log"} or \code{"sqrt"} links; and
-\code{\link[=Gamma]{Gamma()}} with \code{"log"} link.}
+\code{"cloglog"} links; \code{\link[=poisson]{poisson()}} with \code{"log"} or \code{"sqrt"} links;
+\code{\link[=Gamma]{Gamma()}} with \code{"log"} link; and negative binomial (NB2, \code{"log"} link)
+via \code{\link[=mm_negative_binomial]{mm_negative_binomial()}} (theta estimated, like \code{lme4::glmer.nb()})
+or \code{MASS::negative.binomial(theta)} (fixed theta).}
 
 \item{random}{Reserved for the native random-effect constructor path.}
 

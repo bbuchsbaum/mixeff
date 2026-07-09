@@ -495,16 +495,40 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
           ))
   )
   expected <- aphantasia_reference_rows(ref$inference$primary_dd)
-  ## Absolute tolerance: the DiD log-odds estimate drifts ~3-4% relative
-  ## (~0.007-0.011 absolute) vs lme4 from PIRLS/optimizer convergence,
-  ## so a relative 2.5e-2 over-fails. The qualitative result (sign,
-  ## significance, CI excluding zero) is unchanged. See
-  ## bd-01KS61JMB85G8DC3BXVSQW48MA.
-  max_dd_abs <- max(abs(observed$estimate - unlist(expected$estimate)))
-  expect_true(
-    max_dd_abs < 2e-2,
-    info = sprintf("DiD estimate drift vs lme4 too large: max_abs=%s",
-                   signif(max_dd_abs, 4))
+
+  # The DiD estimate and Wald SE drift vs glmer on this default-path
+  # (pirls_profiled, native `||`) fit. The W3.3 hold-the-point experiment
+  # (bd-01KS61JMB85G8DC3BXVSQW48MA; probe scripts glmm_holdpoint/referee/forward)
+  # attributes the drift, so these are classified expected_mismatch rows in
+  # inst/extdata/expected-mismatches.json, not unclassified regressions:
+  #   * Referee = glmer's nAGQ=1 devfun evaluated at mixeff's exact
+  #     (theta, beta) (sanity: reproduces vcov(glmer) to 1.3e-8), run both
+  #     directions (mm_control(start=) forward; devfun reverse).
+  #   * SE gap ~= 73% random-effects FAMILY divergence (native `||` collapses
+  #     the mask factor RE to one scalar: 4 theta vs lme4's 6) + ~26%
+  #     covariance-FORMULA drift (profiled working-Hessian vcov ~2.8%
+  #     anti-conservative vs the true Laplace vcov at an IDENTICAL point,
+  #     uniform across coefficients; upstream bd-01KT3Z64YE5QN7626PQRJSJJVA)
+  #     + ~1% point/optimizer drift.
+  #   * Estimate gap ~= 47% family + ~53% estimator (profiled vs joint
+  #     Laplace; joint_laplace on lme4's expansion matches glmer fixef to 8e-5).
+  # Routing through mm_assert_parity records a parity-scoreboard row per field
+  # and enforces the ledger bounds.
+  mm_assert_parity(
+    observed$estimate, unlist(expected$estimate),
+    case_id = "aphantasia_primary",
+    field = "inference.primary_dd.estimate",
+    tolerance = 0.02,
+    label = "aphantasia primary DiD estimate",
+    mode = "absolute"
+  )
+  mm_assert_parity(
+    observed$SE, unlist(expected$SE),
+    case_id = "aphantasia_primary",
+    field = "inference.primary_dd.SE",
+    tolerance = 0.01,
+    label = "aphantasia primary DiD SE",
+    mode = "absolute"
   )
   expect_equal(observed$where, unlist(expected$where))
 })

@@ -1086,7 +1086,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         bridge$spec_data$categorical_ordered,
         bridge$weights,
         bridge$control_json,
-        as.numeric(t(L)),
+        as.numeric(t(mm_coef_l_to_engine(L, fit))),
         as.integer(nrow(L)),
         as.integer(ncol(L)),
         as.character(rownames(L)),
@@ -1107,7 +1107,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         bridge$spec_data$categorical_ordered,
         bridge$weights,
         bridge$control_json,
-        as.numeric(t(L)),
+        as.numeric(t(mm_coef_l_to_engine(L, fit))),
         as.integer(nrow(L)),
         as.integer(ncol(L)),
         as.character(rownames(L)),
@@ -1471,7 +1471,7 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
       bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.numeric(t(L)),
+      as.numeric(t(mm_coef_l_to_engine(L, fit))),
       as.integer(nrow(L)),
       as.integer(ncol(L)),
       as.character(rownames(L)),
@@ -1520,18 +1520,21 @@ mm_select_bootstrap_interval <- function(payload, level, interval) {
 }
 
 # Map a term name to a row-permutation L matrix that picks the coefficients
-# belonging to the term. The intercept term `1` matches `(Intercept)` exactly;
-# any other term `t` matches coefficient names of the form `t` or `t: <level>`
-# (mixeff's factor-level labelling) and `t:other` (interaction prefix).
+# belonging to the term. Selection goes through the coefficient map's
+# `assign` vector (model.matrix's column -> term index), not name parsing:
+# with lme4-style names ("recipeB") the level is fused to the variable name,
+# so no prefix regex can distinguish term "SNR" from a coefficient of a term
+# named "SNRHard". The intercept term `1` selects assign == 0.
 mm_term_to_l_matrix <- function(fit, term) {
   coef_names <- names(fit$beta)
   k <- length(coef_names)
+  map <- mm_fit_coef_map(fit)
   hits <- if (identical(term, "1")) {
-    coef_names == "(Intercept)"
+    map$assign == 0L
   } else {
-    pattern <- paste0("^", regex_escape(term), "(: |$|:)")
-    grepl(pattern, coef_names)
+    map$assign == match(term, map$term_labels)
   }
+  hits[is.na(hits)] <- FALSE
   if (!any(hits)) {
     mm_abort(
       message = sprintf(
@@ -1580,7 +1583,7 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
       bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.numeric(t(L)),
+      as.numeric(t(mm_coef_l_to_engine(L, fit))),
       as.integer(nrow(L)),
       as.integer(ncol(L)),
       as.character(term),
@@ -1912,7 +1915,11 @@ mm_map_profile_parameter <- function(upstream, fit) {
   if (!is.na(beta_idx)) {
     beta_names <- names(fit$beta)
     if (beta_idx >= 1L && beta_idx <= length(beta_names)) {
-      return(list(name = beta_names[[beta_idx]], kind = "beta"))
+      # The engine indexes beta in ITS column order; fit$beta is stored in
+      # lme4 order, so route the positional index through the map.
+      lme4_pos <- match(beta_idx, fit$coef_map$perm) %||% beta_idx
+      if (is.na(lme4_pos)) lme4_pos <- beta_idx
+      return(list(name = beta_names[[lme4_pos]], kind = "beta"))
     }
     return(NULL)
   }

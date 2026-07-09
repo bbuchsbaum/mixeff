@@ -45,9 +45,8 @@ palday_case_metadata <- function() {
     ordered_factor_contrast_policy = "contr_poly",
     contrast_note = paste(
       "mixeff codes the ordered factor `temperature` with contr.poly, matching",
-      "lme4. Fixed-effect values, logLik, and AIC/BIC reach parity; coefficient",
-      "NAMES still use mixeff's engine encoding (e.g. `temperature: .L`) pending",
-      "the lme4-identical renaming layer."
+      "lme4. Fixed-effect values, names, order, logLik, and AIC/BIC all reach",
+      "parity (contr.poly coding + the lme4-identical renaming layer)."
     )
   )
 }
@@ -235,16 +234,15 @@ test_that("Palday ordered-factor coefficients reach value parity with lme4", {
   expect_equal(stats::BIC(pair$mixeff), stats::BIC(pair$lme4), tolerance = 1e-6)
 })
 
-test_that("Palday ordered-factor coefficient names still use engine encoding", {
-  # Documents the deferred renaming layer: values match (previous test) but the
-  # raw coefficient names remain mixeff's engine encoding, with contr.poly
-  # trend labels (.L/.Q/...) rather than treatment level labels.
+test_that("Palday ordered-factor coefficient names are lme4-identical", {
+  # The renaming layer (bd-01KS5HG8...) makes names AND order match lme4
+  # exactly, including contr.poly trend labels and interaction columns, so
+  # lme4-written lincombs/lookups are drop-in compatible.
   pair <- palday_fit_pair(reml = FALSE, interaction = TRUE)
   mm_names <- names(mixeff::fixef(pair$mixeff))
   lme4_names <- names(lme4::fixef(pair$lme4))
 
-  expect_true(any(grepl("temperature: .L", mm_names, fixed = TRUE)))
-  expect_false(any(grepl("temperature: 185", mm_names, fixed = TRUE)))
-  expect_true(any(grepl("temperature.L", lme4_names, fixed = TRUE)))
-  expect_false(identical(mm_names, lme4_names))
+  expect_identical(mm_names, lme4_names)
+  expect_true(any(grepl("temperature.L", mm_names, fixed = TRUE)))
+  expect_false(any(grepl("temperature: .L", mm_names, fixed = TRUE)))
 })

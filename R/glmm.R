@@ -207,6 +207,7 @@ glmm <- function(formula,
       artifact = artifact
     )
   )
+  fit <- mm_apply_lme4_coef_naming(fit)
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
   fit
 }

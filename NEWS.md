@@ -1,5 +1,21 @@
 # mixeff (development version)
 
+## Breaking: lme4-identical coefficient names
+
+* Fixed-effect coefficient names now match `lme4`/`model.matrix()` exactly —
+  `"recipeB"`, `"temperature.L"`, `"recipeB:temperature.L"` — in
+  `model.matrix()` column order, on every programmatic surface: `fixef()`,
+  `coef()`, `summary()` tables, `vcov()` dimnames, `confint()`, `contrast()`
+  and `mm_lincomb()` weight names, `tidy()`, `emmeans`, and `predict()`.
+  Previously mixeff used its engine encoding (`"recipe: B"`) with a different
+  interaction column order, so linear combinations and coefficient lookups
+  copy-pasted from `lme4` code silently misaligned. Code written against the
+  old names must switch to the lme4 forms. The engine encoding still appears
+  inside engine-rendered `explain()`/`audit()` prose. `ranef()` column names
+  are stripped to the lme4 form (`"modalityAudio"`); `VarCorr()` printing is
+  unchanged. Fits saved with `saveRDS()` by older versions lack the stored
+  name map and should be re-fit.
+
 ## Engine
 
 * Engine pin bumped to `3b6ec69` (one commit past v1.0.0-rc.1): fixes the

@@ -27,8 +27,10 @@ test_that("no-intercept factor random slopes use cell-means coding", {
 
   vc_names <- VarCorr(fit)$table$name
   re_names <- names(ranef(fit)$g)
+  # VarCorr display keeps the engine's pretty labels; ranef() columns carry
+  # lme4-concatenated names (mm_apply_lme4_coef_naming strips the separator).
   expect_true(all(c("f: a", "f: b") %in% vc_names))
-  expect_true(all(c("f: a", "f: b") %in% re_names))
+  expect_true(all(c("fa", "fb") %in% re_names))
   expect_false(any(grepl("half", vc_names, fixed = TRUE)))
   expect_false(any(grepl("half", re_names, fixed = TRUE)))
 
@@ -80,16 +82,13 @@ test_that("ordered fixed factor is coded with contr.poly, matching lme4", {
   fit <- lmm(y ~ o + (1 | g), dat, REML = TRUE, control = mm_control(verbose = -1))
   ref <- suppressMessages(suppressWarnings(lme4::lmer(y ~ o + (1 | g), dat, REML = TRUE)))
 
-  # Polynomial trend labels, not treatment level labels.
-  expect_true(any(grepl("o: .L", names(fixef(fit)), fixed = TRUE)))
-  expect_false(any(grepl("o: mid", names(fixef(fit)), fixed = TRUE)))
+  # Polynomial trend labels in lme4 form, not treatment level labels.
+  expect_true(any(grepl("o.L", names(fixef(fit)), fixed = TRUE)))
+  expect_false(any(grepl("omid", names(fixef(fit)), fixed = TRUE)))
 
-  mm_beta <- fixef(fit)
-  names(mm_beta) <- gsub(": ", "", names(mm_beta), fixed = TRUE)
   ref_beta <- lme4::fixef(ref)
-  expect_true(any(grepl("o.L", names(ref_beta), fixed = TRUE)))
-  expect_setequal(names(mm_beta), names(ref_beta))
-  expect_equal(mm_beta[names(ref_beta)], ref_beta, tolerance = 1e-5)
+  expect_identical(names(fixef(fit)), names(ref_beta))
+  expect_equal(fixef(fit), ref_beta, tolerance = 1e-5)
 })
 
 test_that("ordered factor in a random slope uses contr.poly Z coding, matching lme4", {
@@ -131,7 +130,7 @@ test_that("ordered factor fits (poly-coded) under the standard UNNAMED contrasts
   )
   options(old)
   expect_false(inherits(fit, "error"))
-  expect_true(any(grepl("o: .L", names(fixef(fit)), fixed = TRUE)))
+  expect_true(any(grepl("o.L", names(fixef(fit)), fixed = TRUE)))
   ref <- suppressMessages(suppressWarnings(lme4::lmer(y ~ o + (1 | g), dat, REML = TRUE)))
   expect_equal(as.numeric(stats::logLik(fit)), as.numeric(stats::logLik(ref)),
                tolerance = 1e-4)

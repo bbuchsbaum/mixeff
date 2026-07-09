@@ -195,7 +195,8 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
     mm_fixed_effect_vcov_from_payload(
       object$artifact$fixed_effect_covariance_matrix,
       object$beta,
-      object$std_errors
+      object$std_errors,
+      coef_map = object$coef_map
     )
   if (isTRUE(correlation)) {
     # Match lme4: attach the correlation matrix as a "correlation" attribute.
@@ -208,7 +209,8 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
 #' @export
 vcov.mm_glmm <- vcov.mm_lmm
 
-mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors) {
+mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors,
+                                              coef_map = NULL) {
   coef_names <- names(beta) %||% names(std_errors)
   if (!is.null(payload) &&
       identical(as.character(payload$schema_name %||% NA_character_),
@@ -227,6 +229,10 @@ mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors) {
       out <- mm_numeric_matrix_from_rows(matrix_payload)
       payload_names <- as.character(unlist(payload$coef_names %||% coef_names,
                                            use.names = FALSE))
+      # Payloads produced by the engine label rows in the engine encoding;
+      # when the caller's beta is already lme4-named (any normalized fit),
+      # translate before validating/aligning.
+      payload_names <- mm_coef_engine_to_lme4(payload_names, coef_map)
       mm_validate_fixed_effect_vcov_payload(
         out,
         payload_names,
@@ -468,7 +474,13 @@ inference_table.mm_lmm <- function(fit,
     fit$artifact$fixed_effect_inference_table %||% NULL
   )
   if (!is.null(parsed)) {
-    obj <- list(table = parsed$table, raw = parsed$raw)
+    tbl <- parsed$table
+    if (!is.null(tbl$label)) {
+      # Artifact rows carry engine-encoded labels; translate to the lme4
+      # names the rest of the fit object exposes.
+      tbl$label <- mm_coef_engine_to_lme4(tbl$label, fit$coef_map)
+    }
+    obj <- list(table = tbl, raw = parsed$raw)
     class(obj) <- "mm_inference_table"
     return(obj)
   }

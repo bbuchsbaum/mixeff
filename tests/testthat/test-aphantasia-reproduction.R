@@ -191,10 +191,6 @@ aphantasia_glmm_control <- function(id) {
   mixeff::mm_control(verbose = -1)
 }
 
-aphantasia_lme4_key <- function(x) {
-  gsub(": ", "", as.character(x), fixed = TRUE)
-}
-
 aphantasia_reference_rows <- function(x) {
   if (is.data.frame(x)) {
     return(x)
@@ -219,7 +215,6 @@ aphantasia_expect_fit_matches_reference <- function(fit, ref, id) {
   }
 
   observed <- mixeff::fixef(fit)
-  names(observed) <- aphantasia_lme4_key(names(observed))
   expected <- unlist(ref$fixef, use.names = TRUE)
   common <- intersect(names(expected), names(observed))
   expect_equal(length(common), length(expected),
@@ -262,20 +257,11 @@ aphantasia_has_glmm_full_vcov <- function(fit) {
     all(is.finite(V))
 }
 
-## Map lme4-style coefficient names (e.g. "groupaphant:maskmasked") to
-## mixeff's "group: aphant:mask: masked" naming so user code written
-## against lme4 conventions can drive mm_lincomb() on an mm_glmm fit.
-aphantasia_to_mixeff_key <- function(fit, lme4_keys) {
-  mix_names <- names(mixeff::fixef(fit))
-  lme4_to_mix <- setNames(mix_names, aphantasia_lme4_key(mix_names))
-  unname(lme4_to_mix[lme4_keys])
-}
-
+## mixeff coefficient names are lme4-identical (the coef-map contract), so
+## lme4-style weight names drive mm_lincomb() directly — no key translation.
 aphantasia_lincomb <- function(fit, weights) {
-  mix_keys <- aphantasia_to_mixeff_key(fit, names(weights))
-  stopifnot(!anyNA(mix_keys))
-  named <- setNames(as.numeric(weights), mix_keys)
-  out <- mixeff::mm_lincomb(fit, named)
+  stopifnot(all(names(weights) %in% names(mixeff::fixef(fit))))
+  out <- mixeff::mm_lincomb(fit, weights)
   ## Adapt to the historical column shape this helper used to return
   ## (estimate, SE, z, p) so existing assertions don't need rewriting.
   data.frame(
@@ -377,7 +363,6 @@ test_that("combined reaches the lme4 optimum via the explicit || expansion formu
   expect_identical(as.integer(attr(stats::logLik(fit), "df")), 23L)
 
   observed <- mixeff::fixef(fit)
-  names(observed) <- aphantasia_lme4_key(names(observed))
   expected <- unlist(model_ref$fixef, use.names = TRUE)
   common <- intersect(names(expected), names(observed))
   expect_equal(length(common), length(expected))
@@ -415,7 +400,6 @@ test_that("aphantasia intact budgeted joint Laplace proof improves the profiled 
   )
 
   observed <- mixeff::fixef(fit)
-  names(observed) <- aphantasia_lme4_key(names(observed))
   expected <- unlist(model_ref$fixef, use.names = TRUE)
   common <- intersect(names(expected), names(observed))
   max_fixef_drift <- max(abs(observed[common] - expected[common]))

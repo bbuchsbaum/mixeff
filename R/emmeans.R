@@ -122,15 +122,21 @@ emm_basis.mm_glmm <- function(object, trms, xlev, grid, ...) {
   m <- stats::model.frame(trms, grid, na.action = stats::na.pass, xlev = xlev)
   X_train <- stats::model.matrix(object, type = "fixed")
   X <- stats::model.matrix(trms, m, contrasts.arg = attr(X_train, "contrasts"))
-  if (ncol(X) != length(fixef(object))) {
+  # fixef() carries lme4/model.matrix-style names, so the reference-grid
+  # design aligns by NAME; a positional rename would silently misassign
+  # columns whenever the grid's column order differs from the fit's.
+  missing_cols <- setdiff(names(fixef(object)), colnames(X))
+  if (length(missing_cols)) {
     mm_abort(
-      message = "The emmeans reference grid design does not match the fitted fixed effects.",
+      message = paste0(
+        "The emmeans reference grid design does not match the fitted fixed ",
+        "effects; missing column(s): ", paste(missing_cols, collapse = ", "), "."
+      ),
       class = "mm_inference_unavailable",
       expected = names(fixef(object)),
       observed = colnames(X)
     )
   }
-  colnames(X) <- names(fixef(object))
   X <- X[, names(fixef(object)), drop = FALSE]
 
   bhat <- as.numeric(fixef(object))

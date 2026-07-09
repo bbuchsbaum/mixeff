@@ -211,7 +211,12 @@ mm_compute_cond_var_postvars <- function(fit) {
   out <- list()
   for (term in payload$terms %||% list()) {
     group <- as.character(term$group)
-    slope_names <- as.character(unlist(term$names, use.names = FALSE))
+    # The bridge labels slopes in the engine encoding ("modality: Audio");
+    # fit$random_effects columns carry the stripped lme4 form, and
+    # mm_attach_ranef_postvars() matches by name.
+    slope_names <- mm_coef_strip_engine_sep(
+      as.character(unlist(term$names, use.names = FALSE))
+    )
     level_names <- as.character(unlist(term$levels, use.names = FALSE))
     flat <- as.numeric(unlist(term$postvar, use.names = FALSE))
     dims <- as.integer(unlist(term$dim, use.names = FALSE))

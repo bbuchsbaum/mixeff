@@ -152,6 +152,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       artifact = artifact
     )
   )
+  fit <- mm_apply_lme4_coef_naming(fit)
   class(fit) <- c("mm_lmm", "mm_fit", "mm_compiled")
   fit
 }

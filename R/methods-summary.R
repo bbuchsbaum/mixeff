@@ -155,6 +155,8 @@ mm_glmm_wald_z_inference <- function(object) {
       rows <- rows[rows$kind == "coefficient", , drop = FALSE]
     }
     if (nrow(rows)) {
+      # Artifact rows carry engine-encoded labels; fit$beta is lme4-named.
+      rows$label <- mm_coef_engine_to_lme4(rows$label, object$coef_map)
       rows <- rows[match(names(object$beta), rows$label), , drop = FALSE]
       out <- list(table = rows, raw = parsed$raw)
       class(out) <- c("mm_inference_table", "list")

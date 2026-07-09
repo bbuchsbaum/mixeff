@@ -821,19 +821,15 @@ mm_training_contrasts <- function(fit) {
 }
 
 # Build the fixed-effect design matrix for arbitrary `data` (newdata or a
-# reference grid) in the SAME basis the engine used at fit time, with columns
-# named and ordered to match `fit$beta`.
+# reference grid) in the SAME basis the fit exposes, with columns named and
+# ordered to match `fit$beta`.
 #
-# Why this exists: the engine labels coefficients in a mixeff-specific
-# encoding (e.g. "recipe: B", "recipe: B:temperature: .L") and orders
-# interaction columns with the last factor varying fastest, whereas R's
-# model.matrix() varies the first factor fastest. Either mismatch silently
-# corrupts X %*% beta. The previous code relied on positional alignment + a
-# blind colnames<- rename, which produced wrong predictions/marginal means
-# whenever an ordered factor or an interaction was present (e.g. lme4::cake).
-# We instead force the engine's per-factor coding (treatment for unordered,
-# contr.poly for ordered — see mm_training_contrasts()), translate R-style
-# column names into the engine encoding, and align by name.
+# fit$beta carries lme4/R-style names in model.matrix() column order (see
+# mm_apply_lme4_coef_naming()), so reconstructing with the fit-time xlevels
+# and per-factor contrasts (treatment for unordered, contr.poly for ordered —
+# see mm_training_contrasts()) yields columns that align by NAME. Positional
+# alignment or blind renames silently corrupt X %*% beta whenever an ordered
+# factor or an interaction is present, so any unmatched coefficient aborts.
 mm_engine_fixed_matrix <- function(fit, data) {
   rhs <- stats::delete.response(stats::terms(mm_fixed_formula(fit)))
   mf <- stats::model.frame(rhs, data = data, na.action = stats::na.pass,
@@ -841,30 +837,6 @@ mm_engine_fixed_matrix <- function(fit, data) {
   X <- stats::model.matrix(rhs, data = mf,
                            contrasts.arg = mm_training_contrasts(fit))
   beta_names <- names(fit$beta)
-
-  # Factor variables present in the fixed part, longest name first so that a
-  # factor whose name is a prefix of another (e.g. "rec" vs "recipe") is
-  # matched greedily.
-  fe_vars <- all.vars(rhs)
-  is_fac <- vapply(fit$model_frame, is.factor, logical(1))
-  factor_vars <- intersect(names(is_fac)[is_fac], fe_vars)
-  factor_vars <- factor_vars[order(nchar(factor_vars), decreasing = TRUE)]
-
-  translate_component <- function(comp) {
-    for (v in factor_vars) {
-      if (startsWith(comp, v)) {
-        lev <- substring(comp, nchar(v) + 1L)
-        if (nzchar(lev)) return(paste0(v, ": ", lev))
-      }
-    }
-    comp
-  }
-  translate_name <- function(nm) {
-    if (nm == "(Intercept)") return(nm)
-    parts <- strsplit(nm, ":", fixed = TRUE)[[1L]]
-    paste(vapply(parts, translate_component, character(1)), collapse = ":")
-  }
-  colnames(X) <- vapply(colnames(X), translate_name, character(1))
 
   missing <- setdiff(beta_names, colnames(X))
   if (length(missing)) {

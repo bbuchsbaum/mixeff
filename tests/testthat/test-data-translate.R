@@ -24,6 +24,81 @@ test_that("mm_translate_data accepts numeric / integer / logical / factor / char
   expect_identical(out$categorical_levels$f, c("b", "a"))
   # Character levels are first-appearance.
   expect_identical(out$categorical_levels$s, c("x", "y", "z"))
+  # No ordered factors present, so contr.poly coding applies to nothing.
+  expect_identical(out$categorical_ordered, character(0))
+})
+
+test_that("mm_translate_data flags ordered factors for contr.poly coding", {
+  df <- data.frame(
+    y = 1:4,
+    o = factor(c("lo", "hi", "mid", "hi"),
+               levels = c("lo", "mid", "hi"), ordered = TRUE),
+    u = factor(c("a", "b", "a", "b"))
+  )
+
+  out <- mixeff:::mm_translate_data(df)
+
+  # The ordered factor is named in `categorical_ordered`; the unordered one is
+  # not. Both still appear in the value/level lists (encoding is chosen in Rust).
+  expect_identical(out$categorical_ordered, "o")
+  expect_true(all(c("o", "u") %in% names(out$categorical_values)))
+  expect_identical(out$categorical_levels$o, c("lo", "mid", "hi"))
+})
+
+test_that("mm_translate_data refuses ordered factors under a non-poly ordered option", {
+  df <- data.frame(
+    y = 1:4,
+    o = factor(c("lo", "hi", "mid", "hi"),
+               levels = c("lo", "mid", "hi"), ordered = TRUE)
+  )
+  old <- options(contrasts = c(unordered = "contr.treatment",
+                               ordered = "contr.treatment"))
+  err <- tryCatch(mixeff:::mm_translate_data(df), error = function(e) e)
+  options(old)
+  expect_s3_class(err, "mm_arg_error")
+  expect_match(conditionMessage(err), "contr.poly", fixed = TRUE)
+})
+
+test_that("mm_translate_data honours the standard UNNAMED contr.poly option", {
+  df <- data.frame(
+    y = 1:4,
+    o = factor(c("lo", "hi", "mid", "hi"),
+               levels = c("lo", "mid", "hi"), ordered = TRUE)
+  )
+  # R's default option form is unnamed; ordered coding is resolved positionally
+  # (element 2). Reading it by name would throw and abort a correct fit.
+  old <- options(contrasts = c("contr.treatment", "contr.poly"))
+  out <- tryCatch(mixeff:::mm_translate_data(df), error = function(e) e)
+  options(old)
+  expect_false(inherits(out, "error"))
+  expect_identical(out$categorical_ordered, "o")
+})
+
+test_that("mm_translate_data refuses ordered factors under an unnamed non-poly option", {
+  df <- data.frame(
+    y = 1:4,
+    o = factor(c("lo", "hi", "mid", "hi"),
+               levels = c("lo", "mid", "hi"), ordered = TRUE)
+  )
+  old <- options(contrasts = c("contr.treatment", "contr.treatment"))
+  err <- tryCatch(mixeff:::mm_translate_data(df), error = function(e) e)
+  options(old)
+  expect_s3_class(err, "mm_arg_error")
+  expect_match(conditionMessage(err), "contr.poly", fixed = TRUE)
+})
+
+test_that("mm_translate_data refuses ordered factors with a non-poly contrasts attribute", {
+  df <- data.frame(
+    y = 1:4,
+    o = factor(c("lo", "hi", "mid", "hi"),
+               levels = c("lo", "mid", "hi"), ordered = TRUE)
+  )
+  stats::contrasts(df$o) <- stats::contr.helmert(3)
+  expect_error(
+    mixeff:::mm_translate_data(df),
+    class = "mm_arg_error",
+    regexp = "contrasts"
+  )
 })
 
 test_that("mm_translate_data rejects unsupported column types", {

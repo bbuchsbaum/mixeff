@@ -112,3 +112,43 @@ test_that("predict(newdata=) accepts ~0 as the population form", {
                              re.form = stats::as.formula("~0"))
   expect_equal(unname(obs_na), unname(obs_zero), tolerance = 1e-12)
 })
+
+test_that("predict(newdata=) with an ordered fixed factor reuses the training contr.poly basis", {
+  mm_skip_if_no_lme4_local()
+  set.seed(21)
+  group_count <- 16L
+  reps <- 8L
+  dat <- expand.grid(
+    g = factor(seq_len(group_count)),
+    o = factor(c("lo", "mid", "hi"), levels = c("lo", "mid", "hi"),
+               ordered = TRUE),
+    rep = seq_len(reps)
+  )
+  dat$y <- 1 + 0.7 * as.integer(dat$o) +
+    rnorm(group_count, sd = 0.3)[as.integer(dat$g)] + rnorm(nrow(dat), sd = 0.4)
+  fit <- lmm(y ~ o + (1 | g), dat, REML = TRUE, control = mm_control(verbose = -1))
+  ref <- suppressMessages(suppressWarnings(
+    lme4::lmer(y ~ o + (1 | g), dat, REML = TRUE)
+  ))
+
+  # Normal newdata (all ordered levels present): population + conditional match.
+  nd <- dat[dat$o == "mid", , drop = FALSE]
+  expect_equal(as.numeric(stats::predict(fit, newdata = nd, re.form = NA)),
+               as.numeric(stats::predict(ref, newdata = nd, re.form = NA)),
+               tolerance = 1e-6)
+  expect_equal(as.numeric(stats::predict(fit, newdata = nd, re.form = NULL)),
+               as.numeric(stats::predict(ref, newdata = nd, re.form = NULL)),
+               tolerance = 1e-6)
+
+  # Regression guard: newdata whose ordered factor declares a SINGLE level must
+  # still predict, because the engine re-derives newdata contrasts from the
+  # fitted training snapshot. Eagerly poly-coding the newdata column would abort
+  # here (contr.poly needs >= 2 levels); the predict wrappers therefore send an
+  # empty ordered-flag set for newdata.
+  nd1 <- data.frame(o = factor("mid", levels = "mid", ordered = TRUE),
+                    g = factor("1", levels = levels(dat$g)))
+  expect_identical(nlevels(nd1$o), 1L)
+  expect_equal(as.numeric(stats::predict(fit, newdata = nd1, re.form = NA)),
+               as.numeric(stats::predict(ref, newdata = nd1, re.form = NA)),
+               tolerance = 1e-6)
+})

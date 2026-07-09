@@ -115,7 +115,8 @@ compile_model <- function(formula, data) {
       spec_data$column_order,
       spec_data$numeric_columns,
       spec_data$categorical_values,
-      spec_data$categorical_levels
+      spec_data$categorical_levels,
+      spec_data$categorical_ordered
     ),
     error = function(cnd) cnd
   )

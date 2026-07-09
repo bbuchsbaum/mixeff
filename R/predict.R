@@ -532,12 +532,19 @@ mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(fit$weights),
       as.character(control_json),
       new_data$column_order,
       new_data$numeric_columns,
       new_data$categorical_values,
       new_data$categorical_levels,
+      # Ordered-factor coding for newdata is intentionally empty: the engine
+      # re-derives newdata contrasts from the fitted training snapshot
+      # (align_newdata_to_training), so flagging ordered columns here is a
+      # no-op that could only spuriously error on an ordered newdata column
+      # observed at <2 levels. Training flags (above) drive the coding.
+      character(0),
       policy
     ),
     error = function(cnd) cnd
@@ -674,12 +681,19 @@ mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(fit$weights),
       as.character(control_json),
       new_data$column_order,
       new_data$numeric_columns,
       new_data$categorical_values,
       new_data$categorical_levels,
+      # Ordered-factor coding for newdata is intentionally empty: the engine
+      # re-derives newdata contrasts from the fitted training snapshot
+      # (align_newdata_to_training), so flagging ordered columns here is a
+      # no-op that could only spuriously error on an ordered newdata column
+      # observed at <2 levels. Training flags (above) drive the coding.
+      character(0),
       policy,
       as.numeric(level)
     ),
@@ -725,6 +739,7 @@ mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, l
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(fit$weights),
       mm_bridge_weights(fit$offset),
       as.character(control_json),
@@ -732,6 +747,12 @@ mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, l
       new_data$numeric_columns,
       new_data$categorical_values,
       new_data$categorical_levels,
+      # Ordered-factor coding for newdata is intentionally empty: the engine
+      # re-derives newdata contrasts from the fitted training snapshot
+      # (align_newdata_to_training), so flagging ordered columns here is a
+      # no-op that could only spuriously error on an ordered newdata column
+      # observed at <2 levels. Training flags (above) drive the coding.
+      character(0),
       scale,
       policy,
       as.numeric(level)
@@ -786,28 +807,33 @@ mm_training_contrasts <- function(fit) {
   is_fac <- vapply(fit$model_frame, is.factor, logical(1))
   factor_vars <- intersect(names(is_fac)[is_fac], fe_vars)
   if (!length(factor_vars)) return(NULL)
-  # The Rust engine codes EVERY factor with treatment (dummy) contrasts,
-  # including ordered factors (which R would otherwise give contr.poly). We
-  # must force contr.treatment so the reconstructed design matches `beta`'s
-  # basis; see mm_engine_fixed_matrix() for the full rationale.
-  stats::setNames(rep(list("contr.treatment"), length(factor_vars)), factor_vars)
+  # The engine codes unordered factors with treatment (dummy) contrasts and
+  # ordered factors with contr.poly (orthonormal polynomial trends), matching
+  # lme4/R defaults. We must force the SAME per-factor coding so the
+  # reconstructed design matches `beta`'s basis; see mm_engine_fixed_matrix()
+  # for the full rationale.
+  codings <- vapply(
+    factor_vars,
+    function(v) if (is.ordered(fit$model_frame[[v]])) "contr.poly" else "contr.treatment",
+    character(1)
+  )
+  stats::setNames(as.list(codings), factor_vars)
 }
 
 # Build the fixed-effect design matrix for arbitrary `data` (newdata or a
 # reference grid) in the SAME basis the engine used at fit time, with columns
 # named and ordered to match `fit$beta`.
 #
-# Why this exists: the engine codes all factors with treatment contrasts and
-# labels coefficients in a mixeff-specific encoding (e.g. "recipe: B",
-# "recipe: B:temperature: 215"). R's model.matrix() instead (a) uses
-# contr.poly for ordered factors and (b) orders interaction columns with the
-# first factor varying fastest, whereas the engine varies the last factor
-# fastest. Either mismatch silently corrupts X %*% beta. The previous code
-# relied on positional alignment + a blind colnames<- rename, which produced
-# wrong predictions/marginal means whenever an ordered factor or an
-# interaction was present (e.g. lme4::cake). We instead force treatment
-# contrasts, translate R-style column names into the engine encoding, and
-# align by name.
+# Why this exists: the engine labels coefficients in a mixeff-specific
+# encoding (e.g. "recipe: B", "recipe: B:temperature: .L") and orders
+# interaction columns with the last factor varying fastest, whereas R's
+# model.matrix() varies the first factor fastest. Either mismatch silently
+# corrupts X %*% beta. The previous code relied on positional alignment + a
+# blind colnames<- rename, which produced wrong predictions/marginal means
+# whenever an ordered factor or an interaction was present (e.g. lme4::cake).
+# We instead force the engine's per-factor coding (treatment for unordered,
+# contr.poly for ordered — see mm_training_contrasts()), translate R-style
+# column names into the engine encoding, and align by name.
 mm_engine_fixed_matrix <- function(fit, data) {
   rhs <- stats::delete.response(stats::terms(mm_fixed_formula(fit)))
   mf <- stats::model.frame(rhs, data = data, na.action = stats::na.pass,

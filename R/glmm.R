@@ -134,6 +134,7 @@ glmm <- function(formula,
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(weights),
       mm_bridge_weights(offset),
       as.character(control_json)

@@ -188,6 +188,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
       bridge$spec_data$categorical_levels,
+      bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
       as.character(bootstrap_json)

@@ -36,8 +36,10 @@ The default (\code{NULL}) refuses any \code{NA} in a model variable with a typed
 \code{na.action = na.omit} for lme4's complete-case behaviour.}
 
 \item{contrasts}{Optional named list of factor contrasts. The engine codes
-all factors with treatment contrasts; a request for any other coding is
-refused (recode the factor instead).}
+unordered factors with treatment contrasts (\code{contr.treatment}) and ordered
+factors with orthonormal polynomial contrasts (\code{contr.poly}), matching
+lme4/R defaults. A request for any other coding is refused (recode the
+factor instead).}
 
 \item{control}{A list from \code{\link[=mm_control]{mm_control()}}.}
 }

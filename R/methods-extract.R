@@ -178,6 +178,7 @@ mm_compute_cond_var_postvars <- function(fit) {
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(fit$weights),
       as.character(control_json)
     ),

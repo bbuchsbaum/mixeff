@@ -21,6 +21,21 @@
   and costing ~2% precision on well-determined correlations. Printing is
   unchanged: rounding to 2 decimals now happens only at display time.
 
+## Contrasts
+
+* Ordered factors are now coded with orthonormal polynomial contrasts
+  (`contr.poly`) at fit time, matching R/lme4 defaults, instead of treatment
+  coding. Fixed effects, random-slope (`Z`) coding, `logLik`/`AIC`/`BIC`, and
+  predictions now reach parity with `lme4` on ordered-factor models (e.g.
+  `lme4::cake`). Coefficient *names* still use mixeff's engine encoding
+  (`temperature: .L`) pending the lme4-identical renaming layer. If the global
+  ordered-contrast option is not `contr.poly`, or an ordered column carries an
+  explicit non-poly `contrasts` attribute, `lmm()`/`glmm()` refuse with a typed
+  `mm_arg_error` rather than silently diverge from the requested coding.
+* Behavior change: a *one-level* ordered factor now errors loudly (polynomial
+  contrasts require at least two levels) instead of silently degenerating to an
+  empty/near-empty design.
+
 ## Diagnostic clarity
 
 * New verb `verify_convergence()`: re-runs a fitted LMM under the engine's

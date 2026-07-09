@@ -26,8 +26,10 @@
 #'   `mm_data_error` (audit-first: missing-data dropping must be opt-in). Pass
 #'   `na.action = na.omit` for lme4's complete-case behaviour.
 #' @param contrasts Optional named list of factor contrasts. The engine codes
-#'   all factors with treatment contrasts; a request for any other coding is
-#'   refused (recode the factor instead).
+#'   unordered factors with treatment contrasts (`contr.treatment`) and ordered
+#'   factors with orthonormal polynomial contrasts (`contr.poly`), matching
+#'   lme4/R defaults. A request for any other coding is refused (recode the
+#'   factor instead).
 #' @param control A list from [mm_control()].
 #'
 #' @return An object of class `mm_lmm`, also inheriting from `mm_fit` and
@@ -51,7 +53,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
                 control = mm_control()) {
   call <- match.call()
   control <- mm_validate_control(control)
-  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts)
+  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
   weights <- mm_lmm_weights(substitute(weights), data, parent.frame())
   if (!is.logical(REML) || length(REML) != 1L || is.na(REML)) {
     mm_abort(
@@ -93,6 +95,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(weights),
       as.character(control_json)
     ),
@@ -387,22 +390,36 @@ mm_prepare_fit_data <- function(formula, data, subset_expr, na.action,
   list(data = data, weights = weights)
 }
 
-# The Rust engine codes every factor with treatment (dummy) contrasts. Accept a
-# `contrasts` request only if it asks for that coding; otherwise refuse rather
-# than silently fit a differently-coded design than the user asked for.
-mm_reject_nontreatment_contrasts <- function(contrasts) {
-  is_treatment <- function(x) {
-    is.character(x) && length(x) == 1L &&
-      x %in% c("contr.treatment", "contr.SAS")
+# The engine codes unordered factors with treatment (dummy) contrasts and
+# ordered factors with `contr.poly`, matching lme4/R defaults. Accept a
+# `contrasts` request only if it names that coding per factor; otherwise refuse
+# rather than silently fit a differently-coded design than the user asked for.
+# `data` (the raw model data) tells us which named factors are ordered.
+mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
+  ordered_cols <- if (is.data.frame(data)) {
+    names(data)[vapply(data, is.ordered, logical(1))]
+  } else {
+    character(0)
   }
+  entry_ok <- function(nm, x) {
+    if (!is.character(x) || length(x) != 1L) return(FALSE)
+    if (nm %in% ordered_cols) {
+      identical(x, "contr.poly")
+    } else {
+      x %in% c("contr.treatment", "contr.SAS")
+    }
+  }
+  nms <- names(contrasts)
   ok <- is.list(contrasts) && length(contrasts) &&
-    all(vapply(contrasts, is_treatment, logical(1)))
+    !is.null(nms) && all(nzchar(nms)) &&
+    all(mapply(entry_ok, nms, contrasts, USE.NAMES = FALSE))
   if (!ok) {
     mm_abort(
       message = paste(
-        "Custom `contrasts` are not supported: the engine codes all factors",
-        "with treatment contrasts. Recode the factor (e.g. relevel(), or",
-        "construct the desired numeric columns) to obtain a different coding."
+        "Custom `contrasts` are only honoured when they match the engine's",
+        "coding: `contr.treatment`/`contr.SAS` for unordered factors and",
+        "`contr.poly` for ordered factors. Recode the factor (e.g. relevel(),",
+        "toggle ordering, or construct numeric columns) for a different coding."
       ),
       class = "mm_arg_error",
       input = contrasts

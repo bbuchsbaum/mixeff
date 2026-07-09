@@ -414,6 +414,7 @@ fn mm_compile_model_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
 ) -> std::result::Result<String, String> {
     let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
     let semantic = compile_formula_ir(&parsed);
@@ -421,6 +422,7 @@ fn mm_compile_model_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &column_order,
     )?;
 
@@ -448,6 +450,7 @@ fn mm_fit_lmm_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
 ) -> std::result::Result<String, String> {
@@ -458,6 +461,7 @@ fn mm_fit_lmm_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &column_order,
     )?;
     let weights = optional_case_weights(&weights, df.nrow())?;
@@ -575,6 +579,7 @@ fn mm_fit_glmm_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     offset: Doubles,
     control_json: &str,
@@ -586,6 +591,7 @@ fn mm_fit_glmm_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &column_order,
     )?;
     let family = glmm_family(family)?;
@@ -728,6 +734,7 @@ fn mm_fixed_effect_contrast_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -744,6 +751,7 @@ fn mm_fixed_effect_contrast_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -765,6 +773,7 @@ fn mm_fixed_effect_bootstrap_contrast_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -781,6 +790,7 @@ fn mm_fixed_effect_bootstrap_contrast_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -810,6 +820,7 @@ fn mm_full_model_bootstrap_contrast_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -827,6 +838,7 @@ fn mm_full_model_bootstrap_contrast_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -951,6 +963,7 @@ fn mm_fixed_effect_bootstrap_term_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -967,6 +980,7 @@ fn mm_fixed_effect_bootstrap_term_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1029,6 +1043,7 @@ fn mm_fixed_effect_term_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     method: &str,
@@ -1041,6 +1056,7 @@ fn mm_fixed_effect_term_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1064,6 +1080,7 @@ fn mm_bootstrap_lrt_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     bootstrap_options_json: &str,
@@ -1075,6 +1092,7 @@ fn mm_bootstrap_lrt_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1085,6 +1103,7 @@ fn mm_bootstrap_lrt_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1358,6 +1377,7 @@ fn fit_lmm_from_bridge_data(
     numeric_columns: &List,
     categorical_values: &List,
     categorical_levels: &List,
+    categorical_ordered: &Strings,
     weights: &Doubles,
     control_json: &str,
 ) -> std::result::Result<LinearMixedModel, String> {
@@ -1368,6 +1388,7 @@ fn fit_lmm_from_bridge_data(
         numeric_columns,
         categorical_values,
         categorical_levels,
+        categorical_ordered,
         column_order,
     )?;
     let weights = optional_case_weights(weights, df.nrow())?;
@@ -1406,6 +1427,7 @@ fn fit_lmm_from_bridge_payload_robj(
     let numeric_columns = required_list(&spec_map, "numeric_columns", index)?;
     let categorical_values = required_list(&spec_map, "categorical_values", index)?;
     let categorical_levels = required_list(&spec_map, "categorical_levels", index)?;
+    let categorical_ordered = required_strings(&spec_map, "categorical_ordered", index)?;
     let weights = required_doubles(&payload_map, "weights", index)?;
     let control_json = required_string(&payload_map, "control_json", index)?;
 
@@ -1416,6 +1438,7 @@ fn fit_lmm_from_bridge_payload_robj(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         &control_json,
     )
@@ -1922,6 +1945,7 @@ fn mm_lmm_cond_var_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
 ) -> std::result::Result<String, String> {
@@ -1932,6 +1956,7 @@ fn mm_lmm_cond_var_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -2001,12 +2026,14 @@ fn mm_lmm_predict_new_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     new_column_order: Strings,
     new_numeric_columns: List,
     new_categorical_values: List,
     new_categorical_levels: List,
+    new_categorical_ordered: Strings,
     allow_new_levels_policy: &str,
 ) -> std::result::Result<String, String> {
     let model = fit_lmm_from_bridge_data(
@@ -2016,6 +2043,7 @@ fn mm_lmm_predict_new_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -2023,6 +2051,7 @@ fn mm_lmm_predict_new_json(
         &new_numeric_columns,
         &new_categorical_values,
         &new_categorical_levels,
+        &new_categorical_ordered,
         &new_column_order,
     )?;
     let policy = match allow_new_levels_policy {
@@ -2086,12 +2115,14 @@ fn mm_lmm_predict_new_variance_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     new_column_order: Strings,
     new_numeric_columns: List,
     new_categorical_values: List,
     new_categorical_levels: List,
+    new_categorical_ordered: Strings,
     allow_new_levels_policy: &str,
     level: f64,
 ) -> std::result::Result<String, String> {
@@ -2102,6 +2133,7 @@ fn mm_lmm_predict_new_variance_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -2109,6 +2141,7 @@ fn mm_lmm_predict_new_variance_json(
         &new_numeric_columns,
         &new_categorical_values,
         &new_categorical_levels,
+        &new_categorical_ordered,
         &new_column_order,
     )?;
     let policy = match allow_new_levels_policy {
@@ -2153,6 +2186,7 @@ fn fit_glmm_from_bridge_data(
     numeric_columns: &List,
     categorical_values: &List,
     categorical_levels: &List,
+    categorical_ordered: &Strings,
     weights: &Doubles,
     offset: &Doubles,
     control_json: &str,
@@ -2164,6 +2198,7 @@ fn fit_glmm_from_bridge_data(
         numeric_columns,
         categorical_values,
         categorical_levels,
+        categorical_ordered,
         column_order,
     )?;
     let family = glmm_family(family)?;
@@ -2228,6 +2263,7 @@ fn mm_glmm_predict_new_variance_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     offset: Doubles,
     control_json: &str,
@@ -2235,6 +2271,7 @@ fn mm_glmm_predict_new_variance_json(
     new_numeric_columns: List,
     new_categorical_values: List,
     new_categorical_levels: List,
+    new_categorical_ordered: Strings,
     scale: &str,
     allow_new_levels_policy: &str,
     level: f64,
@@ -2249,6 +2286,7 @@ fn mm_glmm_predict_new_variance_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         &offset,
         control_json,
@@ -2257,6 +2295,7 @@ fn mm_glmm_predict_new_variance_json(
         &new_numeric_columns,
         &new_categorical_values,
         &new_categorical_levels,
+        &new_categorical_ordered,
         &new_column_order,
     )?;
     let scale = match scale {
@@ -2314,6 +2353,7 @@ fn mm_lmm_profile_confint_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     level: f64,
@@ -2331,6 +2371,7 @@ fn mm_lmm_profile_confint_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;

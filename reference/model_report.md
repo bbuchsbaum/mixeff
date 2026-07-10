@@ -13,14 +13,14 @@ model_report(fit, sections = "all", ...)
 # S3 method for class 'mm_fit'
 model_report(fit, sections = "all", ...)
 
-reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
+reporting_table(object, section = "all", view = c("compact", "audit"), ...)
 
 # S3 method for class 'mm_fit'
-reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
+reporting_table(object, section = "all", view = c("compact", "audit"), ...)
 
 # S3 method for class 'mm_model_comparison'
 reporting_table(
-  fit,
+  object,
   section = "comparison_ledger",
   view = c("compact", "audit"),
   ...
@@ -28,14 +28,14 @@ reporting_table(
 
 # S3 method for class 'mm_drop1'
 reporting_table(
-  fit,
+  object,
   section = "comparison_ledger",
   view = c("compact", "audit"),
   ...
 )
 
 # S3 method for class 'mm_random_effect_test'
-reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
+reporting_table(object, section = "all", view = c("compact", "audit"), ...)
 ```
 
 ## Arguments
@@ -53,6 +53,11 @@ reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
 
   Reserved for future methods.
 
+- object:
+
+  For `reporting_table()`: a fitted `mm_fit`, an `mm_model_report`, or a
+  comparison/test object with a durable ledger.
+
 - section:
 
   One section name, or `"all"`.
@@ -66,4 +71,5 @@ reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
 ## Value
 
 `model_report()` returns an `mm_model_report`. `reporting_table()`
-returns a data frame for one section or a named list for `"all"`.
+returns an `mm_reporting_table` object: `$table` holds the section's
+data frame (or `$sections` the named list when `section = "all"`).

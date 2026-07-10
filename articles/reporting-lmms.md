@@ -51,7 +51,7 @@ stable place to check the requested random-effects structure.
 ``` r
 
 spec <- compile_model(score ~ week + treatment + (1 | clinic), clinic_visits)
-audit_design(spec)
+audit(spec)
 #> Audit Summary:
 #>   overall [OK]: clean: no warnings or attention items
 #>   attention [OK]: no warnings or unchecked inference-critical items
@@ -61,10 +61,10 @@ audit_design(spec)
 #>   model kind [INFO]: linear_mixed_model
 #>   distribution/link [INFO]: gaussian/identity
 #>   objective [INFO]: exact_gaussian
-#>   certificate scope [INFO]: exact_objective
+#>   convergence certificate [INFO]: exact_objective
 #>   fixed terms [INFO]: 1, week, treatment
 #>   random terms [INFO]: 1
-#>   theta maps [INFO]: 1 map(s)
+#>   covariance parameter maps [INFO]: 1 map(s)
 ```
 
 ## What fit was used?
@@ -88,18 +88,18 @@ availability, and versioned artifact information.
 ``` r
 
 reporting_table(fit, "overview")
-#>                field                                       value
-#> 1        model_class                                         LMM
-#> 2            formula     score ~ week + treatment + (1 | clinic)
-#> 3  effective_formula score ~ 1 + week + treatment + (1 | clinic)
-#> 4         fit_method                                        REML
-#> 5               mode                   confirmatory_as_specified
-#> 6               nobs                                          72
-#> 7         fit_status                          converged_interior
-#> 8          inference             3/3 available fixed-effect rows
-#> 9    artifact_schema       mixedmodels.compiled_model_artifact 1
-#> 10     crate_version                                  1.0.0-rc.1
-#> 11   package_version                                       0.1.0
+#>              field                                       value
+#>        model_class                                         LMM
+#>            formula     score ~ week + treatment + (1 | clinic)
+#>  effective_formula score ~ 1 + week + treatment + (1 | clinic)
+#>         fit_method                                        REML
+#>               mode                   confirmatory_as_specified
+#>               nobs                                          72
+#>         fit_status                          converged_interior
+#>          inference             3/3 available fixed-effect rows
+#>    artifact_schema       mixedmodels.compiled_model_artifact 1
+#>      crate_version                                  1.0.0-rc.1
+#>    package_version                                       0.2.0
 ```
 
 ## Which design facts belong in the report?
@@ -111,10 +111,10 @@ and rows per group.
 ``` r
 
 reporting_table(fit, "data_design")
-#>    group    role group_levels min_rows_per_group median_rows_per_group
-#> 1 clinic unknown           12                  6                     6
-#>   max_rows_per_group     status
-#> 1                  6 sufficient
+#>   group    role group_levels min_rows_per_group median_rows_per_group
+#>  clinic unknown           12                  6                     6
+#>  max_rows_per_group     status
+#>                   6 sufficient
 ```
 
 The random-term section translates the random-effects formula into
@@ -125,10 +125,10 @@ plain-language description.
 ``` r
 
 reporting_table(fit, "random_terms")
-#>   term_id original_fragment  group     basis covariance theta_parameters
-#> 1      r0      (1 | clinic) clinic intercept     scalar                1
-#>   design_status                                       english
-#> 1    sufficient `clinic` units may differ in average outcome.
+#>  term_id original_fragment  group     basis covariance theta_parameters
+#>       r0      (1 | clinic) clinic intercept     scalar                1
+#>  design_status                                       english
+#>     sufficient `clinic` units may differ in average outcome.
 ```
 
 ## How are estimates and p-values labelled?
@@ -146,7 +146,7 @@ knitr::kable(coef_table, digits = 4)
 |:---|---:|---:|---:|---:|---:|:---|
 | (Intercept) | 7.6829 | 0.1965 | 12.5650 | 39.1065 | 0.0000 | satterthwaite |
 | week | -0.2784 | 0.0260 | 58.9997 | -10.7280 | 0.0000 | satterthwaite |
-| treatment: coached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
+| treatmentcoached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
 
 For report assembly, use
 [`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md).
@@ -156,14 +156,14 @@ p-value, method, row status, and reliability label together.
 ``` r
 
 reporting_table(fit, "fixed_effects")
-#>                 term   estimate  std_error  statistic statistic_name
-#> 1        (Intercept)  7.6828778 0.19646018  39.106539              z
-#> 2               week -0.2783994 0.02595083 -10.727955              z
-#> 3 treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>        p_value            method    status reliability
-#> 1 0.0000000000 asymptotic_wald_z available         low
-#> 2 0.0000000000 asymptotic_wald_z available         low
-#> 3 0.0006039485 asymptotic_wald_z available         low
+#>                term   estimate  std_error  statistic statistic_name
+#>         (Intercept)  7.6828778 0.19646018  39.106539              z
+#>                week -0.2783994 0.02595083 -10.727955              z
+#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
+#>       p_value            method    status reliability
+#>  0.0000000000 asymptotic_wald_z available         low
+#>  0.0000000000 asymptotic_wald_z available         low
+#>  0.0006039485 asymptotic_wald_z available         low
 ```
 
 When you need to audit where those rows came from, request the audit
@@ -171,7 +171,7 @@ view.
 
 ``` r
 
-fixed_audit <- reporting_table(fit, "fixed_effects", view = "audit")
+fixed_audit <- reporting_table(fit, "fixed_effects", view = "audit")$table
 fixed_audit[, c("term", "method", "status", "reliability", "source")]
 #>                 term            method    status reliability
 #> 1        (Intercept) asymptotic_wald_z available         low
@@ -193,9 +193,9 @@ travel with the report.
 ``` r
 
 reporting_table(fit, "random_effects")
-#>      group   basis_lhs              kind  variance   std_dev    status
-#> 1   clinic (Intercept)          variance 0.1827548 0.4274983 available
-#> 2 Residual    Residual residual_variance 0.1414236 0.3760633 available
+#>     group   basis_lhs              kind  variance   std_dev    status
+#>    clinic (Intercept)          variance 0.1827548 0.4274983 available
+#>  Residual    Residual residual_variance 0.1414236 0.3760633 available
 ```
 
 ## What is unavailable or caveated?
@@ -238,10 +238,10 @@ other caveats with stable reasons and an action taken.
 ``` r
 
 reporting_table(report, "unavailable")
-#>                             section             field         status
-#> comparison_ledger comparison_ledger comparison_ledger not_applicable
-#>                                                     reason
-#> comparison_ledger no_model_comparison_recorded_on_this_fit
+#>            section             field         status
+#>  comparison_ledger comparison_ledger not_applicable
+#>                                    reason
+#>  no_model_comparison_recorded_on_this_fit
 ```
 
 ## What should go into your written report?

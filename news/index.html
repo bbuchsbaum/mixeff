@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -58,19 +58,81 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="mixeff-development-version">mixeff (development version)<a class="anchor" aria-label="anchor" href="#mixeff-development-version"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.2.0" id="mixeff-020">mixeff 0.2.0<a class="anchor" aria-label="anchor" href="#mixeff-020"></a></h2>
 <div class="section level3">
-<h3 id="engine-development-version">Engine<a class="anchor" aria-label="anchor" href="#engine-development-version"></a></h3>
-<ul><li>Engine pin bumped to <code>3b6ec69</code> (one commit past v1.0.0-rc.1): fixes the native crossed-LMM trust-region start. Crossed-design fits that route through the trust-region optimizer may land on very slightly different (better-started) optima.</li>
+<h3 id="breaking-api-shape-stabilization-0-2-0">Breaking: API-shape stabilization<a class="anchor" aria-label="anchor" href="#breaking-api-shape-stabilization-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/audit.html">audit()</a></code> is now the single audit verb, dispatching on both compiled specs and fits; <code><a href="../reference/audit_design.html">audit_design()</a></code> forwards with a deprecation warning and will be removed later.</li>
+<li>
+<code><a href="../reference/df_for_contrast.html">df_for_contrast()</a></code> and <code><a href="../reference/model_report.html">reporting_table()</a></code> now return <code>mm_*</code> objects with <code>$table</code> (plus <code>$df</code> on the former, <code>$sections</code> for <code>reporting_table(section = "all")</code>), matching every sibling analysis verb, instead of a bare classed vector / data frame.</li>
+<li>The spec-accepting inspection verbs (<code><a href="../reference/changes.html">changes()</a></code>, <code><a href="../reference/parameterization.html">parameterization()</a></code>, <code><a href="../reference/reproducibility.html">reproducibility()</a></code>, <code><a href="../reference/random_blocks.html">random_blocks()</a></code>, <code><a href="../reference/optimizer_certificate.html">optimizer_certificate()</a></code>, <code><a href="../reference/model_report.html">reporting_table()</a></code>, <code><a href="../reference/audit.html">audit()</a></code>) name their first argument <code>object</code> (previously <code>fit</code>, which was misleading for specs). Fit-only inference verbs keep <code>fit</code>. <code><a href="../reference/mm_lmm-methods.html">model.frame.mm_lmm()</a></code> keeps <code>formula</code> — that name is imposed by the <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">stats::model.frame()</a></code> generic.</li>
+<li>
+<code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> presents <code>"asymptotic"</code> as the canonical method name (the package-wide term for the closed-form Wald interval); <code>"wald"</code> remains an accepted synonym. Computation is unchanged.</li>
+<li>
+<code><a href="https://rdrr.io/r/stats/add1.html" class="external-link">drop1()</a></code> now matches <code><a href="https://rdrr.io/r/stats/add1.html" class="external-link">stats::drop1()</a></code> marginality semantics: by default, main effects participating in an interaction are not offered for dropping. An explicit non-marginal <code>scope</code> is still honoured and fits normally. The result gains <code>status</code> and <code>reason</code> columns.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="breaking-lme4-identical-coefficient-names-0-2-0">Breaking: lme4-identical coefficient names<a class="anchor" aria-label="anchor" href="#breaking-lme4-identical-coefficient-names-0-2-0"></a></h3>
+<ul><li>Fixed-effect coefficient names now match <code>lme4</code>/<code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code> exactly — <code>"recipeB"</code>, <code>"temperature.L"</code>, <code>"recipeB:temperature.L"</code> — in <code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code> column order, on every programmatic surface: <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>, <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> tables, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> dimnames, <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code>, <code><a href="../reference/contrast.html">contrast()</a></code> and <code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code> weight names, <code>tidy()</code>, <code>emmeans</code>, and <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>. Previously mixeff used its engine encoding (<code>"recipe: B"</code>) with a different interaction column order, so linear combinations and coefficient lookups copy-pasted from <code>lme4</code> code silently misaligned. Code written against the old names must switch to the lme4 forms. The engine encoding still appears inside engine-rendered <code>explain()</code>/<code><a href="../reference/audit.html">audit()</a></code> prose. <code><a href="../reference/mm_lmm-methods.html">ranef()</a></code> column names are stripped to the lme4 form (<code>"modalityAudio"</code>); <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code> printing is unchanged. Fits saved with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> by older versions lack the stored name map and should be re-fit.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="engine-0-2-0">Engine<a class="anchor" aria-label="anchor" href="#engine-0-2-0"></a></h3>
+<ul><li>Engine pin bumped to <code>4a2abb3</code>: hardens convergence and runtime contracts. Non-marginal designs (<code>y ~ b + a:b</code>) now fit and match <code>lme4</code> exactly (previously refused). Convergence labelling is more conservative — a fit that reaches a flat/boundary region without a certified stationary point is now reported <code>not_optimized</code> (previously sometimes <code>converged_reduced_rank</code>) on small maximal random-slope models; genuine reduced-rank optima (e.g. <code><a href="https://rdrr.io/pkg/lme4/man/Dyestuff.html" class="external-link">lme4::Dyestuff2</a></code>) still report <code>converged_reduced_rank</code>. The prior pin, <code>ee0c717</code>, carried the audit-render wording batch (policy recommendations phrased as options, boundary-sentence deduplication, humanized summary-view jargon).</li>
+<li>Earlier in this cycle the pin moved to <code>3b6ec69</code> (one commit past v1.0.0-rc.1), which fixes the native crossed-LMM trust-region start. Crossed-design fits that route through the trust-region optimizer may land on very slightly different (better-started) optima.</li>
 <li>The bundled <code>mixeff-rs</code> engine is now pinned to its first tagged release, v1.0.0-rc.1 (<code>3332f3e</code>). The two response-batch diagnostic reasons new in this release (<code>sink_stopped</code>, <code>adaptive_refinement</code>) are registered in the R-side reason registry, so the coverage contract (every engine reason has an R-side entry) holds.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="extractors-development-version">Extractors<a class="anchor" aria-label="anchor" href="#extractors-development-version"></a></h3>
+<h3 id="extractors-0-2-0">Extractors<a class="anchor" aria-label="anchor" href="#extractors-0-2-0"></a></h3>
 <ul><li>
 <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code> correlations are now stored at full precision as numeric columns of <code>$table</code> (<code>correlation</code>, plus <code>correlation2</code>, … for groups with three or more random terms; <code>NA</code> where no pair exists). Previously the column was a 2-decimal display string, forcing callers to parse text and costing ~2% precision on well-determined correlations. Printing is unchanged: rounding to 2 decimals now happens only at display time.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="diagnostic-clarity-development-version">Diagnostic clarity<a class="anchor" aria-label="anchor" href="#diagnostic-clarity-development-version"></a></h3>
+<h3 id="negative-binomial-glmms-0-2-0">Negative-binomial GLMMs<a class="anchor" aria-label="anchor" href="#negative-binomial-glmms-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/glmm.html">glmm()</a></code> now fits NB2 negative-binomial models (log link) on the default profiled path. <code>family = mm_negative_binomial()</code> estimates the size parameter theta alongside the model (the <code><a href="https://rdrr.io/pkg/lme4/man/glmer.nb.html" class="external-link">lme4::glmer.nb()</a></code> route); <code>family = MASS::negative.binomial(theta)</code> or <code>mm_negative_binomial(theta)</code> fits conditional on a fixed theta. The fitted/fixed theta is recorded as <code>fit$family$nb_theta</code>. <code>method = "joint_laplace"</code> is not yet wired for this family at the pinned engine and is refused with a typed error.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="clearer-user-facing-text-ux-parity-pass-vs-lme4-0-2-0">Clearer user-facing text (UX parity pass vs lme4)<a class="anchor" aria-label="anchor" href="#clearer-user-facing-text-ux-parity-pass-vs-lme4-0-2-0"></a></h3>
+<p>A 13-scenario side-by-side battery against lme4 (graded independently) drove a cleanup of every surface where engine internals leaked into user-facing text:</p>
+<ul><li>GLMM summaries with withheld inference now explain plainly that the fast default cannot certify SEs/z/p and to re-fit with <code>method = "joint_laplace"</code>; the engine’s covariance-geometry warrant moved behind <code>print(summary(fit), verbose = TRUE)</code>.</li>
+<li>Unsupported-family errors list the supported families and point to <code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code> for the rest.</li>
+<li>The new-grouping-level prediction error describes the R-level remedies (<code>re.form = NA</code>, <code>allow.new.levels = TRUE</code>) instead of Rust API names, and bridge errors no longer print a duplicated “Caused by” chain.</li>
+<li>
+<code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> prints a compact lme4-shaped table; single-df terms display as the equivalent F statistic (matching <code>lmerTest</code>), and provenance/list columns stay in <code>$table</code>.</li>
+<li>Aliased (rank-deficient) coefficients display as <code>NA</code> with an explicit note, instead of a misleading <code>0</code>.</li>
+<li>
+<code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code> no longer emits the artifact/crate provenance line (available on <code>fit$schema</code>); <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code>’s internal certification label is translated at display.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="fixes-and-runtime-notices-0-2-0">Fixes and runtime notices<a class="anchor" aria-label="anchor" href="#fixes-and-runtime-notices-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/parameterization.html">parameterization()</a></code> on a fitted GLMM reported the compile-time Lambda template (1s and 0s) as <code>theta_value</code> instead of the fitted theta; it now splices the fitted values in by index (LMM fits were unaffected; pre-fit specs keep the honest template).</li>
+<li>Logical random slopes now carry lme4-style <code><a href="../reference/mm_lmm-methods.html">ranef()</a></code> column names (<code>"xTRUE"</code>), consistent with the fixed-effect naming and the conditional variance arrays.</li>
+<li>
+<code>glmm(method = "joint_laplace")</code> emits an up-front runtime notice: the joint route optimizes to an engine-chosen budget inside a single silent native call and can take minutes on large data (cap with <code>mm_control(max_feval = )</code>). Summary notes for completed joint fits no longer imply an unusable fit when the engine’s convergence label is <code>not_assessed</code>/<code>not_optimized</code> (label reliability is tracked upstream); they point to <code><a href="../reference/verify_convergence.html">verify_convergence()</a></code>.</li>
+<li>Bootstrap-based inference with 200+ replicates announces its scale before the single silent native call.</li>
+<li>
+<code><a href="../reference/lmm.html">lmm()</a></code>/<code><a href="../reference/glmm.html">glmm()</a></code> now emit a rescaling advisory when a continuous predictor is on a scale far from 1 (matching <code>lme4</code>’s “predictors on very different scales” guidance): such fits can converge poorly, and <code><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale()</a></code> is the cheap fix. A notice, not a refusal; suppress with <code>mm_control(verbose = -1)</code>.</li>
+<li>
+<code><a href="../reference/lmm.html">lmm()</a></code>/<code><a href="../reference/glmm.html">glmm()</a></code> document that optimization is silent and non-interruptible within one native call, with bounded budgets.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="profiling-and-scope-0-2-0">Profiling and scope<a class="anchor" aria-label="anchor" href="#profiling-and-scope-0-2-0"></a></h3>
+<ul><li>New <code><a href="../reference/profile.mm_lmm.html">profile.mm_lmm()</a></code> method: returns an <code>mm_profile</code> object over the engine’s certified profile-likelihood payload (<code>$table</code> with one row per parameter; REML fixed effects carry an explicit <code>profile_beta_unavailable_under_reml</code> reason instead of being dropped). <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> on the profile reproduces <code>confint(fit, method = "profile")</code>.</li>
+<li>
+<code><a href="../reference/lmm.html">lmm()</a></code> now refuses multivariate <code>cbind(y1, y2)</code> responses with a plain error (fit each outcome separately); shared-theta multivariate models are deferred post-release. <code><a href="../reference/glmm.html">glmm()</a></code> continues to accept <code>cbind(successes, failures)</code> for binomial responses.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="prediction-0-2-0">Prediction<a class="anchor" aria-label="anchor" href="#prediction-0-2-0"></a></h3>
+<ul><li>Population-level predictions (<code>re.form = NA</code> or <code>~0</code>) no longer require the random-effect grouping columns in <code>newdata</code>, matching <code>predict(lmer/glmer, re.form = NA)</code>. Only the fixed-part variables are needed; conditional predictions (<code>re.form = NULL</code>) still require the full formula’s variables.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="contrasts-0-2-0">Contrasts<a class="anchor" aria-label="anchor" href="#contrasts-0-2-0"></a></h3>
+<ul><li>Ordered factors are now coded with orthonormal polynomial contrasts (<code>contr.poly</code>) at fit time, matching R/lme4 defaults, instead of treatment coding. Fixed effects, random-slope (<code>Z</code>) coding, <code>logLik</code>/<code>AIC</code>/<code>BIC</code>, and predictions now reach parity with <code>lme4</code> on ordered-factor models (e.g. <code><a href="https://rdrr.io/pkg/lme4/man/cake.html" class="external-link">lme4::cake</a></code>). Coefficient <em>names</em> still use mixeff’s engine encoding (<code>temperature: .L</code>) pending the lme4-identical renaming layer. If the global ordered-contrast option is not <code>contr.poly</code>, or an ordered column carries an explicit non-poly <code>contrasts</code> attribute, <code><a href="../reference/lmm.html">lmm()</a></code>/<code><a href="../reference/glmm.html">glmm()</a></code> refuse with a typed <code>mm_arg_error</code> rather than silently diverge from the requested coding.</li>
+<li>Behavior change: a <em>one-level</em> ordered factor now errors loudly (polynomial contrasts require at least two levels) instead of silently degenerating to an empty/near-empty design.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="diagnostic-clarity-0-2-0">Diagnostic clarity<a class="anchor" aria-label="anchor" href="#diagnostic-clarity-0-2-0"></a></h3>
 <ul><li>New verb <code><a href="../reference/verify_convergence.html">verify_convergence()</a></code>: re-runs a fitted LMM under the engine’s bounded verification workflow (restart from the optimum, jittered restarts, opt-in alternate-optimizer consensus) and reports the engine’s verdict with per-run objective/theta/beta deltas. This is the check the audit surface already pointed to for uncertain optima; the verdict and wording are engine-owned. <code>consensus</code> defaults to <code>FALSE</code> because this vendored build compiles without the optional <code>nlopt</code> backend, whose absence the consensus pass would otherwise report as a spurious <code>fragile</code>.</li>
 <li>
 <code><a href="../reference/changes.html">changes()</a></code> now prints one plain-language sentence per recorded change (e.g. <code>Fitted covariance for (1 | s): requested rank 1, fitted rank 0 [reduced_rank].</code>) instead of dumping the raw stage table. The certificate-time rank statement is treated as the canonical record of a boundary event, so its design/covariance restatements are not repeated (they remain in <code>$table</code>). A fit whose optimizer stopped early now says so explicitly (<code>none: no structural change was made; the optimizer stopped early (fit status \</code>not_optimized`).<code>) instead of showing a misleading</code>unchanged / formula display` row.</li>
@@ -83,7 +145,7 @@
 <li>The singular-fit <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code> footer only advertises <code>random_options(spec, group = ...)</code> when that call can actually run for the fit (a slope candidate exists); previously the printed hint could error on the very fit that printed it.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="lme4-functional-equivalence-layer-development-version">lme4 functional-equivalence layer<a class="anchor" aria-label="anchor" href="#lme4-functional-equivalence-layer-development-version"></a></h3>
+<h3 id="lme4-functional-equivalence-layer-0-2-0">lme4 functional-equivalence layer<a class="anchor" aria-label="anchor" href="#lme4-functional-equivalence-layer-0-2-0"></a></h3>
 <ul><li>Grouping-variable coercion: <code><a href="../reference/lmm.html">lmm()</a></code> / <code><a href="../reference/glmm.html">glmm()</a></code> now coerce a non-categorical grouping variable (e.g. an integer subject id or numeric item code) to a factor for the random-effects structure, matching <code>lme4</code>/<code>nlme</code>/<code>glmmTMB</code>. Previously such a column was rejected by the native fit with “grouping factor not categorical”. The coercion is announced via a suppressible notice (class <code>mm_grouping_coercion_notice</code>; silence with <code>mm_control(verbose = -1)</code>), never silent. Surfaced by an in-the-wild OSF <code>glmer</code> reproduction with crossed <code>(1 | ID) + (1 | Title)</code> effects.</li>
 <li>Certified GLMM Wald inference: when fit with <code>method = "joint_laplace"</code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code>confint(method = "wald")</code>, <code><a href="../reference/contrast.html">contrast()</a></code>, and <code>tidy()</code> now report engine-certified fixed-effect standard errors, Wald <em>z</em> statistics, and <em>p</em>-values that match <code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code> within tolerance. The default <code>method = "pirls_profiled"</code> path is not certified for fixed-effect inference, so all four surfaces withhold SE/<em>z</em>/<em>p</em> (returning <code>NA</code> with a reason and a <code>vcov_status</code> of <code>"unsupported"</code>) rather than fabricate them from the uncertified working Hessian — consistent with the package’s “no fake certainty” contract.</li>
 <li>Conditional prediction standard errors and intervals: <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> for <code>mm_lmm</code> / <code>mm_glmm</code> with <code>re.form = NULL</code> now routes <code>se.fit</code> and <code>interval</code> through the engine’s prediction-variance payload, which includes the random-effect (BLUP) variance and the fixed/random covariance — a surface <code><a href="https://rdrr.io/pkg/lme4/man/predict.merMod.html" class="external-link">lme4::predict.merMod</a></code> does not offer at all. LMMs get conditional <code>se.fit</code> plus <code>"confidence"</code> and <code>"prediction"</code> intervals; GLMMs get conditional <code>se.fit</code> and <code>"confidence"</code> intervals on the link or response scale (variance propagated through the link by the engine). The engine certifies these rows for <code>method = "joint_laplace"</code> fits and — via a post-fit profiled-optimum certificate — for default <code>pirls_profiled</code> fits, so the default estimator now reports conditional SEs too. Rows the engine does not certify are withheld, not fabricated: uncertified fits (e.g. singular fits, whose certificate is never issued) and unseen grouping levels under <code>allow.new.levels = TRUE</code> return <code>NA</code> with the engine’s reason in the <code>mm_reason</code> attribute. Population (<code>re.form = NA</code>) SEs/intervals are unchanged.</li>
@@ -230,7 +292,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

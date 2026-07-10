@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -91,8 +91,8 @@
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
 <p>A fixed-effects coefficient is not a group mean. For a model with
 multiple predictors and interactions,
-<code>fixef(fit)["trt: active"]</code> is the treatment effect <em>at
-the reference level of every other predictor</em> — not the average
+<code>fixef(fit)["trtactive"]</code> is the treatment effect <em>at the
+reference level of every other predictor</em> — not the average
 treatment effect across the population. Marginal means give you the
 latter: population-level averages at each combination of interest,
 properly accounting for the reference grid and the fixed-effect
@@ -144,23 +144,23 @@ treatment question you actually want.</p>
 <span><span class="co">#&gt; Residual std. dev.: 0.396581</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
-<span><span class="co">#&gt;                         Estimate Std. Error       df    t value  Pr(&gt;|t|)</span></span>
-<span><span class="co">#&gt; (Intercept)            51.875075  0.6181573  3.39845  83.918896 9.313e-07</span></span>
-<span><span class="co">#&gt; trt: active            -1.978847  0.2819065 26.32727  -7.019516 1.747e-07</span></span>
-<span><span class="co">#&gt; time: post             -4.002565  0.1619036 21.96772 -24.721911   &lt; 1e-16</span></span>
-<span><span class="co">#&gt; trt: active:time: post -2.738668  0.2289662 21.96772 -11.961016 4.314e-11</span></span>
-<span><span class="co">#&gt;                               method</span></span>
-<span><span class="co">#&gt; (Intercept)            satterthwaite</span></span>
-<span><span class="co">#&gt; trt: active            satterthwaite</span></span>
-<span><span class="co">#&gt; time: post             satterthwaite</span></span>
-<span><span class="co">#&gt; trt: active:time: post satterthwaite</span></span>
+<span><span class="co">#&gt;                     Estimate Std. Error       df    t value  Pr(&gt;|t|)</span></span>
+<span><span class="co">#&gt; (Intercept)        51.875075  0.6181573  3.39845  83.918896 9.313e-07</span></span>
+<span><span class="co">#&gt; trtactive          -1.978847  0.2819065 26.32727  -7.019516 1.747e-07</span></span>
+<span><span class="co">#&gt; timepost           -4.002565  0.1619036 21.96772 -24.721911   &lt; 1e-16</span></span>
+<span><span class="co">#&gt; trtactive:timepost -2.738668  0.2289662 21.96772 -11.961016 4.314e-11</span></span>
+<span><span class="co">#&gt;                           method</span></span>
+<span><span class="co">#&gt; (Intercept)        satterthwaite</span></span>
+<span><span class="co">#&gt; trtactive          satterthwaite</span></span>
+<span><span class="co">#&gt; timepost           satterthwaite</span></span>
+<span><span class="co">#&gt; trtactive:timepost satterthwaite</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Inference status:</span></span>
-<span><span class="co">#&gt;                    term        method    status reliability</span></span>
-<span><span class="co">#&gt;             (Intercept) satterthwaite available    moderate</span></span>
-<span><span class="co">#&gt;             trt: active satterthwaite available    moderate</span></span>
-<span><span class="co">#&gt;              time: post satterthwaite available    moderate</span></span>
-<span><span class="co">#&gt;  trt: active:time: post satterthwaite available    moderate</span></span>
+<span><span class="co">#&gt;                term        method    status reliability</span></span>
+<span><span class="co">#&gt;         (Intercept) satterthwaite available    moderate</span></span>
+<span><span class="co">#&gt;           trtactive satterthwaite available    moderate</span></span>
+<span><span class="co">#&gt;            timepost satterthwaite available    moderate</span></span>
+<span><span class="co">#&gt;  trtactive:timepost satterthwaite available    moderate</span></span>
 <span><span class="co">#&gt;                             reliability_reason</span></span>
 <span><span class="co">#&gt;  satterthwaite_finite_difference_approximation</span></span>
 <span><span class="co">#&gt;  satterthwaite_finite_difference_approximation</span></span>
@@ -291,12 +291,12 @@ interaction effect expressed as a contrast: (active post − active pre) −
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">beta</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">beta</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "(Intercept)"            "trt: active"            "time: post"            </span></span>
-<span><span class="co">#&gt; [4] "trt: active:time: post"</span></span>
+<span><span class="co">#&gt; [1] "(Intercept)"        "trtactive"          "timepost"          </span></span>
+<span><span class="co">#&gt; [4] "trtactive:timepost"</span></span>
 <span></span>
-<span><span class="co"># Interaction row: coefficient named "trt: active:time: post"</span></span>
+<span><span class="co"># Interaction row: coefficient named "trtactive:timepost" (lme4-identical)</span></span>
 <span><span class="va">w</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">beta</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">beta</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">w</span><span class="op">[</span><span class="st">"trt: active:time: post"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
+<span><span class="va">w</span><span class="op">[</span><span class="st">"trtactive:timepost"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
 <span></span>
 <span><span class="va">lc</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_lincomb.html">mm_lincomb</a></span><span class="op">(</span><span class="va">fit</span>, weights <span class="op">=</span> <span class="va">w</span><span class="op">)</span></span>
 <span><span class="va">lc</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"estimate"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"p_value"</span>, <span class="st">"method"</span><span class="op">)</span><span class="op">]</span></span>
@@ -416,7 +416,7 @@ section from a fitted object.</li>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

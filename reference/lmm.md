@@ -58,9 +58,11 @@ lmm(
 
 - contrasts:
 
-  Optional named list of factor contrasts. The engine codes all factors
-  with treatment contrasts; a request for any other coding is refused
-  (recode the factor instead).
+  Optional named list of factor contrasts. The engine codes unordered
+  factors with treatment contrasts (`contr.treatment`) and ordered
+  factors with orthonormal polynomial contrasts (`contr.poly`), matching
+  lme4/R defaults. A request for any other coding is refused (recode the
+  factor instead).
 
 - control:
 
@@ -79,6 +81,13 @@ sigma, likelihood summaries, fitted values, residuals, random effects,
 and the post-fit compiler artifact are all stored directly on the R
 object. The native Rust handle is treated as a rebuildable cache, not as
 the source of truth.
+
+Optimization runs inside a single native call with no progress output:
+the pre-fit explanation block (when `verbose >= 0`) is the last thing
+printed before the fitted result returns, and the call cannot be
+interrupted from R. Every optimizer budget is bounded, so fits always
+terminate; runtime on large problems is governed by
+`mm_control(max_feval = )`.
 
 ## Examples
 

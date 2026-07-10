@@ -239,12 +239,12 @@ soa_s_25 <- (log(0.025) - mean(primary_dat$soa_log)) /
 
 dd_center <- mm_lincomb(
   primary_fit,
-  c("group: aphant:mask: masked" = 1)
+  c("groupaphant:maskmasked" = 1)
 )
 dd_25 <- mm_lincomb(
   primary_fit,
-  c("group: aphant:mask: masked"       = 1,
-    "group: aphant:mask: masked:soa_s" = soa_s_25)
+  c("groupaphant:maskmasked"       = 1,
+    "groupaphant:maskmasked:soa_s" = soa_s_25)
 )
 list(centered_soa = dd_center, ms25 = dd_25)
 ```
@@ -307,14 +307,16 @@ two are heavy opt-in jobs, and `mixeff` is not a Bayesian engine.
 
 - GLMM Wald inference in `mixeff` is the PIRLS/Laplace working-Hessian
   flavor, advertised as `mm_reliability = "moderate"`. Absolute SEs
-  drift 5–10% versus `lme4::vcov()` on this dataset.
-- `predict(mm_glmm_fit, ...)` is not yet certified for population-level
-  prediction; that lives behind its own bead. Use
-  `emmeans(..., type = "response")` for marginal probabilities.
-- Coefficient names follow `mixeff`’s `"group: aphant"` scheme, not
-  `lme4`’s compact `"groupaphant"`. For copy-pasting hand-written
-  lincombs from `lme4` user code, `gsub(": ", "", x, fixed = TRUE)`
-  recovers the compact form.
+  drift 5–10% versus `lme4::vcov()` on this dataset; a hold-the-point
+  experiment attributes ~73% of that to the native `||` random-effect
+  family, ~26% to a uniform working-Hessian scale factor (tracked
+  upstream), and ~1% to optimizer drift.
+- Population-level GLMM prediction (`re.form = NA`, `type = "link"` or
+  `"response"`) is supported and matches `predict(glmer, re.form = NA)`
+  on joint-Laplace fits; `emmeans(..., type = "response")` remains the
+  route for averaged marginal probabilities.
+- Coefficient names are lme4-identical since 0.2.0 (`"groupaphant"`), so
+  hand-written lincombs copy straight across from `lme4` code.
 
 ## Citation
 

@@ -1,13 +1,93 @@
 # Changelog
 
-## mixeff (development version)
+## mixeff 0.2.0
+
+### Breaking: API-shape stabilization
+
+- [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md) is
+  now the single audit verb, dispatching on both compiled specs and
+  fits;
+  [`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md)
+  forwards with a deprecation warning and will be removed later.
+- [`df_for_contrast()`](https://bbuchsbaum.github.io/mixeff/reference/df_for_contrast.md)
+  and
+  [`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
+  now return `mm_*` objects with `$table` (plus `$df` on the former,
+  `$sections` for `reporting_table(section = "all")`), matching every
+  sibling analysis verb, instead of a bare classed vector / data frame.
+- The spec-accepting inspection verbs
+  ([`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md),
+  [`parameterization()`](https://bbuchsbaum.github.io/mixeff/reference/parameterization.md),
+  [`reproducibility()`](https://bbuchsbaum.github.io/mixeff/reference/reproducibility.md),
+  [`random_blocks()`](https://bbuchsbaum.github.io/mixeff/reference/random_blocks.md),
+  [`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md),
+  [`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md),
+  [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md))
+  name their first argument `object` (previously `fit`, which was
+  misleading for specs). Fit-only inference verbs keep `fit`.
+  [`model.frame.mm_lmm()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  keeps `formula` — that name is imposed by the
+  [`stats::model.frame()`](https://rdrr.io/r/stats/model.frame.html)
+  generic.
+- [`confint()`](https://rdrr.io/r/stats/confint.html) presents
+  `"asymptotic"` as the canonical method name (the package-wide term for
+  the closed-form Wald interval); `"wald"` remains an accepted synonym.
+  Computation is unchanged.
+- [`drop1()`](https://rdrr.io/r/stats/add1.html) now matches
+  [`stats::drop1()`](https://rdrr.io/r/stats/add1.html) marginality
+  semantics: by default, main effects participating in an interaction
+  are not offered for dropping. An explicit non-marginal `scope` is
+  still honoured and fits normally. The result gains `status` and
+  `reason` columns.
+
+### Breaking: lme4-identical coefficient names
+
+- Fixed-effect coefficient names now match
+  `lme4`/[`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html)
+  exactly — `"recipeB"`, `"temperature.L"`, `"recipeB:temperature.L"` —
+  in [`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html)
+  column order, on every programmatic surface:
+  [`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`coef()`](https://rdrr.io/r/stats/coef.html),
+  [`summary()`](https://rdrr.io/r/base/summary.html) tables,
+  [`vcov()`](https://rdrr.io/r/stats/vcov.html) dimnames,
+  [`confint()`](https://rdrr.io/r/stats/confint.html),
+  [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md)
+  and
+  [`mm_lincomb()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lincomb.md)
+  weight names, `tidy()`, `emmeans`, and
+  [`predict()`](https://rdrr.io/r/stats/predict.html). Previously mixeff
+  used its engine encoding (`"recipe: B"`) with a different interaction
+  column order, so linear combinations and coefficient lookups
+  copy-pasted from `lme4` code silently misaligned. Code written against
+  the old names must switch to the lme4 forms. The engine encoding still
+  appears inside engine-rendered
+  `explain()`/[`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md)
+  prose.
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  column names are stripped to the lme4 form (`"modalityAudio"`);
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  printing is unchanged. Fits saved with
+  [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) by older versions
+  lack the stored name map and should be re-fit.
 
 ### Engine
 
-- Engine pin bumped to `3b6ec69` (one commit past v1.0.0-rc.1): fixes
-  the native crossed-LMM trust-region start. Crossed-design fits that
-  route through the trust-region optimizer may land on very slightly
-  different (better-started) optima.
+- Engine pin bumped to `4a2abb3`: hardens convergence and runtime
+  contracts. Non-marginal designs (`y ~ b + a:b`) now fit and match
+  `lme4` exactly (previously refused). Convergence labelling is more
+  conservative — a fit that reaches a flat/boundary region without a
+  certified stationary point is now reported `not_optimized` (previously
+  sometimes `converged_reduced_rank`) on small maximal random-slope
+  models; genuine reduced-rank optima (e.g.
+  [`lme4::Dyestuff2`](https://rdrr.io/pkg/lme4/man/Dyestuff.html)) still
+  report `converged_reduced_rank`. The prior pin, `ee0c717`, carried the
+  audit-render wording batch (policy recommendations phrased as options,
+  boundary-sentence deduplication, humanized summary-view jargon).
+- Earlier in this cycle the pin moved to `3b6ec69` (one commit past
+  v1.0.0-rc.1), which fixes the native crossed-LMM trust-region start.
+  Crossed-design fits that route through the trust-region optimizer may
+  land on very slightly different (better-started) optima.
 - The bundled `mixeff-rs` engine is now pinned to its first tagged
   release, v1.0.0-rc.1 (`3332f3e`). The two response-batch diagnostic
   reasons new in this release (`sink_stopped`, `adaptive_refinement`)
@@ -23,6 +103,122 @@
   column was a 2-decimal display string, forcing callers to parse text
   and costing ~2% precision on well-determined correlations. Printing is
   unchanged: rounding to 2 decimals now happens only at display time.
+
+### Negative-binomial GLMMs
+
+- [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) now
+  fits NB2 negative-binomial models (log link) on the default profiled
+  path. `family = mm_negative_binomial()` estimates the size parameter
+  theta alongside the model (the
+  [`lme4::glmer.nb()`](https://rdrr.io/pkg/lme4/man/glmer.nb.html)
+  route); `family = MASS::negative.binomial(theta)` or
+  `mm_negative_binomial(theta)` fits conditional on a fixed theta. The
+  fitted/fixed theta is recorded as `fit$family$nb_theta`.
+  `method = "joint_laplace"` is not yet wired for this family at the
+  pinned engine and is refused with a typed error.
+
+### Clearer user-facing text (UX parity pass vs lme4)
+
+A 13-scenario side-by-side battery against lme4 (graded independently)
+drove a cleanup of every surface where engine internals leaked into
+user-facing text:
+
+- GLMM summaries with withheld inference now explain plainly that the
+  fast default cannot certify SEs/z/p and to re-fit with
+  `method = "joint_laplace"`; the engine’s covariance-geometry warrant
+  moved behind `print(summary(fit), verbose = TRUE)`.
+- Unsupported-family errors list the supported families and point to
+  [`lme4::glmer()`](https://rdrr.io/pkg/lme4/man/glmer.html) for the
+  rest.
+- The new-grouping-level prediction error describes the R-level remedies
+  (`re.form = NA`, `allow.new.levels = TRUE`) instead of Rust API names,
+  and bridge errors no longer print a duplicated “Caused by” chain.
+- [`anova()`](https://rdrr.io/r/stats/anova.html) prints a compact
+  lme4-shaped table; single-df terms display as the equivalent F
+  statistic (matching `lmerTest`), and provenance/list columns stay in
+  `$table`.
+- Aliased (rank-deficient) coefficients display as `NA` with an explicit
+  note, instead of a misleading `0`.
+- [`print()`](https://rdrr.io/r/base/print.html) no longer emits the
+  artifact/crate provenance line (available on `fit$schema`);
+  [`confint()`](https://rdrr.io/r/stats/confint.html)’s internal
+  certification label is translated at display.
+
+### Fixes and runtime notices
+
+- [`parameterization()`](https://bbuchsbaum.github.io/mixeff/reference/parameterization.md)
+  on a fitted GLMM reported the compile-time Lambda template (1s and 0s)
+  as `theta_value` instead of the fitted theta; it now splices the
+  fitted values in by index (LMM fits were unaffected; pre-fit specs
+  keep the honest template).
+- Logical random slopes now carry lme4-style
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  column names (`"xTRUE"`), consistent with the fixed-effect naming and
+  the conditional variance arrays.
+- `glmm(method = "joint_laplace")` emits an up-front runtime notice: the
+  joint route optimizes to an engine-chosen budget inside a single
+  silent native call and can take minutes on large data (cap with
+  `mm_control(max_feval = )`). Summary notes for completed joint fits no
+  longer imply an unusable fit when the engine’s convergence label is
+  `not_assessed`/`not_optimized` (label reliability is tracked
+  upstream); they point to
+  [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md).
+- Bootstrap-based inference with 200+ replicates announces its scale
+  before the single silent native call.
+- [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)/[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+  now emit a rescaling advisory when a continuous predictor is on a
+  scale far from 1 (matching `lme4`’s “predictors on very different
+  scales” guidance): such fits can converge poorly, and
+  [`scale()`](https://rdrr.io/r/base/scale.html) is the cheap fix. A
+  notice, not a refusal; suppress with `mm_control(verbose = -1)`.
+- [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)/[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+  document that optimization is silent and non-interruptible within one
+  native call, with bounded budgets.
+
+### Profiling and scope
+
+- New
+  [`profile.mm_lmm()`](https://bbuchsbaum.github.io/mixeff/reference/profile.mm_lmm.md)
+  method: returns an `mm_profile` object over the engine’s certified
+  profile-likelihood payload (`$table` with one row per parameter; REML
+  fixed effects carry an explicit `profile_beta_unavailable_under_reml`
+  reason instead of being dropped).
+  [`confint()`](https://rdrr.io/r/stats/confint.html) on the profile
+  reproduces `confint(fit, method = "profile")`.
+- [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) now
+  refuses multivariate `cbind(y1, y2)` responses with a plain error (fit
+  each outcome separately); shared-theta multivariate models are
+  deferred post-release.
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+  continues to accept `cbind(successes, failures)` for binomial
+  responses.
+
+### Prediction
+
+- Population-level predictions (`re.form = NA` or `~0`) no longer
+  require the random-effect grouping columns in `newdata`, matching
+  `predict(lmer/glmer, re.form = NA)`. Only the fixed-part variables are
+  needed; conditional predictions (`re.form = NULL`) still require the
+  full formula’s variables.
+
+### Contrasts
+
+- Ordered factors are now coded with orthonormal polynomial contrasts
+  (`contr.poly`) at fit time, matching R/lme4 defaults, instead of
+  treatment coding. Fixed effects, random-slope (`Z`) coding,
+  `logLik`/`AIC`/`BIC`, and predictions now reach parity with `lme4` on
+  ordered-factor models (e.g.
+  [`lme4::cake`](https://rdrr.io/pkg/lme4/man/cake.html)). Coefficient
+  *names* still use mixeff’s engine encoding (`temperature: .L`) pending
+  the lme4-identical renaming layer. If the global ordered-contrast
+  option is not `contr.poly`, or an ordered column carries an explicit
+  non-poly `contrasts` attribute,
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)/[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+  refuse with a typed `mm_arg_error` rather than silently diverge from
+  the requested coding.
+- Behavior change: a *one-level* ordered factor now errors loudly
+  (polynomial contrasts require at least two levels) instead of silently
+  degenerating to an empty/near-empty design.
 
 ### Diagnostic clarity
 

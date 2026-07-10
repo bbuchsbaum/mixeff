@@ -44,8 +44,12 @@ glmm(
   1.0 surface is: [`binomial()`](https://rdrr.io/r/stats/family.html)
   with `"logit"`, `"probit"`, or `"cloglog"` links;
   [`poisson()`](https://rdrr.io/r/stats/family.html) with `"log"` or
-  `"sqrt"` links; and [`Gamma()`](https://rdrr.io/r/stats/family.html)
-  with `"log"` link.
+  `"sqrt"` links; [`Gamma()`](https://rdrr.io/r/stats/family.html) with
+  `"log"` link; and negative binomial (NB2, `"log"` link) via
+  [`mm_negative_binomial()`](https://bbuchsbaum.github.io/mixeff/reference/mm_negative_binomial.md)
+  (theta estimated, like
+  [`lme4::glmer.nb()`](https://rdrr.io/pkg/lme4/man/glmer.nb.html)) or
+  `MASS::negative.binomial(theta)` (fixed theta).
 
 - random:
 
@@ -101,6 +105,15 @@ glmm(
 
 An object of class `mm_glmm`, also inheriting from `mm_fit` and
 `mm_compiled`.
+
+## Details
+
+Optimization runs inside a single native call with no progress output:
+the pre-fit explanation block (when `verbose >= 0`) is the last thing
+printed before the fitted result returns, and the call cannot be
+interrupted from R. Every optimizer budget is bounded, so fits always
+terminate; runtime on large problems is governed by
+`mm_control(max_feval = )`.
 
 ## Examples
 

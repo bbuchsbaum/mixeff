@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -262,8 +262,9 @@ a string</td>
 <tr class="even">
 <td><code>contrasts</code></td>
 <td>partial</td>
-<td>engine uses treatment contrasts; other codings are refused — recode
-the factor</td>
+<td>unordered factors use treatment coding, ordered factors
+<code>contr.poly</code> (both matching R/lme4 defaults); other codings
+are refused — recode the factor</td>
 </tr>
 <tr class="odd">
 <td><code>family = "binomial"</code></td>
@@ -278,13 +279,14 @@ the factor</td>
 </tr>
 <tr class="odd">
 <td><code>control = lmerControl(optimizer=, optCtrl=)</code></td>
-<td>not exposed</td>
-<td>the engine selects the optimizer/tolerances itself</td>
+<td><code>mm_control(optimizer=, max_feval=, ...)</code></td>
+<td>the engine picks a default optimizer; <code><a href="../reference/mm_control.html">mm_control()</a></code> can
+override it or cap the evaluation budget</td>
 </tr>
 <tr class="even">
 <td><code>start</code></td>
-<td>not exposed</td>
-<td>warm starts are engine-managed</td>
+<td><code>mm_control(start=)</code></td>
+<td>theta warm starts</td>
 </tr>
 </tbody>
 </table>
@@ -292,18 +294,18 @@ the factor</td>
 <div class="section level2">
 <h2 id="four-things-that-will-bite-and-the-fix">Four things that will bite, and the fix<a class="anchor" aria-label="anchor" href="#four-things-that-will-bite-and-the-fix"></a>
 </h2>
-<p><strong>1. Coefficient names for factors differ.</strong> The engine
-labels factor levels as <code>"factor: level"</code>
-(e.g. <code>"recipe: B"</code>), where lme4 writes
-<code>"recipeB"</code>. If you match coefficients by name across the two
-packages, normalise first:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">nm</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">nm_lme4_style</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">gsub</a></span><span class="op">(</span><span class="st">": "</span>, <span class="st">""</span>, <span class="va">nm</span><span class="op">)</span>   <span class="co"># "recipe: B" -&gt; "recipeB"</span></span></code></pre></div>
+<p><strong>1. Coefficient names match lme4 exactly.</strong> Since
+0.2.0, <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> tables,
+<code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> dimnames, and <code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code> weight names
+use lme4’s naming and column order (<code>"recipeB"</code>,
+<code>"temperature.L"</code>, <code>"recipeB:temperature.L"</code>), so
+name-keyed lme4 code is drop-in compatible. (Earlier versions used an
+engine encoding like <code>"recipe: B"</code>; if you wrote
+normalisation shims for those, delete them.)</p>
 <p><strong>2. Grouped binomial responses.</strong> <code><a href="../reference/glmm.html">glmm()</a></code>
 accepts the <code>cbind(successes, failures)</code> spelling like
 <code>glmer</code>:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">incidence</span>, <span class="va">size</span> <span class="op">-</span> <span class="va">incidence</span><span class="op">)</span> <span class="op">~</span> <span class="va">period</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">herd</span><span class="op">)</span>,</span>
 <span>     <span class="fu">lme4</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/lme4/man/cbpp.html" class="external-link">cbpp</a></span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p><strong>3. The default GLMM estimator is not glmer’s.</strong>
@@ -311,7 +313,7 @@ accepts the <code>cbind(successes, failures)</code> spelling like
 coefficients do <strong>not</strong> match <code>glmer()</code> exactly;
 it prints a notice saying so. For glmer-equivalent (joint Laplace)
 estimates, ask for them:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">g</span><span class="op">)</span>, <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>     method <span class="op">=</span> <span class="st">"joint_laplace"</span><span class="op">)</span></span></code></pre></div>
 <p><strong>4. <code>||</code> with a factor means full
@@ -329,7 +331,7 @@ diagnostic (<code>covariance_assumption</code>, reason
 <code>double_bar_factor_term</code>). To reproduce lme4’s model family
 exactly, write the expansion explicitly and give the factor its own
 correlated block:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># mixeff `||`: independent variances for every column, factor levels included</span></span>
 <span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">cond</span> <span class="op">*</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">cond</span> <span class="op">+</span> <span class="va">x</span> <span class="op">||</span> <span class="va">subj</span><span class="op">)</span>, <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
@@ -403,7 +405,7 @@ anything, which inference routes are available on a given fit and why.
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

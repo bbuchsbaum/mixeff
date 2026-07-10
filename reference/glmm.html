@@ -17,7 +17,7 @@ native dependency-light optimizer in this vendored build.'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -112,8 +112,10 @@ native dependency-light optimizer in this vendored build.</p>
 <dt id="arg-family">family<a class="anchor" aria-label="anchor" href="#arg-family"></a></dt>
 <dd><p>A supported GLMM family object or family constructor. The
 certified 1.0 surface is: <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial()</a></code> with <code>"logit"</code>, <code>"probit"</code>, or
-<code>"cloglog"</code> links; <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson()</a></code> with <code>"log"</code> or <code>"sqrt"</code> links; and
-<code><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma()</a></code> with <code>"log"</code> link.</p></dd>
+<code>"cloglog"</code> links; <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson()</a></code> with <code>"log"</code> or <code>"sqrt"</code> links;
+<code><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma()</a></code> with <code>"log"</code> link; and negative binomial (NB2, <code>"log"</code> link)
+via <code><a href="mm_negative_binomial.html">mm_negative_binomial()</a></code> (theta estimated, like <code><a href="https://rdrr.io/pkg/lme4/man/glmer.nb.html" class="external-link">lme4::glmer.nb()</a></code>)
+or <code>MASS::negative.binomial(theta)</code> (fixed theta).</p></dd>
 
 
 <dt id="arg-random">random<a class="anchor" aria-label="anchor" href="#arg-random"></a></dt>
@@ -169,6 +171,14 @@ are rejected for <code>method = "joint_laplace"</code> in the R wrapper.</p></dd
     <p>An object of class <code>mm_glmm</code>, also inheriting from <code>mm_fit</code> and
 <code>mm_compiled</code>.</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>Optimization runs inside a single native call with no progress output: the
+pre-fit explanation block (when <code>verbose &gt;= 0</code>) is the last thing printed
+before the fitted result returns, and the call cannot be interrupted from
+R. Every optimizer budget is bounded, so fits always terminate; runtime on
+large problems is governed by <code>mm_control(max_feval = )</code>.</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
@@ -202,7 +212,7 @@ are rejected for <code>method = "joint_laplace"</code> in the R wrapper.</p></dd
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

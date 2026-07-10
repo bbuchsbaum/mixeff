@@ -58,7 +58,7 @@ knitr::kable(coef_table, digits = 4)
 |:---|---:|---:|---:|---:|---:|:---|
 | (Intercept) | 7.6829 | 0.1965 | 12.5650 | 39.1065 | 0.0000 | satterthwaite |
 | week | -0.2784 | 0.0260 | 58.9997 | -10.7280 | 0.0000 | satterthwaite |
-| treatment: coached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
+| treatmentcoached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
 
 ## Reading the formula before fitting
 
@@ -120,28 +120,28 @@ provenance columns.
 ``` r
 
 reporting_table(fit, "overview")
-#>                field                                       value
-#> 1        model_class                                         LMM
-#> 2            formula     score ~ week + treatment + (1 | clinic)
-#> 3  effective_formula score ~ 1 + week + treatment + (1 | clinic)
-#> 4         fit_method                                        REML
-#> 5               mode                   confirmatory_as_specified
-#> 6               nobs                                          72
-#> 7         fit_status                          converged_interior
-#> 8          inference             3/3 available fixed-effect rows
-#> 9    artifact_schema       mixedmodels.compiled_model_artifact 1
-#> 10     crate_version                                  1.0.0-rc.1
-#> 11   package_version                                       0.1.0
+#>              field                                       value
+#>        model_class                                         LMM
+#>            formula     score ~ week + treatment + (1 | clinic)
+#>  effective_formula score ~ 1 + week + treatment + (1 | clinic)
+#>         fit_method                                        REML
+#>               mode                   confirmatory_as_specified
+#>               nobs                                          72
+#>         fit_status                          converged_interior
+#>          inference             3/3 available fixed-effect rows
+#>    artifact_schema       mixedmodels.compiled_model_artifact 1
+#>      crate_version                                  1.0.0-rc.1
+#>    package_version                                       0.2.0
 reporting_table(fit, "fixed_effects")
-#>                 term   estimate  std_error  statistic statistic_name
-#> 1        (Intercept)  7.6828778 0.19646018  39.106539              z
-#> 2               week -0.2783994 0.02595083 -10.727955              z
-#> 3 treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>        p_value            method    status reliability
-#> 1 0.0000000000 asymptotic_wald_z available         low
-#> 2 0.0000000000 asymptotic_wald_z available         low
-#> 3 0.0006039485 asymptotic_wald_z available         low
-reporting_table(fit, "fixed_effects", view = "audit")[, c("term", "source", "status")]
+#>                term   estimate  std_error  statistic statistic_name
+#>         (Intercept)  7.6828778 0.19646018  39.106539              z
+#>                week -0.2783994 0.02595083 -10.727955              z
+#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
+#>       p_value            method    status reliability
+#>  0.0000000000 asymptotic_wald_z available         low
+#>  0.0000000000 asymptotic_wald_z available         low
+#>  0.0006039485 asymptotic_wald_z available         low
+reporting_table(fit, "fixed_effects", view = "audit")$table[, c("term", "source", "status")]
 #>                 term                       source    status
 #> 1        (Intercept) fixed_effect_inference_table available
 #> 2               week fixed_effect_inference_table available
@@ -160,17 +160,17 @@ saveRDS(fit, path)
 restored <- readRDS(path)
 
 fixef(restored)
-#>        (Intercept)               week treatment: coached 
-#>          7.6828778         -0.2783994         -0.8994747
+#>      (Intercept)             week treatmentcoached 
+#>        7.6828778       -0.2783994       -0.8994747
 reporting_table(restored, "fixed_effects")
-#>                 term   estimate  std_error  statistic statistic_name
-#> 1        (Intercept)  7.6828778 0.19646018  39.106539              z
-#> 2               week -0.2783994 0.02595083 -10.727955              z
-#> 3 treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>        p_value            method    status reliability
-#> 1 0.0000000000 asymptotic_wald_z available         low
-#> 2 0.0000000000 asymptotic_wald_z available         low
-#> 3 0.0006039485 asymptotic_wald_z available         low
+#>                term   estimate  std_error  statistic statistic_name
+#>         (Intercept)  7.6828778 0.19646018  39.106539              z
+#>                week -0.2783994 0.02595083 -10.727955              z
+#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
+#>       p_value            method    status reliability
+#>  0.0000000000 asymptotic_wald_z available         low
+#>  0.0000000000 asymptotic_wald_z available         low
+#>  0.0006039485 asymptotic_wald_z available         low
 ```
 
 ## Lower-level tools

@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -119,13 +119,13 @@ allowed to vary.</p>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">coef_table</span>, digits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
-<col width="21%">
+<col width="19%">
 <col width="10%">
 <col width="12%">
-<col width="8%">
+<col width="9%">
 <col width="10%">
 <col width="21%">
-<col width="15%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
 <th align="left"></th>
@@ -156,7 +156,7 @@ allowed to vary.</p>
 <td align="left">satterthwaite</td>
 </tr>
 <tr class="odd">
-<td align="left">treatment: coached</td>
+<td align="left">treatmentcoached</td>
 <td align="right">-0.8995</td>
 <td align="right">0.2623</td>
 <td align="right">9.9993</td>
@@ -171,10 +171,10 @@ p-value.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/inference_table.html">inference_table</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Inference table:</span></span>
-<span><span class="co">#&gt;                term              label        kind   estimate  std_error df</span></span>
-<span><span class="co">#&gt;         (Intercept)        (Intercept) coefficient  7.6828778 0.19646018 NA</span></span>
-<span><span class="co">#&gt;                week               week coefficient -0.2783994 0.02595083 NA</span></span>
-<span><span class="co">#&gt;  treatment: coached treatment: coached coefficient -0.8994747 0.26225014 NA</span></span>
+<span><span class="co">#&gt;                term            label        kind   estimate  std_error df</span></span>
+<span><span class="co">#&gt;         (Intercept)      (Intercept) coefficient  7.6828778 0.19646018 NA</span></span>
+<span><span class="co">#&gt;                week             week coefficient -0.2783994 0.02595083 NA</span></span>
+<span><span class="co">#&gt;  treatment: coached treatmentcoached coefficient -0.8994747 0.26225014 NA</span></span>
 <span><span class="co">#&gt;  numerator_df denominator_df  statistic statistic_name      p_value</span></span>
 <span><span class="co">#&gt;            NA             NA  39.106539              z 0.0000000000</span></span>
 <span><span class="co">#&gt;            NA             NA -10.727955              z 0.0000000000</span></span>
@@ -224,15 +224,10 @@ table.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova</a></span><span class="op">(</span><span class="va">fit</span>, type <span class="op">=</span> <span class="st">"III"</span>, method <span class="op">=</span> <span class="st">"kenward_roger"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Type III analysis of fixed effects (method: kenward_roger):</span></span>
-<span><span class="co">#&gt;       term type num_df den_df  statistic statistic_name      p_value</span></span>
-<span><span class="co">#&gt;       week  III     NA     59 -10.727955              t 1.776357e-15</span></span>
-<span><span class="co">#&gt;  treatment  III     NA     10  -3.429835              t 6.440269e-03</span></span>
-<span><span class="co">#&gt;         method requested_method    status reliability reason      details</span></span>
-<span><span class="co">#&gt;  kenward_roger    kenward_roger available    moderate   &lt;NA&gt; list(fam....</span></span>
-<span><span class="co">#&gt;  kenward_roger    kenward_roger available    moderate   &lt;NA&gt; list(fam....</span></span>
-<span><span class="co">#&gt;         notes</span></span>
-<span><span class="co">#&gt;  Kenward-....</span></span>
-<span><span class="co">#&gt;  Kenward-....</span></span></code></pre></div>
+<span><span class="co">#&gt;       term num_df den_df statistic      p_value        method</span></span>
+<span><span class="co">#&gt;       week      1     59 115.08903 1.776357e-15 kenward_roger</span></span>
+<span><span class="co">#&gt;  treatment      1     10  11.76377 6.440269e-03 kenward_roger</span></span>
+<span><span class="co">#&gt; Full provenance columns available in `$table` (type, statistic_name, requested_method, status, reliability, reason, details, notes).</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="model-comparisons">Model comparisons<a class="anchor" aria-label="anchor" href="#model-comparisons"></a>
@@ -347,7 +342,7 @@ fabricated number.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

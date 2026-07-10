@@ -7,7 +7,7 @@ base [`lm()`](https://rdrr.io/r/stats/lm.html)'s
 [`model.frame()`](https://rdrr.io/r/stats/model.frame.html) /
 [`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html) chain.
 Nothing is optimized; nothing is fitted.
-[`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md),
+[`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md),
 [`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md),
 [`random_options()`](https://bbuchsbaum.github.io/mixeff/reference/random_options.md),
 and (in Phase 1.E)
@@ -94,8 +94,8 @@ Raises typed conditions (all inheriting from `mm_condition`):
 
 ## See also
 
-[`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md)
-for the printed audit report.
+[`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md) for
+the printed audit report.
 
 ## Examples
 
@@ -107,6 +107,6 @@ df <- data.frame(
   subject = factor(rep(letters[1:5], each = 4))
 )
 spec <- compile_model(y ~ x + (1 + x | subject), df)
-audit_design(spec)
+audit(spec)
 } # }
 ```

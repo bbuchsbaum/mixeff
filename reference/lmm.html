@@ -15,7 +15,7 @@ upstream Rust LinearMixedModel."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -125,8 +125,10 @@ The default (<code>NULL</code>) refuses any <code>NA</code> in a model variable 
 
 <dt id="arg-contrasts">contrasts<a class="anchor" aria-label="anchor" href="#arg-contrasts"></a></dt>
 <dd><p>Optional named list of factor contrasts. The engine codes
-all factors with treatment contrasts; a request for any other coding is
-refused (recode the factor instead).</p></dd>
+unordered factors with treatment contrasts (<code>contr.treatment</code>) and ordered
+factors with orthonormal polynomial contrasts (<code>contr.poly</code>), matching
+lme4/R defaults. A request for any other coding is refused (recode the
+factor instead).</p></dd>
 
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>
@@ -145,6 +147,11 @@ sigma, likelihood summaries, fitted values, residuals, random effects, and
 the post-fit compiler artifact are all stored directly on the R object. The
 native Rust handle is treated as a rebuildable cache, not as the source of
 truth.</p>
+<p>Optimization runs inside a single native call with no progress output: the
+pre-fit explanation block (when <code>verbose &gt;= 0</code>) is the last thing printed
+before the fitted result returns, and the call cannot be interrupted from
+R. Every optimizer budget is bounded, so fits always terminate; runtime on
+large problems is governed by <code>mm_control(max_feval = )</code>.</p>
     </div>
 
     <div class="section level2">
@@ -200,7 +207,7 @@ truth.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

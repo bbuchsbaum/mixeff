@@ -7,15 +7,15 @@ and covariance-parameter trace records.
 ## Usage
 
 ``` r
-parameterization(fit, ...)
+parameterization(object, ...)
 
 # S3 method for class 'mm_compiled'
-parameterization(fit, ...)
+parameterization(object, ...)
 ```
 
 ## Arguments
 
-- fit:
+- object:
 
   A compiled `mm_spec` or fitted `mm_fit`.
 

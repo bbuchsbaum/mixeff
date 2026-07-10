@@ -7,15 +7,15 @@ theta parameter count, level counts, and design-support status.
 ## Usage
 
 ``` r
-random_blocks(fit, ...)
+random_blocks(object, ...)
 
 # S3 method for class 'mm_compiled'
-random_blocks(fit, ...)
+random_blocks(object, ...)
 ```
 
 ## Arguments
 
-- fit:
+- object:
 
   A compiled `mm_spec` or fitted `mm_fit`.
 

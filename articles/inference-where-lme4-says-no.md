@@ -371,8 +371,8 @@ re_lrt
 
 ``` r
 
-reporting_table(re_lrt)[, c("term", "statistic", "p_value",
-                            "reference_distribution", "status")]
+reporting_table(re_lrt)$table[, c("term", "statistic", "p_value",
+                                  "reference_distribution", "status")]
 #>         term statistic p_value                    reference_distribution
 #> 1 (1 | subj)  178.8188       0 0.5 * chi-square(0) + 0.5 * chi-square(1)
 #>      status

@@ -3,13 +3,13 @@
 design-audit pipeline against the supplied data, and returns an
 mm_spec object — the audit-first analogue of the design-only step in
 base lm()'s model.frame() / model.matrix() chain. Nothing is
-optimized; nothing is fitted. audit_design(), explain_model(),
+optimized; nothing is fitted. audit(), explain_model(),
 random_options(), and (in Phase 1.E) lmm() all consume the same
 artifact."><meta property="og:description" content="compile_model() parses the formula, runs the upstream semantic-IR /
 design-audit pipeline against the supplied data, and returns an
 mm_spec object — the audit-first analogue of the design-only step in
 base lm()'s model.frame() / model.matrix() chain. Nothing is
-optimized; nothing is fitted. audit_design(), explain_model(),
+optimized; nothing is fitted. audit(), explain_model(),
 random_options(), and (in Phase 1.E) lmm() all consume the same
 artifact."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -19,7 +19,7 @@ artifact."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,7 @@ artifact."></head><body>
 design-audit pipeline against the supplied data, and returns an
 <code>mm_spec</code> object — the audit-first analogue of the design-only step in
 base <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">lm()</a></code>'s <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame()</a></code> / <code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code> chain. Nothing is
-optimized; nothing is fitted. <code><a href="audit_design.html">audit_design()</a></code>, <code><a href="explain_model.html">explain_model()</a></code>,
+optimized; nothing is fitted. <code><a href="audit.html">audit()</a></code>, <code><a href="explain_model.html">explain_model()</a></code>,
 <code><a href="random_options.html">random_options()</a></code>, and (in Phase 1.E) <code><a href="lmm.html">lmm()</a></code> all consume the same
 artifact.</p>
     </div>
@@ -149,7 +149,7 @@ not match the wrapper's known schema set.</p></li>
 </ul></div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="audit_design.html">audit_design()</a></code> for the printed audit report.</p></div>
+    <div class="dont-index"><p><code><a href="audit.html">audit()</a></code> for the printed audit report.</p></div>
     </div>
 
     <div class="section level2">
@@ -161,7 +161,7 @@ not match the wrapper's known schema set.</p></li>
 <span class="r-in"><span>  subject <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="va">letters</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">]</span>, each <span class="op">=</span> <span class="fl">4</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu">compile_model</span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">x</span> <span class="op">|</span> <span class="va">subject</span><span class="op">)</span>, <span class="va">df</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="fu"><a href="audit_design.html">audit_design</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="audit.html">audit</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
@@ -175,7 +175,7 @@ not match the wrapper's known schema set.</p></li>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

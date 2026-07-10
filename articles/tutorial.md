@@ -89,10 +89,9 @@ This pre-fit explanation confirms:
 - the formula has been canonicalized to the explicit
   `(1 + Days | Subject)` form that the optimizer will receive.
 
-Use `audit_design(spec)` when you want the deeper design audit. Its
-compact print starts with the audit summary and requested model;
-`print(audit_design(spec), full = TRUE)` shows the complete upstream
-report.
+Use `audit(spec)` when you want the deeper design audit. Its compact
+print starts with the audit summary and requested model;
+`print(audit(spec), full = TRUE)` shows the complete upstream report.
 
 If you had written `(1 | Subject)` by mistake (random intercepts only),
 the explanation would show only one random-effects column per subject —
@@ -212,7 +211,7 @@ confint(fit, method = "asymptotic")
 #> (Intercept) 238.02922 264.78099
 #> Days          7.43759  13.49698
 #> method: wald_asymptotic_from_stored_standard_errors
-#> status: not_certified_by_rust_inference_contract
+#> status: Wald (asymptotic) intervals from stored standard errors (engine-certified profile intervals: method = "profile")
 ```
 
 [`confint()`](https://rdrr.io/r/stats/confint.html) with

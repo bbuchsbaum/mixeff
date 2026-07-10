@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -161,10 +161,10 @@ subject,</li>
 <code>(1 + Days | Subject)</code> form that the optimizer will
 receive.</li>
 </ul>
-<p>Use <code>audit_design(spec)</code> when you want the deeper design
-audit. Its compact print starts with the audit summary and requested
-model; <code>print(audit_design(spec), full = TRUE)</code> shows the
-complete upstream report.</p>
+<p>Use <code>audit(spec)</code> when you want the deeper design audit.
+Its compact print starts with the audit summary and requested model;
+<code>print(audit(spec), full = TRUE)</code> shows the complete upstream
+report.</p>
 <p>If you had written <code>(1 | Subject)</code> by mistake (random
 intercepts only), the explanation would show only one random-effects
 column per subject — useful to verify before a long fit.</p>
@@ -273,7 +273,7 @@ objects:</p>
 <span><span class="co">#&gt; (Intercept) 238.02922 264.78099</span></span>
 <span><span class="co">#&gt; Days          7.43759  13.49698</span></span>
 <span><span class="co">#&gt; method: wald_asymptotic_from_stored_standard_errors</span></span>
-<span><span class="co">#&gt; status: not_certified_by_rust_inference_contract</span></span></code></pre></div>
+<span><span class="co">#&gt; status: Wald (asymptotic) intervals from stored standard errors (engine-certified profile intervals: method = "profile")</span></span></code></pre></div>
 <p><code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> with <code>method = "asymptotic"</code> gives
 Wald intervals (fast; use <code>"bootstrap"</code> for small samples).
 The <code>(Intercept)</code> interval is the population mean reaction
@@ -388,7 +388,7 @@ discussion.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

@@ -197,10 +197,19 @@ Construct and fit linear and generalized linear mixed models.
 
 - [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) : Fit
   a linear mixed-effects model
+
 - [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) :
   Fit a generalized linear mixed model
+
+- [`mm_negative_binomial()`](https://bbuchsbaum.github.io/mixeff/reference/mm_negative_binomial.md)
+  :
+
+  Negative-binomial family for
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+
 - [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
   : Compile a mixed-effects model spec without fitting
+
 - [`mm_control()`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md)
   : Control mixeff fitting behavior
 
@@ -283,6 +292,8 @@ Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   : Drop one fixed-effect term at a time from a GLMM
 - [`confint(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/confint.mm_glmm.md)
   : Confidence intervals for fixed effects of a mixeff GLMM
+- [`profile(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/profile.mm_lmm.md)
+  : Profile a fitted linear mixed model
 - [`df_for_contrast()`](https://bbuchsbaum.github.io/mixeff/reference/df_for_contrast.md)
   : Degrees of freedom for a contrast
 - [`estimability()`](https://bbuchsbaum.github.io/mixeff/reference/estimability.md)
@@ -326,28 +337,42 @@ Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
 Make the model’s design, reductions, and optimizer state explicit.
 
 - [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md) :
-  Audit a fitted mixeff model
+  Audit a compiled model spec or fitted model
+
 - [`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md)
-  : Print the structured design audit for a compiled model spec
+  :
+
+  Deprecated alias for
+  [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md)
+
 - [`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md)
   : Explain the random-effects structure of a compiled model
+
 - [`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md)
   : Show requested, effective, and fitted model-state changes
+
 - [`diagnostics()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
   [`fit_status()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
   : Inspect mixeff diagnostics and fit status
+
 - [`parameterization()`](https://bbuchsbaum.github.io/mixeff/reference/parameterization.md)
   : Inspect covariance parameterization
+
 - [`random_options()`](https://bbuchsbaum.github.io/mixeff/reference/random_options.md)
   : Inspect nearby random-effect spellings for one grouping factor
+
 - [`random_blocks()`](https://bbuchsbaum.github.io/mixeff/reference/random_blocks.md)
   : Inspect random-effect blocks
+
 - [`roles()`](https://bbuchsbaum.github.io/mixeff/reference/roles.md) :
   Declare or inspect design roles
+
 - [`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md)
   : Inspect the optimizer certificate
+
 - [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
   : Verify convergence of a fitted linear mixed model
+
 - [`reproducibility()`](https://bbuchsbaum.github.io/mixeff/reference/reproducibility.md)
   : Inspect reproducibility metadata
 

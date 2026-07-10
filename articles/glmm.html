@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -166,14 +166,13 @@ numerical optimization starts.</p>
 <span><span class="co">#&gt; Method: pirls_profiled (nAGQ = 1)</span></span>
 <span><span class="co">#&gt; Fit status: converged_interior</span></span>
 <span><span class="co">#&gt; Optimizer: cobyla; iterations: 19; objective: 555.06</span></span>
-<span><span class="co">#&gt; Artifact: mixedmodels.compiled_model_artifact v1; crate: 1.0.0-rc.1</span></span>
 <span><span class="co">#&gt; nobs: 842, dispersion: 1, logLik: -277.53</span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
-<span><span class="co">#&gt; (Intercept)   period: 2   period: 3   period: 4 </span></span>
+<span><span class="co">#&gt; (Intercept)     period2     period3     period4 </span></span>
 <span><span class="co">#&gt;   -1.360480   -0.976172   -1.111070   -1.559670 </span></span>
 <span><span class="co">#&gt; Audit verbs: audit(), diagnostics(), model_report()</span></span>
 <span><span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; (Intercept)   period: 2   period: 3   period: 4 </span></span>
+<span><span class="co">#&gt; (Intercept)     period2     period3     period4 </span></span>
 <span><span class="co">#&gt;  -1.3604769  -0.9761719  -1.1110715  -1.5596742</span></span>
 <span><span class="fu"><a href="../reference/mm_lmm-methods.html">VarCorr</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Variance components:</span></span>
@@ -196,14 +195,14 @@ coefficient tests unless the inference contract certifies them.</p>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt;               Estimate Std. Error statistic p.value       method</span></span>
 <span><span class="co">#&gt; (Intercept) -1.3604769         NA        NA      NA not_computed</span></span>
-<span><span class="co">#&gt; period: 2   -0.9761719         NA        NA      NA not_computed</span></span>
-<span><span class="co">#&gt; period: 3   -1.1110715         NA        NA      NA not_computed</span></span>
-<span><span class="co">#&gt; period: 4   -1.5596742         NA        NA      NA not_computed</span></span>
+<span><span class="co">#&gt; period2     -0.9761719         NA        NA      NA not_computed</span></span>
+<span><span class="co">#&gt; period3     -1.1110715         NA        NA      NA not_computed</span></span>
+<span><span class="co">#&gt; period4     -1.5596742         NA        NA      NA not_computed</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Wald-z reliability: not_available (not_computed). Reason: certified GLMM fixed-effect Wald inference is not implemented for fast_pirls_profiled; fast-PIRLS/profiled covariance geometry remains a working-Hessian payload, while only joint-laplace fits with a passing certified active-subspace Hessian over active beta plus interior theta parameters can report Wald SE/z/p/confint.</span></span>
+<span><span class="co">#&gt; Wald-z reliability: not_available (not_computed).</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Notes:</span></span>
-<span><span class="co">#&gt;   test statistics and p-values are withheld: the fit's covariance payload does not certify fixed-effect inference. Engine-certified Wald inference is available from a fit with method = "joint_laplace".</span></span></code></pre></div>
+<span><span class="co">#&gt;   standard errors, z statistics, and p-values are not available from the fast default method (pirls_profiled). Re-fit with method = "joint_laplace" for glmer-equivalent Wald inference.</span></span></code></pre></div>
 <p>Core extractors are available from the durable R object.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span></span>
@@ -332,7 +331,7 @@ profiled fast-PIRLS default.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

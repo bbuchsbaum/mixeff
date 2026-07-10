@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -129,7 +129,7 @@ separates formula interpretation from optimization and gives you a
 stable place to check the requested random-effects structure.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">score</span> <span class="op">~</span> <span class="va">week</span> <span class="op">+</span> <span class="va">treatment</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">clinic</span><span class="op">)</span>, <span class="va">clinic_visits</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/audit_design.html">audit_design</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/audit.html">audit</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Audit Summary:</span></span>
 <span><span class="co">#&gt;   overall [OK]: clean: no warnings or attention items</span></span>
 <span><span class="co">#&gt;   attention [OK]: no warnings or unchecked inference-critical items</span></span>
@@ -139,10 +139,10 @@ stable place to check the requested random-effects structure.</p>
 <span><span class="co">#&gt;   model kind [INFO]: linear_mixed_model</span></span>
 <span><span class="co">#&gt;   distribution/link [INFO]: gaussian/identity</span></span>
 <span><span class="co">#&gt;   objective [INFO]: exact_gaussian</span></span>
-<span><span class="co">#&gt;   certificate scope [INFO]: exact_objective</span></span>
+<span><span class="co">#&gt;   convergence certificate [INFO]: exact_objective</span></span>
 <span><span class="co">#&gt;   fixed terms [INFO]: 1, week, treatment</span></span>
 <span><span class="co">#&gt;   random terms [INFO]: 1</span></span>
-<span><span class="co">#&gt;   theta maps [INFO]: 1 map(s)</span></span></code></pre></div>
+<span><span class="co">#&gt;   covariance parameter maps [INFO]: 1 map(s)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="what-fit-was-used">What fit was used?<a class="anchor" aria-label="anchor" href="#what-fit-was-used"></a>
@@ -160,18 +160,18 @@ formula, fitting mode, number of observations, fit status, inference
 availability, and versioned artifact information.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"overview"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                field                                       value</span></span>
-<span><span class="co">#&gt; 1        model_class                                         LMM</span></span>
-<span><span class="co">#&gt; 2            formula     score ~ week + treatment + (1 | clinic)</span></span>
-<span><span class="co">#&gt; 3  effective_formula score ~ 1 + week + treatment + (1 | clinic)</span></span>
-<span><span class="co">#&gt; 4         fit_method                                        REML</span></span>
-<span><span class="co">#&gt; 5               mode                   confirmatory_as_specified</span></span>
-<span><span class="co">#&gt; 6               nobs                                          72</span></span>
-<span><span class="co">#&gt; 7         fit_status                          converged_interior</span></span>
-<span><span class="co">#&gt; 8          inference             3/3 available fixed-effect rows</span></span>
-<span><span class="co">#&gt; 9    artifact_schema       mixedmodels.compiled_model_artifact 1</span></span>
-<span><span class="co">#&gt; 10     crate_version                                  1.0.0-rc.1</span></span>
-<span><span class="co">#&gt; 11   package_version                                       0.1.0</span></span></code></pre></div>
+<span><span class="co">#&gt;              field                                       value</span></span>
+<span><span class="co">#&gt;        model_class                                         LMM</span></span>
+<span><span class="co">#&gt;            formula     score ~ week + treatment + (1 | clinic)</span></span>
+<span><span class="co">#&gt;  effective_formula score ~ 1 + week + treatment + (1 | clinic)</span></span>
+<span><span class="co">#&gt;         fit_method                                        REML</span></span>
+<span><span class="co">#&gt;               mode                   confirmatory_as_specified</span></span>
+<span><span class="co">#&gt;               nobs                                          72</span></span>
+<span><span class="co">#&gt;         fit_status                          converged_interior</span></span>
+<span><span class="co">#&gt;          inference             3/3 available fixed-effect rows</span></span>
+<span><span class="co">#&gt;    artifact_schema       mixedmodels.compiled_model_artifact 1</span></span>
+<span><span class="co">#&gt;      crate_version                                  1.0.0-rc.1</span></span>
+<span><span class="co">#&gt;    package_version                                       0.2.0</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="which-design-facts-belong-in-the-report">Which design facts belong in the report?<a class="anchor" aria-label="anchor" href="#which-design-facts-belong-in-the-report"></a>
@@ -181,20 +181,20 @@ information budget. The data-design section gives the number of levels
 and rows per group.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"data_design"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;    group    role group_levels min_rows_per_group median_rows_per_group</span></span>
-<span><span class="co">#&gt; 1 clinic unknown           12                  6                     6</span></span>
-<span><span class="co">#&gt;   max_rows_per_group     status</span></span>
-<span><span class="co">#&gt; 1                  6 sufficient</span></span></code></pre></div>
+<span><span class="co">#&gt;   group    role group_levels min_rows_per_group median_rows_per_group</span></span>
+<span><span class="co">#&gt;  clinic unknown           12                  6                     6</span></span>
+<span><span class="co">#&gt;  max_rows_per_group     status</span></span>
+<span><span class="co">#&gt;                   6 sufficient</span></span></code></pre></div>
 <p>The random-term section translates the random-effects formula into
 auditable rows. This is where the report records the grouping factor,
 basis, covariance family, parameter count, and Rust-authored
 plain-language description.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"random_terms"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   term_id original_fragment  group     basis covariance theta_parameters</span></span>
-<span><span class="co">#&gt; 1      r0      (1 | clinic) clinic intercept     scalar                1</span></span>
-<span><span class="co">#&gt;   design_status                                       english</span></span>
-<span><span class="co">#&gt; 1    sufficient `clinic` units may differ in average outcome.</span></span></code></pre></div>
+<span><span class="co">#&gt;  term_id original_fragment  group     basis covariance theta_parameters</span></span>
+<span><span class="co">#&gt;       r0      (1 | clinic) clinic intercept     scalar                1</span></span>
+<span><span class="co">#&gt;  design_status                                       english</span></span>
+<span><span class="co">#&gt;     sufficient `clinic` units may differ in average outcome.</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="how-are-estimates-and-p-values-labelled">How are estimates and p-values labelled?<a class="anchor" aria-label="anchor" href="#how-are-estimates-and-p-values-labelled"></a>
@@ -206,13 +206,13 @@ console review.</p>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">coef_table</span>, digits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
-<col width="21%">
+<col width="19%">
 <col width="10%">
 <col width="12%">
-<col width="8%">
+<col width="9%">
 <col width="10%">
 <col width="21%">
-<col width="15%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
 <th align="left"></th>
@@ -243,7 +243,7 @@ console review.</p>
 <td align="left">satterthwaite</td>
 </tr>
 <tr class="odd">
-<td align="left">treatment: coached</td>
+<td align="left">treatmentcoached</td>
 <td align="right">-0.8995</td>
 <td align="right">0.2623</td>
 <td align="right">9.9993</td>
@@ -258,18 +258,18 @@ fixed-effect section keeps the estimate, uncertainty, statistic,
 p-value, method, row status, and reliability label together.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"fixed_effects"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                 term   estimate  std_error  statistic statistic_name</span></span>
-<span><span class="co">#&gt; 1        (Intercept)  7.6828778 0.19646018  39.106539              z</span></span>
-<span><span class="co">#&gt; 2               week -0.2783994 0.02595083 -10.727955              z</span></span>
-<span><span class="co">#&gt; 3 treatment: coached -0.8994747 0.26225014  -3.429835              z</span></span>
-<span><span class="co">#&gt;        p_value            method    status reliability</span></span>
-<span><span class="co">#&gt; 1 0.0000000000 asymptotic_wald_z available         low</span></span>
-<span><span class="co">#&gt; 2 0.0000000000 asymptotic_wald_z available         low</span></span>
-<span><span class="co">#&gt; 3 0.0006039485 asymptotic_wald_z available         low</span></span></code></pre></div>
+<span><span class="co">#&gt;                term   estimate  std_error  statistic statistic_name</span></span>
+<span><span class="co">#&gt;         (Intercept)  7.6828778 0.19646018  39.106539              z</span></span>
+<span><span class="co">#&gt;                week -0.2783994 0.02595083 -10.727955              z</span></span>
+<span><span class="co">#&gt;  treatment: coached -0.8994747 0.26225014  -3.429835              z</span></span>
+<span><span class="co">#&gt;       p_value            method    status reliability</span></span>
+<span><span class="co">#&gt;  0.0000000000 asymptotic_wald_z available         low</span></span>
+<span><span class="co">#&gt;  0.0000000000 asymptotic_wald_z available         low</span></span>
+<span><span class="co">#&gt;  0.0006039485 asymptotic_wald_z available         low</span></span></code></pre></div>
 <p>When you need to audit where those rows came from, request the audit
 view.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">fixed_audit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"fixed_effects"</span>, view <span class="op">=</span> <span class="st">"audit"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">fixed_audit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"fixed_effects"</span>, view <span class="op">=</span> <span class="st">"audit"</span><span class="op">)</span><span class="op">$</span><span class="va">table</span></span>
 <span><span class="va">fixed_audit</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"term"</span>, <span class="st">"method"</span>, <span class="st">"status"</span>, <span class="st">"reliability"</span>, <span class="st">"source"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                 term            method    status reliability</span></span>
 <span><span class="co">#&gt; 1        (Intercept) asymptotic_wald_z available         low</span></span>
@@ -289,9 +289,9 @@ scale. In the current contract, those rows come from the Rust-authored
 availability status travel with the report.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"random_effects"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;      group   basis_lhs              kind  variance   std_dev    status</span></span>
-<span><span class="co">#&gt; 1   clinic (Intercept)          variance 0.1827548 0.4274983 available</span></span>
-<span><span class="co">#&gt; 2 Residual    Residual residual_variance 0.1414236 0.3760633 available</span></span></code></pre></div>
+<span><span class="co">#&gt;     group   basis_lhs              kind  variance   std_dev    status</span></span>
+<span><span class="co">#&gt;    clinic (Intercept)          variance 0.1827548 0.4274983 available</span></span>
+<span><span class="co">#&gt;  Residual    Residual residual_variance 0.1414236 0.3760633 available</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="what-is-unavailable-or-caveated">What is unavailable or caveated?<a class="anchor" aria-label="anchor" href="#what-is-unavailable-or-caveated"></a>
@@ -328,10 +328,10 @@ It is where <code>mixeff</code> records schema gaps, not-applicable
 sections, and other caveats with stable reasons and an action taken.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">report</span>, <span class="st">"unavailable"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                             section             field         status</span></span>
-<span><span class="co">#&gt; comparison_ledger comparison_ledger comparison_ledger not_applicable</span></span>
-<span><span class="co">#&gt;                                                     reason</span></span>
-<span><span class="co">#&gt; comparison_ledger no_model_comparison_recorded_on_this_fit</span></span></code></pre></div>
+<span><span class="co">#&gt;            section             field         status</span></span>
+<span><span class="co">#&gt;  comparison_ledger comparison_ledger not_applicable</span></span>
+<span><span class="co">#&gt;                                    reason</span></span>
+<span><span class="co">#&gt;  no_model_comparison_recorded_on_this_fit</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="what-should-go-into-your-written-report">What should go into your written report?<a class="anchor" aria-label="anchor" href="#what-should-go-into-your-written-report"></a>
@@ -373,7 +373,7 @@ the report needs to survive an RDS round trip.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

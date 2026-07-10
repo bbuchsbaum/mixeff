@@ -70,11 +70,10 @@ fit
 #> Formula: score ~ week + treatment + (1 | clinic)
 #> Fit status: converged_interior
 #> Optimizer: pattern_search; iterations: 23; objective: 95.0585
-#> Artifact: mixedmodels.compiled_model_artifact v1; crate: 1.0.0-rc.1
 #> nobs: 72, sigma: 0.376063, logLik: -47.5293
 #> Fixed effects:
-#>        (Intercept)               week treatment: coached 
-#>           7.682880          -0.278399          -0.899475 
+#>      (Intercept)             week treatmentcoached 
+#>         7.682880        -0.278399        -0.899475 
 #> Audit verbs: audit(), diagnostics(), inference_table(), model_report()
 ```
 
@@ -94,7 +93,7 @@ knitr::kable(coef_table, digits = 4)
 |:---|---:|---:|---:|---:|---:|:---|
 | (Intercept) | 7.6829 | 0.1965 | 12.5650 | 39.1065 | 0.0000 | satterthwaite |
 | week | -0.2784 | 0.0260 | 58.9997 | -10.7280 | 0.0000 | satterthwaite |
-| treatment: coached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
+| treatmentcoached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
 
 For a focused term-level test, use
 [`test_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_effect.md).
@@ -115,8 +114,8 @@ The usual fixed-effect and fit-statistic extractors are available.
 ``` r
 
 fixef(fit)
-#>        (Intercept)               week treatment: coached 
-#>          7.6828778         -0.2783994         -0.8994747
+#>      (Intercept)             week treatmentcoached 
+#>        7.6828778       -0.2783994       -0.8994747
 sigma(fit)
 #> [1] 0.3760633
 logLik(fit)
@@ -178,10 +177,10 @@ inspect.
 ``` r
 
 reporting_table(fit, "data_design")
-#>    group    role group_levels min_rows_per_group median_rows_per_group
-#> 1 clinic unknown           12                  6                     6
-#>   max_rows_per_group     status
-#> 1                  6 sufficient
+#>   group    role group_levels min_rows_per_group median_rows_per_group
+#>  clinic unknown           12                  6                     6
+#>  max_rows_per_group     status
+#>                   6 sufficient
 ```
 
 The random-term table translates the random-effects part of the formula
@@ -190,10 +189,10 @@ into rows.
 ``` r
 
 reporting_table(fit, "random_terms")
-#>   term_id original_fragment  group     basis covariance theta_parameters
-#> 1      r0      (1 | clinic) clinic intercept     scalar                1
-#>   design_status                                       english
-#> 1    sufficient `clinic` units may differ in average outcome.
+#>  term_id original_fragment  group     basis covariance theta_parameters
+#>       r0      (1 | clinic) clinic intercept     scalar                1
+#>  design_status                                       english
+#>     sufficient `clinic` units may differ in average outcome.
 ```
 
 For lower-level checks, use

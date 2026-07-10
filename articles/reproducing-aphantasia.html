@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -294,12 +294,12 @@ door:</p>
 <span></span>
 <span><span class="va">dd_center</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_lincomb.html">mm_lincomb</a></span><span class="op">(</span></span>
 <span>  <span class="va">primary_fit</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"group: aphant:mask: masked"</span> <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"groupaphant:maskmasked"</span> <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">dd_25</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_lincomb.html">mm_lincomb</a></span><span class="op">(</span></span>
 <span>  <span class="va">primary_fit</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"group: aphant:mask: masked"</span>       <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>    <span class="st">"group: aphant:mask: masked:soa_s"</span> <span class="op">=</span> <span class="va">soa_s_25</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"groupaphant:maskmasked"</span>       <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>    <span class="st">"groupaphant:maskmasked:soa_s"</span> <span class="op">=</span> <span class="va">soa_s_25</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>centered_soa <span class="op">=</span> <span class="va">dd_center</span>, ms25 <span class="op">=</span> <span class="va">dd_25</span><span class="op">)</span></span></code></pre></div>
 <p>Compare directly against the <code>lme4</code> reference frozen in
@@ -356,18 +356,18 @@ not a Bayesian engine.</p>
 <li>GLMM Wald inference in <code>mixeff</code> is the PIRLS/Laplace
 working-Hessian flavor, advertised as
 <code>mm_reliability = "moderate"</code>. Absolute SEs drift 5–10%
-versus <code>lme4::vcov()</code> on this dataset.</li>
-<li>
-<code>predict(mm_glmm_fit, ...)</code> is not yet certified for
-population-level prediction; that lives behind its own bead. Use
-<code>emmeans(..., type = "response")</code> for marginal
-probabilities.</li>
-<li>Coefficient names follow <code>mixeff</code>’s
-<code>"group: aphant"</code> scheme, not <code>lme4</code>’s compact
-<code>"groupaphant"</code>. For copy-pasting hand-written lincombs from
-<code>lme4</code> user code,
-<code>gsub(": ", "", x, fixed = TRUE)</code> recovers the compact
-form.</li>
+versus <code>lme4::vcov()</code> on this dataset; a hold-the-point
+experiment attributes ~73% of that to the native <code>||</code>
+random-effect family, ~26% to a uniform working-Hessian scale factor
+(tracked upstream), and ~1% to optimizer drift.</li>
+<li>Population-level GLMM prediction (<code>re.form = NA</code>,
+<code>type = "link"</code> or <code>"response"</code>) is supported and
+matches <code>predict(glmer, re.form = NA)</code> on joint-Laplace fits;
+<code>emmeans(..., type = "response")</code> remains the route for
+averaged marginal probabilities.</li>
+<li>Coefficient names are lme4-identical since 0.2.0
+(<code>"groupaphant"</code>), so hand-written lincombs copy straight
+across from <code>lme4</code> code.</li>
 </ul>
 </div>
 <div class="section level2">
@@ -392,7 +392,7 @@ submitted for publication.</em></p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

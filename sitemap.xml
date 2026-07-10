@@ -1,6 +1,7 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://bbuchsbaum.github.io/mixeff/404.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/LICENSE-text.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/mixeff/RELEASE.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/articles/demystifying-formulas.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/articles/glmm.html</loc></url>
@@ -56,6 +57,7 @@
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/mm_json_negotiate.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/mm_lincomb.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/mixeff/reference/mm_negative_binomial.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/mm_parse_formula.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/model_report.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.html</loc></url>
@@ -63,6 +65,7 @@
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/parametric_bootstrap.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/predict.mm_glmm.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/mixeff/reference/profile.mm_lmm.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/random_blocks.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/random_options.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/mixeff/reference/refit.html</loc></url>

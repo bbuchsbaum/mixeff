@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -140,11 +140,10 @@ summary, residual scale, and fixed effects.</p>
 <span><span class="co">#&gt; Formula: score ~ week + treatment + (1 | clinic)</span></span>
 <span><span class="co">#&gt; Fit status: converged_interior</span></span>
 <span><span class="co">#&gt; Optimizer: pattern_search; iterations: 23; objective: 95.0585</span></span>
-<span><span class="co">#&gt; Artifact: mixedmodels.compiled_model_artifact v1; crate: 1.0.0-rc.1</span></span>
 <span><span class="co">#&gt; nobs: 72, sigma: 0.376063, logLik: -47.5293</span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
-<span><span class="co">#&gt;        (Intercept)               week treatment: coached </span></span>
-<span><span class="co">#&gt;           7.682880          -0.278399          -0.899475 </span></span>
+<span><span class="co">#&gt;      (Intercept)             week treatmentcoached </span></span>
+<span><span class="co">#&gt;         7.682880        -0.278399        -0.899475 </span></span>
 <span><span class="co">#&gt; Audit verbs: audit(), diagnostics(), inference_table(), model_report()</span></span></code></pre></div>
 </div>
 <div class="section level2">
@@ -158,13 +157,13 @@ inference rows are available.</p>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">coef_table</span>, digits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
-<col width="21%">
+<col width="19%">
 <col width="10%">
 <col width="12%">
-<col width="8%">
+<col width="9%">
 <col width="10%">
 <col width="21%">
-<col width="15%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
 <th align="left"></th>
@@ -195,7 +194,7 @@ inference rows are available.</p>
 <td align="left">satterthwaite</td>
 </tr>
 <tr class="odd">
-<td align="left">treatment: coached</td>
+<td align="left">treatmentcoached</td>
 <td align="right">-0.8995</td>
 <td align="right">0.2623</td>
 <td align="right">9.9993</td>
@@ -220,8 +219,8 @@ inference rows are available.</p>
 available.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt;        (Intercept)               week treatment: coached </span></span>
-<span><span class="co">#&gt;          7.6828778         -0.2783994         -0.8994747</span></span>
+<span><span class="co">#&gt;      (Intercept)             week treatmentcoached </span></span>
+<span><span class="co">#&gt;        7.6828778       -0.2783994       -0.8994747</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/sigma.html" class="external-link">sigma</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 0.3760633</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
@@ -274,18 +273,18 @@ report or review. The data-design table is often the first one to
 inspect.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"data_design"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;    group    role group_levels min_rows_per_group median_rows_per_group</span></span>
-<span><span class="co">#&gt; 1 clinic unknown           12                  6                     6</span></span>
-<span><span class="co">#&gt;   max_rows_per_group     status</span></span>
-<span><span class="co">#&gt; 1                  6 sufficient</span></span></code></pre></div>
+<span><span class="co">#&gt;   group    role group_levels min_rows_per_group median_rows_per_group</span></span>
+<span><span class="co">#&gt;  clinic unknown           12                  6                     6</span></span>
+<span><span class="co">#&gt;  max_rows_per_group     status</span></span>
+<span><span class="co">#&gt;                   6 sufficient</span></span></code></pre></div>
 <p>The random-term table translates the random-effects part of the
 formula into rows.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"random_terms"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   term_id original_fragment  group     basis covariance theta_parameters</span></span>
-<span><span class="co">#&gt; 1      r0      (1 | clinic) clinic intercept     scalar                1</span></span>
-<span><span class="co">#&gt;   design_status                                       english</span></span>
-<span><span class="co">#&gt; 1    sufficient `clinic` units may differ in average outcome.</span></span></code></pre></div>
+<span><span class="co">#&gt;  term_id original_fragment  group     basis covariance theta_parameters</span></span>
+<span><span class="co">#&gt;       r0      (1 | clinic) clinic intercept     scalar                1</span></span>
+<span><span class="co">#&gt;  design_status                                       english</span></span>
+<span><span class="co">#&gt;     sufficient `clinic` units may differ in average outcome.</span></span></code></pre></div>
 <p>For lower-level checks, use <code><a href="../reference/diagnostics.html">diagnostics()</a></code>,
 <code><a href="../reference/diagnostics.html">fit_status()</a></code>, and <code><a href="../reference/parameterization.html">parameterization()</a></code>.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
@@ -328,7 +327,7 @@ the random-effects structure.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

@@ -5,15 +5,15 @@ Inspect reproducibility metadata
 ## Usage
 
 ``` r
-reproducibility(fit, ...)
+reproducibility(object, ...)
 
 # S3 method for class 'mm_compiled'
-reproducibility(fit, ...)
+reproducibility(object, ...)
 ```
 
 ## Arguments
 
-- fit:
+- object:
 
   A compiled `mm_spec` or fitted `mm_fit`.
 

@@ -8,6 +8,16 @@ fabricate inference results the engine cannot certify. See
 for an overview and the demystification surface for random-effects
 syntax (Phase 1+).
 
+## See also
+
+Useful links:
+
+- <https://bbuchsbaum.github.io/mixeff/>
+
+- <https://github.com/bbuchsbaum/mixeff>
+
+- Report bugs at <https://github.com/bbuchsbaum/mixeff/issues>
+
 ## Author
 
 **Maintainer**: Brad Buchsbaum <bbuchsbaum@research.baycrest.org>

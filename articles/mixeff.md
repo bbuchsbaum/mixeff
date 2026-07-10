@@ -96,7 +96,6 @@ fit
 #> Formula: rt ~ days + (1 + days | subj)
 #> Fit status: converged_reduced_rank
 #> Optimizer: trust_bq; iterations: 314; objective: 1647.7
-#> Artifact: mixedmodels.compiled_model_artifact v1; crate: 1.0.0-rc.1
 #> nobs: 180, sigma: 20.065, logLik: -823.849
 #> Fixed effects:
 #> (Intercept)        days 

@@ -6,7 +6,7 @@ library(mixeff)
 ```
 
 A fixed-effects coefficient is not a group mean. For a model with
-multiple predictors and interactions, `fixef(fit)["trt: active"]` is the
+multiple predictors and interactions, `fixef(fit)["trtactive"]` is the
 treatment effect *at the reference level of every other predictor* — not
 the average treatment effect across the population. Marginal means give
 you the latter: population-level averages at each combination of
@@ -65,23 +65,23 @@ summary(fit, tests = "coefficients")
 #> Residual std. dev.: 0.396581
 #> 
 #> Fixed effects:
-#>                         Estimate Std. Error       df    t value  Pr(>|t|)
-#> (Intercept)            51.875075  0.6181573  3.39845  83.918896 9.313e-07
-#> trt: active            -1.978847  0.2819065 26.32727  -7.019516 1.747e-07
-#> time: post             -4.002565  0.1619036 21.96772 -24.721911   < 1e-16
-#> trt: active:time: post -2.738668  0.2289662 21.96772 -11.961016 4.314e-11
-#>                               method
-#> (Intercept)            satterthwaite
-#> trt: active            satterthwaite
-#> time: post             satterthwaite
-#> trt: active:time: post satterthwaite
+#>                     Estimate Std. Error       df    t value  Pr(>|t|)
+#> (Intercept)        51.875075  0.6181573  3.39845  83.918896 9.313e-07
+#> trtactive          -1.978847  0.2819065 26.32727  -7.019516 1.747e-07
+#> timepost           -4.002565  0.1619036 21.96772 -24.721911   < 1e-16
+#> trtactive:timepost -2.738668  0.2289662 21.96772 -11.961016 4.314e-11
+#>                           method
+#> (Intercept)        satterthwaite
+#> trtactive          satterthwaite
+#> timepost           satterthwaite
+#> trtactive:timepost satterthwaite
 #> 
 #> Inference status:
-#>                    term        method    status reliability
-#>             (Intercept) satterthwaite available    moderate
-#>             trt: active satterthwaite available    moderate
-#>              time: post satterthwaite available    moderate
-#>  trt: active:time: post satterthwaite available    moderate
+#>                term        method    status reliability
+#>         (Intercept) satterthwaite available    moderate
+#>           trtactive satterthwaite available    moderate
+#>            timepost satterthwaite available    moderate
+#>  trtactive:timepost satterthwaite available    moderate
 #>                             reliability_reason
 #>  satterthwaite_finite_difference_approximation
 #>  satterthwaite_finite_difference_approximation
@@ -238,12 +238,12 @@ pre) − (control post − control pre).
 
 beta <- fixef(fit)
 names(beta)
-#> [1] "(Intercept)"            "trt: active"            "time: post"            
-#> [4] "trt: active:time: post"
+#> [1] "(Intercept)"        "trtactive"          "timepost"          
+#> [4] "trtactive:timepost"
 
-# Interaction row: coefficient named "trt: active:time: post"
+# Interaction row: coefficient named "trtactive:timepost" (lme4-identical)
 w <- setNames(numeric(length(beta)), names(beta))
-w["trt: active:time: post"] <- 1
+w["trtactive:timepost"] <- 1
 
 lc <- mm_lincomb(fit, weights = w)
 lc[, c("estimate", "lower", "upper", "p_value", "method")]

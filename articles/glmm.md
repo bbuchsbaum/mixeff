@@ -90,14 +90,13 @@ glmm_fit
 #> Method: pirls_profiled (nAGQ = 1)
 #> Fit status: converged_interior
 #> Optimizer: cobyla; iterations: 19; objective: 555.06
-#> Artifact: mixedmodels.compiled_model_artifact v1; crate: 1.0.0-rc.1
 #> nobs: 842, dispersion: 1, logLik: -277.53
 #> Fixed effects:
-#> (Intercept)   period: 2   period: 3   period: 4 
+#> (Intercept)     period2     period3     period4 
 #>   -1.360480   -0.976172   -1.111070   -1.559670 
 #> Audit verbs: audit(), diagnostics(), model_report()
 fixef(glmm_fit)
-#> (Intercept)   period: 2   period: 3   period: 4 
+#> (Intercept)     period2     period3     period4 
 #>  -1.3604769  -0.9761719  -1.1110715  -1.5596742
 VarCorr(glmm_fit)
 #> Variance components:
@@ -124,14 +123,14 @@ summary(glmm_fit)
 #> Fixed effects:
 #>               Estimate Std. Error statistic p.value       method
 #> (Intercept) -1.3604769         NA        NA      NA not_computed
-#> period: 2   -0.9761719         NA        NA      NA not_computed
-#> period: 3   -1.1110715         NA        NA      NA not_computed
-#> period: 4   -1.5596742         NA        NA      NA not_computed
+#> period2     -0.9761719         NA        NA      NA not_computed
+#> period3     -1.1110715         NA        NA      NA not_computed
+#> period4     -1.5596742         NA        NA      NA not_computed
 #> 
-#> Wald-z reliability: not_available (not_computed). Reason: certified GLMM fixed-effect Wald inference is not implemented for fast_pirls_profiled; fast-PIRLS/profiled covariance geometry remains a working-Hessian payload, while only joint-laplace fits with a passing certified active-subspace Hessian over active beta plus interior theta parameters can report Wald SE/z/p/confint.
+#> Wald-z reliability: not_available (not_computed).
 #> 
 #> Notes:
-#>   test statistics and p-values are withheld: the fit's covariance payload does not certify fixed-effect inference. Engine-certified Wald inference is available from a fit with method = "joint_laplace".
+#>   standard errors, z statistics, and p-values are not available from the fast default method (pirls_profiled). Re-fit with method = "joint_laplace" for glmer-equivalent Wald inference.
 ```
 
 Core extractors are available from the durable R object.

@@ -41,5 +41,7 @@ df_for_contrast(
 
 ## Value
 
-A numeric vector of `NA` degrees of freedom with an
-`mm_unavailable_reason` attribute.
+An `mm_df_for_contrast` object with `$table` (one row per contrast:
+`contrast`, `df`, `method`, `requested_method`, `reason`), `$df` (the
+named numeric vector), and `$method`. When the method is `"none"` or the
+engine refuses, `df` is `NA` and `reason` records why.

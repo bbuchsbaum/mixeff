@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -135,13 +135,13 @@ status of those coefficients.</p>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">coef_table</span>, digits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
-<col width="21%">
+<col width="19%">
 <col width="10%">
 <col width="12%">
-<col width="8%">
+<col width="9%">
 <col width="10%">
 <col width="21%">
-<col width="15%">
+<col width="16%">
 </colgroup>
 <thead><tr class="header">
 <th align="left"></th>
@@ -172,7 +172,7 @@ status of those coefficients.</p>
 <td align="left">satterthwaite</td>
 </tr>
 <tr class="odd">
-<td align="left">treatment: coached</td>
+<td align="left">treatmentcoached</td>
 <td align="right">-0.8995</td>
 <td align="right">0.2623</td>
 <td align="right">9.9993</td>
@@ -231,28 +231,28 @@ instead of printed console output. The default view is compact; use
 columns.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"overview"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                field                                       value</span></span>
-<span><span class="co">#&gt; 1        model_class                                         LMM</span></span>
-<span><span class="co">#&gt; 2            formula     score ~ week + treatment + (1 | clinic)</span></span>
-<span><span class="co">#&gt; 3  effective_formula score ~ 1 + week + treatment + (1 | clinic)</span></span>
-<span><span class="co">#&gt; 4         fit_method                                        REML</span></span>
-<span><span class="co">#&gt; 5               mode                   confirmatory_as_specified</span></span>
-<span><span class="co">#&gt; 6               nobs                                          72</span></span>
-<span><span class="co">#&gt; 7         fit_status                          converged_interior</span></span>
-<span><span class="co">#&gt; 8          inference             3/3 available fixed-effect rows</span></span>
-<span><span class="co">#&gt; 9    artifact_schema       mixedmodels.compiled_model_artifact 1</span></span>
-<span><span class="co">#&gt; 10     crate_version                                  1.0.0-rc.1</span></span>
-<span><span class="co">#&gt; 11   package_version                                       0.1.0</span></span>
+<span><span class="co">#&gt;              field                                       value</span></span>
+<span><span class="co">#&gt;        model_class                                         LMM</span></span>
+<span><span class="co">#&gt;            formula     score ~ week + treatment + (1 | clinic)</span></span>
+<span><span class="co">#&gt;  effective_formula score ~ 1 + week + treatment + (1 | clinic)</span></span>
+<span><span class="co">#&gt;         fit_method                                        REML</span></span>
+<span><span class="co">#&gt;               mode                   confirmatory_as_specified</span></span>
+<span><span class="co">#&gt;               nobs                                          72</span></span>
+<span><span class="co">#&gt;         fit_status                          converged_interior</span></span>
+<span><span class="co">#&gt;          inference             3/3 available fixed-effect rows</span></span>
+<span><span class="co">#&gt;    artifact_schema       mixedmodels.compiled_model_artifact 1</span></span>
+<span><span class="co">#&gt;      crate_version                                  1.0.0-rc.1</span></span>
+<span><span class="co">#&gt;    package_version                                       0.2.0</span></span>
 <span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"fixed_effects"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                 term   estimate  std_error  statistic statistic_name</span></span>
-<span><span class="co">#&gt; 1        (Intercept)  7.6828778 0.19646018  39.106539              z</span></span>
-<span><span class="co">#&gt; 2               week -0.2783994 0.02595083 -10.727955              z</span></span>
-<span><span class="co">#&gt; 3 treatment: coached -0.8994747 0.26225014  -3.429835              z</span></span>
-<span><span class="co">#&gt;        p_value            method    status reliability</span></span>
-<span><span class="co">#&gt; 1 0.0000000000 asymptotic_wald_z available         low</span></span>
-<span><span class="co">#&gt; 2 0.0000000000 asymptotic_wald_z available         low</span></span>
-<span><span class="co">#&gt; 3 0.0006039485 asymptotic_wald_z available         low</span></span>
-<span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"fixed_effects"</span>, view <span class="op">=</span> <span class="st">"audit"</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"term"</span>, <span class="st">"source"</span>, <span class="st">"status"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;                term   estimate  std_error  statistic statistic_name</span></span>
+<span><span class="co">#&gt;         (Intercept)  7.6828778 0.19646018  39.106539              z</span></span>
+<span><span class="co">#&gt;                week -0.2783994 0.02595083 -10.727955              z</span></span>
+<span><span class="co">#&gt;  treatment: coached -0.8994747 0.26225014  -3.429835              z</span></span>
+<span><span class="co">#&gt;       p_value            method    status reliability</span></span>
+<span><span class="co">#&gt;  0.0000000000 asymptotic_wald_z available         low</span></span>
+<span><span class="co">#&gt;  0.0000000000 asymptotic_wald_z available         low</span></span>
+<span><span class="co">#&gt;  0.0006039485 asymptotic_wald_z available         low</span></span>
+<span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"fixed_effects"</span>, view <span class="op">=</span> <span class="st">"audit"</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"term"</span>, <span class="st">"source"</span>, <span class="st">"status"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                 term                       source    status</span></span>
 <span><span class="co">#&gt; 1        (Intercept) fixed_effect_inference_table available</span></span>
 <span><span class="co">#&gt; 2               week fixed_effect_inference_table available</span></span>
@@ -269,17 +269,17 @@ an RDS round trip preserves the pieces you usually report.</p>
 <span><span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="va">path</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">restored</span><span class="op">)</span></span>
-<span><span class="co">#&gt;        (Intercept)               week treatment: coached </span></span>
-<span><span class="co">#&gt;          7.6828778         -0.2783994         -0.8994747</span></span>
+<span><span class="co">#&gt;      (Intercept)             week treatmentcoached </span></span>
+<span><span class="co">#&gt;        7.6828778       -0.2783994       -0.8994747</span></span>
 <span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">restored</span>, <span class="st">"fixed_effects"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                 term   estimate  std_error  statistic statistic_name</span></span>
-<span><span class="co">#&gt; 1        (Intercept)  7.6828778 0.19646018  39.106539              z</span></span>
-<span><span class="co">#&gt; 2               week -0.2783994 0.02595083 -10.727955              z</span></span>
-<span><span class="co">#&gt; 3 treatment: coached -0.8994747 0.26225014  -3.429835              z</span></span>
-<span><span class="co">#&gt;        p_value            method    status reliability</span></span>
-<span><span class="co">#&gt; 1 0.0000000000 asymptotic_wald_z available         low</span></span>
-<span><span class="co">#&gt; 2 0.0000000000 asymptotic_wald_z available         low</span></span>
-<span><span class="co">#&gt; 3 0.0006039485 asymptotic_wald_z available         low</span></span></code></pre></div>
+<span><span class="co">#&gt;                term   estimate  std_error  statistic statistic_name</span></span>
+<span><span class="co">#&gt;         (Intercept)  7.6828778 0.19646018  39.106539              z</span></span>
+<span><span class="co">#&gt;                week -0.2783994 0.02595083 -10.727955              z</span></span>
+<span><span class="co">#&gt;  treatment: coached -0.8994747 0.26225014  -3.429835              z</span></span>
+<span><span class="co">#&gt;       p_value            method    status reliability</span></span>
+<span><span class="co">#&gt;  0.0000000000 asymptotic_wald_z available         low</span></span>
+<span><span class="co">#&gt;  0.0000000000 asymptotic_wald_z available         low</span></span>
+<span><span class="co">#&gt;  0.0006039485 asymptotic_wald_z available         low</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="lower-level-tools">Lower-level tools<a class="anchor" aria-label="anchor" href="#lower-level-tools"></a>
@@ -331,7 +331,7 @@ random-effects syntax.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

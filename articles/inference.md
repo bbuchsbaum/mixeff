@@ -45,7 +45,7 @@ knitr::kable(coef_table, digits = 4)
 |:---|---:|---:|---:|---:|---:|:---|
 | (Intercept) | 7.6829 | 0.1965 | 12.5650 | 39.1065 | 0.0000 | satterthwaite |
 | week | -0.2784 | 0.0260 | 58.9997 | -10.7280 | 0.0000 | satterthwaite |
-| treatment: coached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
+| treatmentcoached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
 
 The last column tells you the method used for each available p-value.
 
@@ -53,10 +53,10 @@ The last column tells you the method used for each available p-value.
 
 inference_table(fit)
 #> Inference table:
-#>                term              label        kind   estimate  std_error df
-#>         (Intercept)        (Intercept) coefficient  7.6828778 0.19646018 NA
-#>                week               week coefficient -0.2783994 0.02595083 NA
-#>  treatment: coached treatment: coached coefficient -0.8994747 0.26225014 NA
+#>                term            label        kind   estimate  std_error df
+#>         (Intercept)      (Intercept) coefficient  7.6828778 0.19646018 NA
+#>                week             week coefficient -0.2783994 0.02595083 NA
+#>  treatment: coached treatmentcoached coefficient -0.8994747 0.26225014 NA
 #>  numerator_df denominator_df  statistic statistic_name      p_value
 #>            NA             NA  39.106539              z 0.0000000000
 #>            NA             NA -10.727955              z 0.0000000000
@@ -116,15 +116,10 @@ same kind of term-level table.
 
 anova(fit, type = "III", method = "kenward_roger")
 #> Type III analysis of fixed effects (method: kenward_roger):
-#>       term type num_df den_df  statistic statistic_name      p_value
-#>       week  III     NA     59 -10.727955              t 1.776357e-15
-#>  treatment  III     NA     10  -3.429835              t 6.440269e-03
-#>         method requested_method    status reliability reason      details
-#>  kenward_roger    kenward_roger available    moderate   <NA> list(fam....
-#>  kenward_roger    kenward_roger available    moderate   <NA> list(fam....
-#>         notes
-#>  Kenward-....
-#>  Kenward-....
+#>       term num_df den_df statistic      p_value        method
+#>       week      1     59 115.08903 1.776357e-15 kenward_roger
+#>  treatment      1     10  11.76377 6.440269e-03 kenward_roger
+#> Full provenance columns available in `$table` (type, statistic_name, requested_method, status, reliability, reason, details, notes).
 ```
 
 ## Model comparisons

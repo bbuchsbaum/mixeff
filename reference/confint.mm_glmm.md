@@ -13,7 +13,7 @@ confint(
   object,
   parm,
   level = 0.95,
-  method = c("wald", "asymptotic", "profile", "bootstrap"),
+  method = c("asymptotic", "wald", "profile", "bootstrap"),
   ...
 )
 ```
@@ -34,7 +34,8 @@ confint(
 
 - method:
 
-  `"wald"` (default) or its synonym `"asymptotic"`.
+  `"asymptotic"` (the default; the package-wide name for the closed-form
+  Wald interval) or its synonym `"wald"`.
 
 - ...:
 

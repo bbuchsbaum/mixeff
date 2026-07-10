@@ -68,24 +68,23 @@ directly in your own code.)
 | `offset` | `glmm(..., offset=)` | GLMM only; LMM in-fit offset is not yet supported |
 | `subset` | `lmm(..., subset=)` | supported for [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) |
 | `na.action` | `lmm(..., na.action=)` | **default refuses NA**; pass `na.action = na.omit` for lme4’s complete-case behaviour |
-| `contrasts` | partial | engine uses treatment contrasts; other codings are refused — recode the factor |
+| `contrasts` | partial | unordered factors use treatment coding, ordered factors `contr.poly` (both matching R/lme4 defaults); other codings are refused — recode the factor |
 | `family = "binomial"` | `family = binomial()` | string families are not accepted |
 | `nAGQ` | `glmm(..., nAGQ=)` | `>1` on the profiled path |
-| `control = lmerControl(optimizer=, optCtrl=)` | not exposed | the engine selects the optimizer/tolerances itself |
-| `start` | not exposed | warm starts are engine-managed |
+| `control = lmerControl(optimizer=, optCtrl=)` | `mm_control(optimizer=, max_feval=, ...)` | the engine picks a default optimizer; [`mm_control()`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md) can override it or cap the evaluation budget |
+| `start` | `mm_control(start=)` | theta warm starts |
 
 ## Four things that will bite, and the fix
 
-**1. Coefficient names for factors differ.** The engine labels factor
-levels as `"factor: level"` (e.g. `"recipe: B"`), where lme4 writes
-`"recipeB"`. If you match coefficients by name across the two packages,
-normalise first:
-
-``` r
-
-nm <- names(fixef(fit))
-nm_lme4_style <- gsub(": ", "", nm)   # "recipe: B" -> "recipeB"
-```
+**1. Coefficient names match lme4 exactly.** Since 0.2.0,
+[`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+[`summary()`](https://rdrr.io/r/base/summary.html) tables,
+[`vcov()`](https://rdrr.io/r/stats/vcov.html) dimnames, and
+[`mm_lincomb()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lincomb.md)
+weight names use lme4’s naming and column order (`"recipeB"`,
+`"temperature.L"`, `"recipeB:temperature.L"`), so name-keyed lme4 code
+is drop-in compatible. (Earlier versions used an engine encoding like
+`"recipe: B"`; if you wrote normalisation shims for those, delete them.)
 
 **2. Grouped binomial responses.**
 [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)

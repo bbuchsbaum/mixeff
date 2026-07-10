@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">mixeff</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -416,8 +416,8 @@ mixture: <code>0.5 * chi-square(0) + 0.5 * chi-square(1)</code>.</p>
 <span><span class="co">#&gt;                     reference_distribution    status reason_code</span></span>
 <span><span class="co">#&gt;  0.5 * chi-square(0) + 0.5 * chi-square(1) available        &lt;NA&gt;</span></span></code></pre></div>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">re_lrt</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"term"</span>, <span class="st">"statistic"</span>, <span class="st">"p_value"</span>,</span>
-<span>                            <span class="st">"reference_distribution"</span>, <span class="st">"status"</span><span class="op">)</span><span class="op">]</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">re_lrt</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"term"</span>, <span class="st">"statistic"</span>, <span class="st">"p_value"</span>,</span>
+<span>                                  <span class="st">"reference_distribution"</span>, <span class="st">"status"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;         term statistic p_value                    reference_distribution</span></span>
 <span><span class="co">#&gt; 1 (1 | subj)  178.8188       0 0.5 * chi-square(0) + 0.5 * chi-square(1)</span></span>
 <span><span class="co">#&gt;      status</span></span>
@@ -501,7 +501,7 @@ the longitudinal mixed effects model. <em>Biometrics</em>, 50(4),
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

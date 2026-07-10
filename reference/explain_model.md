@@ -53,7 +53,7 @@ does not carry a valid compiled artifact.
 ## See also
 
 [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md),
-[`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md).
+[`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md).
 
 ## Examples
 

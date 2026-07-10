@@ -273,9 +273,9 @@
         attention [WARNING]: Model State / supported: status=refused; formula=y ~ 1 + between + (1 + between | g); random_terms=1; reason=design audit found at least one unsupported random-effect distribution
         attention [WARNING]: Model State / changes: Recommended:DesignTime:r0 -> basis direction(s) unsupported by within-group variation: between | Recommended:DesignTime:r0 -> number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
         attention [WARNING]: Random Effects / r0: group=g, rows=8, levels=4, obs_per_level=2..2, basis=2, covariance=full, params=3, budget=too_rich; reason=number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
-        attention [WARNING]: Random-Effect Information Budget / r0: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; drop unsupported random slopes, split/simplify the random-effect structure, treat the grouping factor as fixed when appropriate, or collect more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
+        attention [WARNING]: Random-Effect Information Budget / r0: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; options include dropping unsupported random slopes, splitting or simplifying the random-effect structure, treating the grouping factor as fixed, or collecting more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
         attention [WARNING]: Random Term Cards / r0: original=(1 + between | g), canonical=(1 + between | g), group=g, blocks=basis=[intercept, between], covariance=full, params=3
-        attention [WARNING]: Policy Recommendations / r0: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; recommended covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
+        attention [WARNING]: Policy Recommendations / r0: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; lower-dimensional covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
         attention [WARNING]: Policy Recommendations / r0: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
         attention [WARNING]: Diagnostics / covariance_too_rich: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; affected=(1 + between | g)
       
@@ -284,10 +284,10 @@
         model kind [INFO]: linear_mixed_model
         distribution/link [INFO]: gaussian/identity
         objective [INFO]: exact_gaussian
-        certificate scope [INFO]: exact_objective
+        convergence certificate [INFO]: exact_objective
         fixed terms [INFO]: 1, between
         random terms [INFO]: 1
-        theta maps [INFO]: 1 map(s)
+        covariance parameter maps [INFO]: 1 map(s)
       
       Model State:
         requested [OK]: status=requested; formula=y ~ 1 + between + (1 + between | g); random_terms=1; reason=formula as requested by the caller
@@ -305,7 +305,7 @@
         r0 [WARNING]: group=g, rows=8, levels=4, obs_per_level=2..2, basis=2, covariance=full, params=3, budget=too_rich; reason=number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
       
       Random-Effect Information Budget:
-        r0 [WARNING]: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; drop unsupported random slopes, split/simplify the random-effect structure, treat the grouping factor as fixed when appropriate, or collect more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
+        r0 [WARNING]: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; options include dropping unsupported random slopes, splitting or simplifying the random-effect structure, treating the grouping factor as fixed, or collecting more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
       
       Random Term Cards:
         r0 [WARNING]: original=(1 + between | g), canonical=(1 + between | g), group=g, blocks=basis=[intercept, between], covariance=full, params=3
@@ -325,7 +325,7 @@
         effective covariance rank [INFO]: not applicable before fitting; effective covariance rank is recorded after fitting
       
       Policy Recommendations:
-        r0 [WARNING]: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; recommended covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
+        r0 [WARNING]: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; lower-dimensional covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
         r0 [WARNING]: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
       
       Optimizer:

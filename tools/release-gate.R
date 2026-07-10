@@ -91,17 +91,13 @@ if (!fast) {
   record("R CMD check --as-cran (built tarball)", NA, "skipped (--fast)")
 }
 
-## 4. lint --------------------------------------------------------------------
-run("lint_package == 0", {
-  lints <- lintr::lint_package(pkg_root)
-  record("lint_package == 0", length(lints) == 0,
-         sprintf("%d lint(s)", length(lints)))
-})
-
-## 5-7. Test suites (installed release build) --------------------------------
+## 4. Install release build ---------------------------------------------------
 # The gate exercises the INSTALLED package (a release build); devtools::test()
 # / load_all() is a debug build ~60x slower and is not representative. Install
 # to a throwaway library so the gate is self-contained from a clean checkout.
+# Install BEFORE linting: lintr::object_usage_linter resolves internal
+# functions from the installed namespace, so linting an uninstalled package
+# yields false "no visible global function" positives.
 gate_lib <- tempfile("mixeff-release-gate-lib-")
 dir.create(gate_lib)
 run("install release build", {
@@ -112,6 +108,14 @@ run("install release build", {
 })
 .libPaths(c(gate_lib, .libPaths()))
 
+## 5. lint --------------------------------------------------------------------
+run("lint_package == 0", {
+  lints <- lintr::lint_package(pkg_root)
+  record("lint_package == 0", length(lints) == 0,
+         sprintf("%d lint(s)", length(lints)))
+})
+
+## 6-8. Test suites (installed release build) --------------------------------
 run("fast suite + error-UX + schema/manifest", {
   Sys.unsetenv(c("MIXEFF_RUN_SLOW_PARITY", "MIXEFF_RUN_APHANTASIA",
                  "MIXEFF_APHANTASIA_JOINT"))

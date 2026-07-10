@@ -20,12 +20,12 @@ with the declared Rust toolchain requirements only.
 
 ## R CMD check results
 
-There were 0 errors, 0 warnings, and 2 NOTEs:
+`R CMD check --as-cran --no-manual` on mixeff 0.2.0 (macOS arm64,
+vignettes rebuilt): 0 errors, 0 warnings, 1 NOTE.
 
 1. **New submission / tarball size** — informational for a first
-   submission; the dry-run tarball was about 5.8 MB.
-2. **Unable to verify current time** — environmental; would not fire on
-   the CRAN clock-synced runner.
+   submission; the tarball is about 6.4 MB (Rust sources vendored for
+   fully offline builds).
 
 ## Downstream dependencies
 

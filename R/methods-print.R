@@ -1,7 +1,6 @@
 #' @method print mm_lmm
 #' @export
 print.mm_lmm <- function(x, ...) {
-  schema <- x$schema %||% mm_object_schema(x$artifact)
   cat(sprintf("Linear mixed model fit by %s\n", if (x$REML) "REML" else "ML"))
   cat(sprintf("Formula: %s\n", deparse1(x$formula)))
   cat(sprintf("Fit status: %s\n", x$fit_status))
@@ -38,7 +37,6 @@ print.mm_lmm <- function(x, ...) {
 #' @method print mm_glmm
 #' @export
 print.mm_glmm <- function(x, ...) {
-  schema <- x$schema %||% mm_object_schema(x$artifact)
   cat("Generalized linear mixed model fit\n")
   cat(sprintf("Formula: %s\n", deparse1(x$formula)))
   cat(sprintf("Family/link: %s/%s\n", x$family$family, x$family$link))

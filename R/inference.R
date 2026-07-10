@@ -1079,12 +1079,34 @@ mm_contrast_matrix <- function(L, fit) {
   L
 }
 
+
+# One-line scale notice before a long silent bootstrap FFI call: the engine
+# runs every replicate refit inside a single native call with no progress
+# output, so say up front roughly how much work was requested. Suppressed by
+# mm_control(verbose = -1).
+mm_inform_bootstrap_scale <- function(fit, bootstrap) {
+  verbose <- fit$control$verbose %||% 0L
+  nsim <- bootstrap$nsim %||% NA_integer_
+  if (verbose >= 0L && is.finite(nsim) && nsim >= 200) {
+    mm_inform(
+      sprintf(paste0(
+        "Running %d bootstrap refits in a single native call with no ",
+        "progress output; expect roughly %d x the cost of one fit. Silence ",
+        "this message with mm_control(verbose = -1)."
+      ), as.integer(nsim), as.integer(nsim)),
+      class = "mm_runtime_notice"
+    )
+  }
+  invisible(NULL)
+}
+
 mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
   bridge <- mm_rust_fit_bridge_payload(fit)
   if (identical(method, "bootstrap") && !is.null(bootstrap)) {
     if (!inherits(bootstrap, "mm_bootstrap_control")) {
       bootstrap <- do.call(bootstrap_control, as.list(bootstrap))
     }
+    mm_inform_bootstrap_scale(fit, bootstrap)
     bootstrap_json <- jsonlite::toJSON(
       unclass(bootstrap),
       auto_unbox = TRUE,
@@ -1581,6 +1603,7 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
   }
   L <- mm_term_to_l_matrix(fit, term)
   rhs <- rep(0, nrow(L))
+  mm_inform_bootstrap_scale(fit, bootstrap)
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
     unclass(bootstrap),

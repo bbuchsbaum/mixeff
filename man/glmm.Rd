@@ -75,6 +75,13 @@ the labelled fast-PIRLS path. \code{method = "joint_laplace"} uses the upstream
 labelled joint Laplace route (\code{fast = FALSE}, \code{nAGQ = 1}) backed by the
 native dependency-light optimizer in this vendored build.
 }
+\details{
+Optimization runs inside a single native call with no progress output: the
+pre-fit explanation block (when \code{verbose >= 0}) is the last thing printed
+before the fitted result returns, and the call cannot be interrupted from
+R. Every optimizer budget is bounded, so fits always terminate; runtime on
+large problems is governed by \code{mm_control(max_feval = )}.
+}
 \examples{
 set.seed(1)
 df <- data.frame(

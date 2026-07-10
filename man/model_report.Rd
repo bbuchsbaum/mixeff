@@ -32,7 +32,7 @@ reporting_table(object, section = "all", view = c("compact", "audit"), ...)
   ...
 )
 
-\method{reporting_table}{mm_random_effect_test}(fit, section = "all", view = c("compact", "audit"), ...)
+\method{reporting_table}{mm_random_effect_test}(object, section = "all", view = c("compact", "audit"), ...)
 }
 \arguments{
 \item{fit}{A fitted \code{mm_fit}, usually from \code{\link[=lmm]{lmm()}}.}

@@ -263,7 +263,7 @@ print.summary.mm_glmm <- function(x, ...) {
     }
   }
   notes <- c(
-    mm_fit_status_note(x$fit_status),
+    mm_fit_status_note(x$fit_status, x$method),
     mm_glmm_withheld_inference_note(x, include_reason = !reason_printed)
   )
   mm_summary_print_notes(notes)
@@ -318,9 +318,25 @@ mm_summary_verbose <- function(...) {
 # A non-converged optimum is model state the user must not read past: repeat
 # it as a plain-language note next to the tests, not only in the header line.
 # Reports what happened; prescribes nothing (PRD R9).
-mm_fit_status_note <- function(fit_status) {
+mm_fit_status_note <- function(fit_status, method = NULL) {
   status <- as.character(fit_status %||% "")
   if (!nzchar(status) || startsWith(status, "converged")) return(character())
+  if (identical(method, "joint_laplace") &&
+      status %in% c("not_assessed", "not_optimized")) {
+    # The joint route's engine labels are known not to track solution quality
+    # at this pin (upstream bd-01KX4ZZA5D...): completed joint fits can carry
+    # `not_assessed`/`not_optimized` even when the optimum matches glmer.
+    # Report the label without implying the fit is unusable, and point to the
+    # verification verb instead.
+    return(sprintf(
+      paste0(
+        "fit status `%s`: the joint-Laplace route does not yet certify its ",
+        "convergence label; the fit completed its optimization budget. Use ",
+        "verify_convergence() to check the optimum directly."
+      ),
+      status
+    ))
+  }
   sprintf(
     paste0(
       "fit status `%s`: the optimizer stopped without certifying an optimum; ",

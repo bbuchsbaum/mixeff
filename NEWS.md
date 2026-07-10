@@ -75,6 +75,27 @@
   `fit$family$nb_theta`. `method = "joint_laplace"` is not yet wired for this
   family at the pinned engine and is refused with a typed error.
 
+## Fixes and runtime notices
+
+* `parameterization()` on a fitted GLMM reported the compile-time Lambda
+  template (1s and 0s) as `theta_value` instead of the fitted theta; it now
+  splices the fitted values in by index (LMM fits were unaffected; pre-fit
+  specs keep the honest template).
+* Logical random slopes now carry lme4-style `ranef()` column names
+  (`"xTRUE"`), consistent with the fixed-effect naming and the conditional
+  variance arrays.
+* `glmm(method = "joint_laplace")` emits an up-front runtime notice: the
+  joint route optimizes to an engine-chosen budget inside a single silent
+  native call and can take minutes on large data (cap with
+  `mm_control(max_feval = )`). Summary notes for completed joint fits no
+  longer imply an unusable fit when the engine's convergence label is
+  `not_assessed`/`not_optimized` (label reliability is tracked upstream);
+  they point to `verify_convergence()`.
+* Bootstrap-based inference with 200+ replicates announces its scale before
+  the single silent native call.
+* `lmm()`/`glmm()` document that optimization is silent and non-interruptible
+  within one native call, with bounded budgets.
+
 ## Profiling and scope
 
 * New `profile.mm_lmm()` method: returns an `mm_profile` object over the

@@ -172,6 +172,20 @@ mm_coef_strip_engine_sep <- function(labels) {
   gsub(": ", "", labels, fixed = TRUE)
 }
 
+# lme4-form random-effect column labels: strip the engine separator, then
+# rename logical slopes to lme4's dummy form ("x" -> "xTRUE"; the wire
+# coerces logicals to numeric 0/1 so the engine emits the bare name). Used
+# for both ranef() column names and cond_var postvar dimnames so the two
+# stay name-aligned.
+mm_re_colnames_lme4 <- function(labels, model_frame) {
+  labels <- mm_coef_strip_engine_sep(labels)
+  is_lgl <- vapply(model_frame, is.logical, logical(1))
+  lgl_vars <- names(is_lgl)[is_lgl]
+  hit <- labels %in% lgl_vars
+  labels[hit] <- paste0(labels[hit], "TRUE")
+  labels
+}
+
 # Normalize a freshly-constructed fit (engine-named beta/std_errors/vcov,
 # engine-named random-effect columns) into the lme4 naming contract. Runs
 # once per fit constructor, immediately before the class is assigned.
@@ -183,7 +197,18 @@ mm_apply_lme4_coef_naming <- function(fit) {
     fit$std_errors <- mm_coef_apply_map(fit$std_errors, map)
   }
   V <- fit$fixed_effect_vcov
-  if (!is.null(V) && is.matrix(V) && nrow(V) == length(map$perm)) {
+  if (!is.null(V) && is.matrix(V)) {
+    if (nrow(V) != length(map$perm) || ncol(V) != length(map$perm)) {
+      # beta/std_errors were just reordered; a wrong-size vcov would silently
+      # misalign against them, so this must be loud.
+      mm_abort(
+        message = sprintf(
+          "Fixed-effect covariance is %d x %d but the fit has %d coefficients.",
+          nrow(V), ncol(V), length(map$perm)
+        ),
+        class = "mm_schema_error"
+      )
+    }
     atts <- attributes(V)
     V <- V[map$perm, map$perm, drop = FALSE]
     dimnames(V) <- list(map$lme4_names, map$lme4_names)
@@ -197,7 +222,8 @@ mm_apply_lme4_coef_naming <- function(fit) {
     for (g in seq_along(fit$random_effects)) {
       cols <- colnames(fit$random_effects[[g]])
       if (!is.null(cols)) {
-        colnames(fit$random_effects[[g]]) <- mm_coef_strip_engine_sep(cols)
+        colnames(fit$random_effects[[g]]) <-
+          mm_re_colnames_lme4(cols, fit$model_frame)
       }
     }
   }

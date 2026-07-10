@@ -37,6 +37,13 @@
 #' @param control A list from [mm_control()].
 #' @param ... Reserved for future use.
 #'
+#'
+#' @details
+#' Optimization runs inside a single native call with no progress output: the
+#' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
+#' before the fitted result returns, and the call cannot be interrupted from
+#' R. Every optimizer budget is bounded, so fits always terminate; runtime on
+#' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.
 #'
@@ -137,6 +144,20 @@ glmm <- function(formula,
     # mm_control(verbose = -1) (as used in loops/bootstrap).
     if (!method_explicit && identical(method, "pirls_profiled")) {
       mm_inform(mm_glmm_profiled_default_notice(), class = "mm_estimator_notice")
+    }
+    if (identical(method, "joint_laplace")) {
+      # The joint route runs to an engine-chosen evaluation budget inside a
+      # single silent native call (~0.1-0.2s per evaluation on ~20k rows), so
+      # large fits can take minutes with no output. Say so up front.
+      mm_inform(
+        paste0(
+          "method = \"joint_laplace\" optimizes to an engine-chosen budget in ",
+          "a single native call with no progress output; large fits can take ",
+          "minutes. Cap the budget with mm_control(max_feval = ) if needed. ",
+          "Silence this message with mm_control(verbose = -1)."
+        ),
+        class = "mm_runtime_notice"
+      )
     }
   }
 

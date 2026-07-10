@@ -91,3 +91,29 @@ test_that("as.data.frame(ranef) without condVar yields NA condsd, not an error",
   expect_named(d, c("grpvar", "term", "grp", "condval", "condsd"))
   expect_true(all(is.na(d$condsd)))
 })
+
+test_that("parameterization() reports fitted theta values on GLMM fits", {
+  # Regression (W3.3 probe finding): GLMM artifacts carry the compile-time
+  # Lambda template in their traces; theta_value must be the FITTED theta.
+  set.seed(7)
+  d <- data.frame(y = rbinom(400, 1, 0.4), x = rnorm(400),
+                  g = factor(rep(1:20, 20)))
+  fit <- glmm(y ~ x + (1 + x | g), d, family = binomial(),
+              control = mm_control(verbose = -1))
+  p <- parameterization(fit)
+  expect_equal(sort(p$table$theta_value), sort(fit$theta), tolerance = 1e-12)
+})
+
+test_that("logical random slopes carry lme4-style ranef column names", {
+  skip_if_not_installed("lme4")
+  set.seed(3)
+  d <- expand.grid(g = factor(seq_len(24)), rep = 1:8)
+  d$x <- runif(nrow(d)) > 0.5
+  d$y <- rnorm(nrow(d)) + ifelse(d$x, 0.4, 0)
+  fit <- lmm(y ~ x + (1 + x | g), d, control = mm_control(verbose = -1))
+  ref <- suppressMessages(suppressWarnings(
+    lme4::lmer(y ~ x + (1 + x | g), d)
+  ))
+  expect_identical(colnames(ranef(fit)$g), colnames(lme4::ranef(ref)$g))
+  expect_identical(names(fixef(fit)), names(lme4::fixef(ref)))
+})

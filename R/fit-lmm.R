@@ -32,6 +32,13 @@
 #'   factor instead).
 #' @param control A list from [mm_control()].
 #'
+#'
+#' @details
+#' Optimization runs inside a single native call with no progress output: the
+#' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
+#' before the fitted result returns, and the call cannot be interrupted from
+#' R. Every optimizer budget is bounded, so fits always terminate; runtime on
+#' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_lmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.
 #'

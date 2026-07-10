@@ -444,3 +444,35 @@ test_that("inference_table rows follow lme4 coefficient order on permuted design
   expect_identical(coef_rows$label, names(fixef(fit)))
   expect_equal(coef_rows$estimate, unname(fixef(fit)), tolerance = 1e-10)
 })
+
+test_that("profile.mm_lmm returns a usable mm_profile object", {
+  fit <- lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,
+             REML = FALSE, control = mm_control(verbose = -1))
+  prof <- profile(fit)
+  expect_s3_class(prof, "mm_profile")
+  expect_true(all(c("parameter", "estimate", "lower", "upper") %in%
+                    names(prof$table)))
+  expect_true(all(c("(Intercept)", "Days", "sigma") %in% prof$table$parameter))
+  # confint on the profile reproduces confint(fit, method = "profile")
+  direct <- confint(fit, method = "profile")
+  via_prof <- confint(prof)
+  common <- intersect(rownames(direct), rownames(via_prof))
+  expect_true(length(common) >= 2L)
+  expect_equal(via_prof[common, ], direct[common, ], tolerance = 1e-10)
+  expect_output(print(prof), "Profile-likelihood intervals")
+  # which= filters
+  p2 <- profile(fit, which = "Days")
+  expect_identical(p2$table$parameter, "Days")
+})
+
+test_that("lmm refuses multivariate cbind responses with a plain error", {
+  d <- data.frame(y1 = rnorm(20), y2 = rnorm(20), x = rnorm(20),
+                  g = factor(rep(1:5, 4)))
+  err <- tryCatch(
+    lmm(cbind(y1, y2) ~ x + (1 | g), d, control = mm_control(verbose = -1)),
+    error = function(e) e
+  )
+  expect_s3_class(err, "mm_inference_unavailable")
+  expect_match(conditionMessage(err), "Multivariate responses")
+  expect_match(conditionMessage(err), "own model")
+})

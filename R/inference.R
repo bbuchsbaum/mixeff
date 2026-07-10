@@ -1765,6 +1765,80 @@ mm_inference_row_unavailable <- function(term, method, reason, reason_code = NA_
   )
 }
 
+#' Profile a fitted linear mixed model
+#'
+#' Computes profile-likelihood intervals for the model's parameters via the
+#' engine's certified profile payload and returns them as an `mm_profile`
+#' object: `$table` has one row per profiled parameter (`parameter`,
+#' `estimate`, `lower`, `upper`, `regularity`, `reason_code`). Under REML,
+#' fixed-effect coefficients are not profiled (upstream contract); their rows
+#' carry `reason_code = "profile_beta_unavailable_under_reml"` rather than
+#' being silently dropped. Use [confint()] with `method = "profile"` for the
+#' matrix form.
+#'
+#' @param fitted A fitted `mm_lmm`.
+#' @param which Optional character vector of parameter names to keep
+#'   (coefficient names, `"sigma"`, `"theta1"`, ...).
+#' @param level Confidence level for the reported interval endpoints.
+#' @param ... Unused; for generic consistency.
+#' @return An `mm_profile` object with `$table`, `$level`, `$fit_criterion`,
+#'   and `$notes`.
+#' @seealso [confint.mm_lmm()]
+#' @export
+profile.mm_lmm <- function(fitted, which = NULL, level = 0.95, ...) {
+  ci <- mm_profile_confint(fitted, parm = which, level = level)
+  prof <- attr(ci, "mm_profile")
+  out <- list(
+    table = prof$table,
+    level = prof$level,
+    fit_criterion = prof$fit_criterion,
+    notes = prof$notes
+  )
+  class(out) <- "mm_profile"
+  out
+}
+
+#' @export
+print.mm_profile <- function(x, ...) {
+  cat(sprintf("Profile-likelihood intervals (%s, level %.2f)\n",
+              x$fit_criterion, x$level))
+  tbl <- x$table
+  show <- tbl[, c("parameter", "estimate", "lower", "upper"), drop = FALSE]
+  print(format(show, digits = 4), row.names = FALSE)
+  unavailable <- tbl[!is.na(tbl$reason_code), , drop = FALSE]
+  if (nrow(unavailable)) {
+    cat(sprintf("Not profiled: %s (%s).\n",
+                paste(unavailable$parameter, collapse = ", "),
+                paste(unique(unavailable$reason_code), collapse = "; ")))
+  }
+  for (note in x$notes) cat("Note:", note, "\n")
+  invisible(x)
+}
+
+#' @export
+confint.mm_profile <- function(object, parm, level = NULL, ...) {
+  if (!is.null(level) && !isTRUE(all.equal(level, object$level))) {
+    mm_abort(
+      message = sprintf(
+        "This profile was computed at level %.3f; re-run profile() with level = %.3f.",
+        object$level, level
+      ),
+      class = "mm_arg_error",
+      input = level
+    )
+  }
+  tbl <- object$table
+  if (!missing(parm) && !is.null(parm)) {
+    tbl <- tbl[tbl$parameter %in% as.character(parm), , drop = FALSE]
+  }
+  mat <- as.matrix(tbl[, c("lower", "upper"), drop = FALSE])
+  rownames(mat) <- tbl$parameter
+  alpha <- 1 - object$level
+  colnames(mat) <- c(sprintf("%.1f %%", 100 * alpha / 2),
+                     sprintf("%.1f %%", 100 * (1 - alpha / 2)))
+  mat
+}
+
 # Stage D.3 (bd-01KRFGFSK4A0MGPFQVCNY5SYFK): wrapper for the upstream
 # `profile_confint_payload` FFI. Refits the model from the bridge payload
 # (no persistent Rust handle), parses the schema-versioned JSON, and

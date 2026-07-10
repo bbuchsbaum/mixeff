@@ -47,6 +47,18 @@
   `fit$family$nb_theta`. `method = "joint_laplace"` is not yet wired for this
   family at the pinned engine and is refused with a typed error.
 
+## Profiling and scope
+
+* New `profile.mm_lmm()` method: returns an `mm_profile` object over the
+  engine's certified profile-likelihood payload (`$table` with one row per
+  parameter; REML fixed effects carry an explicit
+  `profile_beta_unavailable_under_reml` reason instead of being dropped).
+  `confint()` on the profile reproduces `confint(fit, method = "profile")`.
+* `lmm()` now refuses multivariate `cbind(y1, y2)` responses with a plain
+  error (fit each outcome separately); shared-theta multivariate models are
+  deferred post-release. `glmm()` continues to accept
+  `cbind(successes, failures)` for binomial responses.
+
 ## Prediction
 
 * Population-level predictions (`re.form = NA` or `~0`) no longer require the

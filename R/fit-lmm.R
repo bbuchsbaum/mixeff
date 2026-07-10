@@ -53,6 +53,23 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
                 control = mm_control()) {
   call <- match.call()
   control <- mm_validate_control(control)
+  if (inherits(formula, "formula") && length(formula) == 3L &&
+      is.call(formula[[2L]]) &&
+      identical(as.character(formula[[2L]][[1L]]), "cbind")) {
+    # Deferred scope (PRD Phase 5 note, 2026-07-09): shared-theta multivariate
+    # responses need an upstream engine contract. Refuse plainly here rather
+    # than letting the formula compiler emit its transform-subset error.
+    mm_abort(
+      message = paste(
+        "Multivariate responses (`cbind(y1, y2) ~ ...`) are not supported by",
+        "`lmm()`. Fit each outcome as its own model. (`glmm()` accepts",
+        "`cbind(successes, failures)` for binomial responses.)"
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "multivariate_response_unsupported",
+      input = formula
+    )
+  }
   if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
   weights <- mm_lmm_weights(substitute(weights), data, parent.frame())
   if (!is.logical(REML) || length(REML) != 1L || is.na(REML)) {

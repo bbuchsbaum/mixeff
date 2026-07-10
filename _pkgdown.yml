@@ -10,6 +10,7 @@ reference:
   contents:
   - lmm
   - glmm
+  - mm_negative_binomial
   - compile_model
   - mm_control
 - title: Extractors (lme4-compatible)
@@ -33,6 +34,7 @@ reference:
   - drop1.mm_lmm
   - drop1.mm_glmm
   - confint.mm_glmm
+  - profile.mm_lmm
   - df_for_contrast
   - estimability
   - inference_options

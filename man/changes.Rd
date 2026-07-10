@@ -5,12 +5,12 @@
 \alias{changes.mm_compiled}
 \title{Show requested, effective, and fitted model-state changes}
 \usage{
-changes(fit, ...)
+changes(object, ...)
 
-\method{changes}{mm_compiled}(fit, ...)
+\method{changes}{mm_compiled}(object, ...)
 }
 \arguments{
-\item{fit}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
+\item{object}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
 
 \item{...}{Reserved for future methods.}
 }

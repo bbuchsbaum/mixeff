@@ -1,5 +1,33 @@
 # mixeff (development version)
 
+## Breaking: API-shape stabilization
+
+* `audit()` is now the single audit verb, dispatching on both compiled specs
+  and fits; `audit_design()` forwards with a deprecation warning and will be
+  removed later.
+* `df_for_contrast()` and `reporting_table()` now return `mm_*` objects with
+  `$table` (plus `$df` on the former, `$sections` for
+  `reporting_table(section = "all")`), matching every sibling analysis verb,
+  instead of a bare classed vector / data frame.
+* The spec-accepting inspection verbs (`changes()`, `parameterization()`,
+  `reproducibility()`, `random_blocks()`, `optimizer_certificate()`,
+  `reporting_table()`, `audit()`) name their first argument `object`
+  (previously `fit`, which was misleading for specs). Fit-only inference verbs
+  keep `fit`. `model.frame.mm_lmm()` keeps `formula` — that name is imposed by
+  the `stats::model.frame()` generic.
+* `confint()` presents `"asymptotic"` as the canonical method name (the
+  package-wide term for the closed-form Wald interval); `"wald"` remains an
+  accepted synonym. Computation is unchanged.
+* `drop1()` now matches `stats::drop1()` marginality semantics: by default,
+  main effects participating in an interaction are not offered for dropping.
+  An explicit non-marginal `scope` produces an `"unavailable"` row with a
+  reason (the engine's design basis for non-marginal models diverges from
+  R's), instead of an error mid-table. The result gains `status` and `reason`
+  columns.
+* Fitting a non-marginal formula directly (`y ~ b + a:b`) is refused with an
+  explanation: the engine's reduced interaction coding and R/lme4's
+  full-dummy expansion are different models, so parity cannot be certified.
+
 ## Breaking: lme4-identical coefficient names
 
 * Fixed-effect coefficient names now match `lme4`/`model.matrix()` exactly —

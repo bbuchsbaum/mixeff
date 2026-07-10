@@ -4,7 +4,7 @@
 #' design-audit pipeline against the supplied data, and returns an
 #' `mm_spec` object — the audit-first analogue of the design-only step in
 #' base `lm()`'s `model.frame()` / `model.matrix()` chain. Nothing is
-#' optimized; nothing is fitted. `audit_design()`, `explain_model()`,
+#' optimized; nothing is fitted. `audit()`, `explain_model()`,
 #' `random_options()`, and (in Phase 1.E) `lmm()` all consume the same
 #' artifact.
 #'
@@ -58,10 +58,10 @@
 #'   subject = factor(rep(letters[1:5], each = 4))
 #' )
 #' spec <- compile_model(y ~ x + (1 + x | subject), df)
-#' audit_design(spec)
+#' audit(spec)
 #' }
 #'
-#' @seealso [audit_design()] for the printed audit report.
+#' @seealso [audit()] for the printed audit report.
 #'
 #' @export
 compile_model <- function(formula, data) {
@@ -161,6 +161,6 @@ print.mm_spec <- function(x, ...) {
   cat(sprintf("  schema:            %s v%s\n",
               x$artifact$schema$schema_name,
               as.character(x$artifact$schema$schema_version)))
-  cat("Use audit_design(spec) to view the structured design audit.\n")
+  cat("Use audit(spec) to view the structured design audit.\n")
   invisible(x)
 }

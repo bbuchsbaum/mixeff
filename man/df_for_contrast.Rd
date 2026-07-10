@@ -29,8 +29,10 @@ df_for_contrast(
 \item{...}{Reserved for future methods.}
 }
 \value{
-A numeric vector of \code{NA} degrees of freedom with an
-\code{mm_unavailable_reason} attribute.
+An \code{mm_df_for_contrast} object with \verb{$table} (one row per
+contrast: \code{contrast}, \code{df}, \code{method}, \code{requested_method}, \code{reason}),
+\verb{$df} (the named numeric vector), and \verb{$method}. When the method is
+\code{"none"} or the engine refuses, \code{df} is \code{NA} and \code{reason} records why.
 }
 \description{
 Degrees of freedom for a contrast

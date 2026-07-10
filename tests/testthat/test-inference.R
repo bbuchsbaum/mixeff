@@ -143,19 +143,22 @@ test_that("df_for_contrast pipes through the Rust inference-table df values", {
   df_kr   <- df_for_contrast(fit, L, method = "kenward_roger")
   df_none <- df_for_contrast(fit, L, method = "none")
 
+  # API stabilization 2026-07-09: mm_* object with $table + $df, sibling-shaped.
   expect_s3_class(df_satt, "mm_df_for_contrast")
-  expect_true(all(is.finite(df_satt)))
-  expect_identical(attr(df_satt, "method"), "satterthwaite")
-  expect_identical(attr(df_satt, "requested_method"), "satterthwaite")
+  expect_true(all(c("contrast", "df", "method", "requested_method", "reason")
+                  %in% names(df_satt$table)))
+  expect_true(all(is.finite(df_satt$df)))
+  expect_identical(df_satt$method, "satterthwaite")
+  expect_identical(df_satt$requested_method, "satterthwaite")
 
-  expect_true(all(is.finite(df_kr)))
-  expect_identical(attr(df_kr, "method"), "kenward_roger")
+  expect_true(all(is.finite(df_kr$df)))
+  expect_identical(df_kr$method, "kenward_roger")
 
   # method = "none" still returns NA with a reason -- not_requested, not
   # unavailable; the engine never asked for df.
-  expect_true(all(is.na(df_none)))
-  expect_identical(attr(df_none, "method"), "not_requested")
-  expect_false(is.null(attr(df_none, "mm_unavailable_reason")))
+  expect_true(all(is.na(df_none$df)))
+  expect_identical(df_none$method, "not_requested")
+  expect_false(anyNA(df_none$table$reason))
 })
 
 test_that("test_effect() and single-model anova() consume Rust term rows", {

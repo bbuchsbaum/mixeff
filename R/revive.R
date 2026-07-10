@@ -349,20 +349,20 @@ mm_numeric_matrix_from_rows <- function(rows) {
 #' the compiler artifact: grouping factor, basis, covariance family, theta
 #' parameter count, level counts, and design-support status.
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_random_blocks` object with a data-frame `table`.
 #'
 #' @export
-random_blocks <- function(fit, ...) {
+random_blocks <- function(object, ...) {
   UseMethod("random_blocks")
 }
 
 #' @rdname random_blocks
 #' @export
-random_blocks.mm_compiled <- function(fit, ...) {
-  artifact <- mm_compiled_artifact(fit)
+random_blocks.mm_compiled <- function(object, ...) {
+  artifact <- mm_compiled_artifact(object)
   rows <- lapply(artifact$design_audit$random_terms %||% list(), mm_random_block_row)
   table <- if (length(rows)) {
     out <- do.call(rbind, rows)
@@ -403,21 +403,21 @@ print.mm_random_blocks <- function(x, ...) {
 
 #' Inspect the optimizer certificate
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_optimizer_certificate` object containing the raw certificate
 #'   and a compact table view.
 #'
 #' @export
-optimizer_certificate <- function(fit, ...) {
+optimizer_certificate <- function(object, ...) {
   UseMethod("optimizer_certificate")
 }
 
 #' @rdname optimizer_certificate
 #' @export
-optimizer_certificate.mm_compiled <- function(fit, ...) {
-  cert <- mm_compiled_artifact(fit)$optimizer_certificate %||% list()
+optimizer_certificate.mm_compiled <- function(object, ...) {
+  cert <- mm_compiled_artifact(object)$optimizer_certificate %||% list()
   obj <- list(raw = cert, table = mm_optimizer_certificate_table(cert))
   class(obj) <- "mm_optimizer_certificate"
   obj
@@ -533,20 +533,20 @@ print.mm_inference_table <- function(x, ...) {
 
 #' Inspect reproducibility metadata
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_reproducibility` object.
 #'
 #' @export
-reproducibility <- function(fit, ...) {
+reproducibility <- function(object, ...) {
   UseMethod("reproducibility")
 }
 
 #' @rdname reproducibility
 #' @export
-reproducibility.mm_compiled <- function(fit, ...) {
-  raw <- mm_compiled_artifact(fit)$reproducibility %||% list()
+reproducibility.mm_compiled <- function(object, ...) {
+  raw <- mm_compiled_artifact(object)$reproducibility %||% list()
   obj <- list(raw = raw, thresholds = mm_repro_threshold_table(raw$thresholds))
   class(obj) <- "mm_reproducibility"
   obj

@@ -72,8 +72,10 @@ emm_basis.mm_lmm <- function(object, trms, xlev, grid,
     df <- getExportedValue("mixeff", "df_for_contrast")(
       dfargs$object, k, method = dfargs$method
     )
-    value <- as.numeric(df[[1L]])
-    if (is.finite(value)) value else Inf
+    # df_for_contrast() returns an mm_* object; $df is the named numeric
+    # vector (one entry per contrast row of k).
+    value <- as.numeric(df$df)
+    ifelse(is.finite(value), value, Inf)
   }
   attr(dffun, "mesg") <- sprintf("mixeff %s", method)
   misc <- list(initMesg = mm_emmeans_init_messages(V))

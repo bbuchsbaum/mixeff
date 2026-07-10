@@ -136,7 +136,7 @@ test_that("Palday ML interaction model matches lme4 on comparable fit quantities
   expect_false("recipe & replicate" %in% pair$mixeff$varcorr$table$group)
   expect_true("recipe:replicate" %in% as.data.frame(pair$mixeff$varcorr)$grp)
   expect_true("recipe:replicate" %in%
-                reporting_table(pair$mixeff, "random_effects")$group)
+                reporting_table(pair$mixeff, "random_effects")$table$group)
   mm_expect_ranef_lme4_parity(list(
     id = "cake_ordered_temperature_interaction_ml",
     dataset = "cake",
@@ -245,4 +245,28 @@ test_that("Palday ordered-factor coefficient names are lme4-identical", {
   expect_identical(mm_names, lme4_names)
   expect_true(any(grepl("temperature.L", mm_names, fixed = TRUE)))
   expect_false(any(grepl("temperature: .L", mm_names, fixed = TRUE)))
+})
+
+test_that("drop1 default scope respects marginality; explicit non-marginal drops refuse honestly", {
+  dat <- palday_cake_data()
+  fit <- mixeff::lmm(palday_formula(TRUE), dat, REML = FALSE,
+                     control = mixeff::mm_control(verbose = -1))
+
+  # Default scope: only the interaction is droppable (stats::drop1 rule);
+  # main effects participating in it are not attempted.
+  mm_drop <- stats::drop1(fit, test = "Chisq")
+  expect_identical(mm_drop$table$dropped, "recipe:temperature")
+  expect_identical(mm_drop$table$status, "available")
+
+  # Explicit non-marginal scope: the reduced fit's design basis diverges from
+  # R's (engine reduced coding vs full-dummy expansion), so the row comes back
+  # unavailable with the reason, rather than crashing the whole table.
+  mm_drop2 <- stats::drop1(fit, scope = c("recipe", "recipe:temperature"),
+                           test = "Chisq")
+  recipe_row <- mm_drop2$table[mm_drop2$table$dropped == "recipe", , drop = FALSE]
+  expect_identical(recipe_row$status, "unavailable")
+  expect_match(recipe_row$reason, "NON-MARGINAL", fixed = TRUE)
+  inter_row <- mm_drop2$table[mm_drop2$table$dropped == "recipe:temperature", , drop = FALSE]
+  expect_identical(inter_row$status, "available")
+  expect_true(is.finite(inter_row$LRT))
 })

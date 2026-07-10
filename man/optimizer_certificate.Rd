@@ -5,12 +5,12 @@
 \alias{optimizer_certificate.mm_compiled}
 \title{Inspect the optimizer certificate}
 \usage{
-optimizer_certificate(fit, ...)
+optimizer_certificate(object, ...)
 
-\method{optimizer_certificate}{mm_compiled}(fit, ...)
+\method{optimizer_certificate}{mm_compiled}(object, ...)
 }
 \arguments{
-\item{fit}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
+\item{object}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
 
 \item{...}{Reserved for future methods.}
 }

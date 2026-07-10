@@ -5,21 +5,21 @@
 #' transitions, and fitted covariance rank/status from the optimizer
 #' certificate pass.
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_change_log` object with a data-frame `table` and the raw
 #'   artifact fragments used to build it.
 #'
 #' @export
-changes <- function(fit, ...) {
+changes <- function(object, ...) {
   UseMethod("changes")
 }
 
 #' @rdname changes
 #' @export
-changes.mm_compiled <- function(fit, ...) {
-  artifact <- mm_compiled_artifact(fit)
+changes.mm_compiled <- function(object, ...) {
+  artifact <- mm_compiled_artifact(object)
   rows <- c(
     mm_change_formula_rows(artifact),
     mm_change_reduction_rows(artifact),

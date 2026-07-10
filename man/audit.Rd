@@ -2,23 +2,80 @@
 % Please edit documentation in R/audit.R
 \name{audit}
 \alias{audit}
-\alias{audit.mm_fit}
-\title{Audit a fitted mixeff model}
+\alias{audit.default}
+\alias{audit.mm_compiled}
+\title{Audit a compiled model spec or fitted model}
 \usage{
-audit(fit, ...)
+audit(object, ...)
 
-\method{audit}{mm_fit}(fit, ...)
+\method{audit}{default}(object, ...)
+
+\method{audit}{mm_compiled}(object, ...)
 }
 \arguments{
-\item{fit}{A fitted \code{mm_fit}, usually from \code{\link[=lmm]{lmm()}}.}
+\item{object}{An \code{mm_spec} produced by \code{\link[=compile_model]{compile_model()}} or an \code{mm_fit}
+from \code{\link[=lmm]{lmm()}}/\code{\link[=glmm]{glmm()}}.}
 
 \item{...}{Reserved for future methods.}
 }
 \value{
-An \code{mm_audit} object; see \code{\link[=audit_design]{audit_design()}}.
+An object of class \code{mm_audit} carrying:
+\describe{
+\item{\code{text}}{the rendered report text (a single character string,
+newline-separated)}
+\item{\code{summary_text}}{the compact report rendered by the upstream
+\code{ModelAuditReport::render_summary} (Audit Summary plus the
+Requested Model section)}
+\item{\code{design_audit}}{the parsed \code{design_audit} field from the
+\code{CompiledModelArtifact} (random-term audits, fixed-effect rank,
+covariance kernel graph, ...) — \code{NULL} on uncompilable formulas}
+\item{\code{report}}{the parsed upstream \code{ModelAuditReport} v2, including
+Rust-authored \code{random_term_cards} for downstream explanation verbs}
+\item{\code{random_term_cards}}{the report's per-random-term cards, copied
+to the top level for convenient inspection}
+\item{\code{cross_card_constraints}}{report-level constraints between
+random-term cards}
+\item{\code{diagnostics}}{the parsed report diagnostics, falling back to
+artifact diagnostics when needed}
+}
+\code{print.mm_audit} defaults to the compact upstream-rendered summary in
+\code{summary_text}. Use \code{print(x, full = TRUE)} for the complete upstream
+report stored in \code{text}.
 }
 \description{
-\code{audit()} is the post-fit alias for \code{\link[=audit_design]{audit_design()}}. It renders the same
-upstream-authored audit report, now backed by the fitted artifact carried by
-an \code{mm_fit}.
+\code{audit()} returns the user-facing audit report attached to an \code{mm_spec}
+(pre-fit) or an \code{mm_fit} (post-fit). The text is rendered by the upstream Rust crate (the
+\code{mixedmodels.model_audit_report} schema's \code{Display} impl) — Rust authors
+the wording, R formats nothing. Routing every printed audit line
+through the upstream renderer is what enforces the R9 "no advice
+creep" contract: drift in scope notes / tone is visible in one place
+rather than scattered across R formatters.
+}
+\details{
+\code{audit()} accepts an \code{mm_spec} from
+\code{\link[=compile_model]{compile_model()}} or an \code{mm_fit} from \code{\link[=lmm]{lmm()}}/\code{\link[=glmm]{glmm()}} and emits the report sections (Requested Model,
+Model State, Fixed/Random Effects, Information Budget, Dependence
+Paths, Parameterization Trace, Effective Covariance, Policy
+Recommendations, Optimizer, Inference, Diagnostics). Sections that
+depend on a fit (Optimizer / Inference) report \verb{not applicable before fitting} on a pre-fit spec.
+}
+\section{Errors}{
+
+Raises an \code{mm_schema_error} if the supplied object does not carry a
+parsed artifact with the expected schema header.
+}
+
+\examples{
+\dontrun{
+df <- data.frame(
+  y       = rnorm(20),
+  x       = rnorm(20),
+  subject = factor(rep(letters[1:5], each = 4))
+)
+audit(compile_model(y ~ x + (1 + x | subject), df))
+}
+
+}
+\seealso{
+\code{\link[=compile_model]{compile_model()}}.
 }

@@ -5,12 +5,12 @@
 \alias{reproducibility.mm_compiled}
 \title{Inspect reproducibility metadata}
 \usage{
-reproducibility(fit, ...)
+reproducibility(object, ...)
 
-\method{reproducibility}{mm_compiled}(fit, ...)
+\method{reproducibility}{mm_compiled}(object, ...)
 }
 \arguments{
-\item{fit}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
+\item{object}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
 
 \item{...}{Reserved for future methods.}
 }

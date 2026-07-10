@@ -347,15 +347,43 @@ drop1.mm_lmm <- function(object,
   terms <- setdiff(mm_fixed_effect_terms(object), "1")
   if (!is.null(scope)) {
     terms <- intersect(terms, as.character(scope))
+  } else {
+    # Match stats::drop1 marginality semantics: only terms not contained in a
+    # higher-order term are droppable by default. Dropping a main effect that
+    # participates in an interaction yields a NON-MARGINAL reduced model, and
+    # the engine's design basis for those diverges from R's (reduced coding vs
+    # full-dummy expansion), so such refits cannot be certified against lme4.
+    terms <- intersect(terms, mm_droppable_terms(object))
   }
   prepared_full <- mm_prepare_comparison_fits(list(object), refit_for_comparison)
   full <- prepared_full$fits[[1L]]
   full_refit <- isTRUE(prepared_full$refit[[1L]])
   rows <- lapply(terms, function(term) {
     reduced_formula <- mm_drop_fixed_term_formula(full, term)
-    reduced <- lmm(reduced_formula, full$model_frame, REML = isTRUE(full$REML),
-                   weights = full$weights,
-                   control = mm_control(verbose = -1))
+    reduced <- tryCatch(
+      lmm(reduced_formula, full$model_frame, REML = isTRUE(full$REML),
+          weights = full$weights,
+          control = mm_control(verbose = -1)),
+      error = function(cnd) cnd
+    )
+    if (inherits(reduced, "condition")) {
+      # Explicit-scope non-marginal drops (or any refit refusal) surface as an
+      # unavailable row instead of aborting the whole table.
+      return(data.frame(
+        dropped = term,
+        formula = deparse1(reduced_formula),
+        df = NA_real_,
+        logLik = NA_real_,
+        AIC = NA_real_,
+        BIC = NA_real_,
+        LRT = NA_real_,
+        p_value = NA_real_,
+        method = "unavailable",
+        status = "unavailable",
+        reason = conditionMessage(reduced),
+        stringsAsFactors = FALSE
+      ))
+    }
     stat <- mm_lrt_stat(reduced, full)
     df <- full$dof - reduced$dof
     data.frame(
@@ -372,6 +400,8 @@ drop1.mm_lmm <- function(object,
         NA_real_
       },
       method = if (identical(test, "Chisq")) "asymptotic_lrt" else "none",
+      status = "available",
+      reason = NA_character_,
       stringsAsFactors = FALSE
     )
   })
@@ -879,4 +909,21 @@ mm_drop_fixed_term_formula <- function(fit, term) {
   random <- random[nzchar(random)]
   rhs <- paste(c(fixed_rhs, random), collapse = " + ")
   stats::as.formula(paste(response, "~", rhs), env = environment(fit$formula))
+}
+
+# Terms droppable under stats::drop1 marginality rules: a term is droppable
+# iff no OTHER term contains all of its variables (e.g. `recipe` is not
+# droppable from `recipe * temperature`).
+mm_droppable_terms <- function(fit) {
+  tt <- stats::terms(mm_fixed_formula(fit))
+  labels <- attr(tt, "term.labels")
+  fac <- attr(tt, "factors")
+  if (!length(labels) || is.null(dim(fac))) return(labels)
+  vars_of <- lapply(seq_along(labels), function(i) rownames(fac)[fac[, i] > 0])
+  droppable <- vapply(seq_along(labels), function(i) {
+    !any(vapply(seq_along(labels)[-i], function(j) {
+      all(vars_of[[i]] %in% vars_of[[j]])
+    }, logical(1)))
+  }, logical(1))
+  labels[droppable]
 }

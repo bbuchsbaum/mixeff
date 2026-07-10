@@ -99,7 +99,11 @@ mm_coef_name_map <- function(fit, engine_names = names(fit$beta)) {
         "Could not build the lme4-compatible coefficient name map; engine ",
         "coefficient(s) with no unique R design column: ",
         paste(unmatched %||% engine_names[duplicated(matched)], collapse = ", "),
-        "."
+        ". This typically means the formula is NON-MARGINAL (an interaction ",
+        "without its main effects, e.g. `y ~ b + a:b`): the engine codes such ",
+        "interactions in a reduced basis while R/lme4 expand full dummies, so ",
+        "the two fits are not the same model and lme4 parity cannot be ",
+        "certified. Include the main effects, or fit the marginal model."
       ),
       class = "mm_schema_error",
       expected = engine_names,

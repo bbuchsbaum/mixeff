@@ -30,7 +30,7 @@
 #' explain_model(compile_model(y ~ t + (1 | s), df))
 #' }
 #'
-#' @seealso [compile_model()], [audit_design()].
+#' @seealso [compile_model()], [audit()].
 #'
 #' @export
 explain_model <- function(spec) {
@@ -42,7 +42,7 @@ explain_model <- function(spec) {
     )
   }
 
-  audit <- audit_design(spec)
+  audit <- mm_audit_impl(spec)
   out <- list(
     text                   = mm_explanation_text(spec, audit),
     cards                  = audit$random_term_cards,

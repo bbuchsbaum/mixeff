@@ -31,7 +31,7 @@ mk_schema_design <- function() {
 }
 
 cards_from <- function(formula) {
-  audit <- audit_design(compile_model(formula, mk_schema_design()))
+  audit <- audit(compile_model(formula, mk_schema_design()))
   audit$random_term_cards %||% list()
 }
 

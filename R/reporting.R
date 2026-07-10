@@ -57,50 +57,90 @@ model_report.mm_fit <- function(fit, sections = "all", ...) {
 
 #' @rdname model_report
 #' @export
-reporting_table <- function(fit, section = "all", view = c("compact", "audit"), ...) {
+reporting_table <- function(object, section = "all", view = c("compact", "audit"), ...) {
   UseMethod("reporting_table")
 }
 
 #' @rdname model_report
 #' @export
-reporting_table.mm_fit <- function(fit, section = "all",
+reporting_table.mm_fit <- function(object, section = "all",
                                    view = c("compact", "audit"), ...) {
   view <- match.arg(view)
   section <- mm_report_sections_arg(section, allow_many = FALSE)
-  report <- model_report(fit, sections = if (identical(section, "all")) "all" else section)
-  if (identical(section, "all")) {
-    return(mm_report_view_sections(report$sections, view))
+  report <- model_report(object, sections = if (identical(section, "all")) "all" else section)
+  out <- if (identical(section, "all")) {
+    mm_report_view_sections(report$sections, view)
+  } else {
+    mm_report_view_table(report$sections[[section]], section, view)
   }
-  mm_report_view_table(report$sections[[section]], section, view)
+  mm_new_reporting_table(out, section, view)
 }
 
 #' @method reporting_table mm_model_report
 #' @export
-reporting_table.mm_model_report <- function(fit, section = "all",
+reporting_table.mm_model_report <- function(object, section = "all",
                                             view = c("compact", "audit"), ...) {
   view <- match.arg(view)
   section <- mm_report_sections_arg(section, allow_many = FALSE)
-  if (identical(section, "all")) {
-    return(mm_report_view_sections(fit$sections, view))
+  out <- if (identical(section, "all")) {
+    mm_report_view_sections(object$sections, view)
+  } else {
+    mm_report_view_table(object$sections[[section]], section, view)
   }
-  mm_report_view_table(fit$sections[[section]], section, view)
+  mm_new_reporting_table(out, section, view)
 }
+# Sibling-consistent wrapper: reporting_table() returns an mm_* object with
+# $table (single section) or $sections (section = "all"), instead of a bare
+# data.frame / list.
+mm_new_reporting_table <- function(x, section, view) {
+  obj <- if (identical(section, "all")) {
+    list(table = NULL, sections = x, section = "all", view = view)
+  } else {
+    list(table = x, sections = NULL, section = section, view = view)
+  }
+  class(obj) <- "mm_reporting_table"
+  obj
+}
+
+#' @method print mm_reporting_table
+#' @export
+print.mm_reporting_table <- function(x, ...) {
+  if (identical(x$section, "all")) {
+    for (nm in names(x$sections)) {
+      cat("--", nm, "--\n")
+      print(x$sections[[nm]], row.names = FALSE)
+      cat("\n")
+    }
+  } else {
+    print(x$table, row.names = FALSE)
+  }
+  invisible(x)
+}
+
 
 #' @rdname model_report
 #' @method reporting_table mm_model_comparison
 #' @export
-reporting_table.mm_model_comparison <- function(fit, section = "comparison_ledger",
+reporting_table.mm_model_comparison <- function(object, section = "comparison_ledger",
                                                 view = c("compact", "audit"),
                                                 ...) {
-  mm_report_comparison_object_table(fit, section = section, view = view)
+  view <- match.arg(view)
+  mm_new_reporting_table(
+    mm_report_comparison_object_table(object, section = section, view = view),
+    section, view
+  )
 }
 
 #' @rdname model_report
 #' @method reporting_table mm_drop1
 #' @export
-reporting_table.mm_drop1 <- function(fit, section = "comparison_ledger",
+reporting_table.mm_drop1 <- function(object, section = "comparison_ledger",
                                      view = c("compact", "audit"), ...) {
-  mm_report_comparison_object_table(fit, section = section, view = view)
+  view <- match.arg(view)
+  mm_new_reporting_table(
+    mm_report_comparison_object_table(object, section = section, view = view),
+    section, view
+  )
 }
 
 mm_report_comparison_object_table <- function(fit, section = "comparison_ledger",
@@ -126,20 +166,20 @@ mm_report_comparison_object_table <- function(fit, section = "comparison_ledger"
 #' @rdname model_report
 #' @method reporting_table mm_random_effect_test
 #' @export
-reporting_table.mm_random_effect_test <- function(fit, section = "all",
+reporting_table.mm_random_effect_test <- function(object, section = "all",
                                                   view = c("compact", "audit"),
                                                   ...) {
   view <- match.arg(view)
-  table <- fit$table
-  if (identical(view, "audit")) {
-    return(table)
+  table <- object$table
+  if (!identical(view, "audit")) {
+    keep <- intersect(
+      c("term", "group", "statistic", "statistic_name", "p_value",
+        "reference_distribution", "method", "status", "reason_code"),
+      names(table)
+    )
+    table <- table[, keep, drop = FALSE]
   }
-  keep <- intersect(
-    c("term", "group", "statistic", "statistic_name", "p_value",
-      "reference_distribution", "method", "status", "reason_code"),
-    names(table)
-  )
-  table[, keep, drop = FALSE]
+  mm_new_reporting_table(table, "random_effect_test", view)
 }
 
 #' @method print mm_model_report
@@ -405,7 +445,7 @@ mm_report_data_design <- function(fit) {
 }
 
 mm_report_random_terms <- function(fit) {
-  audit <- audit_design(fit)
+  audit <- mm_audit_impl(fit)
   cards <- audit$random_term_cards %||% list()
   rows <- unlist(lapply(cards, mm_report_random_term_card_rows), recursive = FALSE)
   table <- if (length(rows)) {
@@ -807,7 +847,7 @@ mm_group_ir_label <- function(group) {
 }
 
 mm_report_group_roles <- function(fit, groups) {
-  audit <- audit_design(fit)
+  audit <- mm_audit_impl(fit)
   card_roles <- lapply(audit$random_term_cards %||% list(), function(card) {
     data.frame(
       group = mm_group_ir_label(card$group),

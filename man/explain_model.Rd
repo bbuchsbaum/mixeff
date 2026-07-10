@@ -43,5 +43,5 @@ explain_model(compile_model(y ~ t + (1 | s), df))
 
 }
 \seealso{
-\code{\link[=compile_model]{compile_model()}}, \code{\link[=audit_design]{audit_design()}}.
+\code{\link[=compile_model]{compile_model()}}, \code{\link[=audit]{audit()}}.
 }

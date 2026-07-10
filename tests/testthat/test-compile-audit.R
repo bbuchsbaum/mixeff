@@ -1,5 +1,5 @@
 # Smoke fixture covering Phase 1.A: compile_model() builds an mm_spec and
-# audit_design() returns the upstream-rendered audit text for a few worked
+# audit() returns the upstream-rendered audit text for a few worked
 # shapes drawn from compiler_contract_v0_prd.md lines 907-922 plus the
 # §9.5.7 syntax coverage list. The full snapshot suite (with locked text)
 # lands in 1.C alongside explain_model().
@@ -55,10 +55,10 @@ test_that("compile_model() handles crossed grouping factors", {
   expect_length(spec$artifact$semantic_model$random_terms, 2L)
 })
 
-test_that("audit_design() round-trips upstream text and exposes design_audit", {
+test_that("audit() round-trips upstream text and exposes design_audit", {
   df <- mk_sleepstudy_like()
   spec <- compile_model(Reaction ~ Days + (1 + Days | Subject), df)
-  audit <- audit_design(spec)
+  audit <- audit(spec)
 
   expect_s3_class(audit, "mm_audit")
   expect_type(audit$text, "character")
@@ -93,7 +93,7 @@ test_that("compile/audit surface the upstream pedagogical DiagnosticCode variant
   )
 
   punt <- compile_model(y ~ x + (1 | g), sparse)
-  punt_codes <- diagnostic_codes(audit_design(punt))
+  punt_codes <- diagnostic_codes(audit(punt))
   expect_true("support_note" %in% punt_codes)
   expect_true("scope_note" %in% punt_codes)
 
@@ -119,7 +119,7 @@ test_that("scope_note does not fire for categorical (factor) fixed effects", {
     Subject = factor(rep(seq_len(n_subj), each = n_per))
   )
   spec  <- compile_model(y ~ treat + (1 | Subject), df)
-  codes <- diagnostic_codes(audit_design(spec))
+  codes <- diagnostic_codes(audit(spec))
   expect_false("scope_note" %in% codes)
 })
 
@@ -134,7 +134,7 @@ test_that("scope_note fires for numeric main effects but not for their interacti
     Subject = factor(rep(seq_len(n_subj), each = n_per))
   )
   spec  <- compile_model(y ~ x * z + (1 | Subject), df)
-  diags <- audit_design(spec)$diagnostics %||% list()
+  diags <- audit(spec)$diagnostics %||% list()
   scope_terms <- vapply(diags, function(d) {
     if (identical(d$code, "scope_note")) d$payload$fixed_effect else NA_character_
   }, character(1))
@@ -158,7 +158,7 @@ test_that("scope_note does not fire for fixed effects constant within group", {
     Subject = factor(rep(seq_len(n_subj), each = n_per))
   )
   spec  <- compile_model(y ~ dose + (1 | Subject), df)
-  codes <- diagnostic_codes(audit_design(spec))
+  codes <- diagnostic_codes(audit(spec))
   expect_false("scope_note" %in% codes)
 })
 
@@ -199,8 +199,8 @@ test_that("compile_model() refuses non-data.frame data", {
   )
 })
 
-test_that("audit_design() refuses inputs that are not mm_spec / mm_fit", {
-  expect_error(audit_design(list(foo = 1)), class = "mm_schema_error")
+test_that("audit() refuses inputs that are not mm_spec / mm_fit", {
+  expect_error(audit(list(foo = 1)), class = "mm_schema_error")
 })
 
 test_that("compile_model() preserves input column order through the FFI", {

@@ -760,8 +760,10 @@ print.mm_estimability <- function(x, ...) {
 #' @param method Requested degrees-of-freedom method.
 #' @param ... Reserved for future methods.
 #'
-#' @return A numeric vector of `NA` degrees of freedom with an
-#'   `mm_unavailable_reason` attribute.
+#' @return An `mm_df_for_contrast` object with `$table` (one row per
+#'   contrast: `contrast`, `df`, `method`, `requested_method`, `reason`),
+#'   `$df` (the named numeric vector), and `$method`. When the method is
+#'   `"none"` or the engine refuses, `df` is `NA` and `reason` records why.
 #'
 #' @export
 df_for_contrast <- function(fit, L, method = c("auto", "satterthwaite",
@@ -782,11 +784,9 @@ df_for_contrast.mm_lmm <- function(fit, L, method = c("auto", "satterthwaite",
   names(out) <- rownames(L)
 
   if (identical(method, "none")) {
-    attr(out, "method") <- "not_requested"
-    attr(out, "requested_method") <- method
-    attr(out, "mm_unavailable_reason") <- mm_inference_unavailable_reason(method)
-    class(out) <- c("mm_df_for_contrast", "numeric")
-    return(out)
+    return(mm_new_df_for_contrast(out, method_label = "not_requested",
+                                  requested = method,
+                                  reason = mm_inference_unavailable_reason(method)))
   }
 
   parsed <- tryCatch(
@@ -794,11 +794,9 @@ df_for_contrast.mm_lmm <- function(fit, L, method = c("auto", "satterthwaite",
     error = function(cnd) cnd
   )
   if (inherits(parsed, "condition")) {
-    attr(out, "method") <- "unavailable"
-    attr(out, "requested_method") <- method
-    attr(out, "mm_unavailable_reason") <- conditionMessage(parsed)
-    class(out) <- c("mm_df_for_contrast", "numeric")
-    return(out)
+    return(mm_new_df_for_contrast(out, method_label = "unavailable",
+                                  requested = method,
+                                  reason = conditionMessage(parsed)))
   }
 
   table <- parsed$table
@@ -820,21 +818,37 @@ df_for_contrast.mm_lmm <- function(fit, L, method = c("auto", "satterthwaite",
     NA_character_
   }
 
-  attr(out, "method") <- method_label
-  attr(out, "requested_method") <- method
-  if (!is.na(reason_label)) {
-    attr(out, "mm_unavailable_reason") <- reason_label
-  }
-  class(out) <- c("mm_df_for_contrast", "numeric")
-  out
+  mm_new_df_for_contrast(out, method_label = method_label,
+                         requested = method, reason = reason_label)
+}
+
+# Sibling-consistent constructor: an mm_* object carrying $table plus the
+# named df vector for programmatic use.
+mm_new_df_for_contrast <- function(df, method_label, requested, reason) {
+  if (is.null(names(df))) names(df) <- paste0("c", seq_along(df))
+  table <- data.frame(
+    contrast = names(df),
+    df = as.numeric(df),
+    method = method_label,
+    requested_method = requested,
+    reason = if (length(reason) == 1L && !is.na(reason)) reason else NA_character_,
+    stringsAsFactors = FALSE
+  )
+  obj <- list(
+    table = table,
+    df = df,
+    method = method_label,
+    requested_method = requested
+  )
+  class(obj) <- "mm_df_for_contrast"
+  obj
 }
 
 #' @method print mm_df_for_contrast
 #' @export
 print.mm_df_for_contrast <- function(x, ...) {
-  print(unclass(x))
-  cat(sprintf("method: %s\n", attr(x, "method") %||% "unavailable"))
-  cat(sprintf("reason: %s\n", attr(x, "mm_unavailable_reason") %||% "not_recorded"))
+  cat("Degrees of freedom for contrasts:\n")
+  print(x$table, row.names = FALSE)
   invisible(x)
 }
 
@@ -842,14 +856,14 @@ print.mm_df_for_contrast <- function(x, ...) {
 #' @importFrom stats confint
 #' @export
 confint.mm_lmm <- function(object, parm, level = 0.95,
-                           method = c("wald", "asymptotic", "bootstrap",
+                           method = c("asymptotic", "wald", "bootstrap",
                                       "profile"),
                            bootstrap = NULL,
                            interval = c("percentile", "basic"), ...) {
   method <- match.arg(method)
-  # `"asymptotic"` is the package-wide name for the closed-form Wald
-  # interval; accept it here as a synonym so the method vocabulary is
-  # consistent with contrast()/test_effect()/inference_table().
+  # `"asymptotic"` is the package-wide canonical name for the closed-form
+  # Wald interval (shared with contrast()/test_effect()/inference_table());
+  # `"wald"` stays accepted as a synonym. Internals compute under "wald".
   if (identical(method, "asymptotic")) method <- "wald"
   interval <- match.arg(interval)
   if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
@@ -905,7 +919,8 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' @param object A fitted `mm_glmm`.
 #' @param parm Optional fixed-effect names or indices; defaults to all.
 #' @param level Confidence level.
-#' @param method `"wald"` (default) or its synonym `"asymptotic"`.
+#' @param method `"asymptotic"` (the default; the package-wide name for the
+#'   closed-form Wald interval) or its synonym `"wald"`.
 #' @param ... Unused.
 #'
 #' @return An `mm_confint` matrix of lower/upper bounds.
@@ -913,7 +928,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' @method confint mm_glmm
 #' @export
 confint.mm_glmm <- function(object, parm, level = 0.95,
-                            method = c("wald", "asymptotic", "profile",
+                            method = c("asymptotic", "wald", "profile",
                                        "bootstrap"), ...) {
   method <- match.arg(method)
   if (method %in% c("profile", "bootstrap")) {
@@ -921,7 +936,7 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
       message = sprintf(
         paste0("`confint(method = \"%s\")` is not available for GLMM fits; the ",
                "upstream contract certifies only asymptotic Wald intervals for ",
-               "generalized models. Use method = \"wald\"."),
+               "generalized models. Use method = \"asymptotic\"."),
         method
       ),
       class = "mm_inference_unavailable",
@@ -2169,8 +2184,8 @@ mm_lincomb.mm_lmm <- function(fit, weights,
   } else {
     L <- matrix(w, nrow = 1L, dimnames = list(NULL, bnms))
     df_tbl <- df_for_contrast(fit, L, method = method)
-    df <- as.numeric(df_tbl[1L])
-    method_used <- attr(df_tbl, "method") %||% method
+    df <- as.numeric(df_tbl$df[[1L]])
+    method_used <- df_tbl$method %||% method
     statistic <- est / se
     stat_name <- "t"
     if (is.finite(df) && df > 0) {

@@ -1,23 +1,24 @@
-#' Print the structured design audit for a compiled model spec
+#' Audit a compiled model spec or fitted model
 #'
-#' `audit_design()` returns the user-facing audit report attached to an
-#' `mm_spec`. The text is rendered by the upstream Rust crate (the
+#' `audit()` returns the user-facing audit report attached to an `mm_spec`
+#' (pre-fit) or an `mm_fit` (post-fit). The text is rendered by the upstream Rust crate (the
 #' `mixedmodels.model_audit_report` schema's `Display` impl) — Rust authors
 #' the wording, R formats nothing. Routing every printed audit line
 #' through the upstream renderer is what enforces the R9 "no advice
 #' creep" contract: drift in scope notes / tone is visible in one place
 #' rather than scattered across R formatters.
 #'
-#' Phase 1.A scope: `audit_design()` accepts an `mm_spec` from
-#' [compile_model()] and emits the report sections (Requested Model,
+#' `audit()` accepts an `mm_spec` from
+#' [compile_model()] or an `mm_fit` from [lmm()]/[glmm()] and emits the report sections (Requested Model,
 #' Model State, Fixed/Random Effects, Information Budget, Dependence
 #' Paths, Parameterization Trace, Effective Covariance, Policy
 #' Recommendations, Optimizer, Inference, Diagnostics). Sections that
 #' depend on a fit (Optimizer / Inference) report `not applicable
 #' before fitting` on a pre-fit spec.
 #'
-#' @param spec An `mm_spec` produced by [compile_model()] (Phase 1.A) or
-#'   an `mm_fit` (post-Phase-1.E).
+#' @param object An `mm_spec` produced by [compile_model()] or an `mm_fit`
+#'   from [lmm()]/[glmm()].
+#' @param ... Reserved for future methods.
 #'
 #' @return An object of class `mm_audit` carrying:
 #' \describe{
@@ -53,16 +54,50 @@
 #'   x       = rnorm(20),
 #'   subject = factor(rep(letters[1:5], each = 4))
 #' )
-#' audit_design(compile_model(y ~ x + (1 + x | subject), df))
+#' audit(compile_model(y ~ x + (1 + x | subject), df))
 #' }
 #'
 #' @seealso [compile_model()].
 #'
 #' @export
+audit <- function(object, ...) {
+  UseMethod("audit")
+}
+
+#' @rdname audit
+#' @export
+audit.default <- function(object, ...) {
+  mm_abort(
+    message = "`object` must be an `mm_spec` (from compile_model) or an `mm_fit` (from lmm/glmm).",
+    class = "mm_schema_error",
+    input = object
+  )
+}
+
+#' @rdname audit
+#' @export
+audit.mm_compiled <- function(object, ...) {
+  mm_audit_impl(object)
+}
+
+#' Deprecated alias for [audit()]
+#'
+#' `audit_design()` and `audit()` were two names for one operation; the
+#' surface collapsed to `audit()` for 0.2.0. This alias forwards with a
+#' deprecation note and will be removed in a future release.
+#'
+#' @param spec An `mm_spec` or `mm_fit`; see [audit()].
+#' @return See [audit()].
+#' @export
 audit_design <- function(spec) {
+  .Deprecated("audit")
+  audit(spec)
+}
+
+mm_audit_impl <- function(spec) {
   if (!inherits(spec, c("mm_spec", "mm_fit"))) {
     mm_abort(
-      message = "`spec` must be an `mm_spec` (from compile_model) or an `mm_fit` (from lmm).",
+      message = "`object` must be an `mm_spec` (from compile_model) or an `mm_fit` (from lmm/glmm).",
       class = "mm_schema_error",
       input = spec
     )
@@ -97,28 +132,6 @@ audit_design <- function(spec) {
   )
   class(out) <- "mm_audit"
   out
-}
-
-#' Audit a fitted mixeff model
-#'
-#' `audit()` is the post-fit alias for [audit_design()]. It renders the same
-#' upstream-authored audit report, now backed by the fitted artifact carried by
-#' an `mm_fit`.
-#'
-#' @param fit A fitted `mm_fit`, usually from [lmm()].
-#' @param ... Reserved for future methods.
-#'
-#' @return An `mm_audit` object; see [audit_design()].
-#'
-#' @export
-audit <- function(fit, ...) {
-  UseMethod("audit")
-}
-
-#' @rdname audit
-#' @export
-audit.mm_fit <- function(fit, ...) {
-  audit_design(fit)
 }
 
 #' @method print mm_audit

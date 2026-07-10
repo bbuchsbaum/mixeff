@@ -13,13 +13,15 @@ mk_audit_fit <- function(seed = 11L) {
   )
 }
 
-test_that("audit() is the post-fit audit_design() surface", {
+test_that("audit() works on fits and specs; audit_design() is a deprecated alias", {
   fit <- mk_audit_fit()
   a <- audit(fit)
 
   expect_s3_class(a, "mm_audit")
   expect_match(a$text, "Audit Summary", fixed = TRUE)
-  expect_identical(audit_design(fit)$text, a$text)
+  # The collapsed surface: audit_design() forwards with a deprecation note.
+  expect_warning(alias <- audit_design(fit), "deprecated")
+  expect_identical(alias$text, a$text)
 })
 
 test_that("print.mm_audit defaults to the upstream-rendered compact summary", {
@@ -32,7 +34,7 @@ test_that("print.mm_audit defaults to the upstream-rendered compact summary", {
   subject <- factor(rep(seq_len(n_subjects), each = n_per))
   x <- rep(seq_len(n_per) - 1L, n_subjects)
   df <- data.frame(y = rnorm(length(x)), x = x, subject = subject)
-  audit <- audit_design(compile_model(y ~ x + (x | subject), df))
+  audit <- audit(compile_model(y ~ x + (x | subject), df))
 
   compact_lines <- capture.output(print(audit))
   compact <- paste(compact_lines, collapse = "\n")

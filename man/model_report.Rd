@@ -14,19 +14,19 @@ model_report(fit, sections = "all", ...)
 
 \method{model_report}{mm_fit}(fit, sections = "all", ...)
 
-reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
+reporting_table(object, section = "all", view = c("compact", "audit"), ...)
 
-\method{reporting_table}{mm_fit}(fit, section = "all", view = c("compact", "audit"), ...)
+\method{reporting_table}{mm_fit}(object, section = "all", view = c("compact", "audit"), ...)
 
 \method{reporting_table}{mm_model_comparison}(
-  fit,
+  object,
   section = "comparison_ledger",
   view = c("compact", "audit"),
   ...
 )
 
 \method{reporting_table}{mm_drop1}(
-  fit,
+  object,
   section = "comparison_ledger",
   view = c("compact", "audit"),
   ...

@@ -52,3 +52,4 @@ relib/
 
 # testthat auto-generated failure dump — regenerated on failing runs, not source
 tests/testthat/testthat-problems.rds
+release-gate-report.txt

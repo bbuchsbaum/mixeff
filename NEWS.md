@@ -121,6 +121,11 @@ text:
   they point to `verify_convergence()`.
 * Bootstrap-based inference with 200+ replicates announces its scale before
   the single silent native call.
+* `lmm()`/`glmm()` now emit a rescaling advisory when a continuous predictor
+  is on a scale far from 1 (matching `lme4`'s "predictors on very different
+  scales" guidance): such fits can converge poorly, and `scale()` is the
+  cheap fix. A notice, not a refusal; suppress with
+  `mm_control(verbose = -1)`.
 * `lmm()`/`glmm()` document that optimization is silent and non-interruptible
   within one native call, with bounded budgets.
 

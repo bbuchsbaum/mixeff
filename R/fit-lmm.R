@@ -102,6 +102,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
 
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec)
+  mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {
     mm_inform_explanation(spec)
   }
@@ -359,6 +360,52 @@ mm_apply_grouping_coercion <- function(formula, data, verbose) {
     )
   }
   res$data
+}
+
+# lme4-parity scaling advisory. Predictors on wildly different scales make the
+# optimizer's trust region ill-conditioned; lme4 warns "predictor variables
+# are on very different scales: consider rescaling". We surface the same
+# guidance (a notice, not a refusal) so a user whose fit stalls on raw-scale
+# data knows the cheap fix. Fires at verbose >= 0; suppress with
+# mm_control(verbose = -1). Runs on the compiled spec so grouping factors are
+# already coerced (excluded by is.numeric) and the fixed formula is known;
+# continuous fixed-effect predictors only (the response and factor dummies are
+# excluded).
+mm_scaling_advisory <- function(spec, verbose) {
+  if (!isTRUE(verbose >= 0L)) return(invisible(NULL))
+  fe <- tryCatch(all.vars(mm_fixed_formula(spec)[[3L]]),
+                 error = function(e) character())
+  mf <- spec$model_frame
+  cols <- intersect(fe, names(mf))
+  if (!length(cols)) return(invisible(NULL))
+  num <- vapply(mf[cols], function(col) is.numeric(col) && !is.factor(col),
+                logical(1))
+  if (!any(num)) return(invisible(NULL))
+  sds <- vapply(mf[cols][num], function(col) stats::sd(col, na.rm = TRUE),
+                numeric(1))
+  sds <- sds[is.finite(sds) & sds > 0]
+  if (!length(sds)) return(invisible(NULL))
+  # Two ways a continuous predictor makes the trust region ill-conditioned
+  # (both what lme4's checkScaleX flags): a large spread ACROSS predictors,
+  # or a single predictor far from unit scale. Threshold ~1e4 either way.
+  ratio <- max(sds) / min(sds)
+  extreme <- max(sds) > 1e4 || min(sds) < 1e-4
+  if (ratio > 1e4 || extreme) {
+    wide <- names(sds)[which.max(abs(log10(sds)))]
+    mm_inform(
+      sprintf(
+        paste0(
+          "Predictor `%s` is on a scale far from 1 (SD ~%.0e); predictors on ",
+          "very different scales can make the optimizer converge poorly. ",
+          "Consider rescaling continuous predictors (e.g. `scale()`). Silence ",
+          "with mm_control(verbose = -1)."
+        ),
+        wide, sds[[which.max(abs(log10(sds)))]]
+      ),
+      class = "mm_scaling_notice"
+    )
+  }
+  invisible(NULL)
 }
 
 # lme4-style data preparation shared by the fit drivers: apply a `subset`

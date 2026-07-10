@@ -136,6 +136,7 @@ glmm <- function(formula,
 
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec, lmm = FALSE)
+  mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {
     mm_inform_explanation(spec)
     # No silent surgery on the estimator choice: when the user did not pick a

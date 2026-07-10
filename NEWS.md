@@ -1,4 +1,4 @@
-# mixeff (development version)
+# mixeff 0.2.0
 
 ## Breaking: API-shape stabilization
 
@@ -46,10 +46,14 @@
 
 ## Engine
 
-* Engine pin bumped to `3b6ec69` (one commit past v1.0.0-rc.1): fixes the
-  native crossed-LMM trust-region start. Crossed-design fits that route
-  through the trust-region optimizer may land on very slightly different
-  (better-started) optima.
+* Engine pin bumped to `ee0c717`: the audit-render wording batch (policy
+  recommendations phrased as available options, boundary-sentence
+  deduplication, internal jargon humanized in the summary view) plus
+  upstream release hardening.
+* Earlier in this cycle the pin moved to `3b6ec69` (one commit past
+  v1.0.0-rc.1), which fixes the native crossed-LMM trust-region start.
+  Crossed-design fits that route through the trust-region optimizer may land
+  on very slightly different (better-started) optima.
 * The bundled `mixeff-rs` engine is now pinned to its first tagged release,
   v1.0.0-rc.1 (`3332f3e`). The two response-batch diagnostic reasons new in
   this release (`sink_stopped`, `adaptive_refinement`) are registered in the

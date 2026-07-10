@@ -59,6 +59,12 @@ Aphantasia reproduction reviewed if the fixture changed
 External state — **each depends on something outside this checkout and
 must be confirmed explicitly, not implied by local green tests**:
 
+> **Self-contained repo:** the vendored engine (`src/rust/upstream/`,
+> `vendor.tar.xz`, `vendor-config.toml`) is committed so R-universe
+> (which builds from the repo, not a pre-vendored tarball) can build.
+> Re-run `tools/vendor-rust.R` **and re-commit those paths** on every
+> `PINNED_REV` bump, or the R-universe build breaks.
+
 `mixeff-rs` pin (`PINNED_REV` in `tools/vendor-rust.R`) is published on
 the mixeff-rs GitHub default branch (CI vendoring needs it on the
 remote)

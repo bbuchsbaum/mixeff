@@ -91,6 +91,9 @@
 <ul class="task-list"><li><label><input type="checkbox">Slow-parity suite reviewed (<code>MIXEFF_RUN_SLOW_PARITY=true</code>) — any misses are documented Decision-D near-ties, not regressions</label></li>
 <li><label><input type="checkbox">Aphantasia reproduction reviewed if the fixture changed</label></li>
 </ul><p>External state — <strong>each depends on something outside this checkout and must be confirmed explicitly, not implied by local green tests</strong>:</p>
+<blockquote>
+<p><strong>Self-contained repo:</strong> the vendored engine (<code>src/rust/upstream/</code>, <code>vendor.tar.xz</code>, <code>vendor-config.toml</code>) is committed so R-universe (which builds from the repo, not a pre-vendored tarball) can build. Re-run <code>tools/vendor-rust.R</code> <strong>and re-commit those paths</strong> on every <code>PINNED_REV</code> bump, or the R-universe build breaks.</p>
+</blockquote>
 <ul class="task-list"><li><label><input type="checkbox"><code>mixeff-rs</code> pin (<code>PINNED_REV</code> in <code>tools/vendor-rust.R</code>) is published on the mixeff-rs GitHub default branch (CI vendoring needs it on the remote)</label></li>
 <li><label><input type="checkbox"><code>release/0.2.0-prep</code> merged to <code>main</code> and pushed; GitHub Actions (R CMD check on 3 OS, Release gates, pkgdown) green on the pushed head</label></li>
 <li><label><input type="checkbox">R-hub v2 (linux / windows / macos, R-devel) green</label></li>

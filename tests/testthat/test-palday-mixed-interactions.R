@@ -247,7 +247,7 @@ test_that("Palday ordered-factor coefficient names are lme4-identical", {
   expect_false(any(grepl("temperature: .L", mm_names, fixed = TRUE)))
 })
 
-test_that("drop1 default scope respects marginality; explicit non-marginal drops refuse honestly", {
+test_that("drop1 default scope respects marginality; explicit non-marginal drops fit + match lme4", {
   dat <- palday_cake_data()
   fit <- mixeff::lmm(palday_formula(TRUE), dat, REML = FALSE,
                      control = mixeff::mm_control(verbose = -1))
@@ -258,15 +258,21 @@ test_that("drop1 default scope respects marginality; explicit non-marginal drops
   expect_identical(mm_drop$table$dropped, "recipe:temperature")
   expect_identical(mm_drop$table$status, "available")
 
-  # Explicit non-marginal scope: the reduced fit's design basis diverges from
-  # R's (engine reduced coding vs full-dummy expansion), so the row comes back
-  # unavailable with the reason, rather than crashing the whole table.
+  # Explicit non-marginal scope: since engine pin 4a2abb3 the engine expands
+  # full dummies for the absent margin exactly like R/lme4, so the reduced
+  # non-marginal fit is the SAME model as lme4's and produces an ordinary
+  # available row whose LRT matches lme4's drop1.
+  skip_if_not_installed("lme4")
   mm_drop2 <- stats::drop1(fit, scope = c("recipe", "recipe:temperature"),
                            test = "Chisq")
   recipe_row <- mm_drop2$table[mm_drop2$table$dropped == "recipe", , drop = FALSE]
-  expect_identical(recipe_row$status, "unavailable")
-  expect_match(recipe_row$reason, "NON-MARGINAL", fixed = TRUE)
-  inter_row <- mm_drop2$table[mm_drop2$table$dropped == "recipe:temperature", , drop = FALSE]
-  expect_identical(inter_row$status, "available")
-  expect_true(is.finite(inter_row$LRT))
+  expect_identical(recipe_row$status, "available")
+  expect_true(is.finite(recipe_row$LRT))
+
+  ref <- suppressMessages(suppressWarnings(
+    lme4::lmer(palday_formula(TRUE), data = dat, REML = FALSE)
+  ))
+  lme4_drop <- stats::drop1(ref, scope = c("recipe", "recipe:temperature"),
+                            test = "Chisq")
+  expect_equal(recipe_row$LRT, lme4_drop["recipe", "LRT"], tolerance = 1e-3)
 })

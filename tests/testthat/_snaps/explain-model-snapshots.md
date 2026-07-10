@@ -272,11 +272,11 @@
         overall [WARNING]: 8 warning(s); review attention lines before treating inference as routine
         attention [WARNING]: Model State / supported: status=refused; formula=y ~ 1 + between + (1 + between | g); random_terms=1; reason=design audit found at least one unsupported random-effect distribution
         attention [WARNING]: Model State / changes: Recommended:DesignTime:r0 -> basis direction(s) unsupported by within-group variation: between | Recommended:DesignTime:r0 -> number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
-        attention [WARNING]: Random Effects / r0: group=g, rows=8, levels=4, obs_per_level=2..2, basis=2, covariance=full, params=3, budget=too_rich; reason=number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
-        attention [WARNING]: Random-Effect Information Budget / r0: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; options include dropping unsupported random slopes, splitting or simplifying the random-effect structure, treating the grouping factor as fixed, or collecting more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
-        attention [WARNING]: Random Term Cards / r0: original=(1 + between | g), canonical=(1 + between | g), group=g, blocks=basis=[intercept, between], covariance=full, params=3
-        attention [WARNING]: Policy Recommendations / r0: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; lower-dimensional covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
-        attention [WARNING]: Policy Recommendations / r0: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
+        attention [WARNING]: Random Effects / g: group=g, rows=8, levels=4, obs_per_level=2..2, basis=2, covariance=full, params=3, budget=too_rich; reason=number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
+        attention [WARNING]: Random-Effect Information Budget / g: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; options include dropping unsupported random slopes, splitting or simplifying the random-effect structure, treating the grouping factor as fixed, or collecting more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
+        attention [WARNING]: Random Term Cards / g: `g` units differ in baseline and `between` slope; the model estimates whether these are associated. It uses 3 covariance parameters for intercept, between. The data contain 4 `g` levels, with at least 2 rows per level (median 2). Within-group support is absent for `between`. Within-group support was not assessed for `intercept`. The requested covariance is too rich for the available grouping-level information. Formula detail: `(1 + between | g)`.
+        attention [WARNING]: Policy Recommendations / g: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; lower-dimensional covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
+        attention [WARNING]: Policy Recommendations / g: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
         attention [WARNING]: Diagnostics / covariance_too_rich: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; affected=(1 + between | g)
       
       Requested Model:
@@ -302,31 +302,31 @@
         empty cells [OK]: 0
       
       Random Effects:
-        r0 [WARNING]: group=g, rows=8, levels=4, obs_per_level=2..2, basis=2, covariance=full, params=3, budget=too_rich; reason=number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
+        g [WARNING]: group=g, rows=8, levels=4, obs_per_level=2..2, basis=2, covariance=full, params=3, budget=too_rich; reason=number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable
       
       Random-Effect Information Budget:
-        r0 [WARNING]: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; options include dropping unsupported random slopes, splitting or simplifying the random-effect structure, treating the grouping factor as fixed, or collecting more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
+        g [WARNING]: levels=4, rows=8, obs_per_level=2..2, basis=2, cov_params=3, levels/basis=2.00, levels/param=1.33, rows/param=2.67; total rows can be misleading for covariance support; risk=maximal covariance structure is too rich for the grouping-level budget; recommendation=random-effect coefficients saturate the rows for this term; options include dropping unsupported random slopes, splitting or simplifying the random-effect structure, treating the grouping factor as fixed, or collecting more observations per grouping level; explanation=8 rows are clustered into 4 grouping levels; covariance support is limited by grouping levels, not by total rows
       
       Random Term Cards:
-        r0 [WARNING]: original=(1 + between | g), canonical=(1 + between | g), group=g, blocks=basis=[intercept, between], covariance=full, params=3
+        g [WARNING]: `g` units differ in baseline and `between` slope; the model estimates whether these are associated. It uses 3 covariance parameters for intercept, between. The data contain 4 `g` levels, with at least 2 rows per level (median 2). Within-group support is absent for `between`. Within-group support was not assessed for `intercept`. The requested covariance is too rich for the available grouping-level information. Formula detail: `(1 + between | g)`.
       
       Cross-Card Constraints:
         constraints [OK]: none
       
       Dependence Paths:
-        kernels [INFO]: r0=marginal(g, intercept=true, covariance=full, basis=intercept, between)
-        repeated units [OK]: g=marginal(g, levels=4, obs_per_level=2..2, covered_by=r0)
+        kernels [INFO]: Observations sharing `g` are linked through `intercept`, `between`, with full covariance (marginal path).
+        repeated units [OK]: `g` has 4 levels and 2..2 rows per level; its marginal path is covered by one requested random-effect term.
         missing paths [OK]: none
       
       Parameterization Trace:
-        r0 [INFO]: source=(1 + between | g); group=g; family=FullCholesky; user_basis=intercept, between; optimizer_basis=intercept, between; theta_slots=theta[0], theta[1], theta[2]; lambda_slots=(0, 0), (1, 0), (1, 1); parmap_aligned=0/3; varcorr_entries=sd(intercept), sd(between), corr(between,intercept)
+        g [INFO]: source=(1 + between | g); group=g; family=FullCholesky; user_basis=intercept, between; optimizer_basis=intercept, between; theta_slots=theta[0], theta[1], theta[2]; lambda_slots=(0, 0), (1, 0), (1, 1); parmap_aligned=0/3; varcorr_entries=sd(intercept), sd(between), corr(between,intercept)
       
       Effective Covariance:
         effective covariance rank [INFO]: not applicable before fitting; effective covariance rank is recorded after fitting
       
       Policy Recommendations:
-        r0 [WARNING]: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; lower-dimensional covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
-        r0 [WARNING]: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
+        g [WARNING]: drop_unsupported_basis: basis direction(s) unsupported by within-group variation: between; lower-dimensional covariance=scalar_or_diagonal_on_supported_basis; inference=fixed-effect inference would be conditional on the supported random-effect basis
+        g [WARNING]: refuse_random_term_distribution: number of observations (8) is <= random coefficients (8) for grouping factor 'g' with basis dimension 2; random-effect variances and the residual scale are probably not separately identifiable; inference=confirmatory fixed-effect p-values should be withheld or recomputed after a declared design-level change
       
       Optimizer:
         certificate [INFO]: not applicable before fitting; model has not been fitted

@@ -86,7 +86,15 @@ test_that("diagnostics() and fit_status() expose artifact status fields", {
 })
 
 test_that("changes() reports requested/effective/fitted transitions", {
-  fit <- mk_audit_fit()
+  # A fit that CONVERGES to a certified (reduced-rank) optimum exercises the
+  # certificate_time transition + rank status rendering. Dyestuff2 has zero
+  # between-batch variance, so it reliably converges to reduced rank (the
+  # maximal-slope mk_audit_fit is now reported not_optimized by the engine
+  # and so carries no certificate row).
+  skip_if_not_installed("lme4")
+  data("Dyestuff2", package = "lme4")
+  fit <- lmm(Yield ~ 1 + (1 | Batch), Dyestuff2,
+             control = mm_control(verbose = -1))
   ch <- changes(fit)
 
   expect_s3_class(ch, "mm_change_log")

@@ -20,13 +20,8 @@
   accepted synonym. Computation is unchanged.
 * `drop1()` now matches `stats::drop1()` marginality semantics: by default,
   main effects participating in an interaction are not offered for dropping.
-  An explicit non-marginal `scope` produces an `"unavailable"` row with a
-  reason (the engine's design basis for non-marginal models diverges from
-  R's), instead of an error mid-table. The result gains `status` and `reason`
-  columns.
-* Fitting a non-marginal formula directly (`y ~ b + a:b`) is refused with an
-  explanation: the engine's reduced interaction coding and R/lme4's
-  full-dummy expansion are different models, so parity cannot be certified.
+  An explicit non-marginal `scope` is still honoured and fits normally. The
+  result gains `status` and `reason` columns.
 
 ## Breaking: lme4-identical coefficient names
 
@@ -46,10 +41,16 @@
 
 ## Engine
 
-* Engine pin bumped to `ee0c717`: the audit-render wording batch (policy
-  recommendations phrased as available options, boundary-sentence
-  deduplication, internal jargon humanized in the summary view) plus
-  upstream release hardening.
+* Engine pin bumped to `4a2abb3`: hardens convergence and runtime contracts.
+  Non-marginal designs (`y ~ b + a:b`) now fit and match `lme4` exactly
+  (previously refused). Convergence labelling is more conservative — a fit
+  that reaches a flat/boundary region without a certified stationary point is
+  now reported `not_optimized` (previously sometimes `converged_reduced_rank`)
+  on small maximal random-slope models; genuine reduced-rank optima (e.g.
+  `lme4::Dyestuff2`) still report `converged_reduced_rank`. The prior pin,
+  `ee0c717`, carried the audit-render wording batch (policy recommendations
+  phrased as options, boundary-sentence deduplication, humanized summary-view
+  jargon).
 * Earlier in this cycle the pin moved to `3b6ec69` (one commit past
   v1.0.0-rc.1), which fixes the native crossed-LMM trust-region start.
   Crossed-design fits that route through the trust-region optimizer may land

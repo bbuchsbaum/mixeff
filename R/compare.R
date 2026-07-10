@@ -374,11 +374,11 @@ drop1.mm_lmm <- function(object,
   if (!is.null(scope)) {
     terms <- intersect(terms, as.character(scope))
   } else {
-    # Match stats::drop1 marginality semantics: only terms not contained in a
-    # higher-order term are droppable by default. Dropping a main effect that
-    # participates in an interaction yields a NON-MARGINAL reduced model, and
-    # the engine's design basis for those diverges from R's (reduced coding vs
-    # full-dummy expansion), so such refits cannot be certified against lme4.
+    # Match stats::drop1 marginality semantics: by default only terms not
+    # contained in a higher-order term are droppable (you don't test a main
+    # effect while its interaction is in the model). An explicit `scope` may
+    # still request a non-marginal drop -- the engine fits those correctly
+    # (matching lme4's full-dummy expansion), so they produce ordinary rows.
     terms <- intersect(terms, mm_droppable_terms(object))
   }
   prepared_full <- mm_prepare_comparison_fits(list(object), refit_for_comparison)

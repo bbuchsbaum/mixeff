@@ -339,6 +339,14 @@ cat(sprintf(
 ))
 cat("[vendor-rust.R] next: devtools::check(document = FALSE)\n")
 cat(paste0(
+  "[vendor-rust.R] COMMIT the regenerated snapshot: src/rust/upstream/,\n",
+  "                src/rust/vendor.tar.xz, and src/rust/vendor-config.toml\n",
+  "                are tracked so the repo builds from a clean clone\n",
+  "                (R-universe). A re-pin that does not re-commit them will\n",
+  "                break the R-universe build. `git add src/rust/upstream\n",
+  "                src/rust/vendor.tar.xz src/rust/vendor-config.toml`.\n"
+))
+cat(paste0(
   "[vendor-rust.R] REMINDER: you just pulled new engine code. Consult\n",
   "                planning/upstream-blocked.md and unblock any downstream\n",
   "                beads whose upstream mixeff-rs feature has now shipped\n",

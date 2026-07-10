@@ -1,0 +1,172 @@
+[package]
+name = "mixeff-rs"
+version = "1.0.0-rc.1"
+edition = "2021"
+rust-version = "1.85"
+description = "Linear and generalized linear mixed-effects models in Rust; engine for the mixeff R package, parity-tested against Julia's MixedModels.jl"
+license = "MIT"
+authors = ["Bradley Buchsbaum <brad.buchsbaum@gmail.com>"]
+repository = "https://github.com/bbuchsbaum/mixeff-rs"
+documentation = "https://docs.rs/mixeff-rs"
+readme = "README.md"
+keywords = ["statistics", "mixed-models", "lme4", "regression", "glmm"]
+categories = ["science", "mathematics", "algorithms"]
+exclude = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "Cargo.toml.orig",
+    "MixedModels.jl/",
+    "comparison/",
+    "scripts/",
+    "docs/*.md",
+    "audit/",
+    ".github/",
+    ".mote/",
+    ".omc/",
+    "tests/",
+    "=",
+    "halving_bound",
+    "progress.txt",
+    "prd.json",
+]
+
+[dependencies]
+nalgebra = { version = "0.33", features = ["serde-serialize"] }
+nalgebra-sparse = "0.10"
+cobyla = "1"
+statrs = "0.18"
+rand = "0.8"
+rand_distr = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+num-traits = "0.2"
+indexmap = "2"
+log = "0.4"
+nlopt = { version = "0.8.1", optional = true }
+faer = { version = "0.24", optional = true, default-features = false, features = ["std", "linalg"] }
+rayon = { version = "1.10", optional = true }
+csv = "1"
+toml = { version = "0.8", default-features = false, features = ["parse"] }
+minilp = "0.2"
+
+[features]
+default = ["nlopt"]
+# Enables NLopt (BOBYQA / large-θ paths and optional GLMM optimizer parity).
+# This is the default release optimizer path because it is substantially more
+# iteration-efficient on vector and crossed LMMs. Dependency-light builds can
+# opt out with `--no-default-features`, which uses the native TrustBQ LMM
+# optimizer plus native GLMM fallbacks.
+nlopt = ["dep:nlopt"]
+# Enables the PRIMA C backend for explicitly requested Powell optimizers.
+# This first slice wires bounded LMM theta optimization through PRIMA BOBYQA
+# only. The feature expects a system PRIMA C library visible to the linker.
+prima = []
+# Exposes the unstable internal surface (`compiler`, `datasets`, `pathology`)
+# as public modules. These are NOT covered by the 1.0 SemVer guarantee — the
+# compiler/IR is still in flux and dataset provenance churns. Off by default
+# so IR refinements are not SemVer-major breaks.
+unstable-internals = []
+# Enables opt-in deterministic parallel execution for response-matrix batch
+# fitting (`BatchParallelism::Rayon`). Off by default; the serial path stays
+# the default at runtime even when the feature is compiled in.
+rayon = ["dep:rayon"]
+# EXPERIMENTAL: routes the hot blocked-Cholesky gemm downdates through faer's
+# matmul instead of nalgebra/matrixmultiply. Benchmark-gated (see mote
+# bd-01KWG71ZHZAS...); off by default. Objectives may drift at rounding level
+# versus the pinned perf_gate baselines, so do not enable in parity runs.
+faer-backend = ["dep:faer"]
+
+[dev-dependencies]
+approx = "0.5"
+# `default-features = false` drops the plotters/cairo + rayon stack so the
+# benches build with no system graphics deps.
+criterion = { version = "0.5", default-features = false }
+
+[[bench]]
+name = "pls_kernel"
+harness = false
+required-features = ["unstable-internals"]
+
+# Examples that consume the unstable internal surface (compiler / datasets /
+# pathology) only build when that feature is enabled, so the default
+# `cargo build --examples` stays on the stable public API.
+[[example]]
+name = "active_face_bench"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "bench_compiler_contract"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "bootstrap_refit_bench"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "bench_penicillin_convergence"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "bench_response_matrix_batch"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "compare_rust"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "debug_inference_drift"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "lmm_lme4_comparison"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "objective_eval_bench"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "parity_dump"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "perf_gate"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "profile_pls_kernel"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "profile_grouseticks_glmm"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "probe_high_baseline_glmm"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "probe_aphantasia_combined"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "probe_tungara_glmm"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "probe_weak_id"
+required-features = ["unstable-internals"]
+
+[[example]]
+name = "profile_kb07"
+required-features = ["unstable-internals"]
+
+# Tuning harness: configures optimizer tolerances via the unstable
+# `optsum_mut` escape hatch, so it requires the same feature as the other
+# internal-poking harnesses (auto-discovery would otherwise build it under
+# default features where that surface is sealed).
+[[example]]
+name = "tune_bobyqa_asymptotic"
+required-features = ["unstable-internals"]

@@ -33,13 +33,13 @@ src/rust/vendor
 src/Makevars
 src/Makevars.win
 
-# Outputs of tools/vendor-rust.R — regenerated, not committed.
-# These ship inside the package tarball but are not part of the source repo.
-src/rust/upstream/
+# Outputs of tools/vendor-rust.R. The vendored engine snapshot and offline
+# cargo tarball ARE committed so the repo is self-contained and builds from a
+# clean clone (required by R-universe, which builds from the repo, not from a
+# pre-vendored tarball). Re-run tools/vendor-rust.R and re-commit these on
+# every PINNED_REV bump. Local unpack dirs stay ignored.
 src/vendor/
 src/.cargo/
-src/rust/vendor-config.toml
-src/rust/vendor.tar.xz
 
 # Rendered pkgdown/albersdown site and stray local package extractions.
 # Both are .Rbuildignore'd already; keep them out of git too. The site is

@@ -1,0 +1,9 @@
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+# Resolved relative to CARGO_HOME's parent (= the package src/ dir at
+# build time per src/Makevars.in: CARGO_HOME=src/.cargo, vendored sources
+# at src/vendor). Survives tarball relocation because both are inside
+# src/.
+directory = "vendor"

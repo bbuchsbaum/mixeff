@@ -31,5 +31,5 @@ being silently dropped. Use \code{\link[=confint]{confint()}} with \code{method 
 matrix form.
 }
 \seealso{
-\code{\link[=confint.mm_lmm]{confint.mm_lmm()}}
+\code{\link[=confint]{confint()}} with \code{method = "profile"} for the matrix form.
 }

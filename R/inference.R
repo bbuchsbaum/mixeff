@@ -1830,7 +1830,7 @@ mm_inference_row_unavailable <- function(term, method, reason, reason_code = NA_
 #' @param ... Unused; for generic consistency.
 #' @return An `mm_profile` object with `$table`, `$level`, `$fit_criterion`,
 #'   and `$notes`.
-#' @seealso [confint.mm_lmm()]
+#' @seealso [confint()] with `method = "profile"` for the matrix form.
 #' @export
 profile.mm_lmm <- function(fitted, which = NULL, level = 0.95, ...) {
   ci <- mm_profile_confint(fitted, parm = which, level = level)

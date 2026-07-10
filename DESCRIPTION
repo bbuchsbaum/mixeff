@@ -38,6 +38,7 @@ Suggests:
     knitr,
     lme4,
     lmerTest,
+    MASS,
     rextendr,
     rmarkdown,
     testthat (>= 3.0.0)

@@ -47,6 +47,14 @@
   `fit$family$nb_theta`. `method = "joint_laplace"` is not yet wired for this
   family at the pinned engine and is refused with a typed error.
 
+## Prediction
+
+* Population-level predictions (`re.form = NA` or `~0`) no longer require the
+  random-effect grouping columns in `newdata`, matching
+  `predict(lmer/glmer, re.form = NA)`. Only the fixed-part variables are
+  needed; conditional predictions (`re.form = NULL`) still require the full
+  formula's variables.
+
 ## Contrasts
 
 * Ordered factors are now coded with orthonormal polynomial contrasts

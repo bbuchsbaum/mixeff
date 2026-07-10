@@ -152,3 +152,16 @@ test_that("predict(newdata=) with an ordered fixed factor reuses the training co
                as.numeric(stats::predict(ref, newdata = nd1, re.form = NA)),
                tolerance = 1e-6)
 })
+
+test_that("LMM population predict accepts newdata without grouping columns", {
+  skip_if_not_installed("lme4")
+  fit <- lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,
+             control = mm_control(verbose = -1))
+  ref <- suppressMessages(lme4::lmer(Reaction ~ Days + (Days | Subject),
+                                     lme4::sleepstudy))
+  nd <- data.frame(Days = c(0, 5, 9))
+  expect_equal(unname(predict(fit, nd, re.form = NA)),
+               unname(predict(ref, newdata = nd, re.form = NA)),
+               tolerance = 1e-8)
+  expect_error(predict(fit, nd, re.form = NULL), class = "mm_data_error")
+})

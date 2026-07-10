@@ -330,7 +330,16 @@ predict.mm_glmm <- function(object,
       nm <- rownames(object$model_frame)
     }
   } else {
-    needed <- all.vars(stats::delete.response(stats::terms(object$formula)))
+    # Population predictions (re.form = NA / ~0) only evaluate the fixed
+    # design, so newdata needs the fixed-part variables only — matching
+    # predict(glmer, re.form = NA), which accepts newdata without grouping
+    # columns. Conditional predictions need the full formula's variables.
+    needed_formula <- if (identical(target, "population")) {
+      mm_fixed_formula(object)
+    } else {
+      object$formula
+    }
+    needed <- all.vars(stats::delete.response(stats::terms(needed_formula)))
     missing_vars <- setdiff(needed, names(newdata))
     if (length(missing_vars)) {
       mm_abort(
@@ -490,7 +499,14 @@ mm_predict_newdata <- function(fit, newdata, target, allow_new_levels) {
       input = newdata
     )
   }
-  needed <- all.vars(stats::delete.response(stats::terms(fit$formula)))
+  # Population predictions evaluate the fixed design only, so grouping
+  # columns are not required in newdata (matching predict(lmer, re.form = NA)).
+  needed_formula <- if (identical(target, "population")) {
+    mm_fixed_formula(fit)
+  } else {
+    fit$formula
+  }
+  needed <- all.vars(stats::delete.response(stats::terms(needed_formula)))
   missing_vars <- setdiff(needed, names(newdata))
   if (length(missing_vars)) {
     mm_abort(

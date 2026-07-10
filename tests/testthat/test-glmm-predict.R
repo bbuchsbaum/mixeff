@@ -182,3 +182,45 @@ test_that("predict.mm_glmm population se.fit gives finite Wald SEs", {
   # response-scale SE = link SE * |d mu / d eta|, which is < link SE for logit
   expect_true(all(resp$se.fit <= link$se.fit + 1e-9))
 })
+
+test_that("population predict accepts newdata without grouping columns", {
+  # lme4 parity: predict(glmer, newdata, re.form = NA) does not require the
+  # grouping variables in newdata; only the fixed part is evaluated.
+  skip_if_not_installed("lme4")
+  data(cbpp, package = "lme4")
+  cbpp$prop <- cbpp$incidence / cbpp$size
+  ref <- suppressMessages(lme4::glmer(
+    prop ~ period + (1 | herd), data = cbpp,
+    family = binomial(), weights = size
+  ))
+  nd <- data.frame(period = factor(c("1", "2", "3", "4")))
+
+  # joint_laplace tracks glmer's estimator, so parity is tight (~1e-3 link).
+  fit_joint <- glmm(prop ~ period + (1 | herd), data = cbpp,
+                    family = binomial(), weights = cbpp$size,
+                    method = "joint_laplace",
+                    control = mm_control(verbose = -1))
+  for (ty in c("link", "response")) {
+    expect_equal(
+      unname(predict(fit_joint, nd, re.form = NA, type = ty)),
+      unname(predict(ref, newdata = nd, re.form = NA, type = ty)),
+      tolerance = 2e-3,
+      info = sprintf("joint population predict parity (%s scale)", ty)
+    )
+  }
+
+  # The default profiled fit differs from glmer's estimator (documented gap),
+  # but the same-fit prediction path must still work without grouping cols.
+  fit_prof <- glmm(prop ~ period + (1 | herd), data = cbpp,
+                   family = binomial(), weights = cbpp$size,
+                   control = mm_control(verbose = -1))
+  p <- predict(fit_prof, nd, re.form = NA, type = "response")
+  expect_length(p, 4L)
+  expect_true(all(is.finite(p) & p > 0 & p < 1))
+
+  # Conditional predictions still require the grouping variable.
+  expect_error(
+    predict(fit_prof, nd, re.form = NULL),
+    class = "mm_data_error"
+  )
+})

@@ -547,10 +547,38 @@ mm_abort_from_bridge <- function(cnd, ...) {
   parts <- mm_split_tagged_error(conditionMessage(cnd))
   cls <- if (!is.na(parts$tag)) parts$tag else "mm_bridge_error"
   msg <- if (!is.na(parts$tag)) parts$message else conditionMessage(cnd)
+  # No `parent = cnd`: the bridge condition carries the same message, so
+  # chaining it only adds a duplicated "Caused by error in doTryCatch()"
+  # block to what the user sees. The tagged class + message are the contract.
   mm_abort(
-    message = msg,
+    message = mm_translate_bridge_message(msg),
     class = cls,
-    ...,
-    parent = cnd
+    ...
   )
+}
+
+# Engine error text is written for the Rust API surface; rewrite the pieces
+# that reference controls an R user cannot type into the R-level equivalents,
+# and strip internal call-path prefixes. Text-only: the tagged condition
+# class and the substantive reason are preserved.
+mm_translate_bridge_message <- function(msg) {
+  msg <- sub(
+    "Use NewReLevels::Population or ::Missing to allow this\\.?",
+    paste0(
+      "To predict for unseen groups, use population-level prediction ",
+      "(`re.form = NA`) or set `allow.new.levels = TRUE`."
+    ),
+    msg
+  )
+  msg <- sub("^predict_new(_variance(_with_level)?)? failed: Invalid argument: ",
+             "", msg)
+  msg <- sub("^failed to construct (LMM|GLMM): ", "", msg)
+  if (grepl("No random effects in formula: this is not a mixed model",
+            msg, fixed = TRUE) &&
+      !grepl("stats::lm", msg, fixed = TRUE)) {
+    msg <- paste0(
+      msg, " Use stats::lm() (or glm()) for a fixed-effects-only model."
+    )
+  }
+  msg
 }

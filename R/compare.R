@@ -297,6 +297,16 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I"),
                    drop = FALSE]
     names(table)[names(table) == "numerator_df"] <- "num_df"
     names(table)[names(table) == "denominator_df"] <- "den_df"
+    # Single-df terms come back as t-form rows; lme4's anova presents the
+    # mathematically identical F form (F(1, nu) = t(nu)^2). Convert so the
+    # ANOVA table reads like lme4's and num_df is never a bare NA for an
+    # available row.
+    t_rows <- !is.na(table$statistic_name) & table$statistic_name == "t"
+    if (any(t_rows)) {
+      table$statistic[t_rows] <- table$statistic[t_rows]^2
+      table$statistic_name[t_rows] <- "f"
+      table$num_df[t_rows] <- 1
+    }
   }
   table$type <- type
   table <- table[, c("term", "type", setdiff(names(table), c("term", "type"))),
@@ -316,7 +326,23 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I"),
 print.mm_anova <- function(x, ...) {
   cat(sprintf("Type %s analysis of fixed effects (method: %s):\n",
               x$type %||% "III", x$requested_method %||% "auto"))
-  print(x$table, row.names = FALSE)
+  # Reader-facing columns only (lme4-shaped); provenance/list columns stay in
+  # x$table for programmatic use — rendering them wraps the console table and
+  # dumps list(...) internals.
+  show_cols <- intersect(c("term", "num_df", "den_df", "statistic",
+                           "p_value", "method"), names(x$table))
+  show <- x$table[, show_cols, drop = FALSE]
+  bad <- !is.na(x$table$status) & x$table$status != "available"
+  if (any(bad)) {
+    show$status <- x$table$status
+    show$reason <- x$table$reason
+  }
+  print(show, row.names = FALSE)
+  hidden <- setdiff(names(x$table), names(show))
+  if (length(hidden)) {
+    cat(sprintf("Full provenance columns available in `$table` (%s).\n",
+                paste(hidden, collapse = ", ")))
+  }
   invisible(x)
 }
 

@@ -1024,7 +1024,16 @@ print.mm_confint <- function(x, ...) {
   if (!is.null(interval)) {
     cat(sprintf("interval: %s\n", interval))
   }
-  cat(sprintf("status: %s\n", status))
+  # Display translation for the internal status label (the stored attribute
+  # is unchanged): the raw contract label reads as an alarm without telling
+  # the user anything actionable.
+  status_shown <- if (identical(status, "not_certified_by_rust_inference_contract")) {
+    paste0("Wald (asymptotic) intervals from stored standard errors ",
+           "(engine-certified profile intervals: method = \"profile\")")
+  } else {
+    status
+  }
+  cat(sprintf("status: %s\n", status_shown))
 
   bootstrap <- attr(x, "bootstrap")
   if (length(bootstrap)) {

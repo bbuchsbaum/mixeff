@@ -31,14 +31,18 @@ test_that("lmm() fits an LMM and stores flat extractor fields", {
   expect_equal(df.residual(fit), fit$df_residual)
 })
 
-test_that("print.mm_lmm exposes artifact provenance and audit entry points", {
+test_that("print.mm_lmm shows audit entry points; provenance lives in reproducibility()", {
   df <- mk_lmm_fit_fixture()
   fit <- lmm(y ~ x + (1 | subject), df, control = mm_control(verbose = -1))
   output <- paste(capture.output(print(fit)), collapse = "\n")
 
-  expect_match(output, "Artifact: mixedmodels.compiled_model_artifact v1", fixed = TRUE)
-  expect_match(output, "crate:", fixed = TRUE)
+  # UX bar (2026-07-10): artifact/crate provenance is developer metadata and
+  # no longer prints on every fit; reproducibility(fit) still reports it.
+  expect_no_match(output, "Artifact:", fixed = TRUE)
   expect_match(output, "Audit verbs: audit(), diagnostics(), inference_table(), model_report()", fixed = TRUE)
+  # Provenance stays programmatically available on the fit object.
+  expect_match(fit$schema$schema_name, "compiled_model_artifact")
+  expect_true(nzchar(fit$schema$crate_version %||% ""))
 })
 
 test_that("lmm() emits the explain_model message unless verbose is -1", {

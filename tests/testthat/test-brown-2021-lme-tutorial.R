@@ -103,6 +103,15 @@ brown_cases <- function() {
   )
 }
 
+# Gate status (2026-07-09 baseline at engine pin 3b6ec69): wall time is no
+# longer the reason for this gate — the rt_interaction fit runs in ~2.5s
+# (lme4 ~4.7s). What still fails opt-in is ACCURACY on `rt_interaction`: the
+# default trust_bq cold start lands in a reduced-rank basin +108 REML-dev
+# units above lme4's optimum (both stim components collapse to sd 0);
+# warm-start/cobyla/pattern_search recover lme4's optimum exactly and
+# verify_convergence() flags the fit unstable. Filed upstream as mixeff-rs
+# bd-01KX33Z3NAB2EVE94CBWR3NXX3; reproducer in
+# planning/probes/MINIMAL_case1_brown_rt_interaction.R. Ungate when it lands.
 brown_run_slow_rt_parity <- function() {
   identical(tolower(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")), "true")
 }

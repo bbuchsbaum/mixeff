@@ -75,6 +75,30 @@
   `fit$family$nb_theta`. `method = "joint_laplace"` is not yet wired for this
   family at the pinned engine and is refused with a typed error.
 
+## Clearer user-facing text (UX parity pass vs lme4)
+
+A 13-scenario side-by-side battery against lme4 (graded independently) drove
+a cleanup of every surface where engine internals leaked into user-facing
+text:
+
+* GLMM summaries with withheld inference now explain plainly that the fast
+  default cannot certify SEs/z/p and to re-fit with
+  `method = "joint_laplace"`; the engine's covariance-geometry warrant moved
+  behind `print(summary(fit), verbose = TRUE)`.
+* Unsupported-family errors list the supported families and point to
+  `lme4::glmer()` for the rest.
+* The new-grouping-level prediction error describes the R-level remedies
+  (`re.form = NA`, `allow.new.levels = TRUE`) instead of Rust API names, and
+  bridge errors no longer print a duplicated "Caused by" chain.
+* `anova()` prints a compact lme4-shaped table; single-df terms display as
+  the equivalent F statistic (matching `lmerTest`), and provenance/list
+  columns stay in `$table`.
+* Aliased (rank-deficient) coefficients display as `NA` with an explicit
+  note, instead of a misleading `0`.
+* `print()` no longer emits the artifact/crate provenance line (available on
+  `fit$schema`); `confint()`'s internal certification label is translated at
+  display.
+
 ## Fixes and runtime notices
 
 * `parameterization()` on a fitted GLMM reported the compile-time Lambda

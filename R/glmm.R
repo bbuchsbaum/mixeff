@@ -396,16 +396,24 @@ mm_glmm_supported_family_link_table <- function() {
 
 mm_abort_glmm_unsupported_family_link <- function(family, link) {
   reason_code <- "unsupported_glmm_family_link"
+  supported <- mm_glmm_supported_family_link_table()
+  by_family <- vapply(split(supported$link, supported$family),
+                      paste, character(1), collapse = "/")
+  supported_text <- paste(sprintf("%s (%s)", names(by_family), by_family),
+                          collapse = ", ")
   mm_abort(
     message = sprintf(
-      "GLMM family/link `%s/%s` is outside the certified upstream contract.",
-      family, link
+      paste0(
+        "The %s family with link `%s` is not supported by glmm(). Supported ",
+        "families: %s. For other families, use lme4::glmer()."
+      ),
+      family, link, supported_text
     ),
     class = "mm_inference_unavailable",
     reason_code = reason_code,
     family = family,
     link = link,
-    supported = mm_glmm_supported_family_link_table(),
+    supported = supported,
     input = list(family = family, link = link)
   )
 }

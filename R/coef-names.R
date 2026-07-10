@@ -229,3 +229,16 @@ mm_apply_lme4_coef_naming <- function(fit) {
   }
   fit
 }
+
+# Coefficients the engine marked aliased (rank-deficiency pivot): the fit
+# stores them as hard zeros so predictions stay correct, but DISPLAYING a
+# zero reads as "no effect" — the opposite of "not separately estimable".
+# Display surfaces show these as NA (R's lm() convention for aliased terms).
+mm_aliased_coefficients <- function(fit) {
+  cols <- unlist(
+    fit$artifact$design_audit$fixed_effects$aliased_columns %||% list(),
+    use.names = FALSE
+  )
+  if (!length(cols)) return(character())
+  mm_coef_engine_to_lme4(as.character(cols), fit$coef_map)
+}

@@ -255,7 +255,12 @@ print.summary.mm_glmm <- function(x, ...) {
         rel,
         x$vcov_status$method %||% "no method tag"
       ))
-      if (!is.na(x$vcov_status$reason) && nzchar(x$vcov_status$reason)) {
+      # The engine's warrant is a paragraph of covariance-geometry internals;
+      # the plain-language note below explains the absence and the remedy.
+      # Verbatim engine reason available with print(summary(fit),
+      # verbose = TRUE) or options(mixeff.verbose = 1).
+      if (mm_summary_verbose(...) &&
+          !is.na(x$vcov_status$reason) && nzchar(x$vcov_status$reason)) {
         cat(sprintf(" Reason: %s.", x$vcov_status$reason))
         reason_printed <- TRUE
       }
@@ -280,25 +285,20 @@ mm_glmm_withheld_inference_note <- function(x, include_reason = TRUE) {
   if (!length(stat_cols)) return(character())
   stats <- coef[[stat_cols[[1L]]]]
   if (!length(stats) || !all(is.na(stats))) return(character())
-  note <- paste0(
-    "test statistics and p-values are withheld: the fit's covariance payload ",
-    "does not certify fixed-effect inference"
-  )
-  # The engine reason is skipped when the Wald-z reliability line above the
-  # notes already printed it verbatim; repeating a paragraph-length warrant
-  # twice reads as noise, not honesty.
-  reason <- x$vcov_status$reason %||% NA_character_
-  if (include_reason && !is.na(reason) && nzchar(reason)) {
-    note <- sprintf("%s (engine reason: %s)", note, reason)
-  }
-  if (identical(x$method, "pirls_profiled")) {
-    note <- paste0(
-      note,
-      ". Engine-certified Wald inference is available from a fit with ",
-      'method = "joint_laplace".'
+  # Plain language first (UX bar: never more obscure than lme4); the engine's
+  # covariance-geometry warrant stays available via verbose printing and the
+  # inference rows themselves.
+  note <- if (identical(x$method, "pirls_profiled")) {
+    paste0(
+      "standard errors, z statistics, and p-values are not available from ",
+      "the fast default method (pirls_profiled). Re-fit with ",
+      'method = "joint_laplace" for glmer-equivalent Wald inference.'
     )
   } else {
-    note <- paste0(note, ".")
+    paste0(
+      "standard errors, z statistics, and p-values are withheld: the fit's ",
+      "covariance payload does not certify fixed-effect inference."
+    )
   }
   note
 }
@@ -422,6 +422,19 @@ mm_summary_coefficients <- function(object, inference) {
   )
   coef[[stat_col]] <- rows$statistic
   coef[[p_col]] <- rows$p_value
+  # Aliased (rank-deficiency-pivoted) coefficients are stored as hard zeros
+  # so predictions stay correct; display them as NA (lm() convention) so a
+  # zero never reads as "no effect".
+  aliased <- intersect(mm_aliased_coefficients(object), beta_names)
+  if (length(aliased)) {
+    hit <- beta_names %in% aliased
+    coef$Estimate[hit] <- NA_real_
+    coef[["Std. Error"]][hit] <- NA_real_
+    coef[[stat_col]][hit] <- NA_real_
+    coef[[p_col]][hit] <- NA_real_
+    coef$method[hit] <- "aliased"
+    attr(coef, "mm_aliased") <- aliased
+  }
   cols <- c("Estimate", "Std. Error", "df", stat_col, p_col, "method")
   if (all(is.na(coef$df))) {
     # df is undefined for every row (e.g. asymptotic Wald z); an all-NA

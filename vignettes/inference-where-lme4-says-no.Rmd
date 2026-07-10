@@ -334,8 +334,8 @@ re_lrt
 ```
 
 ```{r boundary-lrt-table}
-reporting_table(re_lrt)[, c("term", "statistic", "p_value",
-                            "reference_distribution", "status")]
+reporting_table(re_lrt)$table[, c("term", "statistic", "p_value",
+                                  "reference_distribution", "status")]
 ```
 
 ```{r boundary-lrt-checks, include = FALSE}

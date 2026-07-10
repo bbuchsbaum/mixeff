@@ -41,6 +41,9 @@ reporting_table(object, section = "all", view = c("compact", "audit"), ...)
 
 \item{...}{Reserved for future methods.}
 
+\item{object}{For \code{reporting_table()}: a fitted \code{mm_fit}, an
+\code{mm_model_report}, or a comparison/test object with a durable ledger.}
+
 \item{section}{One section name, or \code{"all"}.}
 
 \item{view}{\code{"compact"} for reader-facing columns, or \code{"audit"} for the
@@ -49,7 +52,8 @@ audit columns.}
 }
 \value{
 \code{model_report()} returns an \code{mm_model_report}. \code{reporting_table()}
-returns a data frame for one section or a named list for \code{"all"}.
+returns an \code{mm_reporting_table} object: \verb{$table} holds the section's
+data frame (or \verb{$sections} the named list when \code{section = "all"}).
 }
 \description{
 \code{model_report()} assembles a structured, publication-oriented report from

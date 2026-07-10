@@ -80,9 +80,9 @@ This pre-fit explanation confirms:
 - the formula has been canonicalized to the explicit `(1 + Days | Subject)`
   form that the optimizer will receive.
 
-Use `audit_design(spec)` when you want the deeper design audit. Its compact
+Use `audit(spec)` when you want the deeper design audit. Its compact
 print starts with the audit summary and requested model;
-`print(audit_design(spec), full = TRUE)` shows the complete upstream report.
+`print(audit(spec), full = TRUE)` shows the complete upstream report.
 
 If you had written `(1 | Subject)` by mistake (random intercepts only), the
 explanation would show only one random-effects column per subject — useful to

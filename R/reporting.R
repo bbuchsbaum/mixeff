@@ -6,6 +6,8 @@
 #' section as a data-frame-compatible object.
 #'
 #' @param fit A fitted `mm_fit`, usually from [lmm()].
+#' @param object For `reporting_table()`: a fitted `mm_fit`, an
+#'   `mm_model_report`, or a comparison/test object with a durable ledger.
 #' @param sections Character vector of report sections, or `"all"`.
 #' @param section One section name, or `"all"`.
 #' @param view `"compact"` for reader-facing columns, or `"audit"` for the
@@ -14,7 +16,8 @@
 #' @param ... Reserved for future methods.
 #'
 #' @return `model_report()` returns an `mm_model_report`. `reporting_table()`
-#'   returns a data frame for one section or a named list for `"all"`.
+#'   returns an `mm_reporting_table` object: `$table` holds the section's
+#'   data frame (or `$sections` the named list when `section = "all"`).
 #'
 #' @export
 model_report <- function(fit, sections = "all", ...) {

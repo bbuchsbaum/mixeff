@@ -72,7 +72,7 @@ the requested random-effects structure.
 
 ```{r compile-design}
 spec <- compile_model(score ~ week + treatment + (1 | clinic), clinic_visits)
-audit_design(spec)
+audit(spec)
 ```
 
 ```{r compile-checks, include = FALSE}
@@ -124,10 +124,10 @@ reporting_table(fit, "random_terms")
 ```
 
 ```{r design-report-checks, include = FALSE}
-design <- reporting_table(fit, "data_design")
+design <- reporting_table(fit, "data_design")$table
 stopifnot(any(design$group == "clinic"))
 stopifnot(all(design$group_levels[design$group == "clinic"] == n_clinic))
-terms <- reporting_table(fit, "random_terms")
+terms <- reporting_table(fit, "random_terms")$table
 stopifnot(all(c("group", "basis", "covariance", "english") %in% names(terms)))
 ```
 
@@ -151,12 +151,12 @@ reporting_table(fit, "fixed_effects")
 When you need to audit where those rows came from, request the audit view.
 
 ```{r fixed-effect-audit}
-fixed_audit <- reporting_table(fit, "fixed_effects", view = "audit")
+fixed_audit <- reporting_table(fit, "fixed_effects", view = "audit")$table
 fixed_audit[, c("term", "method", "status", "reliability", "source")]
 ```
 
 ```{r fixed-effect-checks, include = FALSE}
-fixed_report <- reporting_table(fit, "fixed_effects")
+fixed_report <- reporting_table(fit, "fixed_effects")$table
 stopifnot(all(is.finite(fixed_report$estimate)))
 stopifnot(any(is.finite(fixed_report$p_value)))
 stopifnot(all(c("method", "status", "reliability") %in% names(fixed_report)))
@@ -175,7 +175,7 @@ reporting_table(fit, "random_effects")
 ```
 
 ```{r random-effect-checks, include = FALSE}
-random_report <- reporting_table(fit, "random_effects")
+random_report <- reporting_table(fit, "random_effects")$table
 stopifnot(any(random_report$kind == "variance"))
 stopifnot(any(random_report$group == "Residual"))
 stopifnot(any(is.finite(random_report$variance)))
@@ -200,7 +200,7 @@ reporting_table(report, "unavailable")
 ```
 
 ```{r unavailable-checks, include = FALSE}
-unavailable <- reporting_table(report, "unavailable")
+unavailable <- reporting_table(report, "unavailable")$table
 stopifnot(all(c("section", "field", "status", "reason") %in%
                 names(unavailable)))
 stopifnot(!any(unavailable$field ==

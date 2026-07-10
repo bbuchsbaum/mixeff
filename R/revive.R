@@ -381,11 +381,11 @@ random_blocks.mm_compiled <- function(object, ...) {
 }
 
 #' @export
-random_blocks.default <- function(fit, ...) {
+random_blocks.default <- function(object, ...) {
   mm_abort(
     message = "`random_blocks()` expects a compiled or fitted mixeff object.",
     class = "mm_arg_error",
-    input = fit
+    input = object
   )
 }
 

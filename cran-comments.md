@@ -1,24 +1,22 @@
-# cran-comments.md — mixeff 0.1.0 (R-Universe pre-release)
+# cran-comments.md — mixeff 0.2.0
 
 ## Submission target
 
-This document tracks notes for the next CRAN submission. mixeff 0.1.0
-is still in R-Universe pre-release hardening; no CRAN submission has
-been made from this checkout. The upstream Rust engine is bundled as a
-pinned, vendored snapshot and its optional `nlopt` C-library path is
-feature-gated off for this build, so the source package builds with the
-declared Rust toolchain requirements only.
+First CRAN submission of mixeff (0.2.0), following an R-Universe
+pre-release cycle. The upstream Rust engine is bundled as a pinned,
+vendored snapshot (`tools/vendor-rust.R`; provenance in
+`src/rust/upstream/mixeff-rs.lock`) and its optional `nlopt` C-library
+path is feature-gated off for this build, so the source package builds
+with the declared Rust toolchain requirements only.
 
 ## Test environments
 
-- macOS arm64, R 4.5.1 — `R CMD build --no-manual` with vignette
-  rebuilding enabled: clean.
-- macOS arm64, R 4.5.1 — `R CMD check --as-cran --no-manual` with
-  `CARGO_NET_OFFLINE=true`: 0 errors, 0 warnings, 2 NOTEs.
-- R-Universe API (`bbuchsbaum.r-universe.dev/api/packages/mixeff`) —
-  404 at dry-run time; no current job matrix is available yet.
-- Windows UCRT / mac-builder remote dry-runs — pending external
-  submission.
+- macOS arm64, R 4.5.x — `R CMD check --as-cran --no-manual` with
+  vignette rebuilding: results recorded below (this checkout).
+- GitHub Actions (ubuntu, macOS, windows UCRT) — R CMD check green on
+  the pre-release branch head; R-hub v2 (linux/windows/macos R-devel)
+  green at the previous pin.
+- win-builder / mac-builder dry-runs — to be run at submission time.
 
 ## R CMD check results
 

@@ -428,3 +428,19 @@ test_that("legacy fits without artifact inference table use unavailable fallback
   expect_true(all(inf$table$status == "not_assessed"))
   expect_true(all(inf$table$reason == "fixed_effect_inference_table_unavailable_legacy_object"))
 })
+
+test_that("inference_table rows follow lme4 coefficient order on permuted designs", {
+  # Regression for the engine-vs-R interaction column order: with two
+  # multi-level factors the engine varies the LAST factor fastest, R the
+  # first, so unordered rows silently mispair with fixef() positionally.
+  set.seed(11)
+  d <- expand.grid(a = factor(c("A1", "A2", "A3")),
+                   b = factor(c("B1", "B2", "B3")),
+                   g = factor(seq_len(8)))
+  d$y <- rnorm(nrow(d))
+  fit <- lmm(y ~ a * b + (1 | g), d, control = mm_control(verbose = -1))
+  tbl <- inference_table(fit)$table
+  coef_rows <- tbl[tbl$kind == "coefficient", , drop = FALSE]
+  expect_identical(coef_rows$label, names(fixef(fit)))
+  expect_equal(coef_rows$estimate, unname(fixef(fit)), tolerance = 1e-10)
+})

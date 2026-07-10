@@ -476,9 +476,20 @@ inference_table.mm_lmm <- function(fit,
   if (!is.null(parsed)) {
     tbl <- parsed$table
     if (!is.null(tbl$label)) {
-      # Artifact rows carry engine-encoded labels; translate to the lme4
-      # names the rest of the fit object exposes.
+      # Artifact rows carry engine-encoded labels in ENGINE column order;
+      # translate to lme4 names and reorder coefficient rows to match
+      # names(fit$beta), so positional pairing with fixef()/vcov() is safe.
       tbl$label <- mm_coef_engine_to_lme4(tbl$label, fit$coef_map)
+      if (!is.null(tbl$kind) && !is.null(fit$coef_map)) {
+        is_coef <- tbl$kind == "coefficient"
+        coef_rows <- tbl[is_coef, , drop = FALSE]
+        hit <- match(names(fit$beta), coef_rows$label)
+        if (!anyNA(hit) && nrow(coef_rows) == length(hit)) {
+          tbl <- rbind(coef_rows[hit, , drop = FALSE],
+                       tbl[!is_coef, , drop = FALSE])
+          rownames(tbl) <- NULL
+        }
+      }
     }
     obj <- list(table = tbl, raw = parsed$raw)
     class(obj) <- "mm_inference_table"

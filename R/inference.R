@@ -1916,8 +1916,9 @@ mm_map_profile_parameter <- function(upstream, fit) {
     beta_names <- names(fit$beta)
     if (beta_idx >= 1L && beta_idx <= length(beta_names)) {
       # The engine indexes beta in ITS column order; fit$beta is stored in
-      # lme4 order, so route the positional index through the map.
-      lme4_pos <- match(beta_idx, fit$coef_map$perm) %||% beta_idx
+      # lme4 order, so route the positional index through the map (NA when
+      # no map is stored, e.g. legacy fits: keep the raw index).
+      lme4_pos <- match(beta_idx, fit$coef_map$perm)
       if (is.na(lme4_pos)) lme4_pos <- beta_idx
       return(list(name = beta_names[[lme4_pos]], kind = "beta"))
     }

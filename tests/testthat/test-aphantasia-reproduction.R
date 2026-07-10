@@ -191,10 +191,6 @@ aphantasia_glmm_control <- function(id) {
   mixeff::mm_control(verbose = -1)
 }
 
-aphantasia_lme4_key <- function(x) {
-  gsub(": ", "", as.character(x), fixed = TRUE)
-}
-
 aphantasia_reference_rows <- function(x) {
   if (is.data.frame(x)) {
     return(x)
@@ -219,7 +215,6 @@ aphantasia_expect_fit_matches_reference <- function(fit, ref, id) {
   }
 
   observed <- mixeff::fixef(fit)
-  names(observed) <- aphantasia_lme4_key(names(observed))
   expected <- unlist(ref$fixef, use.names = TRUE)
   common <- intersect(names(expected), names(observed))
   expect_equal(length(common), length(expected),
@@ -262,20 +257,11 @@ aphantasia_has_glmm_full_vcov <- function(fit) {
     all(is.finite(V))
 }
 
-## Map lme4-style coefficient names (e.g. "groupaphant:maskmasked") to
-## mixeff's "group: aphant:mask: masked" naming so user code written
-## against lme4 conventions can drive mm_lincomb() on an mm_glmm fit.
-aphantasia_to_mixeff_key <- function(fit, lme4_keys) {
-  mix_names <- names(mixeff::fixef(fit))
-  lme4_to_mix <- setNames(mix_names, aphantasia_lme4_key(mix_names))
-  unname(lme4_to_mix[lme4_keys])
-}
-
+## mixeff coefficient names are lme4-identical (the coef-map contract), so
+## lme4-style weight names drive mm_lincomb() directly — no key translation.
 aphantasia_lincomb <- function(fit, weights) {
-  mix_keys <- aphantasia_to_mixeff_key(fit, names(weights))
-  stopifnot(!anyNA(mix_keys))
-  named <- setNames(as.numeric(weights), mix_keys)
-  out <- mixeff::mm_lincomb(fit, named)
+  stopifnot(all(names(weights) %in% names(mixeff::fixef(fit))))
+  out <- mixeff::mm_lincomb(fit, weights)
   ## Adapt to the historical column shape this helper used to return
   ## (estimate, SE, z, p) so existing assertions don't need rewriting.
   data.frame(
@@ -377,7 +363,6 @@ test_that("combined reaches the lme4 optimum via the explicit || expansion formu
   expect_identical(as.integer(attr(stats::logLik(fit), "df")), 23L)
 
   observed <- mixeff::fixef(fit)
-  names(observed) <- aphantasia_lme4_key(names(observed))
   expected <- unlist(model_ref$fixef, use.names = TRUE)
   common <- intersect(names(expected), names(observed))
   expect_equal(length(common), length(expected))
@@ -415,7 +400,6 @@ test_that("aphantasia intact budgeted joint Laplace proof improves the profiled 
   )
 
   observed <- mixeff::fixef(fit)
-  names(observed) <- aphantasia_lme4_key(names(observed))
   expected <- unlist(model_ref$fixef, use.names = TRUE)
   common <- intersect(names(expected), names(observed))
   max_fixef_drift <- max(abs(observed[common] - expected[common]))
@@ -495,16 +479,40 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
           ))
   )
   expected <- aphantasia_reference_rows(ref$inference$primary_dd)
-  ## Absolute tolerance: the DiD log-odds estimate drifts ~3-4% relative
-  ## (~0.007-0.011 absolute) vs lme4 from PIRLS/optimizer convergence,
-  ## so a relative 2.5e-2 over-fails. The qualitative result (sign,
-  ## significance, CI excluding zero) is unchanged. See
-  ## bd-01KS61JMB85G8DC3BXVSQW48MA.
-  max_dd_abs <- max(abs(observed$estimate - unlist(expected$estimate)))
-  expect_true(
-    max_dd_abs < 2e-2,
-    info = sprintf("DiD estimate drift vs lme4 too large: max_abs=%s",
-                   signif(max_dd_abs, 4))
+
+  # The DiD estimate and Wald SE drift vs glmer on this default-path
+  # (pirls_profiled, native `||`) fit. The W3.3 hold-the-point experiment
+  # (bd-01KS61JMB85G8DC3BXVSQW48MA; probe scripts glmm_holdpoint/referee/forward)
+  # attributes the drift, so these are classified expected_mismatch rows in
+  # inst/extdata/expected-mismatches.json, not unclassified regressions:
+  #   * Referee = glmer's nAGQ=1 devfun evaluated at mixeff's exact
+  #     (theta, beta) (sanity: reproduces vcov(glmer) to 1.3e-8), run both
+  #     directions (mm_control(start=) forward; devfun reverse).
+  #   * SE gap ~= 73% random-effects FAMILY divergence (native `||` collapses
+  #     the mask factor RE to one scalar: 4 theta vs lme4's 6) + ~26%
+  #     covariance-FORMULA drift (profiled working-Hessian vcov ~2.8%
+  #     anti-conservative vs the true Laplace vcov at an IDENTICAL point,
+  #     uniform across coefficients; upstream bd-01KT3Z64YE5QN7626PQRJSJJVA)
+  #     + ~1% point/optimizer drift.
+  #   * Estimate gap ~= 47% family + ~53% estimator (profiled vs joint
+  #     Laplace; joint_laplace on lme4's expansion matches glmer fixef to 8e-5).
+  # Routing through mm_assert_parity records a parity-scoreboard row per field
+  # and enforces the ledger bounds.
+  mm_assert_parity(
+    observed$estimate, unlist(expected$estimate),
+    case_id = "aphantasia_primary",
+    field = "inference.primary_dd.estimate",
+    tolerance = 0.02,
+    label = "aphantasia primary DiD estimate",
+    mode = "absolute"
+  )
+  mm_assert_parity(
+    observed$SE, unlist(expected$SE),
+    case_id = "aphantasia_primary",
+    field = "inference.primary_dd.SE",
+    tolerance = 0.01,
+    label = "aphantasia primary DiD SE",
+    mode = "absolute"
   )
   expect_equal(observed$where, unlist(expected$where))
 })

@@ -123,7 +123,7 @@ the full provenance columns.
 ```{r reporting-tables}
 reporting_table(fit, "overview")
 reporting_table(fit, "fixed_effects")
-reporting_table(fit, "fixed_effects", view = "audit")[, c("term", "source", "status")]
+reporting_table(fit, "fixed_effects", view = "audit")$table[, c("term", "source", "status")]
 ```
 
 ## Saving and reloading

@@ -10,9 +10,9 @@ use mixeff_rs::model::linear::ConvergenceVerificationOptions;
 use mixeff_rs::model::{
     parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
     BootstrapSeedRecord, BootstrapTarget, Family, FitOptions, FitToleranceOverrides,
-    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GlmmFitOptions, GlmmPredictionScale,
-    LinearMixedModel, LinkFunction, MixedModelBootstrap, MixedModelFit, NewReLevels,
-    OptimizerControl,
+    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder,
+    GlmmFitOptions, GlmmPredictionScale, LinearMixedModel, LinkFunction, MixedModelBootstrap,
+    MixedModelFit, NewReLevels, OptimizerControl,
 };
 use mixeff_rs::stats::{
     profile_confint_payload, BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit,
@@ -414,6 +414,7 @@ fn mm_compile_model_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
 ) -> std::result::Result<String, String> {
     let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
     let semantic = compile_formula_ir(&parsed);
@@ -421,6 +422,7 @@ fn mm_compile_model_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &column_order,
     )?;
 
@@ -448,6 +450,7 @@ fn mm_fit_lmm_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
 ) -> std::result::Result<String, String> {
@@ -458,6 +461,7 @@ fn mm_fit_lmm_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &column_order,
     )?;
     let weights = optional_case_weights(&weights, df.nrow())?;
@@ -575,6 +579,7 @@ fn mm_fit_glmm_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     offset: Doubles,
     control_json: &str,
@@ -586,37 +591,22 @@ fn mm_fit_glmm_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &column_order,
     )?;
-    let family = glmm_family(family)?;
+    let family_spec = glmm_family(family)?;
+    let family = family_spec.0;
     let link = glmm_link(link)?;
     let (fast, method_label) = glmm_method(method, n_agq)?;
     let n_agq = usize::try_from(n_agq)
         .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
 
     // Prior weights (e.g. binomial trial counts) and a fixed linear-predictor
-    // offset are both supported by the engine; route to the matching
-    // constructor when supplied (empty Doubles => None).
+    // offset are both supported by the engine (empty Doubles => None); the
+    // builder also carries the negative-binomial theta modes.
     let weights = optional_case_weights(&weights, df.nrow())?;
     let offset = optional_offset(&offset, df.nrow())?;
-    let mut model = match (weights, offset) {
-        (None, None) => GeneralizedLinearMixedModel::new(parsed, &df, family, Some(link)),
-        (Some(w), None) => {
-            GeneralizedLinearMixedModel::new_with_weights(parsed, &df, family, Some(link), w)
-        }
-        (None, Some(o)) => {
-            GeneralizedLinearMixedModel::new_with_offset(parsed, &df, family, Some(link), o)
-        }
-        (Some(w), Some(o)) => GeneralizedLinearMixedModel::new_with_weights_and_offset(
-            parsed,
-            &df,
-            family,
-            Some(link),
-            w,
-            o,
-        ),
-    }
-    .map_err(|e| format!("mm_fit_error: failed to construct GLMM: {}", e))?;
+    let mut model = build_glmm_model(parsed, &df, family_spec, link, weights, offset)?;
 
     // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval)
     // route through the GLMM optimizer-control surface; absent fields keep the
@@ -681,6 +671,10 @@ fn mm_fit_glmm_json(
         "link": glmm_link_label(link),
         "method": method_label,
         "n_agq": n_agq,
+        // NB2 size parameter: the fitted (or fixed) theta and whether it was
+        // estimated glmer.nb-style. Null for non-negative-binomial families.
+        "nb_theta": model.negative_binomial_theta(),
+        "nb_theta_estimated": model.negative_binomial_theta_estimated(),
         "beta": beta.iter().copied().collect::<Vec<_>>(),
         "beta_names": beta_names,
         "theta": model.theta(),
@@ -728,6 +722,7 @@ fn mm_fixed_effect_contrast_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -744,6 +739,7 @@ fn mm_fixed_effect_contrast_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -765,6 +761,7 @@ fn mm_fixed_effect_bootstrap_contrast_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -781,6 +778,7 @@ fn mm_fixed_effect_bootstrap_contrast_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -810,6 +808,7 @@ fn mm_full_model_bootstrap_contrast_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -827,6 +826,7 @@ fn mm_full_model_bootstrap_contrast_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -951,6 +951,7 @@ fn mm_fixed_effect_bootstrap_term_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     l_values: Doubles,
@@ -967,6 +968,7 @@ fn mm_fixed_effect_bootstrap_term_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1029,6 +1031,7 @@ fn mm_fixed_effect_term_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     method: &str,
@@ -1041,6 +1044,7 @@ fn mm_fixed_effect_term_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1064,6 +1068,7 @@ fn mm_bootstrap_lrt_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     bootstrap_options_json: &str,
@@ -1075,6 +1080,7 @@ fn mm_bootstrap_lrt_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1085,6 +1091,7 @@ fn mm_bootstrap_lrt_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -1358,6 +1365,7 @@ fn fit_lmm_from_bridge_data(
     numeric_columns: &List,
     categorical_values: &List,
     categorical_levels: &List,
+    categorical_ordered: &Strings,
     weights: &Doubles,
     control_json: &str,
 ) -> std::result::Result<LinearMixedModel, String> {
@@ -1368,6 +1376,7 @@ fn fit_lmm_from_bridge_data(
         numeric_columns,
         categorical_values,
         categorical_levels,
+        categorical_ordered,
         column_order,
     )?;
     let weights = optional_case_weights(weights, df.nrow())?;
@@ -1406,6 +1415,7 @@ fn fit_lmm_from_bridge_payload_robj(
     let numeric_columns = required_list(&spec_map, "numeric_columns", index)?;
     let categorical_values = required_list(&spec_map, "categorical_values", index)?;
     let categorical_levels = required_list(&spec_map, "categorical_levels", index)?;
+    let categorical_ordered = required_strings(&spec_map, "categorical_ordered", index)?;
     let weights = required_doubles(&payload_map, "weights", index)?;
     let control_json = required_string(&payload_map, "control_json", index)?;
 
@@ -1416,22 +1426,78 @@ fn fit_lmm_from_bridge_payload_robj(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         &control_json,
     )
 }
 
-fn glmm_family(family: &str) -> std::result::Result<Family, String> {
-    match family {
-        "bernoulli" => Ok(Family::Bernoulli),
+/// Parsed family spec: (family, NB theta, NB theta is estimated).
+///
+/// The negative-binomial modes ride the family string so no wrapper
+/// signature changes: `"negative_binomial"` = glmer.nb-style estimated
+/// theta (engine derives a method-of-moments start);
+/// `"negative_binomial:theta=<value>"` = MASS::negative.binomial-style fit
+/// conditional on a fixed theta.
+type GlmmFamilySpec = (Family, Option<f64>, bool);
+
+fn glmm_family(family: &str) -> std::result::Result<GlmmFamilySpec, String> {
+    if let Some(rest) = family.strip_prefix("negative_binomial") {
+        if rest.is_empty() {
+            return Ok((Family::NegativeBinomial, None, true));
+        }
+        let spec = rest.strip_prefix(":theta=").ok_or_else(|| {
+            format!("mm_fit_error: malformed negative_binomial family spec `{family}`")
+        })?;
+        let theta: f64 = spec
+            .parse()
+            .map_err(|_| format!("mm_fit_error: invalid negative_binomial theta `{spec}`"))?;
+        if !theta.is_finite() || theta <= 0.0 {
+            return Err(format!(
+                "mm_fit_error: negative_binomial theta must be positive and finite, got `{spec}`"
+            ));
+        }
+        return Ok((Family::NegativeBinomial, Some(theta), false));
+    }
+    let fam = match family {
+        "bernoulli" => Family::Bernoulli,
         // Grouped binomial (proportion response + trial-count weights). The R
         // layer sends "bernoulli" for ungrouped 0/1 responses and "binomial"
         // only when trial weights are supplied.
-        "binomial" => Ok(Family::Binomial),
-        "poisson" => Ok(Family::Poisson),
-        "gamma" => Ok(Family::Gamma),
-        other => Err(format!("mm_fit_error: unsupported GLMM family `{other}`")),
+        "binomial" => Family::Binomial,
+        "poisson" => Family::Poisson,
+        "gamma" => Family::Gamma,
+        other => return Err(format!("mm_fit_error: unsupported GLMM family `{other}`")),
+    };
+    Ok((fam, None, false))
+}
+
+/// Construct an (unfitted) GLMM through the builder so every option —
+/// weights, offset, and the NB theta modes — routes through one path.
+fn build_glmm_model(
+    parsed: mixeff_rs::formula::Formula,
+    df: &mixeff_rs::model::DataFrame,
+    spec: GlmmFamilySpec,
+    link: LinkFunction,
+    weights: Option<Vec<f64>>,
+    offset: Option<Vec<f64>>,
+) -> std::result::Result<GeneralizedLinearMixedModel, String> {
+    let (family, nb_theta, nb_estimate) = spec;
+    let mut builder = GeneralizedLinearMixedModelBuilder::new(parsed, df, family).link(link);
+    if nb_estimate {
+        builder = builder.estimate_negative_binomial_theta(nb_theta);
+    } else if let Some(theta) = nb_theta {
+        builder = builder.negative_binomial_theta(theta);
     }
+    if let Some(w) = weights {
+        builder = builder.weights(w);
+    }
+    if let Some(o) = offset {
+        builder = builder.offset(o);
+    }
+    builder
+        .build()
+        .map_err(|e| format!("mm_fit_error: failed to construct GLMM: {}", e))
 }
 
 fn glmm_link(link: &str) -> std::result::Result<LinkFunction, String> {
@@ -1473,6 +1539,7 @@ fn glmm_family_label(family: Family) -> &'static str {
         Family::Poisson => "poisson",
         Family::Gamma => "gamma",
         Family::InverseGaussian => "inverse_gaussian",
+        Family::NegativeBinomial => "negative_binomial",
         _ => "unknown",
     }
 }
@@ -1922,6 +1989,7 @@ fn mm_lmm_cond_var_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
 ) -> std::result::Result<String, String> {
@@ -1932,6 +2000,7 @@ fn mm_lmm_cond_var_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -2001,12 +2070,14 @@ fn mm_lmm_predict_new_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     new_column_order: Strings,
     new_numeric_columns: List,
     new_categorical_values: List,
     new_categorical_levels: List,
+    new_categorical_ordered: Strings,
     allow_new_levels_policy: &str,
 ) -> std::result::Result<String, String> {
     let model = fit_lmm_from_bridge_data(
@@ -2016,6 +2087,7 @@ fn mm_lmm_predict_new_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -2023,6 +2095,7 @@ fn mm_lmm_predict_new_json(
         &new_numeric_columns,
         &new_categorical_values,
         &new_categorical_levels,
+        &new_categorical_ordered,
         &new_column_order,
     )?;
     let policy = match allow_new_levels_policy {
@@ -2086,12 +2159,14 @@ fn mm_lmm_predict_new_variance_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     new_column_order: Strings,
     new_numeric_columns: List,
     new_categorical_values: List,
     new_categorical_levels: List,
+    new_categorical_ordered: Strings,
     allow_new_levels_policy: &str,
     level: f64,
 ) -> std::result::Result<String, String> {
@@ -2102,6 +2177,7 @@ fn mm_lmm_predict_new_variance_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;
@@ -2109,6 +2185,7 @@ fn mm_lmm_predict_new_variance_json(
         &new_numeric_columns,
         &new_categorical_values,
         &new_categorical_levels,
+        &new_categorical_ordered,
         &new_column_order,
     )?;
     let policy = match allow_new_levels_policy {
@@ -2153,6 +2230,7 @@ fn fit_glmm_from_bridge_data(
     numeric_columns: &List,
     categorical_values: &List,
     categorical_levels: &List,
+    categorical_ordered: &Strings,
     weights: &Doubles,
     offset: &Doubles,
     control_json: &str,
@@ -2164,33 +2242,17 @@ fn fit_glmm_from_bridge_data(
         numeric_columns,
         categorical_values,
         categorical_levels,
+        categorical_ordered,
         column_order,
     )?;
-    let family = glmm_family(family)?;
+    let family_spec = glmm_family(family)?;
     let link = glmm_link(link)?;
     let (fast, _method_label) = glmm_method(method, n_agq)?;
     let n_agq = usize::try_from(n_agq)
         .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
     let weights = optional_case_weights(weights, df.nrow())?;
     let offset = optional_offset(offset, df.nrow())?;
-    let mut model = match (weights, offset) {
-        (None, None) => GeneralizedLinearMixedModel::new(parsed, &df, family, Some(link)),
-        (Some(w), None) => {
-            GeneralizedLinearMixedModel::new_with_weights(parsed, &df, family, Some(link), w)
-        }
-        (None, Some(o)) => {
-            GeneralizedLinearMixedModel::new_with_offset(parsed, &df, family, Some(link), o)
-        }
-        (Some(w), Some(o)) => GeneralizedLinearMixedModel::new_with_weights_and_offset(
-            parsed,
-            &df,
-            family,
-            Some(link),
-            w,
-            o,
-        ),
-    }
-    .map_err(|e| format!("mm_fit_error: failed to construct GLMM: {}", e))?;
+    let mut model = build_glmm_model(parsed, &df, family_spec, link, weights, offset)?;
     let optimizer_control = parse_optimizer_control(&_control)?;
     let glmm_options = if fast {
         GlmmFitOptions::fast_laplace()
@@ -2228,6 +2290,7 @@ fn mm_glmm_predict_new_variance_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     offset: Doubles,
     control_json: &str,
@@ -2235,6 +2298,7 @@ fn mm_glmm_predict_new_variance_json(
     new_numeric_columns: List,
     new_categorical_values: List,
     new_categorical_levels: List,
+    new_categorical_ordered: Strings,
     scale: &str,
     allow_new_levels_policy: &str,
     level: f64,
@@ -2249,6 +2313,7 @@ fn mm_glmm_predict_new_variance_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         &offset,
         control_json,
@@ -2257,6 +2322,7 @@ fn mm_glmm_predict_new_variance_json(
         &new_numeric_columns,
         &new_categorical_values,
         &new_categorical_levels,
+        &new_categorical_ordered,
         &new_column_order,
     )?;
     let scale = match scale {
@@ -2314,6 +2380,7 @@ fn mm_lmm_profile_confint_json(
     numeric_columns: List,
     categorical_values: List,
     categorical_levels: List,
+    categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
     level: f64,
@@ -2331,6 +2398,7 @@ fn mm_lmm_profile_confint_json(
         &numeric_columns,
         &categorical_values,
         &categorical_levels,
+        &categorical_ordered,
         &weights,
         control_json,
     )?;

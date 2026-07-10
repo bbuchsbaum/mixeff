@@ -760,8 +760,10 @@ print.mm_estimability <- function(x, ...) {
 #' @param method Requested degrees-of-freedom method.
 #' @param ... Reserved for future methods.
 #'
-#' @return A numeric vector of `NA` degrees of freedom with an
-#'   `mm_unavailable_reason` attribute.
+#' @return An `mm_df_for_contrast` object with `$table` (one row per
+#'   contrast: `contrast`, `df`, `method`, `requested_method`, `reason`),
+#'   `$df` (the named numeric vector), and `$method`. When the method is
+#'   `"none"` or the engine refuses, `df` is `NA` and `reason` records why.
 #'
 #' @export
 df_for_contrast <- function(fit, L, method = c("auto", "satterthwaite",
@@ -782,11 +784,9 @@ df_for_contrast.mm_lmm <- function(fit, L, method = c("auto", "satterthwaite",
   names(out) <- rownames(L)
 
   if (identical(method, "none")) {
-    attr(out, "method") <- "not_requested"
-    attr(out, "requested_method") <- method
-    attr(out, "mm_unavailable_reason") <- mm_inference_unavailable_reason(method)
-    class(out) <- c("mm_df_for_contrast", "numeric")
-    return(out)
+    return(mm_new_df_for_contrast(out, method_label = "not_requested",
+                                  requested = method,
+                                  reason = mm_inference_unavailable_reason(method)))
   }
 
   parsed <- tryCatch(
@@ -794,11 +794,9 @@ df_for_contrast.mm_lmm <- function(fit, L, method = c("auto", "satterthwaite",
     error = function(cnd) cnd
   )
   if (inherits(parsed, "condition")) {
-    attr(out, "method") <- "unavailable"
-    attr(out, "requested_method") <- method
-    attr(out, "mm_unavailable_reason") <- conditionMessage(parsed)
-    class(out) <- c("mm_df_for_contrast", "numeric")
-    return(out)
+    return(mm_new_df_for_contrast(out, method_label = "unavailable",
+                                  requested = method,
+                                  reason = conditionMessage(parsed)))
   }
 
   table <- parsed$table
@@ -820,21 +818,37 @@ df_for_contrast.mm_lmm <- function(fit, L, method = c("auto", "satterthwaite",
     NA_character_
   }
 
-  attr(out, "method") <- method_label
-  attr(out, "requested_method") <- method
-  if (!is.na(reason_label)) {
-    attr(out, "mm_unavailable_reason") <- reason_label
-  }
-  class(out) <- c("mm_df_for_contrast", "numeric")
-  out
+  mm_new_df_for_contrast(out, method_label = method_label,
+                         requested = method, reason = reason_label)
+}
+
+# Sibling-consistent constructor: an mm_* object carrying $table plus the
+# named df vector for programmatic use.
+mm_new_df_for_contrast <- function(df, method_label, requested, reason) {
+  if (is.null(names(df))) names(df) <- paste0("c", seq_along(df))
+  table <- data.frame(
+    contrast = names(df),
+    df = as.numeric(df),
+    method = method_label,
+    requested_method = requested,
+    reason = if (length(reason) == 1L && !is.na(reason)) reason else NA_character_,
+    stringsAsFactors = FALSE
+  )
+  obj <- list(
+    table = table,
+    df = df,
+    method = method_label,
+    requested_method = requested
+  )
+  class(obj) <- "mm_df_for_contrast"
+  obj
 }
 
 #' @method print mm_df_for_contrast
 #' @export
 print.mm_df_for_contrast <- function(x, ...) {
-  print(unclass(x))
-  cat(sprintf("method: %s\n", attr(x, "method") %||% "unavailable"))
-  cat(sprintf("reason: %s\n", attr(x, "mm_unavailable_reason") %||% "not_recorded"))
+  cat("Degrees of freedom for contrasts:\n")
+  print(x$table, row.names = FALSE)
   invisible(x)
 }
 
@@ -842,14 +856,14 @@ print.mm_df_for_contrast <- function(x, ...) {
 #' @importFrom stats confint
 #' @export
 confint.mm_lmm <- function(object, parm, level = 0.95,
-                           method = c("wald", "asymptotic", "bootstrap",
+                           method = c("asymptotic", "wald", "bootstrap",
                                       "profile"),
                            bootstrap = NULL,
                            interval = c("percentile", "basic"), ...) {
   method <- match.arg(method)
-  # `"asymptotic"` is the package-wide name for the closed-form Wald
-  # interval; accept it here as a synonym so the method vocabulary is
-  # consistent with contrast()/test_effect()/inference_table().
+  # `"asymptotic"` is the package-wide canonical name for the closed-form
+  # Wald interval (shared with contrast()/test_effect()/inference_table());
+  # `"wald"` stays accepted as a synonym. Internals compute under "wald".
   if (identical(method, "asymptotic")) method <- "wald"
   interval <- match.arg(interval)
   if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
@@ -905,7 +919,8 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' @param object A fitted `mm_glmm`.
 #' @param parm Optional fixed-effect names or indices; defaults to all.
 #' @param level Confidence level.
-#' @param method `"wald"` (default) or its synonym `"asymptotic"`.
+#' @param method `"asymptotic"` (the default; the package-wide name for the
+#'   closed-form Wald interval) or its synonym `"wald"`.
 #' @param ... Unused.
 #'
 #' @return An `mm_confint` matrix of lower/upper bounds.
@@ -913,7 +928,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' @method confint mm_glmm
 #' @export
 confint.mm_glmm <- function(object, parm, level = 0.95,
-                            method = c("wald", "asymptotic", "profile",
+                            method = c("asymptotic", "wald", "profile",
                                        "bootstrap"), ...) {
   method <- match.arg(method)
   if (method %in% c("profile", "bootstrap")) {
@@ -921,7 +936,7 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
       message = sprintf(
         paste0("`confint(method = \"%s\")` is not available for GLMM fits; the ",
                "upstream contract certifies only asymptotic Wald intervals for ",
-               "generalized models. Use method = \"wald\"."),
+               "generalized models. Use method = \"asymptotic\"."),
         method
       ),
       class = "mm_inference_unavailable",
@@ -1009,7 +1024,16 @@ print.mm_confint <- function(x, ...) {
   if (!is.null(interval)) {
     cat(sprintf("interval: %s\n", interval))
   }
-  cat(sprintf("status: %s\n", status))
+  # Display translation for the internal status label (the stored attribute
+  # is unchanged): the raw contract label reads as an alarm without telling
+  # the user anything actionable.
+  status_shown <- if (identical(status, "not_certified_by_rust_inference_contract")) {
+    paste0("Wald (asymptotic) intervals from stored standard errors ",
+           "(engine-certified profile intervals: method = \"profile\")")
+  } else {
+    status
+  }
+  cat(sprintf("status: %s\n", status_shown))
 
   bootstrap <- attr(x, "bootstrap")
   if (length(bootstrap)) {
@@ -1064,12 +1088,34 @@ mm_contrast_matrix <- function(L, fit) {
   L
 }
 
+
+# One-line scale notice before a long silent bootstrap FFI call: the engine
+# runs every replicate refit inside a single native call with no progress
+# output, so say up front roughly how much work was requested. Suppressed by
+# mm_control(verbose = -1).
+mm_inform_bootstrap_scale <- function(fit, bootstrap) {
+  verbose <- fit$control$verbose %||% 0L
+  nsim <- bootstrap$nsim %||% NA_integer_
+  if (verbose >= 0L && is.finite(nsim) && nsim >= 200) {
+    mm_inform(
+      sprintf(paste0(
+        "Running %d bootstrap refits in a single native call with no ",
+        "progress output; expect roughly %d x the cost of one fit. Silence ",
+        "this message with mm_control(verbose = -1)."
+      ), as.integer(nsim), as.integer(nsim)),
+      class = "mm_runtime_notice"
+    )
+  }
+  invisible(NULL)
+}
+
 mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
   bridge <- mm_rust_fit_bridge_payload(fit)
   if (identical(method, "bootstrap") && !is.null(bootstrap)) {
     if (!inherits(bootstrap, "mm_bootstrap_control")) {
       bootstrap <- do.call(bootstrap_control, as.list(bootstrap))
     }
+    mm_inform_bootstrap_scale(fit, bootstrap)
     bootstrap_json <- jsonlite::toJSON(
       unclass(bootstrap),
       auto_unbox = TRUE,
@@ -1083,9 +1129,10 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         bridge$spec_data$numeric_columns,
         bridge$spec_data$categorical_values,
         bridge$spec_data$categorical_levels,
+        bridge$spec_data$categorical_ordered,
         bridge$weights,
         bridge$control_json,
-        as.numeric(t(L)),
+        as.numeric(t(mm_coef_l_to_engine(L, fit))),
         as.integer(nrow(L)),
         as.integer(ncol(L)),
         as.character(rownames(L)),
@@ -1103,9 +1150,10 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         bridge$spec_data$numeric_columns,
         bridge$spec_data$categorical_values,
         bridge$spec_data$categorical_levels,
+        bridge$spec_data$categorical_ordered,
         bridge$weights,
         bridge$control_json,
-        as.numeric(t(L)),
+        as.numeric(t(mm_coef_l_to_engine(L, fit))),
         as.integer(nrow(L)),
         as.integer(ncol(L)),
         as.character(rownames(L)),
@@ -1143,6 +1191,7 @@ mm_rust_term_table <- function(fit, method, type = "III") {
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
       bridge$spec_data$categorical_levels,
+      bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
       method,
@@ -1465,9 +1514,10 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
       bridge$spec_data$categorical_levels,
+      bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.numeric(t(L)),
+      as.numeric(t(mm_coef_l_to_engine(L, fit))),
       as.integer(nrow(L)),
       as.integer(ncol(L)),
       as.character(rownames(L)),
@@ -1516,18 +1566,21 @@ mm_select_bootstrap_interval <- function(payload, level, interval) {
 }
 
 # Map a term name to a row-permutation L matrix that picks the coefficients
-# belonging to the term. The intercept term `1` matches `(Intercept)` exactly;
-# any other term `t` matches coefficient names of the form `t` or `t: <level>`
-# (mixeff's factor-level labelling) and `t:other` (interaction prefix).
+# belonging to the term. Selection goes through the coefficient map's
+# `assign` vector (model.matrix's column -> term index), not name parsing:
+# with lme4-style names ("recipeB") the level is fused to the variable name,
+# so no prefix regex can distinguish term "SNR" from a coefficient of a term
+# named "SNRHard". The intercept term `1` selects assign == 0.
 mm_term_to_l_matrix <- function(fit, term) {
   coef_names <- names(fit$beta)
   k <- length(coef_names)
+  map <- mm_fit_coef_map(fit)
   hits <- if (identical(term, "1")) {
-    coef_names == "(Intercept)"
+    map$assign == 0L
   } else {
-    pattern <- paste0("^", regex_escape(term), "(: |$|:)")
-    grepl(pattern, coef_names)
+    map$assign == match(term, map$term_labels)
   }
+  hits[is.na(hits)] <- FALSE
   if (!any(hits)) {
     mm_abort(
       message = sprintf(
@@ -1559,6 +1612,7 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
   }
   L <- mm_term_to_l_matrix(fit, term)
   rhs <- rep(0, nrow(L))
+  mm_inform_bootstrap_scale(fit, bootstrap)
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
     unclass(bootstrap),
@@ -1573,9 +1627,10 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
       bridge$spec_data$categorical_levels,
+      bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.numeric(t(L)),
+      as.numeric(t(mm_coef_l_to_engine(L, fit))),
       as.integer(nrow(L)),
       as.integer(ncol(L)),
       as.character(term),
@@ -1641,6 +1696,7 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
       bridge$spec_data$categorical_levels,
+      bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
       as.character(bootstrap_json)
@@ -1756,6 +1812,80 @@ mm_inference_row_unavailable <- function(term, method, reason, reason_code = NA_
   )
 }
 
+#' Profile a fitted linear mixed model
+#'
+#' Computes profile-likelihood intervals for the model's parameters via the
+#' engine's certified profile payload and returns them as an `mm_profile`
+#' object: `$table` has one row per profiled parameter (`parameter`,
+#' `estimate`, `lower`, `upper`, `regularity`, `reason_code`). Under REML,
+#' fixed-effect coefficients are not profiled (upstream contract); their rows
+#' carry `reason_code = "profile_beta_unavailable_under_reml"` rather than
+#' being silently dropped. Use [confint()] with `method = "profile"` for the
+#' matrix form.
+#'
+#' @param fitted A fitted `mm_lmm`.
+#' @param which Optional character vector of parameter names to keep
+#'   (coefficient names, `"sigma"`, `"theta1"`, ...).
+#' @param level Confidence level for the reported interval endpoints.
+#' @param ... Unused; for generic consistency.
+#' @return An `mm_profile` object with `$table`, `$level`, `$fit_criterion`,
+#'   and `$notes`.
+#' @seealso [confint()] with `method = "profile"` for the matrix form.
+#' @export
+profile.mm_lmm <- function(fitted, which = NULL, level = 0.95, ...) {
+  ci <- mm_profile_confint(fitted, parm = which, level = level)
+  prof <- attr(ci, "mm_profile")
+  out <- list(
+    table = prof$table,
+    level = prof$level,
+    fit_criterion = prof$fit_criterion,
+    notes = prof$notes
+  )
+  class(out) <- "mm_profile"
+  out
+}
+
+#' @export
+print.mm_profile <- function(x, ...) {
+  cat(sprintf("Profile-likelihood intervals (%s, level %.2f)\n",
+              x$fit_criterion, x$level))
+  tbl <- x$table
+  show <- tbl[, c("parameter", "estimate", "lower", "upper"), drop = FALSE]
+  print(format(show, digits = 4), row.names = FALSE)
+  unavailable <- tbl[!is.na(tbl$reason_code), , drop = FALSE]
+  if (nrow(unavailable)) {
+    cat(sprintf("Not profiled: %s (%s).\n",
+                paste(unavailable$parameter, collapse = ", "),
+                paste(unique(unavailable$reason_code), collapse = "; ")))
+  }
+  for (note in x$notes) cat("Note:", note, "\n")
+  invisible(x)
+}
+
+#' @export
+confint.mm_profile <- function(object, parm, level = NULL, ...) {
+  if (!is.null(level) && !isTRUE(all.equal(level, object$level))) {
+    mm_abort(
+      message = sprintf(
+        "This profile was computed at level %.3f; re-run profile() with level = %.3f.",
+        object$level, level
+      ),
+      class = "mm_arg_error",
+      input = level
+    )
+  }
+  tbl <- object$table
+  if (!missing(parm) && !is.null(parm)) {
+    tbl <- tbl[tbl$parameter %in% as.character(parm), , drop = FALSE]
+  }
+  mat <- as.matrix(tbl[, c("lower", "upper"), drop = FALSE])
+  rownames(mat) <- tbl$parameter
+  alpha <- 1 - object$level
+  colnames(mat) <- c(sprintf("%.1f %%", 100 * alpha / 2),
+                     sprintf("%.1f %%", 100 * (1 - alpha / 2)))
+  mat
+}
+
 # Stage D.3 (bd-01KRFGFSK4A0MGPFQVCNY5SYFK): wrapper for the upstream
 # `profile_confint_payload` FFI. Refits the model from the bridge payload
 # (no persistent Rust handle), parses the schema-versioned JSON, and
@@ -1840,6 +1970,7 @@ mm_profile_confint_payload <- function(fit, level) {
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
       bridge$spec_data$categorical_levels,
+      bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
       as.numeric(level)
@@ -1905,7 +2036,12 @@ mm_map_profile_parameter <- function(upstream, fit) {
   if (!is.na(beta_idx)) {
     beta_names <- names(fit$beta)
     if (beta_idx >= 1L && beta_idx <= length(beta_names)) {
-      return(list(name = beta_names[[beta_idx]], kind = "beta"))
+      # The engine indexes beta in ITS column order; fit$beta is stored in
+      # lme4 order, so route the positional index through the map (NA when
+      # no map is stored, e.g. legacy fits: keep the raw index).
+      lme4_pos <- match(beta_idx, fit$coef_map$perm)
+      if (is.na(lme4_pos)) lme4_pos <- beta_idx
+      return(list(name = beta_names[[lme4_pos]], kind = "beta"))
     }
     return(NULL)
   }
@@ -2080,8 +2216,8 @@ mm_lincomb.mm_lmm <- function(fit, weights,
   } else {
     L <- matrix(w, nrow = 1L, dimnames = list(NULL, bnms))
     df_tbl <- df_for_contrast(fit, L, method = method)
-    df <- as.numeric(df_tbl[1L])
-    method_used <- attr(df_tbl, "method") %||% method
+    df <- as.numeric(df_tbl$df[[1L]])
+    method_used <- df_tbl$method %||% method
     statistic <- est / se
     stat_name <- "t"
     if (is.finite(df) && df > 0) {

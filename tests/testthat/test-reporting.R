@@ -1,3 +1,8 @@
+# reporting_table() returns an mm_reporting_table object (API stabilization
+# 2026-07-09); most assertions below inspect the section table itself.
+rt_tbl <- function(...) reporting_table(...)$table
+rt_sections <- function(...) reporting_table(...)$sections
+
 mk_reporting_fit <- function(seed = 41L) {
   set.seed(seed)
   n_subjects <- 10L
@@ -74,35 +79,35 @@ test_that("model_report() unavailable ledger is explicit", {
 
 test_that("overview and reporting_table() expose compact report fields", {
   fit <- mk_reporting_fit()
-  overview <- reporting_table(fit, "overview")
+  overview <- rt_tbl(fit, "overview")
 
   expect_identical(names(overview), c("field", "value"))
   expect_true(all(c("formula", "fit_method", "nobs", "fit_status",
                     "inference") %in% overview$field))
   expect_identical(
-    reporting_table(model_report(fit), "overview"),
+    rt_tbl(model_report(fit), "overview"),
     overview
   )
 })
 
 test_that("reporting_table() supports compact and audit views", {
   fit <- mk_reporting_fit()
-  compact <- reporting_table(fit, "fixed_effects")
-  audit <- reporting_table(fit, "fixed_effects", view = "audit")
+  compact <- rt_tbl(fit, "fixed_effects")
+  audit <- rt_tbl(fit, "fixed_effects", view = "audit")
 
   expect_false("source" %in% names(compact))
   expect_false("details" %in% names(compact))
   expect_true(all(c("source", "reason", "details", "notes") %in% names(audit)))
   expect_true(all(names(compact) %in% names(audit)))
   expect_identical(
-    reporting_table(model_report(fit), "fixed_effects", view = "audit"),
+    rt_tbl(model_report(fit), "fixed_effects", view = "audit"),
     audit
   )
 })
 
 test_that("fixed-effect report rows preserve Rust inference status", {
   fit <- mk_reporting_fit()
-  fixed <- reporting_table(fit, "fixed_effects", view = "audit")
+  fixed <- rt_tbl(fit, "fixed_effects", view = "audit")
   inf <- inference_table(fit)$table
 
   expect_identical(fixed$method, inf$method)
@@ -114,7 +119,7 @@ test_that("fixed-effect report rows preserve Rust inference status", {
 
 test_that("random-term report rows preserve Rust-authored cards", {
   fit <- mk_reporting_fit()
-  random_terms <- reporting_table(fit, "random_terms", view = "audit")
+  random_terms <- rt_tbl(fit, "random_terms", view = "audit")
 
   expect_true(all(c("term_id", "original_fragment", "canonical_fragment",
                     "group", "basis", "covariance", "english",
@@ -127,7 +132,7 @@ test_that("random-term report rows preserve Rust-authored cards", {
 
 test_that("data-design report includes grouping unit counts", {
   fit <- mk_reporting_fit()
-  design <- reporting_table(fit, "data_design")
+  design <- rt_tbl(fit, "data_design")
 
   expect_true("subject" %in% design$group)
   row <- design[design$group == "subject", , drop = FALSE]
@@ -139,7 +144,7 @@ test_that("data-design report includes grouping unit counts", {
 
 test_that("random-effect report consumes Rust fit-summary VarCorr payload", {
   fit <- mk_reporting_fit()
-  random_effects <- reporting_table(fit, "random_effects")
+  random_effects <- rt_tbl(fit, "random_effects")
   unavailable <- model_report(fit)$unavailable
 
   expect_identical(fit$fit_summary$schema_name, "mixedmodels.fit_summary")
@@ -174,9 +179,9 @@ test_that("reporting_table() exposes durable comparison ledgers", {
                  control = mm_control(verbose = -1))
 
   cmp <- compare(reduced, full)
-  compact <- reporting_table(cmp, "comparison_ledger")
-  audit <- reporting_table(cmp, "comparison_ledger", view = "audit")
-  all_sections <- reporting_table(cmp, "all")
+  compact <- rt_tbl(cmp, "comparison_ledger")
+  audit <- rt_tbl(cmp, "comparison_ledger", view = "audit")
+  all_sections <- rt_sections(cmp, "all")
 
   expect_equal(nrow(audit), nrow(cmp$ledger))
   expect_true(all(c("comparison_id", "formula", "comparison_method",
@@ -187,12 +192,12 @@ test_that("reporting_table() exposes durable comparison ledgers", {
   expect_identical(audit$source, cmp$ledger$source)
 
   dropped <- stats::drop1(full, test = "Chisq")
-  dropped_ledger <- reporting_table(dropped, "comparison_ledger", view = "audit")
+  dropped_ledger <- rt_tbl(dropped, "comparison_ledger", view = "audit")
 
   expect_equal(nrow(dropped_ledger), nrow(dropped$ledger))
   expect_identical(dropped_ledger$reference_formula, dropped$ledger$reference_formula)
   expect_error(
-    reporting_table(cmp, "fixed_effects"),
+    rt_tbl(cmp, "fixed_effects"),
     class = "mm_schema_error"
   )
 })
@@ -204,11 +209,11 @@ test_that("saved fits preserve report sections backed by stored artifacts", {
   revived <- readRDS(path)
 
   expect_identical(
-    reporting_table(revived, "fixed_effects", view = "audit"),
-    reporting_table(fit, "fixed_effects", view = "audit")
+    rt_tbl(revived, "fixed_effects", view = "audit"),
+    rt_tbl(fit, "fixed_effects", view = "audit")
   )
   expect_identical(
-    reporting_table(revived, "random_effects", view = "audit"),
-    reporting_table(fit, "random_effects", view = "audit")
+    rt_tbl(revived, "random_effects", view = "audit"),
+    rt_tbl(fit, "random_effects", view = "audit")
   )
 })

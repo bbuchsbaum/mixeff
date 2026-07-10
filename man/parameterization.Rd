@@ -5,12 +5,12 @@
 \alias{parameterization.mm_compiled}
 \title{Inspect covariance parameterization}
 \usage{
-parameterization(fit, ...)
+parameterization(object, ...)
 
-\method{parameterization}{mm_compiled}(fit, ...)
+\method{parameterization}{mm_compiled}(object, ...)
 }
 \arguments{
-\item{fit}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
+\item{object}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
 
 \item{...}{Reserved for future methods.}
 }

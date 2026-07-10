@@ -4,21 +4,21 @@
 #' compiler artifact. It is the R table view of the upstream theta-map and
 #' covariance-parameter trace records.
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_theta_map` object with a data-frame `table` and raw trace
 #'   records.
 #'
 #' @export
-parameterization <- function(fit, ...) {
+parameterization <- function(object, ...) {
   UseMethod("parameterization")
 }
 
 #' @rdname parameterization
 #' @export
-parameterization.mm_compiled <- function(fit, ...) {
-  artifact <- mm_compiled_artifact(fit)
+parameterization.mm_compiled <- function(object, ...) {
+  artifact <- mm_compiled_artifact(object)
   traces <- artifact$covariance_parameter_traces %||% list()
   rows <- lapply(traces, mm_parameterization_trace_row)
   table <- if (length(rows)) {
@@ -27,6 +27,19 @@ parameterization.mm_compiled <- function(fit, ...) {
     out
   } else {
     mm_parameterization_empty_table()
+  }
+  # GLMM artifacts carry the compile-time Lambda TEMPLATE (identity start) in
+  # their traces, not the fitted values; presenting those as `theta_value`
+  # silently hands the user wrong numbers. On a fitted object, splice the
+  # fitted theta in by global index (the LMM artifact already stores fitted
+  # values, and the splice is a no-op there); refuse to guess on mismatch.
+  if (inherits(object, "mm_fit") && nrow(table) &&
+      length(object$theta) && "theta_index" %in% names(table)) {
+    idx <- table$theta_index + 1L
+    ok <- !is.na(idx) & idx >= 1L & idx <= length(object$theta)
+    if (any(ok)) {
+      table$theta_value[ok] <- as.numeric(object$theta[idx[ok]])
+    }
   }
   obj <- list(table = table, traces = traces, theta_maps = artifact$theta_maps %||% list())
   class(obj) <- "mm_theta_map"

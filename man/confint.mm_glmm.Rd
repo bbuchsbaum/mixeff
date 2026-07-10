@@ -8,7 +8,7 @@
   object,
   parm,
   level = 0.95,
-  method = c("wald", "asymptotic", "profile", "bootstrap"),
+  method = c("asymptotic", "wald", "profile", "bootstrap"),
   ...
 )
 }
@@ -19,7 +19,8 @@
 
 \item{level}{Confidence level.}
 
-\item{method}{\code{"wald"} (default) or its synonym \code{"asymptotic"}.}
+\item{method}{\code{"asymptotic"} (the default; the package-wide name for the
+closed-form Wald interval) or its synonym \code{"wald"}.}
 
 \item{...}{Unused.}
 }

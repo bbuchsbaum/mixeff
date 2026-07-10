@@ -35,7 +35,7 @@ so the post-compile FFI calls (e.g., the internal
 design-audit pipeline against the supplied data, and returns an
 \code{mm_spec} object — the audit-first analogue of the design-only step in
 base \code{lm()}'s \code{model.frame()} / \code{model.matrix()} chain. Nothing is
-optimized; nothing is fitted. \code{audit_design()}, \code{explain_model()},
+optimized; nothing is fitted. \code{audit()}, \code{explain_model()},
 \code{random_options()}, and (in Phase 1.E) \code{lmm()} all consume the same
 artifact.
 }
@@ -71,10 +71,10 @@ df <- data.frame(
   subject = factor(rep(letters[1:5], each = 4))
 )
 spec <- compile_model(y ~ x + (1 + x | subject), df)
-audit_design(spec)
+audit(spec)
 }
 
 }
 \seealso{
-\code{\link[=audit_design]{audit_design()}} for the printed audit report.
+\code{\link[=audit]{audit()}} for the printed audit report.
 }

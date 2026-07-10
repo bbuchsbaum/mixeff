@@ -18,7 +18,6 @@
       Formula: Yield ~ 1 + (1 | Batch)
       Fit status: converged_reduced_rank
       Optimizer: pattern_search; iterations: 23; objective: 161.828
-      Artifact: mixedmodels.compiled_model_artifact v1; crate: <version>
       nobs: 30, sigma: 3.71568, logLik: -80.9141
       Fixed effects:
       (Intercept) 

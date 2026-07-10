@@ -155,6 +155,8 @@ mm_glmm_wald_z_inference <- function(object) {
       rows <- rows[rows$kind == "coefficient", , drop = FALSE]
     }
     if (nrow(rows)) {
+      # Artifact rows carry engine-encoded labels; fit$beta is lme4-named.
+      rows$label <- mm_coef_engine_to_lme4(rows$label, object$coef_map)
       rows <- rows[match(names(object$beta), rows$label), , drop = FALSE]
       out <- list(table = rows, raw = parsed$raw)
       class(out) <- c("mm_inference_table", "list")
@@ -253,7 +255,12 @@ print.summary.mm_glmm <- function(x, ...) {
         rel,
         x$vcov_status$method %||% "no method tag"
       ))
-      if (!is.na(x$vcov_status$reason) && nzchar(x$vcov_status$reason)) {
+      # The engine's warrant is a paragraph of covariance-geometry internals;
+      # the plain-language note below explains the absence and the remedy.
+      # Verbatim engine reason available with print(summary(fit),
+      # verbose = TRUE) or options(mixeff.verbose = 1).
+      if (mm_summary_verbose(...) &&
+          !is.na(x$vcov_status$reason) && nzchar(x$vcov_status$reason)) {
         cat(sprintf(" Reason: %s.", x$vcov_status$reason))
         reason_printed <- TRUE
       }
@@ -261,7 +268,7 @@ print.summary.mm_glmm <- function(x, ...) {
     }
   }
   notes <- c(
-    mm_fit_status_note(x$fit_status),
+    mm_fit_status_note(x$fit_status, x$method),
     mm_glmm_withheld_inference_note(x, include_reason = !reason_printed)
   )
   mm_summary_print_notes(notes)
@@ -278,25 +285,20 @@ mm_glmm_withheld_inference_note <- function(x, include_reason = TRUE) {
   if (!length(stat_cols)) return(character())
   stats <- coef[[stat_cols[[1L]]]]
   if (!length(stats) || !all(is.na(stats))) return(character())
-  note <- paste0(
-    "test statistics and p-values are withheld: the fit's covariance payload ",
-    "does not certify fixed-effect inference"
-  )
-  # The engine reason is skipped when the Wald-z reliability line above the
-  # notes already printed it verbatim; repeating a paragraph-length warrant
-  # twice reads as noise, not honesty.
-  reason <- x$vcov_status$reason %||% NA_character_
-  if (include_reason && !is.na(reason) && nzchar(reason)) {
-    note <- sprintf("%s (engine reason: %s)", note, reason)
-  }
-  if (identical(x$method, "pirls_profiled")) {
-    note <- paste0(
-      note,
-      ". Engine-certified Wald inference is available from a fit with ",
-      'method = "joint_laplace".'
+  # Plain language first (UX bar: never more obscure than lme4); the engine's
+  # covariance-geometry warrant stays available via verbose printing and the
+  # inference rows themselves.
+  note <- if (identical(x$method, "pirls_profiled")) {
+    paste0(
+      "standard errors, z statistics, and p-values are not available from ",
+      "the fast default method (pirls_profiled). Re-fit with ",
+      'method = "joint_laplace" for glmer-equivalent Wald inference.'
     )
   } else {
-    note <- paste0(note, ".")
+    paste0(
+      "standard errors, z statistics, and p-values are withheld: the fit's ",
+      "covariance payload does not certify fixed-effect inference."
+    )
   }
   note
 }
@@ -316,9 +318,25 @@ mm_summary_verbose <- function(...) {
 # A non-converged optimum is model state the user must not read past: repeat
 # it as a plain-language note next to the tests, not only in the header line.
 # Reports what happened; prescribes nothing (PRD R9).
-mm_fit_status_note <- function(fit_status) {
+mm_fit_status_note <- function(fit_status, method = NULL) {
   status <- as.character(fit_status %||% "")
   if (!nzchar(status) || startsWith(status, "converged")) return(character())
+  if (identical(method, "joint_laplace") &&
+      status %in% c("not_assessed", "not_optimized")) {
+    # The joint route's engine labels are known not to track solution quality
+    # at this pin (upstream bd-01KX4ZZA5D...): completed joint fits can carry
+    # `not_assessed`/`not_optimized` even when the optimum matches glmer.
+    # Report the label without implying the fit is unusable, and point to the
+    # verification verb instead.
+    return(sprintf(
+      paste0(
+        "fit status `%s`: the joint-Laplace route does not yet certify its ",
+        "convergence label; the fit completed its optimization budget. Use ",
+        "verify_convergence() to check the optimum directly."
+      ),
+      status
+    ))
+  }
   sprintf(
     paste0(
       "fit status `%s`: the optimizer stopped without certifying an optimum; ",
@@ -404,6 +422,19 @@ mm_summary_coefficients <- function(object, inference) {
   )
   coef[[stat_col]] <- rows$statistic
   coef[[p_col]] <- rows$p_value
+  # Aliased (rank-deficiency-pivoted) coefficients are stored as hard zeros
+  # so predictions stay correct; display them as NA (lm() convention) so a
+  # zero never reads as "no effect".
+  aliased <- intersect(mm_aliased_coefficients(object), beta_names)
+  if (length(aliased)) {
+    hit <- beta_names %in% aliased
+    coef$Estimate[hit] <- NA_real_
+    coef[["Std. Error"]][hit] <- NA_real_
+    coef[[stat_col]][hit] <- NA_real_
+    coef[[p_col]][hit] <- NA_real_
+    coef$method[hit] <- "aliased"
+    attr(coef, "mm_aliased") <- aliased
+  }
   cols <- c("Estimate", "Std. Error", "df", stat_col, p_col, "method")
   if (all(is.na(coef$df))) {
     # df is undefined for every row (e.g. asymptotic Wald z); an all-NA

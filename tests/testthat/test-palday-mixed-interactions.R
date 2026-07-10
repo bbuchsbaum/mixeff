@@ -42,11 +42,11 @@ palday_case_metadata <- function() {
     source = "https://rpubs.com/palday/mixed-interactions",
     dataset = "lme4::cake",
     formula = "angle ~ recipe * temperature + (1 | recipe:replicate)",
-    ordered_factor_contrast_policy = "contrast_basis_divergence",
+    ordered_factor_contrast_policy = "contr_poly",
     contrast_note = paste(
-      "lme4 uses contr.poly for ordered factors; mixeff currently uses",
-      "treatment coding. Comparable tests avoid coefficient-name/value parity",
-      "until bd-01KTVF5NFWB4ERGCXVNEP2FWCV is implemented."
+      "mixeff codes the ordered factor `temperature` with contr.poly, matching",
+      "lme4. Fixed-effect values, names, order, logLik, and AIC/BIC all reach",
+      "parity (contr.poly coding + the lme4-identical renaming layer)."
     )
   )
 }
@@ -115,10 +115,9 @@ test_that("Palday cake fixture uses the lme4 bundled split-plot data", {
 test_that("Palday fixture metadata records ordered-factor contrast policy", {
   metadata <- palday_case_metadata()
 
-  expect_identical(metadata$ordered_factor_contrast_policy,
-                   "contrast_basis_divergence")
+  expect_identical(metadata$ordered_factor_contrast_policy, "contr_poly")
   expect_match(metadata$contrast_note, "contr.poly", fixed = TRUE)
-  expect_match(metadata$contrast_note, "treatment coding", fixed = TRUE)
+  expect_match(metadata$contrast_note, "parity", fixed = TRUE)
 })
 
 test_that("Palday ML interaction model matches lme4 on comparable fit quantities", {
@@ -137,7 +136,7 @@ test_that("Palday ML interaction model matches lme4 on comparable fit quantities
   expect_false("recipe & replicate" %in% pair$mixeff$varcorr$table$group)
   expect_true("recipe:replicate" %in% as.data.frame(pair$mixeff$varcorr)$grp)
   expect_true("recipe:replicate" %in%
-                reporting_table(pair$mixeff, "random_effects")$group)
+                reporting_table(pair$mixeff, "random_effects")$table$group)
   mm_expect_ranef_lme4_parity(list(
     id = "cake_ordered_temperature_interaction_ml",
     dataset = "cake",
@@ -210,13 +209,70 @@ test_that("Palday interaction finite-sample term tests match lmerTest", {
   )
 })
 
-test_that("Palday ordered-factor coefficient caveat is explicit", {
+test_that("Palday ordered-factor coefficients reach value parity with lme4", {
+  pair <- palday_fit_pair(reml = TRUE, interaction = TRUE)
+  mm_beta <- mixeff::fixef(pair$mixeff)
+  lme4_beta <- lme4::fixef(pair$lme4)
+
+  expect_true(is.ordered(pair$data$temperature))
+
+  # Engine coefficient names use mixeff's encoding ("recipe: B",
+  # "temperature: .L"); translate to lme4's ("recipeB", "temperature.L") to
+  # align by name. The lme4-identical renaming/reordering layer is the follow-on
+  # task; until it lands the raw names differ but the contr.poly basis is
+  # identical, so name-aligned values must agree.
+  translate <- function(nm) gsub(": ", "", nm, fixed = TRUE)
+  names(mm_beta) <- translate(names(mm_beta))
+
+  expect_setequal(names(mm_beta), names(lme4_beta))
+  expect_equal(mm_beta[names(lme4_beta)], lme4_beta, tolerance = 1e-6)
+
+  # REML likelihood-scale parity.
+  expect_equal(as.numeric(stats::logLik(pair$mixeff)),
+               as.numeric(stats::logLik(pair$lme4)), tolerance = 1e-6)
+  expect_equal(stats::AIC(pair$mixeff), stats::AIC(pair$lme4), tolerance = 1e-6)
+  expect_equal(stats::BIC(pair$mixeff), stats::BIC(pair$lme4), tolerance = 1e-6)
+})
+
+test_that("Palday ordered-factor coefficient names are lme4-identical", {
+  # The renaming layer (bd-01KS5HG8...) makes names AND order match lme4
+  # exactly, including contr.poly trend labels and interaction columns, so
+  # lme4-written lincombs/lookups are drop-in compatible.
   pair <- palday_fit_pair(reml = FALSE, interaction = TRUE)
   mm_names <- names(mixeff::fixef(pair$mixeff))
   lme4_names <- names(lme4::fixef(pair$lme4))
 
-  expect_true(is.ordered(pair$data$temperature))
-  expect_true(any(grepl("temperature: 185", mm_names, fixed = TRUE)))
-  expect_true(any(grepl("temperature.L", lme4_names, fixed = TRUE)))
-  expect_false(identical(mm_names, lme4_names))
+  expect_identical(mm_names, lme4_names)
+  expect_true(any(grepl("temperature.L", mm_names, fixed = TRUE)))
+  expect_false(any(grepl("temperature: .L", mm_names, fixed = TRUE)))
+})
+
+test_that("drop1 default scope respects marginality; explicit non-marginal drops fit + match lme4", {
+  dat <- palday_cake_data()
+  fit <- mixeff::lmm(palday_formula(TRUE), dat, REML = FALSE,
+                     control = mixeff::mm_control(verbose = -1))
+
+  # Default scope: only the interaction is droppable (stats::drop1 rule);
+  # main effects participating in it are not attempted.
+  mm_drop <- stats::drop1(fit, test = "Chisq")
+  expect_identical(mm_drop$table$dropped, "recipe:temperature")
+  expect_identical(mm_drop$table$status, "available")
+
+  # Explicit non-marginal scope: since engine pin 4a2abb3 the engine expands
+  # full dummies for the absent margin exactly like R/lme4, so the reduced
+  # non-marginal fit is the SAME model as lme4's and produces an ordinary
+  # available row whose LRT matches lme4's drop1.
+  skip_if_not_installed("lme4")
+  mm_drop2 <- stats::drop1(fit, scope = c("recipe", "recipe:temperature"),
+                           test = "Chisq")
+  recipe_row <- mm_drop2$table[mm_drop2$table$dropped == "recipe", , drop = FALSE]
+  expect_identical(recipe_row$status, "available")
+  expect_true(is.finite(recipe_row$LRT))
+
+  ref <- suppressMessages(suppressWarnings(
+    lme4::lmer(palday_formula(TRUE), data = dat, REML = FALSE)
+  ))
+  lme4_drop <- stats::drop1(ref, scope = c("recipe", "recipe:temperature"),
+                            test = "Chisq")
+  expect_equal(recipe_row$LRT, lme4_drop["recipe", "LRT"], tolerance = 1e-3)
 })

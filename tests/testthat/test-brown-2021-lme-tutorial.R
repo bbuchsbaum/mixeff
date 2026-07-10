@@ -63,6 +63,18 @@ brown_cases <- function() {
       REML = TRUE,
       slow = TRUE,
       control = lme4::lmerControl(optimizer = "bobyqa"),
+      # NOTE (pin 4a2abb3, 2026-07-10): the reduced-rank/optimizer bugs that
+      # used to fail rt_interaction are fixed; this maximal crossed model now
+      # converges (both engines converged_interior, REML deviance 0.05 apart
+      # ~= 3.6e-7 relative). Only per-observation residual parity misses at
+      # fitted=2e-3 (max |resid| diff ~2.3 on a ~254 scale). Tight-tolerance
+      # refit (ftol_rel=1e-12) narrows the REML gap to 0.014 but does not
+      # close it: the two engines reach a REML-equivalent point whose
+      # random-effect BLUPs differ slightly on the flat ridge of a maximal
+      # crossed fit (PRD Decision D: statistical equivalence, not bit-exact).
+      # The fitted tolerance below is PENDING a user tolerance decision (cf.
+      # the sdamr_speeddate precedent, commit 96076e4); left at 2e-3 so the
+      # opt-in miss stays visible.
       tolerance = list(fixef = 2e-4, scalar = 2e-3, fitted = 2e-3,
                        varcorr = 3e-1)
     ),
@@ -103,6 +115,15 @@ brown_cases <- function() {
   )
 }
 
+# Gate status (2026-07-09 baseline at engine pin 3b6ec69): wall time is no
+# longer the reason for this gate — the rt_interaction fit runs in ~2.5s
+# (lme4 ~4.7s). What still fails opt-in is ACCURACY on `rt_interaction`: the
+# default trust_bq cold start lands in a reduced-rank basin +108 REML-dev
+# units above lme4's optimum (both stim components collapse to sd 0);
+# warm-start/cobyla/pattern_search recover lme4's optimum exactly and
+# verify_convergence() flags the fit unstable. Filed upstream as mixeff-rs
+# bd-01KX33Z3NAB2EVE94CBWR3NXX3; reproducer in
+# planning/probes/MINIMAL_case1_brown_rt_interaction.R. Ungate when it lands.
 brown_run_slow_rt_parity <- function() {
   identical(tolower(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")), "true")
 }

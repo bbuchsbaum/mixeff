@@ -13,13 +13,15 @@ mk_audit_fit <- function(seed = 11L) {
   )
 }
 
-test_that("audit() is the post-fit audit_design() surface", {
+test_that("audit() works on fits and specs; audit_design() is a deprecated alias", {
   fit <- mk_audit_fit()
   a <- audit(fit)
 
   expect_s3_class(a, "mm_audit")
   expect_match(a$text, "Audit Summary", fixed = TRUE)
-  expect_identical(audit_design(fit)$text, a$text)
+  # The collapsed surface: audit_design() forwards with a deprecation note.
+  expect_warning(alias <- audit_design(fit), "deprecated")
+  expect_identical(alias$text, a$text)
 })
 
 test_that("print.mm_audit defaults to the upstream-rendered compact summary", {
@@ -32,7 +34,7 @@ test_that("print.mm_audit defaults to the upstream-rendered compact summary", {
   subject <- factor(rep(seq_len(n_subjects), each = n_per))
   x <- rep(seq_len(n_per) - 1L, n_subjects)
   df <- data.frame(y = rnorm(length(x)), x = x, subject = subject)
-  audit <- audit_design(compile_model(y ~ x + (x | subject), df))
+  audit <- audit(compile_model(y ~ x + (x | subject), df))
 
   compact_lines <- capture.output(print(audit))
   compact <- paste(compact_lines, collapse = "\n")
@@ -84,7 +86,15 @@ test_that("diagnostics() and fit_status() expose artifact status fields", {
 })
 
 test_that("changes() reports requested/effective/fitted transitions", {
-  fit <- mk_audit_fit()
+  # A fit that CONVERGES to a certified (reduced-rank) optimum exercises the
+  # certificate_time transition + rank status rendering. Dyestuff2 has zero
+  # between-batch variance, so it reliably converges to reduced rank (the
+  # maximal-slope mk_audit_fit is now reported not_optimized by the engine
+  # and so carries no certificate row).
+  skip_if_not_installed("lme4")
+  data("Dyestuff2", package = "lme4")
+  fit <- lmm(Yield ~ 1 + (1 | Batch), Dyestuff2,
+             control = mm_control(verbose = -1))
   ch <- changes(fit)
 
   expect_s3_class(ch, "mm_change_log")

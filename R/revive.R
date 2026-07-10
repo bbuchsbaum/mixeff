@@ -195,7 +195,8 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
     mm_fixed_effect_vcov_from_payload(
       object$artifact$fixed_effect_covariance_matrix,
       object$beta,
-      object$std_errors
+      object$std_errors,
+      coef_map = object$coef_map
     )
   if (isTRUE(correlation)) {
     # Match lme4: attach the correlation matrix as a "correlation" attribute.
@@ -208,7 +209,8 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
 #' @export
 vcov.mm_glmm <- vcov.mm_lmm
 
-mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors) {
+mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors,
+                                              coef_map = NULL) {
   coef_names <- names(beta) %||% names(std_errors)
   if (!is.null(payload) &&
       identical(as.character(payload$schema_name %||% NA_character_),
@@ -227,6 +229,10 @@ mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors) {
       out <- mm_numeric_matrix_from_rows(matrix_payload)
       payload_names <- as.character(unlist(payload$coef_names %||% coef_names,
                                            use.names = FALSE))
+      # Payloads produced by the engine label rows in the engine encoding;
+      # when the caller's beta is already lme4-named (any normalized fit),
+      # translate before validating/aligning.
+      payload_names <- mm_coef_engine_to_lme4(payload_names, coef_map)
       mm_validate_fixed_effect_vcov_payload(
         out,
         payload_names,
@@ -343,20 +349,20 @@ mm_numeric_matrix_from_rows <- function(rows) {
 #' the compiler artifact: grouping factor, basis, covariance family, theta
 #' parameter count, level counts, and design-support status.
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_random_blocks` object with a data-frame `table`.
 #'
 #' @export
-random_blocks <- function(fit, ...) {
+random_blocks <- function(object, ...) {
   UseMethod("random_blocks")
 }
 
 #' @rdname random_blocks
 #' @export
-random_blocks.mm_compiled <- function(fit, ...) {
-  artifact <- mm_compiled_artifact(fit)
+random_blocks.mm_compiled <- function(object, ...) {
+  artifact <- mm_compiled_artifact(object)
   rows <- lapply(artifact$design_audit$random_terms %||% list(), mm_random_block_row)
   table <- if (length(rows)) {
     out <- do.call(rbind, rows)
@@ -375,11 +381,11 @@ random_blocks.mm_compiled <- function(fit, ...) {
 }
 
 #' @export
-random_blocks.default <- function(fit, ...) {
+random_blocks.default <- function(object, ...) {
   mm_abort(
     message = "`random_blocks()` expects a compiled or fitted mixeff object.",
     class = "mm_arg_error",
-    input = fit
+    input = object
   )
 }
 
@@ -397,21 +403,21 @@ print.mm_random_blocks <- function(x, ...) {
 
 #' Inspect the optimizer certificate
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_optimizer_certificate` object containing the raw certificate
 #'   and a compact table view.
 #'
 #' @export
-optimizer_certificate <- function(fit, ...) {
+optimizer_certificate <- function(object, ...) {
   UseMethod("optimizer_certificate")
 }
 
 #' @rdname optimizer_certificate
 #' @export
-optimizer_certificate.mm_compiled <- function(fit, ...) {
-  cert <- mm_compiled_artifact(fit)$optimizer_certificate %||% list()
+optimizer_certificate.mm_compiled <- function(object, ...) {
+  cert <- mm_compiled_artifact(object)$optimizer_certificate %||% list()
   obj <- list(raw = cert, table = mm_optimizer_certificate_table(cert))
   class(obj) <- "mm_optimizer_certificate"
   obj
@@ -468,7 +474,24 @@ inference_table.mm_lmm <- function(fit,
     fit$artifact$fixed_effect_inference_table %||% NULL
   )
   if (!is.null(parsed)) {
-    obj <- list(table = parsed$table, raw = parsed$raw)
+    tbl <- parsed$table
+    if (!is.null(tbl$label)) {
+      # Artifact rows carry engine-encoded labels in ENGINE column order;
+      # translate to lme4 names and reorder coefficient rows to match
+      # names(fit$beta), so positional pairing with fixef()/vcov() is safe.
+      tbl$label <- mm_coef_engine_to_lme4(tbl$label, fit$coef_map)
+      if (!is.null(tbl$kind) && !is.null(fit$coef_map)) {
+        is_coef <- tbl$kind == "coefficient"
+        coef_rows <- tbl[is_coef, , drop = FALSE]
+        hit <- match(names(fit$beta), coef_rows$label)
+        if (!anyNA(hit) && nrow(coef_rows) == length(hit)) {
+          tbl <- rbind(coef_rows[hit, , drop = FALSE],
+                       tbl[!is_coef, , drop = FALSE])
+          rownames(tbl) <- NULL
+        }
+      }
+    }
+    obj <- list(table = tbl, raw = parsed$raw)
     class(obj) <- "mm_inference_table"
     return(obj)
   }
@@ -510,20 +533,20 @@ print.mm_inference_table <- function(x, ...) {
 
 #' Inspect reproducibility metadata
 #'
-#' @param fit A compiled `mm_spec` or fitted `mm_fit`.
+#' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_reproducibility` object.
 #'
 #' @export
-reproducibility <- function(fit, ...) {
+reproducibility <- function(object, ...) {
   UseMethod("reproducibility")
 }
 
 #' @rdname reproducibility
 #' @export
-reproducibility.mm_compiled <- function(fit, ...) {
-  raw <- mm_compiled_artifact(fit)$reproducibility %||% list()
+reproducibility.mm_compiled <- function(object, ...) {
+  raw <- mm_compiled_artifact(object)$reproducibility %||% list()
   obj <- list(raw = raw, thresholds = mm_repro_threshold_table(raw$thresholds))
   class(obj) <- "mm_reproducibility"
   obj

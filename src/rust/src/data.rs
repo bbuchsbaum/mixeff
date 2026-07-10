@@ -5,8 +5,10 @@
 //!   - `categorical_values`: list(name = character vector of observed values)
 //!   - `categorical_levels`: list(name = character vector of canonical levels)
 //! plus a `column_order` character vector that names every column in the
-//! original `data.frame` order. Each column appears in exactly one of the
-//! numeric/categorical lists.
+//! original `data.frame` order and a `categorical_ordered` character vector
+//! naming the subset of categorical columns that are ordered factors (coded
+//! with `contr.poly` polynomial contrasts rather than treatment coding). Each
+//! column appears in exactly one of the numeric/categorical lists.
 //!
 //! Rust trusts the R wrapper to have validated:
 //!   - every value in `categorical_values[name]` is in `categorical_levels[name]`,
@@ -22,16 +24,17 @@
 //! through `mm_data_error:` rather than ignore it, per the no-silent-surgery
 //! contract.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use extendr_api::prelude::*;
 
-use mixeff_rs::model::DataFrame;
+use mixeff_rs::model::{CategoricalContrast, DataFrame};
 
 pub(crate) fn build_dataframe(
     numeric_columns: &List,
     categorical_values: &List,
     categorical_levels: &List,
+    categorical_ordered: &Strings,
     column_order: &Strings,
 ) -> std::result::Result<DataFrame, String> {
     let mut numeric_map: HashMap<String, Vec<f64>> = HashMap::with_capacity(numeric_columns.len());
@@ -69,6 +72,23 @@ pub(crate) fn build_dataframe(
         cat_levels_map.insert(name.to_string(), levels);
     }
 
+    // Names of categorical columns the R wrapper flagged as ordered factors.
+    // These are coded with orthonormal polynomial contrasts (R's `contr.poly`)
+    // instead of the default treatment coding, matching lme4's ordered-factor
+    // behaviour. The R side guarantees each name here also appears in
+    // `categorical_values`/`categorical_levels`.
+    // NB: `Strings::iter()` aborts (non-unwinding panic) on a zero-length
+    // vector, so guard the common no-ordered-factors case before iterating.
+    // `.len()` is safe on an empty `Strings`; only `.iter()` is not.
+    let ordered_set: HashSet<&str> = if categorical_ordered.len() == 0 {
+        HashSet::new()
+    } else {
+        categorical_ordered
+            .iter()
+            .map(|name_rstr| name_rstr.as_ref())
+            .collect()
+    };
+
     let mut df = DataFrame::new();
     for name_rstr in column_order.iter() {
         // `Rstr::as_str` is deprecated; per upstream guidance, take the
@@ -87,10 +107,27 @@ pub(crate) fn build_dataframe(
             let levels = cat_levels_map.remove(name).ok_or_else(|| {
                 format!("mm_data_error: categorical column '{name}' is missing its `levels` entry")
             })?;
-            df.add_categorical_with_levels(name, values, levels)
-                .map_err(|e| {
-                    format!("mm_data_error: failed to add categorical column '{name}': {e}")
+            if ordered_set.contains(name) {
+                // Ordered factor: polynomial (contr.poly) contrast basis. The
+                // engine builds the QR-orthonormalized Vandermonde over the
+                // level order the R wrapper supplied and labels columns .L/.Q/.C/^k.
+                let contrast = CategoricalContrast::polynomial(levels.clone()).map_err(|e| {
+                    format!(
+                        "mm_data_error: failed to build polynomial contrast for ordered column '{name}': {e}"
+                    )
                 })?;
+                df.add_categorical_with_contrast(name, values, levels, contrast)
+                    .map_err(|e| {
+                        format!(
+                            "mm_data_error: failed to add ordered categorical column '{name}': {e}"
+                        )
+                    })?;
+            } else {
+                df.add_categorical_with_levels(name, values, levels)
+                    .map_err(|e| {
+                        format!("mm_data_error: failed to add categorical column '{name}': {e}")
+                    })?;
+            }
             continue;
         }
 

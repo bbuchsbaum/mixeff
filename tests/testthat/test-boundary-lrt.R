@@ -44,7 +44,8 @@ test_that("test_random_effect() exposes certified one-component boundary LRT", {
   printed <- paste(capture.output(print(out)), collapse = "\n")
   expect_match(printed, "chi-square(0)", fixed = TRUE)
   report <- reporting_table(out)
-  expect_identical(report$reference_distribution[[1L]],
+  expect_s3_class(report, "mm_reporting_table")
+  expect_identical(report$table$reference_distribution[[1L]],
                    "0.5 * chi-square(0) + 0.5 * chi-square(1)")
 })
 

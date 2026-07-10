@@ -250,7 +250,7 @@ mm_diagnostics_table <- function(raw) {
 }
 
 # Stable registry pinning every Rust `DiagnosticCode` to an R-side advice
-# bucket so explain_model() / audit_design() never silently drop a code.
+# bucket so explain_model() / audit() never silently drop a code.
 # Mirrors src/rust/upstream/mixeff-rs/src/compiler/diagnostics.rs; the
 # coverage gate in tests/testthat/test-diagnostic-formatters.R fails if
 # Rust gains a variant the registry does not classify.

@@ -5,12 +5,12 @@
 \alias{random_blocks.mm_compiled}
 \title{Inspect random-effect blocks}
 \usage{
-random_blocks(fit, ...)
+random_blocks(object, ...)
 
-\method{random_blocks}{mm_compiled}(fit, ...)
+\method{random_blocks}{mm_compiled}(object, ...)
 }
 \arguments{
-\item{fit}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
+\item{object}{A compiled \code{mm_spec} or fitted \code{mm_fit}.}
 
 \item{...}{Reserved for future methods.}
 }

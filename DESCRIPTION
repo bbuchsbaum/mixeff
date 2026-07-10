@@ -1,6 +1,6 @@
 Package: mixeff
 Title: Audit-First Mixed-Effects Models via the 'mixeff-rs' Rust Crate
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("Brad", "Buchsbaum",
            email = "bbuchsbaum@research.baycrest.org",
@@ -38,6 +38,7 @@ Suggests:
     knitr,
     lme4,
     lmerTest,
+    MASS,
     rextendr,
     rmarkdown,
     testthat (>= 3.0.0)

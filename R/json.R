@@ -3,7 +3,7 @@
 #' Internal: every artifact crossing the FFI carries a top-level `schema`
 #' object — see [mm_json_negotiate()] for the contract. `mm_json_parse_artifact()`
 #' is the typed parser used by Phase 1 verbs (`compile_model()`,
-#' `audit_design()`, and later `lmm()`): it reads the JSON with
+#' `audit()`, and later `lmm()`): it reads the JSON with
 #' `jsonlite::fromJSON(simplifyVector = FALSE)` so deeply-nested mixed
 #' structures stay as nested lists, validates the schema header against the
 #' wrapper's known set, and returns the parsed list with the original JSON

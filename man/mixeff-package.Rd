@@ -13,6 +13,15 @@ the engine cannot certify. See \code{vignette("intro", package = "mixeff")} for
 an overview and the demystification surface for random-effects syntax
 (Phase 1+).
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://bbuchsbaum.github.io/mixeff/}
+  \item \url{https://github.com/bbuchsbaum/mixeff}
+  \item Report bugs at \url{https://github.com/bbuchsbaum/mixeff/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Brad Buchsbaum \email{bbuchsbaum@research.baycrest.org}
 

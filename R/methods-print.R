@@ -1,23 +1,29 @@
 #' @method print mm_lmm
 #' @export
 print.mm_lmm <- function(x, ...) {
-  schema <- x$schema %||% mm_object_schema(x$artifact)
   cat(sprintf("Linear mixed model fit by %s\n", if (x$REML) "REML" else "ML"))
   cat(sprintf("Formula: %s\n", deparse1(x$formula)))
   cat(sprintf("Fit status: %s\n", x$fit_status))
   cat(mm_print_optimizer_line(x))
-  cat(sprintf(
-    "Artifact: %s v%s; crate: %s\n",
-    schema$schema_name %||% "not_recorded",
-    schema$schema_version %||% "not_recorded",
-    schema$crate_version %||% "not_recorded"
-  ))
+  # Artifact/crate provenance is developer metadata, not model output;
+  # reproducibility(fit) reports it (UX bar: print() shows nothing lme4's
+  # print would not need explained).
   cat(sprintf(
     "nobs: %d, sigma: %.6g, logLik: %.6g\n",
     x$nobs, x$sigma, x$logLik
   ))
   cat("Fixed effects:\n")
-  print(signif(fixef(x), 6))
+  beta_shown <- fixef(x)
+  aliased <- mm_aliased_coefficients(x)
+  aliased <- intersect(aliased, names(beta_shown))
+  if (length(aliased)) beta_shown[aliased] <- NA_real_
+  print(signif(beta_shown, 6))
+  if (length(aliased)) {
+    cat(sprintf(
+      "Aliased (not separately estimable, shown as NA): %s. See the design note in summary().\n",
+      paste(aliased, collapse = ", ")
+    ))
+  }
   singular_lines <- mm_singular_render_lines(x)
   if (length(singular_lines)) {
     cat("\nFitted covariance state:\n")
@@ -31,25 +37,31 @@ print.mm_lmm <- function(x, ...) {
 #' @method print mm_glmm
 #' @export
 print.mm_glmm <- function(x, ...) {
-  schema <- x$schema %||% mm_object_schema(x$artifact)
   cat("Generalized linear mixed model fit\n")
   cat(sprintf("Formula: %s\n", deparse1(x$formula)))
   cat(sprintf("Family/link: %s/%s\n", x$family$family, x$family$link))
   cat(sprintf("Method: %s (nAGQ = %d)\n", x$method, x$nAGQ))
   cat(sprintf("Fit status: %s\n", x$fit_status))
   cat(mm_print_optimizer_line(x))
-  cat(sprintf(
-    "Artifact: %s v%s; crate: %s\n",
-    schema$schema_name %||% "not_recorded",
-    schema$schema_version %||% "not_recorded",
-    schema$crate_version %||% "not_recorded"
-  ))
+  # Artifact/crate provenance is developer metadata, not model output;
+  # reproducibility(fit) reports it (UX bar: print() shows nothing lme4's
+  # print would not need explained).
   cat(sprintf(
     "nobs: %d, dispersion: %.6g, logLik: %.6g\n",
     x$nobs, x$dispersion, x$logLik
   ))
   cat("Fixed effects:\n")
-  print(signif(fixef(x), 6))
+  beta_shown <- fixef(x)
+  aliased <- mm_aliased_coefficients(x)
+  aliased <- intersect(aliased, names(beta_shown))
+  if (length(aliased)) beta_shown[aliased] <- NA_real_
+  print(signif(beta_shown, 6))
+  if (length(aliased)) {
+    cat(sprintf(
+      "Aliased (not separately estimable, shown as NA): %s. See the design note in summary().\n",
+      paste(aliased, collapse = ", ")
+    ))
+  }
   cat("Audit verbs: audit(), diagnostics(), model_report()\n")
   invisible(x)
 }

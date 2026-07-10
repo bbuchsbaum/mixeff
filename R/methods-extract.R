@@ -178,6 +178,7 @@ mm_compute_cond_var_postvars <- function(fit) {
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(fit$weights),
       as.character(control_json)
     ),
@@ -210,7 +211,14 @@ mm_compute_cond_var_postvars <- function(fit) {
   out <- list()
   for (term in payload$terms %||% list()) {
     group <- as.character(term$group)
-    slope_names <- as.character(unlist(term$names, use.names = FALSE))
+    # The bridge labels slopes in the engine encoding ("modality: Audio");
+    # fit$random_effects columns carry the lme4 form (separator stripped,
+    # logical slopes as "xTRUE"), and mm_attach_ranef_postvars() matches by
+    # name — the same transform must apply here.
+    slope_names <- mm_re_colnames_lme4(
+      as.character(unlist(term$names, use.names = FALSE)),
+      fit$model_frame
+    )
     level_names <- as.character(unlist(term$levels, use.names = FALSE))
     flat <- as.numeric(unlist(term$postvar, use.names = FALSE))
     dims <- as.integer(unlist(term$dim, use.names = FALSE))

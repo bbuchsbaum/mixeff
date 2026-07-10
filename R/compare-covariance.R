@@ -14,7 +14,7 @@
 #' @export
 compare_covariance <- function(spec) {
   mm_assert_compiled_spec(spec)
-  audit <- audit_design(spec)
+  audit <- mm_audit_impl(spec)
   cards <- audit$random_term_cards %||% list()
   constraints <- audit$cross_card_constraints %||% list()
   rows <- unlist(lapply(cards, mm_compare_covariance_card_rows), recursive = FALSE)

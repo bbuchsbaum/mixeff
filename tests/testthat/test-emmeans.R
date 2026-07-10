@@ -57,9 +57,9 @@ test_that("optional emmeans pairwise estimates agree with fixed-effect differenc
   beta <- fixef(fit)
 
   expect_equal(pairs$estimate[pairs$contrast == "a - b"],
-               -unname(beta[["trt: b"]]), tolerance = 1e-8)
+               -unname(beta[["trtb"]]), tolerance = 1e-8)
   expect_equal(pairs$estimate[pairs$contrast == "a - c"],
-               -unname(beta[["trt: c"]]), tolerance = 1e-8)
+               -unname(beta[["trtc"]]), tolerance = 1e-8)
   expect_true(all(is.finite(pairs$SE)))
 })
 

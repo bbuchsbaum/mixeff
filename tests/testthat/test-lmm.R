@@ -31,14 +31,18 @@ test_that("lmm() fits an LMM and stores flat extractor fields", {
   expect_equal(df.residual(fit), fit$df_residual)
 })
 
-test_that("print.mm_lmm exposes artifact provenance and audit entry points", {
+test_that("print.mm_lmm shows audit entry points; provenance lives in reproducibility()", {
   df <- mk_lmm_fit_fixture()
   fit <- lmm(y ~ x + (1 | subject), df, control = mm_control(verbose = -1))
   output <- paste(capture.output(print(fit)), collapse = "\n")
 
-  expect_match(output, "Artifact: mixedmodels.compiled_model_artifact v1", fixed = TRUE)
-  expect_match(output, "crate:", fixed = TRUE)
+  # UX bar (2026-07-10): artifact/crate provenance is developer metadata and
+  # no longer prints on every fit; reproducibility(fit) still reports it.
+  expect_no_match(output, "Artifact:", fixed = TRUE)
   expect_match(output, "Audit verbs: audit(), diagnostics(), inference_table(), model_report()", fixed = TRUE)
+  # Provenance stays programmatically available on the fit object.
+  expect_match(fit$schema$schema_name, "compiled_model_artifact")
+  expect_true(nzchar(fit$schema$crate_version %||% ""))
 })
 
 test_that("lmm() emits the explain_model message unless verbose is -1", {
@@ -160,4 +164,32 @@ test_that("revived extractor paths return typed values", {
   expect_equal(unname(pred), unname(fitted(fit)), tolerance = 1e-8)
   expect_error(stats::predict(fit, re.form = ~(1 | subject)),
                class = "mm_inference_unavailable")
+})
+
+test_that("lmm()/glmm() advise rescaling when a predictor is far from unit scale", {
+  # lme4 parity: predictors on very different scales get a rescale advisory
+  # (a notice, not a refusal). Matches lme4's checkScaleX guidance.
+  set.seed(1)
+  n_g <- 20L
+  n_i <- 15L
+  g <- factor(rep(seq_len(n_g), each = n_i))
+  x <- runif(n_g * n_i, 0, 1e5)
+  y <- 1 + 2e-4 * x + rnorm(n_g, 0, 2)[g] + rnorm(nrow_g <- n_g * n_i, 0, 1)
+  d <- data.frame(y = y, x = x, g = g)
+
+  expect_message(
+    lmm(y ~ x + (1 | g), d),
+    "on a scale far from 1",
+    class = "mm_scaling_notice"
+  )
+  # Clean, unit-scale data emits no scaling notice.
+  expect_no_message(
+    lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy),
+    class = "mm_scaling_notice"
+  )
+  # Suppressible with verbose = -1.
+  expect_no_message(
+    lmm(y ~ x + (1 | g), d, control = mm_control(verbose = -1)),
+    class = "mm_scaling_notice"
+  )
 })

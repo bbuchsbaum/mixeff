@@ -26,10 +26,19 @@
 #'   `mm_data_error` (audit-first: missing-data dropping must be opt-in). Pass
 #'   `na.action = na.omit` for lme4's complete-case behaviour.
 #' @param contrasts Optional named list of factor contrasts. The engine codes
-#'   all factors with treatment contrasts; a request for any other coding is
-#'   refused (recode the factor instead).
+#'   unordered factors with treatment contrasts (`contr.treatment`) and ordered
+#'   factors with orthonormal polynomial contrasts (`contr.poly`), matching
+#'   lme4/R defaults. A request for any other coding is refused (recode the
+#'   factor instead).
 #' @param control A list from [mm_control()].
 #'
+#'
+#' @details
+#' Optimization runs inside a single native call with no progress output: the
+#' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
+#' before the fitted result returns, and the call cannot be interrupted from
+#' R. Every optimizer budget is bounded, so fits always terminate; runtime on
+#' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_lmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.
 #'
@@ -51,7 +60,24 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
                 control = mm_control()) {
   call <- match.call()
   control <- mm_validate_control(control)
-  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts)
+  if (inherits(formula, "formula") && length(formula) == 3L &&
+      is.call(formula[[2L]]) &&
+      identical(as.character(formula[[2L]][[1L]]), "cbind")) {
+    # Deferred scope (PRD Phase 5 note, 2026-07-09): shared-theta multivariate
+    # responses need an upstream engine contract. Refuse plainly here rather
+    # than letting the formula compiler emit its transform-subset error.
+    mm_abort(
+      message = paste(
+        "Multivariate responses (`cbind(y1, y2) ~ ...`) are not supported by",
+        "`lmm()`. Fit each outcome as its own model. (`glmm()` accepts",
+        "`cbind(successes, failures)` for binomial responses.)"
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "multivariate_response_unsupported",
+      input = formula
+    )
+  }
+  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
   weights <- mm_lmm_weights(substitute(weights), data, parent.frame())
   if (!is.logical(REML) || length(REML) != 1L || is.na(REML)) {
     mm_abort(
@@ -76,6 +102,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
 
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec)
+  mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {
     mm_inform_explanation(spec)
   }
@@ -93,6 +120,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(weights),
       as.character(control_json)
     ),
@@ -149,6 +177,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       artifact = artifact
     )
   )
+  fit <- mm_apply_lme4_coef_naming(fit)
   class(fit) <- c("mm_lmm", "mm_fit", "mm_compiled")
   fit
 }
@@ -333,6 +362,52 @@ mm_apply_grouping_coercion <- function(formula, data, verbose) {
   res$data
 }
 
+# lme4-parity scaling advisory. Predictors on wildly different scales make the
+# optimizer's trust region ill-conditioned; lme4 warns "predictor variables
+# are on very different scales: consider rescaling". We surface the same
+# guidance (a notice, not a refusal) so a user whose fit stalls on raw-scale
+# data knows the cheap fix. Fires at verbose >= 0; suppress with
+# mm_control(verbose = -1). Runs on the compiled spec so grouping factors are
+# already coerced (excluded by is.numeric) and the fixed formula is known;
+# continuous fixed-effect predictors only (the response and factor dummies are
+# excluded).
+mm_scaling_advisory <- function(spec, verbose) {
+  if (!isTRUE(verbose >= 0L)) return(invisible(NULL))
+  fe <- tryCatch(all.vars(mm_fixed_formula(spec)[[3L]]),
+                 error = function(e) character())
+  mf <- spec$model_frame
+  cols <- intersect(fe, names(mf))
+  if (!length(cols)) return(invisible(NULL))
+  num <- vapply(mf[cols], function(col) is.numeric(col) && !is.factor(col),
+                logical(1))
+  if (!any(num)) return(invisible(NULL))
+  sds <- vapply(mf[cols][num], function(col) stats::sd(col, na.rm = TRUE),
+                numeric(1))
+  sds <- sds[is.finite(sds) & sds > 0]
+  if (!length(sds)) return(invisible(NULL))
+  # Two ways a continuous predictor makes the trust region ill-conditioned
+  # (both what lme4's checkScaleX flags): a large spread ACROSS predictors,
+  # or a single predictor far from unit scale. Threshold ~1e4 either way.
+  ratio <- max(sds) / min(sds)
+  extreme <- max(sds) > 1e4 || min(sds) < 1e-4
+  if (ratio > 1e4 || extreme) {
+    wide <- names(sds)[which.max(abs(log10(sds)))]
+    mm_inform(
+      sprintf(
+        paste0(
+          "Predictor `%s` is on a scale far from 1 (SD ~%.0e); predictors on ",
+          "very different scales can make the optimizer converge poorly. ",
+          "Consider rescaling continuous predictors (e.g. `scale()`). Silence ",
+          "with mm_control(verbose = -1)."
+        ),
+        wide, sds[[which.max(abs(log10(sds)))]]
+      ),
+      class = "mm_scaling_notice"
+    )
+  }
+  invisible(NULL)
+}
+
 # lme4-style data preparation shared by the fit drivers: apply a `subset`
 # expression and an `na.action` to `data` (and the already-evaluated `weights`
 # vector, kept aligned). Returns the processed `data` and `weights`. The NA
@@ -387,22 +462,36 @@ mm_prepare_fit_data <- function(formula, data, subset_expr, na.action,
   list(data = data, weights = weights)
 }
 
-# The Rust engine codes every factor with treatment (dummy) contrasts. Accept a
-# `contrasts` request only if it asks for that coding; otherwise refuse rather
-# than silently fit a differently-coded design than the user asked for.
-mm_reject_nontreatment_contrasts <- function(contrasts) {
-  is_treatment <- function(x) {
-    is.character(x) && length(x) == 1L &&
-      x %in% c("contr.treatment", "contr.SAS")
+# The engine codes unordered factors with treatment (dummy) contrasts and
+# ordered factors with `contr.poly`, matching lme4/R defaults. Accept a
+# `contrasts` request only if it names that coding per factor; otherwise refuse
+# rather than silently fit a differently-coded design than the user asked for.
+# `data` (the raw model data) tells us which named factors are ordered.
+mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
+  ordered_cols <- if (is.data.frame(data)) {
+    names(data)[vapply(data, is.ordered, logical(1))]
+  } else {
+    character(0)
   }
+  entry_ok <- function(nm, x) {
+    if (!is.character(x) || length(x) != 1L) return(FALSE)
+    if (nm %in% ordered_cols) {
+      identical(x, "contr.poly")
+    } else {
+      x %in% c("contr.treatment", "contr.SAS")
+    }
+  }
+  nms <- names(contrasts)
   ok <- is.list(contrasts) && length(contrasts) &&
-    all(vapply(contrasts, is_treatment, logical(1)))
+    !is.null(nms) && all(nzchar(nms)) &&
+    all(mapply(entry_ok, nms, contrasts, USE.NAMES = FALSE))
   if (!ok) {
     mm_abort(
       message = paste(
-        "Custom `contrasts` are not supported: the engine codes all factors",
-        "with treatment contrasts. Recode the factor (e.g. relevel(), or",
-        "construct the desired numeric columns) to obtain a different coding."
+        "Custom `contrasts` are only honoured when they match the engine's",
+        "coding: `contr.treatment`/`contr.SAS` for unordered factors and",
+        "`contr.poly` for ordered factors. Recode the factor (e.g. relevel(),",
+        "toggle ordering, or construct numeric columns) for a different coding."
       ),
       class = "mm_arg_error",
       input = contrasts
@@ -505,10 +594,38 @@ mm_abort_from_bridge <- function(cnd, ...) {
   parts <- mm_split_tagged_error(conditionMessage(cnd))
   cls <- if (!is.na(parts$tag)) parts$tag else "mm_bridge_error"
   msg <- if (!is.na(parts$tag)) parts$message else conditionMessage(cnd)
+  # No `parent = cnd`: the bridge condition carries the same message, so
+  # chaining it only adds a duplicated "Caused by error in doTryCatch()"
+  # block to what the user sees. The tagged class + message are the contract.
   mm_abort(
-    message = msg,
+    message = mm_translate_bridge_message(msg),
     class = cls,
-    ...,
-    parent = cnd
+    ...
   )
+}
+
+# Engine error text is written for the Rust API surface; rewrite the pieces
+# that reference controls an R user cannot type into the R-level equivalents,
+# and strip internal call-path prefixes. Text-only: the tagged condition
+# class and the substantive reason are preserved.
+mm_translate_bridge_message <- function(msg) {
+  msg <- sub(
+    "Use NewReLevels::Population or ::Missing to allow this\\.?",
+    paste0(
+      "To predict for unseen groups, use population-level prediction ",
+      "(`re.form = NA`) or set `allow.new.levels = TRUE`."
+    ),
+    msg
+  )
+  msg <- sub("^predict_new(_variance(_with_level)?)? failed: Invalid argument: ",
+             "", msg)
+  msg <- sub("^failed to construct (LMM|GLMM): ", "", msg)
+  if (grepl("No random effects in formula: this is not a mixed model",
+            msg, fixed = TRUE) &&
+      !grepl("stats::lm", msg, fixed = TRUE)) {
+    msg <- paste0(
+      msg, " Use stats::lm() (or glm()) for a fixed-effects-only model."
+    )
+  }
+  msg
 }

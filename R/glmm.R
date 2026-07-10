@@ -11,8 +11,10 @@
 #' @param data A `data.frame`.
 #' @param family A supported GLMM family object or family constructor. The
 #'   certified 1.0 surface is: [binomial()] with `"logit"`, `"probit"`, or
-#'   `"cloglog"` links; [poisson()] with `"log"` or `"sqrt"` links; and
-#'   [Gamma()] with `"log"` link.
+#'   `"cloglog"` links; [poisson()] with `"log"` or `"sqrt"` links;
+#'   [Gamma()] with `"log"` link; and negative binomial (NB2, `"log"` link)
+#'   via [mm_negative_binomial()] (theta estimated, like `lme4::glmer.nb()`)
+#'   or `MASS::negative.binomial(theta)` (fixed theta).
 #' @param random Reserved for the native random-effect constructor path.
 #' @param weights Optional prior weights. For binomial models these are trial
 #'   counts for proportion responses; weights must be positive and finite.
@@ -35,6 +37,13 @@
 #' @param control A list from [mm_control()].
 #' @param ... Reserved for future use.
 #'
+#'
+#' @details
+#' Optimization runs inside a single native call with no progress output: the
+#' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
+#' before the fitted result returns, and the call cannot be interrupted from
+#' R. Every optimizer budget is bounded, so fits always terminate; runtime on
+#' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.
 #'
@@ -78,6 +87,23 @@ glmm <- function(formula,
   family_info <- mm_glmm_family_info(family)
   nAGQ <- mm_glmm_validate_nagq(nAGQ, method)
 
+  if (identical(family_info$family, "negative_binomial") &&
+      identical(method, "joint_laplace")) {
+    # The engine's NB theta loop routes through fast-PIRLS internally, so the
+    # joint route is not wired for NB at this pin; refusing here gives a
+    # clear message instead of the engine's internal optimizer-guard error.
+    mm_abort(
+      message = paste0(
+        "Negative-binomial GLMMs support the default profiled method only; ",
+        "method = \"joint_laplace\" is not yet available for this family. ",
+        "Drop the method argument to use the profiled fit."
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "nb_joint_laplace_unavailable",
+      input = method
+    )
+  }
+
   if (!is.null(random) || !is.null(subset) ||
       !identical(na.action, na.omit) || !is.null(contrasts)) {
     mm_abort(
@@ -97,6 +123,10 @@ glmm <- function(formula,
   data <- prep$data
   weights <- prep$weights
   engine_family <- prep$engine_family
+  if (identical(family_info$family, "negative_binomial")) {
+    # Theta mode rides the family string (see mm_glmm_nb_engine_spec).
+    engine_family <- mm_glmm_nb_engine_spec(family_info)
+  }
 
   # lme4 parity: grouping variables must be categorical. Coerce non-factor /
   # non-character grouping columns to factors (announced, not silent) so an
@@ -106,6 +136,7 @@ glmm <- function(formula,
 
   spec <- compile_model(formula, data)
   mm_validate_fit_structure(spec, lmm = FALSE)
+  mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {
     mm_inform_explanation(spec)
     # No silent surgery on the estimator choice: when the user did not pick a
@@ -114,6 +145,20 @@ glmm <- function(formula,
     # mm_control(verbose = -1) (as used in loops/bootstrap).
     if (!method_explicit && identical(method, "pirls_profiled")) {
       mm_inform(mm_glmm_profiled_default_notice(), class = "mm_estimator_notice")
+    }
+    if (identical(method, "joint_laplace")) {
+      # The joint route runs to an engine-chosen evaluation budget inside a
+      # single silent native call (~0.1-0.2s per evaluation on ~20k rows), so
+      # large fits can take minutes with no output. Say so up front.
+      mm_inform(
+        paste0(
+          "method = \"joint_laplace\" optimizes to an engine-chosen budget in ",
+          "a single native call with no progress output; large fits can take ",
+          "minutes. Cap the budget with mm_control(max_feval = ) if needed. ",
+          "Silence this message with mm_control(verbose = -1)."
+        ),
+        class = "mm_runtime_notice"
+      )
     }
   }
 
@@ -134,6 +179,7 @@ glmm <- function(formula,
       spec_data$numeric_columns,
       spec_data$categorical_values,
       spec_data$categorical_levels,
+      spec_data$categorical_ordered,
       mm_bridge_weights(weights),
       mm_bridge_weights(offset),
       as.character(control_json)
@@ -164,6 +210,14 @@ glmm <- function(formula,
     beta,
     std_errors
   )
+
+  if (identical(family_info$family, "negative_binomial")) {
+    # Record the fitted (or fixed) NB2 size parameter on the family so
+    # summaries can report it; nb_theta_estimated stays TRUE for estimated
+    # fits so downstream engine refits reproduce the original estimation.
+    family_info$nb_theta <- as.numeric(fit_result$nb_theta %||%
+                                         family_info$nb_theta)
+  }
 
   fit <- list(
     call           = call,
@@ -206,6 +260,7 @@ glmm <- function(formula,
       artifact = artifact
     )
   )
+  fit <- mm_apply_lme4_coef_naming(fit)
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
   fit
 }
@@ -237,6 +292,32 @@ mm_glmm_family_info <- function(family) {
   }
   family_name <- fam$family
   link_name <- fam$link
+  nb_theta <- NULL
+  nb_theta_estimated <- FALSE
+  # MASS::negative.binomial(theta) encodes theta in the family name
+  # ("Negative Binomial(2.5)"): fixed-theta NB2, fit conditional on theta.
+  # mm_negative_binomial() yields family "negative_binomial" with an optional
+  # $theta; theta = NULL requests glmer.nb-style estimation.
+  if (grepl("^Negative Binomial\\(", family_name)) {
+    nb_theta <- suppressWarnings(
+      as.numeric(sub("^Negative Binomial\\(([^)]*)\\)$", "\\1", family_name))
+    )
+    if (!length(nb_theta) || is.na(nb_theta) || !is.finite(nb_theta) ||
+        nb_theta <= 0) {
+      mm_abort(
+        message = sprintf(
+          "Could not read a positive finite theta from family `%s`.",
+          family_name
+        ),
+        class = "mm_arg_error",
+        input = family
+      )
+    }
+    family_name <- "negative_binomial"
+  } else if (identical(family_name, "negative_binomial")) {
+    nb_theta <- fam$theta
+    nb_theta_estimated <- is.null(nb_theta)
+  }
   supported <- mm_glmm_supported_family_links()
   if (!family_name %in% names(supported) ||
       !link_name %in% supported[[family_name]]) {
@@ -244,15 +325,62 @@ mm_glmm_family_info <- function(family) {
   }
   list(
     family = if (identical(family_name, "Gamma")) "gamma" else family_name,
-    link = link_name
+    link = link_name,
+    nb_theta = nb_theta,
+    nb_theta_estimated = nb_theta_estimated
   )
+}
+
+#' Negative-binomial family for `glmm()`
+#'
+#' NB2 family (variance `mu + mu^2/theta`, log link). With `theta = NULL`
+#' (the default) the size parameter is estimated alongside the model, matching
+#' `lme4::glmer.nb()`. Supplying a positive `theta` fits conditional on that
+#' value, matching `glmer(family = MASS::negative.binomial(theta))` — which
+#' `glmm()` also accepts directly.
+#'
+#' @param theta Optional positive NB2 size (dispersion) parameter. `NULL`
+#'   estimates theta from the data.
+#' @return A `family` object accepted by [glmm()].
+#' @examples
+#' fam <- mm_negative_binomial()      # glmer.nb-style: theta estimated
+#' fam_fixed <- mm_negative_binomial(theta = 2.5)
+#' @export
+mm_negative_binomial <- function(theta = NULL) {
+  if (!is.null(theta)) {
+    if (!is.numeric(theta) || length(theta) != 1L || !is.finite(theta) ||
+        theta <= 0) {
+      mm_abort(
+        message = "`theta` must be a single positive finite number (or NULL to estimate it).",
+        class = "mm_arg_error",
+        input = theta
+      )
+    }
+    theta <- as.numeric(theta)
+  }
+  structure(
+    list(family = "negative_binomial", link = "log", theta = theta),
+    class = "family"
+  )
+}
+
+# Engine wire spec for a family: negative-binomial rides its theta mode in
+# the family string so no FFI signatures change ("negative_binomial" =
+# estimate theta; "negative_binomial:theta=<v>" = fixed theta).
+mm_glmm_nb_engine_spec <- function(family_info) {
+  if (is.null(family_info$nb_theta) || isTRUE(family_info$nb_theta_estimated)) {
+    "negative_binomial"
+  } else {
+    sprintf("negative_binomial:theta=%.17g", family_info$nb_theta)
+  }
 }
 
 mm_glmm_supported_family_links <- function() {
   list(
     binomial = c("logit", "probit", "cloglog"),
     poisson = c("log", "sqrt"),
-    Gamma = c("log")
+    Gamma = c("log"),
+    negative_binomial = "log"
   )
 }
 
@@ -269,16 +397,24 @@ mm_glmm_supported_family_link_table <- function() {
 
 mm_abort_glmm_unsupported_family_link <- function(family, link) {
   reason_code <- "unsupported_glmm_family_link"
+  supported <- mm_glmm_supported_family_link_table()
+  by_family <- vapply(split(supported$link, supported$family),
+                      paste, character(1), collapse = "/")
+  supported_text <- paste(sprintf("%s (%s)", names(by_family), by_family),
+                          collapse = ", ")
   mm_abort(
     message = sprintf(
-      "GLMM family/link `%s/%s` is outside the certified upstream contract.",
-      family, link
+      paste0(
+        "The %s family with link `%s` is not supported by glmm(). Supported ",
+        "families: %s. For other families, use lme4::glmer()."
+      ),
+      family, link, supported_text
     ),
     class = "mm_inference_unavailable",
     reason_code = reason_code,
     family = family,
     link = link,
-    supported = mm_glmm_supported_family_link_table(),
+    supported = supported,
     input = list(family = family, link = link)
   )
 }

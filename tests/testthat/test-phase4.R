@@ -87,8 +87,9 @@ test_that("glmm() fits expanded cbpp binomial smoke through profiled PIRLS", {
 
 test_that("glmm() family/link surface matches the upstream support contract", {
   expected <- data.frame(
-    family = c(rep("binomial", 3), rep("poisson", 2), "Gamma"),
-    link = c("logit", "probit", "cloglog", "log", "sqrt", "log"),
+    family = c(rep("binomial", 3), rep("poisson", 2), "Gamma",
+               "negative_binomial"),
+    link = c("logit", "probit", "cloglog", "log", "sqrt", "log", "log"),
     stringsAsFactors = FALSE
   )
   supported <- mm_glmm_supported_family_link_table()

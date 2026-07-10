@@ -143,19 +143,22 @@ test_that("df_for_contrast pipes through the Rust inference-table df values", {
   df_kr   <- df_for_contrast(fit, L, method = "kenward_roger")
   df_none <- df_for_contrast(fit, L, method = "none")
 
+  # API stabilization 2026-07-09: mm_* object with $table + $df, sibling-shaped.
   expect_s3_class(df_satt, "mm_df_for_contrast")
-  expect_true(all(is.finite(df_satt)))
-  expect_identical(attr(df_satt, "method"), "satterthwaite")
-  expect_identical(attr(df_satt, "requested_method"), "satterthwaite")
+  expect_true(all(c("contrast", "df", "method", "requested_method", "reason")
+                  %in% names(df_satt$table)))
+  expect_true(all(is.finite(df_satt$df)))
+  expect_identical(df_satt$method, "satterthwaite")
+  expect_identical(df_satt$requested_method, "satterthwaite")
 
-  expect_true(all(is.finite(df_kr)))
-  expect_identical(attr(df_kr, "method"), "kenward_roger")
+  expect_true(all(is.finite(df_kr$df)))
+  expect_identical(df_kr$method, "kenward_roger")
 
   # method = "none" still returns NA with a reason -- not_requested, not
   # unavailable; the engine never asked for df.
-  expect_true(all(is.na(df_none)))
-  expect_identical(attr(df_none, "method"), "not_requested")
-  expect_false(is.null(attr(df_none, "mm_unavailable_reason")))
+  expect_true(all(is.na(df_none$df)))
+  expect_identical(df_none$method, "not_requested")
+  expect_false(anyNA(df_none$table$reason))
 })
 
 test_that("test_effect() and single-model anova() consume Rust term rows", {
@@ -427,4 +430,52 @@ test_that("legacy fits without artifact inference table use unavailable fallback
   expect_true(all(inf$table$method == "not_computed"))
   expect_true(all(inf$table$status == "not_assessed"))
   expect_true(all(inf$table$reason == "fixed_effect_inference_table_unavailable_legacy_object"))
+})
+
+test_that("inference_table rows follow lme4 coefficient order on permuted designs", {
+  # Regression for the engine-vs-R interaction column order: with two
+  # multi-level factors the engine varies the LAST factor fastest, R the
+  # first, so unordered rows silently mispair with fixef() positionally.
+  set.seed(11)
+  d <- expand.grid(a = factor(c("A1", "A2", "A3")),
+                   b = factor(c("B1", "B2", "B3")),
+                   g = factor(seq_len(8)))
+  d$y <- rnorm(nrow(d))
+  fit <- lmm(y ~ a * b + (1 | g), d, control = mm_control(verbose = -1))
+  tbl <- inference_table(fit)$table
+  coef_rows <- tbl[tbl$kind == "coefficient", , drop = FALSE]
+  expect_identical(coef_rows$label, names(fixef(fit)))
+  expect_equal(coef_rows$estimate, unname(fixef(fit)), tolerance = 1e-10)
+})
+
+test_that("profile.mm_lmm returns a usable mm_profile object", {
+  fit <- lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,
+             REML = FALSE, control = mm_control(verbose = -1))
+  prof <- profile(fit)
+  expect_s3_class(prof, "mm_profile")
+  expect_true(all(c("parameter", "estimate", "lower", "upper") %in%
+                    names(prof$table)))
+  expect_true(all(c("(Intercept)", "Days", "sigma") %in% prof$table$parameter))
+  # confint on the profile reproduces confint(fit, method = "profile")
+  direct <- confint(fit, method = "profile")
+  via_prof <- confint(prof)
+  common <- intersect(rownames(direct), rownames(via_prof))
+  expect_true(length(common) >= 2L)
+  expect_equal(via_prof[common, ], direct[common, ], tolerance = 1e-10)
+  expect_output(print(prof), "Profile-likelihood intervals")
+  # which= filters
+  p2 <- profile(fit, which = "Days")
+  expect_identical(p2$table$parameter, "Days")
+})
+
+test_that("lmm refuses multivariate cbind responses with a plain error", {
+  d <- data.frame(y1 = rnorm(20), y2 = rnorm(20), x = rnorm(20),
+                  g = factor(rep(1:5, 4)))
+  err <- tryCatch(
+    lmm(cbind(y1, y2) ~ x + (1 | g), d, control = mm_control(verbose = -1)),
+    error = function(e) e
+  )
+  expect_s3_class(err, "mm_inference_unavailable")
+  expect_match(conditionMessage(err), "Multivariate responses")
+  expect_match(conditionMessage(err), "own model")
 })

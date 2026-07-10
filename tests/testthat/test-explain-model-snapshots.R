@@ -68,7 +68,7 @@ test_that("snapshot: three kinds of help register cleanly", {
 #-- §9.5.5 — refusals use 'Possible repairs', never 'suggested model' --------
 
 test_that("snapshot: structural_refusal renders 'Possible repairs' wording", {
-  refusal_audit <- audit_design(compile_model(
+  refusal_audit <- audit(compile_model(
     y ~ between + (1 + between | g),
     mk_refusal_design()
   ))

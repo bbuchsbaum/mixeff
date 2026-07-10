@@ -371,6 +371,12 @@ mm_expect_core_lme4_parity <- function(case) {
   fit <- pair$mixeff
   ref <- pair$lme4
 
+  # Names AND order must be lme4-identical (the coef-map contract): every
+  # parity case doubles as a regression test for the renaming layer.
+  testthat::expect_identical(
+    names(fixef(fit)), names(lme4::fixef(ref)),
+    info = sprintf("fixef name/order parity failed for case `%s`", case$id)
+  )
   mm_assert_parity(fixef(fit), lme4::fixef(ref), case$id, "fixef", tol$fixef,
                   "fixef")
   mm_assert_parity(sigma(fit), sigma(ref), case$id, "sigma", tol$sigma,

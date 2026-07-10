@@ -40,7 +40,7 @@ random_options <- function(spec, group, slope = NULL) {
   }
 
   data <- mm_spec_model_frame(spec)
-  audit <- audit_design(spec)
+  audit <- mm_audit_impl(spec)
   current_cards <- mm_cards_for_group(audit$random_term_cards, group_label)
   if (!length(current_cards)) {
     mm_abort(
@@ -78,7 +78,7 @@ random_options <- function(spec, group, slope = NULL) {
       mm_candidate_formula(spec, candidate$fragment),
       data
     )
-    candidate_audit <- audit_design(candidate_spec)
+    candidate_audit <- mm_audit_impl(candidate_spec)
     candidate_cards <- mm_cards_for_group(candidate_audit$random_term_cards, group_label)
 
     rows[[i]] <- mm_random_option_row(

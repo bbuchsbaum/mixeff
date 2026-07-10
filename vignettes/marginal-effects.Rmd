@@ -21,7 +21,7 @@ library(mixeff)
 ```
 
 A fixed-effects coefficient is not a group mean. For a model with multiple
-predictors and interactions, `fixef(fit)["trt: active"]` is the treatment
+predictors and interactions, `fixef(fit)["trtactive"]` is the treatment
 effect *at the reference level of every other predictor* — not the
 average treatment effect across the population. Marginal means give you the
 latter: population-level averages at each combination of interest, properly
@@ -190,9 +190,9 @@ expressed as a contrast: (active post − active pre) − (control post − cont
 beta <- fixef(fit)
 names(beta)
 
-# Interaction row: coefficient named "trt: active:time: post"
+# Interaction row: coefficient named "trtactive:timepost" (lme4-identical)
 w <- setNames(numeric(length(beta)), names(beta))
-w["trt: active:time: post"] <- 1
+w["trtactive:timepost"] <- 1
 
 lc <- mm_lincomb(fit, weights = w)
 lc[, c("estimate", "lower", "upper", "p_value", "method")]

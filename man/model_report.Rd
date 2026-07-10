@@ -14,25 +14,25 @@ model_report(fit, sections = "all", ...)
 
 \method{model_report}{mm_fit}(fit, sections = "all", ...)
 
-reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
+reporting_table(object, section = "all", view = c("compact", "audit"), ...)
 
-\method{reporting_table}{mm_fit}(fit, section = "all", view = c("compact", "audit"), ...)
+\method{reporting_table}{mm_fit}(object, section = "all", view = c("compact", "audit"), ...)
 
 \method{reporting_table}{mm_model_comparison}(
-  fit,
+  object,
   section = "comparison_ledger",
   view = c("compact", "audit"),
   ...
 )
 
 \method{reporting_table}{mm_drop1}(
-  fit,
+  object,
   section = "comparison_ledger",
   view = c("compact", "audit"),
   ...
 )
 
-\method{reporting_table}{mm_random_effect_test}(fit, section = "all", view = c("compact", "audit"), ...)
+\method{reporting_table}{mm_random_effect_test}(object, section = "all", view = c("compact", "audit"), ...)
 }
 \arguments{
 \item{fit}{A fitted \code{mm_fit}, usually from \code{\link[=lmm]{lmm()}}.}
@@ -40,6 +40,9 @@ reporting_table(fit, section = "all", view = c("compact", "audit"), ...)
 \item{sections}{Character vector of report sections, or \code{"all"}.}
 
 \item{...}{Reserved for future methods.}
+
+\item{object}{For \code{reporting_table()}: a fitted \code{mm_fit}, an
+\code{mm_model_report}, or a comparison/test object with a durable ledger.}
 
 \item{section}{One section name, or \code{"all"}.}
 
@@ -49,7 +52,8 @@ audit columns.}
 }
 \value{
 \code{model_report()} returns an \code{mm_model_report}. \code{reporting_table()}
-returns a data frame for one section or a named list for \code{"all"}.
+returns an \code{mm_reporting_table} object: \verb{$table} holds the section's
+data frame (or \verb{$sections} the named list when \code{section = "all"}).
 }
 \description{
 \code{model_report()} assembles a structured, publication-oriented report from

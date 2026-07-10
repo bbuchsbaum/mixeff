@@ -35,3 +35,6 @@
 ^vignettes/.*\.css$
 ^vignettes/.*\.js$
 ^tests/testthat/testthat-problems\.rds$
+^\.ruff_cache$
+^release-gate-report\.txt$
+^RELEASE\.md$

@@ -72,8 +72,10 @@ emm_basis.mm_lmm <- function(object, trms, xlev, grid,
     df <- getExportedValue("mixeff", "df_for_contrast")(
       dfargs$object, k, method = dfargs$method
     )
-    value <- as.numeric(df[[1L]])
-    if (is.finite(value)) value else Inf
+    # df_for_contrast() returns an mm_* object; $df is the named numeric
+    # vector (one entry per contrast row of k).
+    value <- as.numeric(df$df)
+    ifelse(is.finite(value), value, Inf)
   }
   attr(dffun, "mesg") <- sprintf("mixeff %s", method)
   misc <- list(initMesg = mm_emmeans_init_messages(V))
@@ -122,15 +124,21 @@ emm_basis.mm_glmm <- function(object, trms, xlev, grid, ...) {
   m <- stats::model.frame(trms, grid, na.action = stats::na.pass, xlev = xlev)
   X_train <- stats::model.matrix(object, type = "fixed")
   X <- stats::model.matrix(trms, m, contrasts.arg = attr(X_train, "contrasts"))
-  if (ncol(X) != length(fixef(object))) {
+  # fixef() carries lme4/model.matrix-style names, so the reference-grid
+  # design aligns by NAME; a positional rename would silently misassign
+  # columns whenever the grid's column order differs from the fit's.
+  missing_cols <- setdiff(names(fixef(object)), colnames(X))
+  if (length(missing_cols)) {
     mm_abort(
-      message = "The emmeans reference grid design does not match the fitted fixed effects.",
+      message = paste0(
+        "The emmeans reference grid design does not match the fitted fixed ",
+        "effects; missing column(s): ", paste(missing_cols, collapse = ", "), "."
+      ),
       class = "mm_inference_unavailable",
       expected = names(fixef(object)),
       observed = colnames(X)
     )
   }
-  colnames(X) <- names(fixef(object))
   X <- X[, names(fixef(object)), drop = FALSE]
 
   bhat <- as.numeric(fixef(object))

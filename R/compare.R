@@ -188,6 +188,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
       bridge$spec_data$categorical_levels,
+      bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
       as.character(bootstrap_json)
@@ -296,6 +297,16 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I"),
                    drop = FALSE]
     names(table)[names(table) == "numerator_df"] <- "num_df"
     names(table)[names(table) == "denominator_df"] <- "den_df"
+    # Single-df terms come back as t-form rows; lme4's anova presents the
+    # mathematically identical F form (F(1, nu) = t(nu)^2). Convert so the
+    # ANOVA table reads like lme4's and num_df is never a bare NA for an
+    # available row.
+    t_rows <- !is.na(table$statistic_name) & table$statistic_name == "t"
+    if (any(t_rows)) {
+      table$statistic[t_rows] <- table$statistic[t_rows]^2
+      table$statistic_name[t_rows] <- "f"
+      table$num_df[t_rows] <- 1
+    }
   }
   table$type <- type
   table <- table[, c("term", "type", setdiff(names(table), c("term", "type"))),
@@ -315,7 +326,23 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I"),
 print.mm_anova <- function(x, ...) {
   cat(sprintf("Type %s analysis of fixed effects (method: %s):\n",
               x$type %||% "III", x$requested_method %||% "auto"))
-  print(x$table, row.names = FALSE)
+  # Reader-facing columns only (lme4-shaped); provenance/list columns stay in
+  # x$table for programmatic use — rendering them wraps the console table and
+  # dumps list(...) internals.
+  show_cols <- intersect(c("term", "num_df", "den_df", "statistic",
+                           "p_value", "method"), names(x$table))
+  show <- x$table[, show_cols, drop = FALSE]
+  bad <- !is.na(x$table$status) & x$table$status != "available"
+  if (any(bad)) {
+    show$status <- x$table$status
+    show$reason <- x$table$reason
+  }
+  print(show, row.names = FALSE)
+  hidden <- setdiff(names(x$table), names(show))
+  if (length(hidden)) {
+    cat(sprintf("Full provenance columns available in `$table` (%s).\n",
+                paste(hidden, collapse = ", ")))
+  }
   invisible(x)
 }
 
@@ -346,15 +373,43 @@ drop1.mm_lmm <- function(object,
   terms <- setdiff(mm_fixed_effect_terms(object), "1")
   if (!is.null(scope)) {
     terms <- intersect(terms, as.character(scope))
+  } else {
+    # Match stats::drop1 marginality semantics: by default only terms not
+    # contained in a higher-order term are droppable (you don't test a main
+    # effect while its interaction is in the model). An explicit `scope` may
+    # still request a non-marginal drop -- the engine fits those correctly
+    # (matching lme4's full-dummy expansion), so they produce ordinary rows.
+    terms <- intersect(terms, mm_droppable_terms(object))
   }
   prepared_full <- mm_prepare_comparison_fits(list(object), refit_for_comparison)
   full <- prepared_full$fits[[1L]]
   full_refit <- isTRUE(prepared_full$refit[[1L]])
   rows <- lapply(terms, function(term) {
     reduced_formula <- mm_drop_fixed_term_formula(full, term)
-    reduced <- lmm(reduced_formula, full$model_frame, REML = isTRUE(full$REML),
-                   weights = full$weights,
-                   control = mm_control(verbose = -1))
+    reduced <- tryCatch(
+      lmm(reduced_formula, full$model_frame, REML = isTRUE(full$REML),
+          weights = full$weights,
+          control = mm_control(verbose = -1)),
+      error = function(cnd) cnd
+    )
+    if (inherits(reduced, "condition")) {
+      # Explicit-scope non-marginal drops (or any refit refusal) surface as an
+      # unavailable row instead of aborting the whole table.
+      return(data.frame(
+        dropped = term,
+        formula = deparse1(reduced_formula),
+        df = NA_real_,
+        logLik = NA_real_,
+        AIC = NA_real_,
+        BIC = NA_real_,
+        LRT = NA_real_,
+        p_value = NA_real_,
+        method = "unavailable",
+        status = "unavailable",
+        reason = conditionMessage(reduced),
+        stringsAsFactors = FALSE
+      ))
+    }
     stat <- mm_lrt_stat(reduced, full)
     df <- full$dof - reduced$dof
     data.frame(
@@ -371,6 +426,8 @@ drop1.mm_lmm <- function(object,
         NA_real_
       },
       method = if (identical(test, "Chisq")) "asymptotic_lrt" else "none",
+      status = "available",
+      reason = NA_character_,
       stringsAsFactors = FALSE
     )
   })
@@ -878,4 +935,21 @@ mm_drop_fixed_term_formula <- function(fit, term) {
   random <- random[nzchar(random)]
   rhs <- paste(c(fixed_rhs, random), collapse = " + ")
   stats::as.formula(paste(response, "~", rhs), env = environment(fit$formula))
+}
+
+# Terms droppable under stats::drop1 marginality rules: a term is droppable
+# iff no OTHER term contains all of its variables (e.g. `recipe` is not
+# droppable from `recipe * temperature`).
+mm_droppable_terms <- function(fit) {
+  tt <- stats::terms(mm_fixed_formula(fit))
+  labels <- attr(tt, "term.labels")
+  fac <- attr(tt, "factors")
+  if (!length(labels) || is.null(dim(fac))) return(labels)
+  vars_of <- lapply(seq_along(labels), function(i) rownames(fac)[fac[, i] > 0])
+  droppable <- vapply(seq_along(labels), function(i) {
+    !any(vapply(seq_along(labels)[-i], function(j) {
+      all(vars_of[[i]] %in% vars_of[[j]])
+    }, logical(1)))
+  }, logical(1))
+  labels[droppable]
 }

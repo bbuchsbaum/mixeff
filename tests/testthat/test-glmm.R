@@ -70,16 +70,36 @@ mm_glmm_fit_pair <- function(case) {
   family <- mm_glmm_case_family(case)
   method <- case$method %||% "pirls_profiled"
 
+  # Fit mixeff first so a genuine mixeff failure still surfaces (rather than
+  # being masked by an lme4-reference skip below).
+  mixeff_fit <- glmm(formula, data, family = family, method = method,
+                     control = mm_control(verbose = -1))
+  # Guard the lme4 REFERENCE fit. glmer() is numerically fragile on some
+  # boundary GLMMs (e.g. grouseticks Poisson) and throws hard errors like
+  # "Downdated VtV is not positive definite" on certain platform / lme4 /
+  # Matrix builds while succeeding on others. That is an lme4/environment
+  # failure, not a mixeff defect, and parity cannot be asserted against a
+  # reference lme4 could not compute -- so skip the case rather than error.
+  ref <- tryCatch(
+    suppressMessages(suppressWarnings(
+      lme4::glmer(formula, data = data, family = family, nAGQ = 1L)
+    )),
+    error = function(e) e
+  )
+  if (inherits(ref, "error")) {
+    testthat::skip(sprintf(
+      "lme4::glmer() reference for case `%s` failed on this platform: %s",
+      case$id, conditionMessage(ref)
+    ))
+  }
+
   list(
     case = case,
     data = data,
     formula = formula,
     family = family,
-    mixeff = glmm(formula, data, family = family, method = method,
-                  control = mm_control(verbose = -1)),
-    lme4 = suppressMessages(suppressWarnings(
-      lme4::glmer(formula, data = data, family = family, nAGQ = 1L)
-    ))
+    mixeff = mixeff_fit,
+    lme4 = ref
   )
 }
 

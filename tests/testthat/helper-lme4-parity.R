@@ -80,18 +80,34 @@ mm_lme4_level_key <- function(x) {
   gsub("_", ":", as.character(x), fixed = TRUE)
 }
 
+# Fit the reference lmer(), skipping the case if lme4/lmerTest itself errors.
+# lmer() is numerically fragile on some boundary models and throws hard errors
+# (e.g. "Downdated VtV is not positive definite") on certain platform / lme4 /
+# Matrix builds; that is a reference-tool/environment failure, not a mixeff
+# defect, and parity cannot be asserted against a fit lme4 could not produce.
+mm_lme4_reference_or_skip <- function(fit_expr, id, tool = "lme4::lmer()") {
+  ref <- tryCatch(
+    suppressMessages(suppressWarnings(force(fit_expr))),
+    error = function(e) e
+  )
+  if (inherits(ref, "error")) {
+    testthat::skip(sprintf("%s reference for case `%s` failed on this platform: %s",
+                           tool, id, conditionMessage(ref)))
+  }
+  ref
+}
+
 mm_lme4_fit_pair <- function(case) {
   mm_skip_if_no_lme4()
   data <- mm_lme4_case_data(case)
   formula <- mm_lme4_case_formula(case)
   reml <- isTRUE(case$reml)
-  list(
-    case = case,
-    data = data,
-    formula = formula,
-    mixeff = lmm(formula, data, REML = reml, control = mm_control(verbose = -1)),
-    lme4 = suppressMessages(suppressWarnings(lme4::lmer(formula, data = data, REML = reml)))
+  mixeff_fit <- lmm(formula, data, REML = reml, control = mm_control(verbose = -1))
+  ref <- mm_lme4_reference_or_skip(
+    lme4::lmer(formula, data = data, REML = reml), case$id
   )
+  list(case = case, data = data, formula = formula,
+       mixeff = mixeff_fit, lme4 = ref)
 }
 
 mm_lmerTest_fit_pair <- function(case) {
@@ -99,15 +115,12 @@ mm_lmerTest_fit_pair <- function(case) {
   data <- mm_lme4_case_data(case)
   formula <- mm_lme4_case_formula(case)
   reml <- isTRUE(case$reml)
-  list(
-    case = case,
-    data = data,
-    formula = formula,
-    mixeff = lmm(formula, data, REML = reml, control = mm_control(verbose = -1)),
-    lmerTest = suppressMessages(suppressWarnings(
-      lmerTest::lmer(formula, data = data, REML = reml)
-    ))
+  mixeff_fit <- lmm(formula, data, REML = reml, control = mm_control(verbose = -1))
+  ref <- mm_lme4_reference_or_skip(
+    lmerTest::lmer(formula, data = data, REML = reml), case$id, "lmerTest::lmer()"
   )
+  list(case = case, data = data, formula = formula,
+       mixeff = mixeff_fit, lmerTest = ref)
 }
 
 mm_numeric_payload <- function(x) {

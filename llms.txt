@@ -1,115 +1,185 @@
 # mixeff
 
-> **Audit-first mixed-effects models in R, powered by the `mixeff-rs`
-> Rust crate.**
+> Mixed-effects models in R, with lme4-style formulas and a Rust engine.
 
-`mixeff` fits linear and generalized linear mixed-effects models from
-lme4-style formulas. It aims to be *functionally equivalent* to `lme4`:
-the formula syntax is the same, the extractor surface (`fixef`, `ranef`,
-`VarCorr`, `predict`, `simulate`, `anova`, `summary`, `update`,
-[`broom::tidy`](https://generics.r-lib.org/reference/tidy.html)) is the
-same, and statistical answers agree within documented tolerances on the
-parity datasets shipped with the package. It is not a literal *drop-in*
-replacement, by design: you call
-[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) /
-[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) (not
-`lmer()` / `glmer()`), results are not bit-exact, and the package is
-audit-first — it refuses or reports rather than silently transforming a
-model.
+`mixeff` fits linear and generalized linear mixed-effects models through
+the [`mixeff-rs`](https://github.com/bbuchsbaum/mixeff-rs) engine. The R
+interface uses familiar formulas and extractors (`fixef`, `ranef`,
+`VarCorr`, `predict`, `simulate`, `anova`, `summary`, `update`, and
+[`broom::tidy`](https://generics.r-lib.org/reference/tidy.html)), while
+keeping the compiled model, optimizer result, and inference metadata
+available for inspection.
 
-What it adds is *provenance*. Every printed claim — a coefficient, a
-standard error, a variance component, a p-value — traces back to a
-versioned JSON artifact produced by a named Rust compiler at a known
-schema version. It is the package to reach for when you need to *defend*
-a mixed-model analysis, not just run one.
+It is not a drop-in replacement for `lme4`: use
+[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) or
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) rather
+than `lmer()` or `glmer()`, and do not expect bit-identical estimates.
+The target is statistical agreement within documented tolerances on the
+package’s parity datasets.
 
 Documentation: <https://bbuchsbaum.github.io/mixeff/>
 
-The R surface exposes the engine’s formula parser, semantic IR, design
-auditor, ThetaMap parameterization, optimizer, and inference contract as
-first-class verbs.
+## Why mixeff?
 
-## Why a different package?
+Three parts of the design are useful in practice:
 
-| Problem in current R practice | What `mixeff` does |
-|----|----|
-| Convergence warnings that scroll off-screen | `optimizer_certificate(fit)` is structured; status, objective, iterations are fields, not text |
-| Singular fits printed without ceremony | Singularity is reported model state with effective rank, not a shameful failure |
-| p-values from methods the software never names | Each inference row carries `method`, `status`, `reliability`, and a stable `reason_code` |
-| Refusals (non-identifiable design, unsupported slope) buried in warnings | [`audit_design()`](https://bbuchsbaum.github.io/mixeff/reference/audit_design.md) raises structured `mm_design_refusal` *before* the fit |
-| Reproducibility tied to a live optimizer state | The fitted object is a serializable record; [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) survives session restarts and reloads via [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md) |
+- **Fast repeated fitting.** In the LMM scaling benchmark included with
+  the package, `mixeff` was 2.2 to 5.3 times faster than `lme4` at the
+  largest tested scale for five common random-effects structures. This
+  matters most for bootstrap, simulation, and sensitivity analyses,
+  where the same model may be refit hundreds or thousands of times.
+- **The model can be inspected before it is fitted.**
+  [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
+  turns the formula into an explicit model specification.
+  [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md)
+  shows the canonical formula, random-effects structure, covariance
+  parameterization, and design diagnostics before optimization starts.
+- **Fit diagnostics are data, not only console text.** Convergence
+  status, optimizer details, inference method, reliability, and reason
+  codes live in structured objects. A fitted model is serializable with
+  [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) and can be
+  inspected after reloading without a live Rust handle.
 
-## Two-line install
+These features do not remove the need to evaluate a model statistically.
+They make the computation and the software’s decisions easier to
+examine.
 
-R-Universe (recommended once 0.1.0 ships):
+## Installation
+
+From R-Universe:
 
 ``` r
 
-install.packages("mixeff", repos = c("https://bbuchsbaum.r-universe.dev", getOption("repos")))
+install.packages(
+  "mixeff",
+  repos = c("https://bbuchsbaum.r-universe.dev", getOption("repos"))
+)
 ```
 
-Development install (needs Rust toolchain ≥ 1.78 and `rextendr`):
+From GitHub (requires Rust 1.78 or newer and `rextendr`):
 
 ``` r
 
 remotes::install_github("bbuchsbaum/mixeff")
 ```
 
-## A six-line tour
+## A short example
+
+Compile and inspect a model before fitting it:
 
 ``` r
 
 library(mixeff)
 
-fit <- lmm(Reaction ~ Days + (Days | Subject), data = lme4::sleepstudy)
-summary(fit)        # familiar lme4-style summary
-audit(fit)          # Rust-authored audit report
-changes(fit)        # what the compiler did to the requested model
-fixef(fit); VarCorr(fit); ranef(fit)
-
-saveRDS(fit, tf <- tempfile()); rm(fit); gc()
-fit2 <- readRDS(tf)
-fixef(fit2)         # works without a live Rust handle — artifact is the source of truth
+spec <- compile_model(
+  Reaction ~ Days + (Days | Subject),
+  lme4::sleepstudy
+)
+audit(spec)
+#> Audit Summary:
+#>   overall [OK]: clean: no warnings or attention items
+#>   attention [OK]: no warnings or unchecked inference-critical items
+#>
+#> Requested Model:
+#>   formula [INFO]: Reaction ~ 1 + Days + (1 + Days | Subject)
+#>   model kind [INFO]: linear_mixed_model
+#>   distribution/link [INFO]: gaussian/identity
+#>   objective [INFO]: exact_gaussian
+#>   convergence certificate [INFO]: exact_objective
+#>   fixed terms [INFO]: 1, Days
+#>   random terms [INFO]: 1
+#>   covariance parameter maps [INFO]: 1 map(s)
 ```
 
-## Audit-first workflow
-
-`mixeff` exposes the contract as first-class verbs:
+Then fit the model with the Rust engine and use the usual R extractors:
 
 ``` r
 
-spec <- compile_model(Reaction ~ Days + (Days | Subject), lme4::sleepstudy)
+fit <- lmm(
+  Reaction ~ Days + (Days | Subject),
+  data = lme4::sleepstudy,
+  control = mm_control(verbose = -1)
+)
 
-audit_design(spec)        # structured design audit, before any optimization
-explain_model(spec)       # named-form translation of every random term
-random_options(spec, Subject)   # map of nearby random-effect spellings (not a ranking)
-compare_covariance(spec)  # full / diagonal / scalar comparison per term
+summary(fit)
+fixef(fit)
+VarCorr(fit)
+ranef(fit)
 ```
 
-Once fit:
+The optimizer certificate is programmatic. Here is a compact view of the
+sleep-study fit:
 
 ``` r
 
-diagnostics(fit)          # structured diagnostics list
-parameterization(fit)     # ThetaMap details
-optimizer_certificate(fit)# convergence status, iterations, objective trace
-inference_table(fit)      # per-coefficient inference with method + reliability
-estimability(fit, L)      # certificate-backed estimability of contrasts
+cert <- optimizer_certificate(fit)$table
+subset(cert, metric %in% c("status", "optimizer", "iterations"))
+#>      metric              value
+#>      status converged_interior
+#>   optimizer           trust_bq
+#>  iterations                457
 ```
 
-Where the engine cannot certify a number, the wrapper returns `NA` with
-a stable reason code — never a fabricated value.
-
-## Random-effects guidance, never recommendation
-
-`mixeff` adds a *guidance* layer for random-effects syntax. It explains
-what each formula spelling actually estimates, what the data can
-support, and which covariances the syntax fixes at zero — but it never
-ranks, recommends, or substitutes models.
+Other inspection functions expose different parts of the same fitted
+artifact:
 
 ``` r
 
-# What does this formula actually model?
+changes(fit)                 # changes made while compiling the request
+diagnostics(fit)             # structured warnings and status information
+parameterization(fit)        # random-effects covariance parameterization
+inference_table(fit)         # method, status, and reliability by coefficient
+reproducibility(fit)         # schema and engine metadata
+```
+
+Because the fitted quantities are stored in the R object, ordinary R
+serialization works:
+
+``` r
+
+saveRDS(fit, path <- tempfile())
+restored <- readRDS(path)
+fixef(restored)
+optimizer_certificate(restored)
+```
+
+`revive(restored)` resets the process-local lazy R-side cache after
+serialization; the current bridge intentionally leaves the Rust handle
+absent.
+
+## Performance
+
+The committed scaling benchmark fits the same LMM with
+[`mixeff::lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
+and [`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) three times
+per cell. The table below reports the largest cell for each design.
+
+| design | largest tested scale | mixeff median | lme4 median | speedup |
+|----|---:|---:|---:|---:|
+| random intercept, varying rows | 5,000 rows | 6 ms | 13 ms | 2.2x |
+| random intercept, varying groups | 200 subjects | 3 ms | 9 ms | 3.0x |
+| correlated random slope | 200 subjects | 5 ms | 17 ms | 3.4x |
+| crossed random intercepts | 30 subjects and 30 items | 5 ms | 18 ms | 3.6x |
+| crossed design with random slope | 30 subjects and 30 items | 7 ms | 37 ms | 5.3x |
+
+These are small absolute timings from one benchmark run, with only three
+replications per cell. They show the behavior of this harness, not a
+universal speed guarantee. The scripts and full CSV are included so the
+comparison can be rerun on a relevant machine and model:
+
+- `inst/benchmarks/lme4-scaling.R`
+- `inst/extdata/lme4-scaling-summary.csv`
+- the [benchmarking
+  vignette](https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html)
+
+## Inspecting random-effects structure
+
+[`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md)
+describes what a random-effects formula estimates and what the design
+can support. It does not rank or replace candidate models.
+
+``` r
+
 explain_model(compile_model(score ~ week + (1 | clinic), df))
 #> Random effects:
 #>   clinic:
@@ -120,70 +190,34 @@ explain_model(compile_model(score ~ week + (1 | clinic), df))
 #>   scope_note: week varies within clinic and could be a clinic-level slope.
 ```
 
-The split-block, double-bar, and nested forms are all explained
-explicitly. The `(1 | a/b)` expansion to `(1 | a) + (1 | a:b)` is
-labeled as `syntax_expansion`, not silently rewritten.
+Split-block, double-bar, and nested formulas are expanded explicitly.
+For example, `(1 | a/b)` is shown as `(1 | a) + (1 | a:b)` and labelled
+as a syntax expansion.
 
-## Faster than lme4 on the parity benchmark
+## Numerical compatibility with lme4
 
-On the `mixeff` lme4-scaling benchmark (3 reps per cell, harness and CSV
-under `benchmarks/lme4-scaling/` in the source tree):
+`mixeff` does not target bit-exact reproduction of `lme4`. Its bundled
+Rust engine and optimizer can take a different numerical path while
+arriving at a statistically equivalent result. Expected differences on
+the parity datasets are classified in
+`inst/extdata/expected-mismatches.json`, with tolerances enforced by the
+test suite.
 
-| scenario | scale | mixeff median | lme4 median | speedup |
-|----|----|---:|---:|---:|
-| `(1 | subject)` rows | 5000 rows | 6 ms | 13 ms | 2.2× |
-| `(1 | subject)` levels | 200 subjects | 3 ms | 9 ms | 3.0× |
-| `(1 + x | subject)` slopes | 200 subjects | 5 ms | 17 ms | 3.4× |
-| `(1 | subject) + (1 | item)` crossed | 30 each | 5 ms | 18 ms | 3.6× |
-| `(1 + x | subject) + (1 | item)` crossed slope | 30 each | 7 ms | 37 ms | 5.3× |
-
-(Median seconds per fit; full table at
-`benchmarks/lme4-scaling/lme4-scaling-summary.csv` and an installed copy
-at `inst/extdata/lme4-scaling-summary.csv` for the benchmarking vignette
-to plot.)
-
-## Numerical parity with lme4
-
-`mixeff` does **not** target bit-exact reproduction of `lme4`. The
-upstream Rust compiler defaults to a pure-Rust optimizer (cobyla /
-pattern_search) rather than the C `nlopt` library that lme4 uses for
-CRAN compatibility reasons.
-
-Statistical equivalence within documented tolerances on parity datasets
-is the bar. Every divergence from `lme4` is classified and bounded in
-`inst/extdata/expected-mismatches.json`, with regression-detector limits
-enforced by the test suite.
-
-## Status
-
-- **Phase 0** — extendr bridge, vendoring, formula round-trip, schema
-  negotiation: **shipped**.
-- **Phase 1** —
-  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md),
-  audit-first surface (`compile_model`, `audit_design`, `explain_model`,
-  `random_options`, `compare_covariance`, `changes`, `diagnostics`,
-  `parameterization`, `roles`), lme4-style extractors: **shipped**.
-- **Phase 2** — `saveRDS` round-trip,
-  [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md),
-  lazy extractors, `model.matrix`, `vcov`: **shipped**.
-- **Phase 3** — `contrast`, `test_effect`, `inference_table`, `confint`,
-  `anova`, `drop1`, parametric bootstrap, bootstrap LRT: **shipped**.
-- **Phase 4** —
-  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
-  profiled-PIRLS bridge, `simulate`, `refit`, `compare`: **in progress**
-  (joint Laplace / AGQ still explicit boundaries).
-- **Phase 5** — `emmeans` integration, profile-likelihood CIs,
-  multivariate shared-theta: deferred.
-
-The audit-first contract is what the package is for.
+The current GLMM surface supports binomial, Poisson, Gamma, and negative
+binomial models for documented links. The default profiled PIRLS
+estimator is fast but is not the same estimator as `glmer()`; use
+`method = "joint_laplace"` when glmer-equivalent Laplace estimates are
+needed for a supported family. See the [GLMM
+vignette](https://bbuchsbaum.github.io/mixeff/articles/glmm.html) for
+the current boundaries.
 
 ## Acknowledgements
 
-The `mixeff-rs` Rust crate that powers `mixeff` is itself modelled on
-Julia’s [`MixedModels.jl`](https://juliastats.org/MixedModels.jl/),
-whose formula-to-fit pipeline — formula parser, semantic IR, ThetaMap
-parameterization, optimizer, and inference contract — is the basis for
-the corresponding stages here.
+The `mixeff-rs` engine is modelled on Julia’s
+[`MixedModels.jl`](https://juliastats.org/MixedModels.jl/). Its staged
+formula-to-fit design—formula parser, semantic representation,
+covariance parameterization, optimizer, and inference contract—informed
+the corresponding parts of `mixeff`.
 
 ## License
 

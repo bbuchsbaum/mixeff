@@ -78,105 +78,169 @@
 <div class="page-header"><h1 id="mixeff">mixeff<a class="anchor" aria-label="anchor" href="#mixeff"></a>
 </h1></div>
 <blockquote>
-<p><strong>Audit-first mixed-effects models in R, powered by the <code>mixeff-rs</code> Rust crate.</strong></p>
+<p>Mixed-effects models in R, with lme4-style formulas and a Rust engine.</p>
 </blockquote>
-<p><code>mixeff</code> fits linear and generalized linear mixed-effects models from lme4-style formulas. It aims to be <em>functionally equivalent</em> to <code>lme4</code>: the formula syntax is the same, the extractor surface (<code>fixef</code>, <code>ranef</code>, <code>VarCorr</code>, <code>predict</code>, <code>simulate</code>, <code>anova</code>, <code>summary</code>, <code>update</code>, <code><a href="https://generics.r-lib.org/reference/tidy.html" class="external-link">broom::tidy</a></code>) is the same, and statistical answers agree within documented tolerances on the parity datasets shipped with the package. It is not a literal <em>drop-in</em> replacement, by design: you call <code><a href="reference/lmm.html">lmm()</a></code> / <code><a href="reference/glmm.html">glmm()</a></code> (not <code>lmer()</code> / <code>glmer()</code>), results are not bit-exact, and the package is audit-first — it refuses or reports rather than silently transforming a model.</p>
-<p>What it adds is <em>provenance</em>. Every printed claim — a coefficient, a standard error, a variance component, a p-value — traces back to a versioned JSON artifact produced by a named Rust compiler at a known schema version. It is the package to reach for when you need to <em>defend</em> a mixed-model analysis, not just run one.</p>
+<p><code>mixeff</code> fits linear and generalized linear mixed-effects models through the <a href="https://github.com/bbuchsbaum/mixeff-rs" class="external-link"><code>mixeff-rs</code></a> engine. The R interface uses familiar formulas and extractors (<code>fixef</code>, <code>ranef</code>, <code>VarCorr</code>, <code>predict</code>, <code>simulate</code>, <code>anova</code>, <code>summary</code>, <code>update</code>, and <code><a href="https://generics.r-lib.org/reference/tidy.html" class="external-link">broom::tidy</a></code>), while keeping the compiled model, optimizer result, and inference metadata available for inspection.</p>
+<p>It is not a drop-in replacement for <code>lme4</code>: use <code><a href="reference/lmm.html">lmm()</a></code> or <code><a href="reference/glmm.html">glmm()</a></code> rather than <code>lmer()</code> or <code>glmer()</code>, and do not expect bit-identical estimates. The target is statistical agreement within documented tolerances on the package’s parity datasets.</p>
 <p>Documentation: <a href="https://bbuchsbaum.github.io/mixeff/" class="uri">https://bbuchsbaum.github.io/mixeff/</a></p>
-<p>The R surface exposes the engine’s formula parser, semantic IR, design auditor, ThetaMap parameterization, optimizer, and inference contract as first-class verbs.</p>
 <div class="section level2">
-<h2 id="why-a-different-package">Why a different package?<a class="anchor" aria-label="anchor" href="#why-a-different-package"></a>
+<h2 id="why-mixeff">Why mixeff?<a class="anchor" aria-label="anchor" href="#why-mixeff"></a>
 </h2>
-<table class="table">
-<colgroup>
-<col width="39%">
-<col width="60%">
-</colgroup>
-<thead><tr>
-<th>Problem in current R practice</th>
-<th>What <code>mixeff</code> does</th>
-</tr></thead>
-<tbody>
-<tr>
-<td>Convergence warnings that scroll off-screen</td>
-<td>
-<code>optimizer_certificate(fit)</code> is structured; status, objective, iterations are fields, not text</td>
-</tr>
-<tr>
-<td>Singular fits printed without ceremony</td>
-<td>Singularity is reported model state with effective rank, not a shameful failure</td>
-</tr>
-<tr>
-<td>p-values from methods the software never names</td>
-<td>Each inference row carries <code>method</code>, <code>status</code>, <code>reliability</code>, and a stable <code>reason_code</code>
-</td>
-</tr>
-<tr>
-<td>Refusals (non-identifiable design, unsupported slope) buried in warnings</td>
-<td>
-<code><a href="reference/audit_design.html">audit_design()</a></code> raises structured <code>mm_design_refusal</code> <em>before</em> the fit</td>
-</tr>
-<tr>
-<td>Reproducibility tied to a live optimizer state</td>
-<td>The fitted object is a serializable record; <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> survives session restarts and reloads via <code><a href="reference/revive.html">revive()</a></code>
-</td>
-</tr>
-</tbody>
-</table>
+<p>Three parts of the design are useful in practice:</p>
+<ul>
+<li>
+<strong>Fast repeated fitting.</strong> In the LMM scaling benchmark included with the package, <code>mixeff</code> was 2.2 to 5.3 times faster than <code>lme4</code> at the largest tested scale for five common random-effects structures. This matters most for bootstrap, simulation, and sensitivity analyses, where the same model may be refit hundreds or thousands of times.</li>
+<li>
+<strong>The model can be inspected before it is fitted.</strong> <code><a href="reference/compile_model.html">compile_model()</a></code> turns the formula into an explicit model specification. <code><a href="reference/audit.html">audit()</a></code> shows the canonical formula, random-effects structure, covariance parameterization, and design diagnostics before optimization starts.</li>
+<li>
+<strong>Fit diagnostics are data, not only console text.</strong> Convergence status, optimizer details, inference method, reliability, and reason codes live in structured objects. A fitted model is serializable with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> and can be inspected after reloading without a live Rust handle.</li>
+</ul>
+<p>These features do not remove the need to evaluate a model statistically. They make the computation and the software’s decisions easier to examine.</p>
 </div>
 <div class="section level2">
-<h2 id="two-line-install">Two-line install<a class="anchor" aria-label="anchor" href="#two-line-install"></a>
+<h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>R-Universe (recommended once 0.1.0 ships):</p>
+<p>From R-Universe:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"mixeff"</span>, repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"https://bbuchsbaum.r-universe.dev"</span>, <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"repos"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>Development install (needs Rust toolchain ≥ 1.78 and <code>rextendr</code>):</p>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
+<span>  <span class="st">"mixeff"</span>,</span>
+<span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"https://bbuchsbaum.r-universe.dev"</span>, <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"repos"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>From GitHub (requires Rust 1.78 or newer and <code>rextendr</code>):</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"bbuchsbaum/mixeff"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="a-six-line-tour">A six-line tour<a class="anchor" aria-label="anchor" href="#a-six-line-tour"></a>
+<h2 id="a-short-example">A short example<a class="anchor" aria-label="anchor" href="#a-short-example"></a>
 </h2>
+<p>Compile and inspect a model before fitting it:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/lmm.html">lmm</a></span><span class="op">(</span><span class="va">Reaction</span> <span class="op">~</span> <span class="va">Days</span> <span class="op">+</span> <span class="op">(</span><span class="va">Days</span> <span class="op">|</span> <span class="va">Subject</span><span class="op">)</span>, data <span class="op">=</span> <span class="fu">lme4</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/lme4/man/sleepstudy.html" class="external-link">sleepstudy</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>        <span class="co"># familiar lme4-style summary</span></span>
-<span><span class="fu"><a href="reference/audit.html">audit</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>          <span class="co"># Rust-authored audit report</span></span>
-<span><span class="fu"><a href="reference/changes.html">changes</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>        <span class="co"># what the compiler did to the requested model</span></span>
-<span><span class="fu"><a href="reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>; <span class="fu"><a href="reference/mm_lmm-methods.html">VarCorr</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>; <span class="fu"><a href="reference/mm_lmm-methods.html">ranef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">tf</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="va">tf</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">fit2</span><span class="op">)</span>         <span class="co"># works without a live Rust handle — artifact is the source of truth</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="audit-first-workflow">Audit-first workflow<a class="anchor" aria-label="anchor" href="#audit-first-workflow"></a>
-</h2>
-<p><code>mixeff</code> exposes the contract as first-class verbs:</p>
+<span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compile_model.html">compile_model</a></span><span class="op">(</span></span>
+<span>  <span class="va">Reaction</span> <span class="op">~</span> <span class="va">Days</span> <span class="op">+</span> <span class="op">(</span><span class="va">Days</span> <span class="op">|</span> <span class="va">Subject</span><span class="op">)</span>,</span>
+<span>  <span class="fu">lme4</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/lme4/man/sleepstudy.html" class="external-link">sleepstudy</a></span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/audit.html">audit</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Audit Summary:</span></span>
+<span><span class="co">#&gt;   overall [OK]: clean: no warnings or attention items</span></span>
+<span><span class="co">#&gt;   attention [OK]: no warnings or unchecked inference-critical items</span></span>
+<span><span class="co">#&gt;</span></span>
+<span><span class="co">#&gt; Requested Model:</span></span>
+<span><span class="co">#&gt;   formula [INFO]: Reaction ~ 1 + Days + (1 + Days | Subject)</span></span>
+<span><span class="co">#&gt;   model kind [INFO]: linear_mixed_model</span></span>
+<span><span class="co">#&gt;   distribution/link [INFO]: gaussian/identity</span></span>
+<span><span class="co">#&gt;   objective [INFO]: exact_gaussian</span></span>
+<span><span class="co">#&gt;   convergence certificate [INFO]: exact_objective</span></span>
+<span><span class="co">#&gt;   fixed terms [INFO]: 1, Days</span></span>
+<span><span class="co">#&gt;   random terms [INFO]: 1</span></span>
+<span><span class="co">#&gt;   covariance parameter maps [INFO]: 1 map(s)</span></span></code></pre></div>
+<p>Then fit the model with the Rust engine and use the usual R extractors:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">Reaction</span> <span class="op">~</span> <span class="va">Days</span> <span class="op">+</span> <span class="op">(</span><span class="va">Days</span> <span class="op">|</span> <span class="va">Subject</span><span class="op">)</span>, <span class="fu">lme4</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/lme4/man/sleepstudy.html" class="external-link">sleepstudy</a></span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/lmm.html">lmm</a></span><span class="op">(</span></span>
+<span>  <span class="va">Reaction</span> <span class="op">~</span> <span class="va">Days</span> <span class="op">+</span> <span class="op">(</span><span class="va">Days</span> <span class="op">|</span> <span class="va">Subject</span><span class="op">)</span>,</span>
+<span>  data <span class="op">=</span> <span class="fu">lme4</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/lme4/man/sleepstudy.html" class="external-link">sleepstudy</a></span>,</span>
+<span>  control <span class="op">=</span> <span class="fu"><a href="reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="reference/audit_design.html">audit_design</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span>        <span class="co"># structured design audit, before any optimization</span></span>
-<span><span class="fu"><a href="reference/explain_model.html">explain_model</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span>       <span class="co"># named-form translation of every random term</span></span>
-<span><span class="fu"><a href="reference/random_options.html">random_options</a></span><span class="op">(</span><span class="va">spec</span>, <span class="va">Subject</span><span class="op">)</span>   <span class="co"># map of nearby random-effect spellings (not a ranking)</span></span>
-<span><span class="fu"><a href="reference/compare_covariance.html">compare_covariance</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span>  <span class="co"># full / diagonal / scalar comparison per term</span></span></code></pre></div>
-<p>Once fit:</p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/mm_lmm-methods.html">VarCorr</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/mm_lmm-methods.html">ranef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></code></pre></div>
+<p>The optimizer certificate is programmatic. Here is a compact view of the sleep-study fit:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/diagnostics.html">diagnostics</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>          <span class="co"># structured diagnostics list</span></span>
-<span><span class="fu"><a href="reference/parameterization.html">parameterization</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>     <span class="co"># ThetaMap details</span></span>
-<span><span class="fu"><a href="reference/optimizer_certificate.html">optimizer_certificate</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="co"># convergence status, iterations, objective trace</span></span>
-<span><span class="fu"><a href="reference/inference_table.html">inference_table</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>      <span class="co"># per-coefficient inference with method + reliability</span></span>
-<span><span class="fu"><a href="reference/estimability.html">estimability</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">L</span><span class="op">)</span>      <span class="co"># certificate-backed estimability of contrasts</span></span></code></pre></div>
-<p>Where the engine cannot certify a number, the wrapper returns <code>NA</code> with a stable reason code — never a fabricated value.</p>
+<code class="sourceCode R"><span><span class="va">cert</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/optimizer_certificate.html">optimizer_certificate</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">cert</span>, <span class="va">metric</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"status"</span>, <span class="st">"optimizer"</span>, <span class="st">"iterations"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;      metric              value</span></span>
+<span><span class="co">#&gt;      status converged_interior</span></span>
+<span><span class="co">#&gt;   optimizer           trust_bq</span></span>
+<span><span class="co">#&gt;  iterations                457</span></span></code></pre></div>
+<p>Other inspection functions expose different parts of the same fitted artifact:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/changes.html">changes</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>                 <span class="co"># changes made while compiling the request</span></span>
+<span><span class="fu"><a href="reference/diagnostics.html">diagnostics</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>             <span class="co"># structured warnings and status information</span></span>
+<span><span class="fu"><a href="reference/parameterization.html">parameterization</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>        <span class="co"># random-effects covariance parameterization</span></span>
+<span><span class="fu"><a href="reference/inference_table.html">inference_table</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>         <span class="co"># method, status, and reliability by coefficient</span></span>
+<span><span class="fu"><a href="reference/reproducibility.html">reproducibility</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span>         <span class="co"># schema and engine metadata</span></span></code></pre></div>
+<p>Because the fitted quantities are stored in the R object, ordinary R serialization works:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="va">path</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">restored</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/optimizer_certificate.html">optimizer_certificate</a></span><span class="op">(</span><span class="va">restored</span><span class="op">)</span></span></code></pre></div>
+<p><code>revive(restored)</code> resets the process-local lazy R-side cache after serialization; the current bridge intentionally leaves the Rust handle absent.</p>
 </div>
 <div class="section level2">
-<h2 id="random-effects-guidance-never-recommendation">Random-effects guidance, never recommendation<a class="anchor" aria-label="anchor" href="#random-effects-guidance-never-recommendation"></a>
+<h2 id="performance">Performance<a class="anchor" aria-label="anchor" href="#performance"></a>
 </h2>
-<p><code>mixeff</code> adds a <em>guidance</em> layer for random-effects syntax. It explains what each formula spelling actually estimates, what the data can support, and which covariances the syntax fixes at zero — but it never ranks, recommends, or substitutes models.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># What does this formula actually model?</span></span>
-<span><span class="fu"><a href="reference/explain_model.html">explain_model</a></span><span class="op">(</span><span class="fu"><a href="reference/compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">score</span> <span class="op">~</span> <span class="va">week</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">clinic</span><span class="op">)</span>, <span class="va">df</span><span class="op">)</span><span class="op">)</span></span>
+<p>The committed scaling benchmark fits the same LMM with <code><a href="reference/lmm.html">mixeff::lmm()</a></code> and <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code> three times per cell. The table below reports the largest cell for each design.</p>
+<table class="table">
+<colgroup>
+<col width="15%">
+<col width="21%">
+<col width="21%">
+<col width="21%">
+<col width="21%">
+</colgroup>
+<thead><tr>
+<th>design</th>
+<th align="right">largest tested scale</th>
+<th align="right">mixeff median</th>
+<th align="right">lme4 median</th>
+<th align="right">speedup</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>random intercept, varying rows</td>
+<td align="right">5,000 rows</td>
+<td align="right">6 ms</td>
+<td align="right">13 ms</td>
+<td align="right">2.2x</td>
+</tr>
+<tr>
+<td>random intercept, varying groups</td>
+<td align="right">200 subjects</td>
+<td align="right">3 ms</td>
+<td align="right">9 ms</td>
+<td align="right">3.0x</td>
+</tr>
+<tr>
+<td>correlated random slope</td>
+<td align="right">200 subjects</td>
+<td align="right">5 ms</td>
+<td align="right">17 ms</td>
+<td align="right">3.4x</td>
+</tr>
+<tr>
+<td>crossed random intercepts</td>
+<td align="right">30 subjects and 30 items</td>
+<td align="right">5 ms</td>
+<td align="right">18 ms</td>
+<td align="right">3.6x</td>
+</tr>
+<tr>
+<td>crossed design with random slope</td>
+<td align="right">30 subjects and 30 items</td>
+<td align="right">7 ms</td>
+<td align="right">37 ms</td>
+<td align="right">5.3x</td>
+</tr>
+</tbody>
+</table>
+<p>These are small absolute timings from one benchmark run, with only three replications per cell. They show the behavior of this harness, not a universal speed guarantee. The scripts and full CSV are included so the comparison can be rerun on a relevant machine and model:</p>
+<ul>
+<li><code>inst/benchmarks/lme4-scaling.R</code></li>
+<li><code>inst/extdata/lme4-scaling-summary.csv</code></li>
+<li>the <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html">benchmarking vignette</a>
+</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="inspecting-random-effects-structure">Inspecting random-effects structure<a class="anchor" aria-label="anchor" href="#inspecting-random-effects-structure"></a>
+</h2>
+<p><code><a href="reference/explain_model.html">explain_model()</a></code> describes what a random-effects formula estimates and what the design can support. It does not rank or replace candidate models.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/explain_model.html">explain_model</a></span><span class="op">(</span><span class="fu"><a href="reference/compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">score</span> <span class="op">~</span> <span class="va">week</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">clinic</span><span class="op">)</span>, <span class="va">df</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Random effects:</span></span>
 <span><span class="co">#&gt;   clinic:</span></span>
 <span><span class="co">#&gt;     wrote:        (1 | clinic)</span></span>
@@ -184,101 +248,18 @@
 <span><span class="co">#&gt;     scope:        clinics may differ in average outcome.</span></span>
 <span><span class="co">#&gt; Design notes:</span></span>
 <span><span class="co">#&gt;   scope_note: week varies within clinic and could be a clinic-level slope.</span></span></code></pre></div>
-<p>The split-block, double-bar, and nested forms are all explained explicitly. The <code>(1 | a/b)</code> expansion to <code>(1 | a) + (1 | a:b)</code> is labeled as <code>syntax_expansion</code>, not silently rewritten.</p>
+<p>Split-block, double-bar, and nested formulas are expanded explicitly. For example, <code>(1 | a/b)</code> is shown as <code>(1 | a) + (1 | a:b)</code> and labelled as a syntax expansion.</p>
 </div>
 <div class="section level2">
-<h2 id="faster-than-lme4-on-the-parity-benchmark">Faster than lme4 on the parity benchmark<a class="anchor" aria-label="anchor" href="#faster-than-lme4-on-the-parity-benchmark"></a>
+<h2 id="numerical-compatibility-with-lme4">Numerical compatibility with lme4<a class="anchor" aria-label="anchor" href="#numerical-compatibility-with-lme4"></a>
 </h2>
-<p>On the <code>mixeff</code> lme4-scaling benchmark (3 reps per cell, harness and CSV under <code>benchmarks/lme4-scaling/</code> in the source tree):</p>
-<table class="table">
-<colgroup>
-<col width="29%">
-<col width="23%">
-<col width="19%">
-<col width="16%">
-<col width="10%">
-</colgroup>
-<thead><tr>
-<th>scenario</th>
-<th>scale</th>
-<th align="right">mixeff median</th>
-<th align="right">lme4 median</th>
-<th align="right">speedup</th>
-</tr></thead>
-<tbody>
-<tr>
-<td>
-<code>(1 | subject)</code> rows</td>
-<td>5000 rows</td>
-<td align="right">6 ms</td>
-<td align="right">13 ms</td>
-<td align="right">2.2×</td>
-</tr>
-<tr>
-<td>
-<code>(1 | subject)</code> levels</td>
-<td>200 subjects</td>
-<td align="right">3 ms</td>
-<td align="right">9 ms</td>
-<td align="right">3.0×</td>
-</tr>
-<tr>
-<td>
-<code>(1 + x | subject)</code> slopes</td>
-<td>200 subjects</td>
-<td align="right">5 ms</td>
-<td align="right">17 ms</td>
-<td align="right">3.4×</td>
-</tr>
-<tr>
-<td>
-<code>(1 | subject) + (1 | item)</code> crossed</td>
-<td>30 each</td>
-<td align="right">5 ms</td>
-<td align="right">18 ms</td>
-<td align="right">3.6×</td>
-</tr>
-<tr>
-<td>
-<code>(1 + x | subject) + (1 | item)</code> crossed slope</td>
-<td>30 each</td>
-<td align="right">7 ms</td>
-<td align="right">37 ms</td>
-<td align="right">5.3×</td>
-</tr>
-</tbody>
-</table>
-<p>(Median seconds per fit; full table at <code>benchmarks/lme4-scaling/lme4-scaling-summary.csv</code> and an installed copy at <code>inst/extdata/lme4-scaling-summary.csv</code> for the benchmarking vignette to plot.)</p>
-</div>
-<div class="section level2">
-<h2 id="numerical-parity-with-lme4">Numerical parity with lme4<a class="anchor" aria-label="anchor" href="#numerical-parity-with-lme4"></a>
-</h2>
-<p><code>mixeff</code> does <strong>not</strong> target bit-exact reproduction of <code>lme4</code>. The upstream Rust compiler defaults to a pure-Rust optimizer (cobyla / pattern_search) rather than the C <code>nlopt</code> library that lme4 uses for CRAN compatibility reasons.</p>
-<p>Statistical equivalence within documented tolerances on parity datasets is the bar. Every divergence from <code>lme4</code> is classified and bounded in <code>inst/extdata/expected-mismatches.json</code>, with regression-detector limits enforced by the test suite.</p>
-</div>
-<div class="section level2">
-<h2 id="status">Status<a class="anchor" aria-label="anchor" href="#status"></a>
-</h2>
-<ul>
-<li>
-<strong>Phase 0</strong> — extendr bridge, vendoring, formula round-trip, schema negotiation: <strong>shipped</strong>.</li>
-<li>
-<strong>Phase 1</strong> — <code><a href="reference/lmm.html">lmm()</a></code>, audit-first surface (<code>compile_model</code>, <code>audit_design</code>, <code>explain_model</code>, <code>random_options</code>, <code>compare_covariance</code>, <code>changes</code>, <code>diagnostics</code>, <code>parameterization</code>, <code>roles</code>), lme4-style extractors: <strong>shipped</strong>.</li>
-<li>
-<strong>Phase 2</strong> — <code>saveRDS</code> round-trip, <code><a href="reference/revive.html">revive()</a></code>, lazy extractors, <code>model.matrix</code>, <code>vcov</code>: <strong>shipped</strong>.</li>
-<li>
-<strong>Phase 3</strong> — <code>contrast</code>, <code>test_effect</code>, <code>inference_table</code>, <code>confint</code>, <code>anova</code>, <code>drop1</code>, parametric bootstrap, bootstrap LRT: <strong>shipped</strong>.</li>
-<li>
-<strong>Phase 4</strong> — <code><a href="reference/glmm.html">glmm()</a></code> profiled-PIRLS bridge, <code>simulate</code>, <code>refit</code>, <code>compare</code>: <strong>in progress</strong> (joint Laplace / AGQ still explicit boundaries).</li>
-<li>
-<strong>Phase 5</strong> — <code>emmeans</code> integration, profile-likelihood CIs, multivariate shared-theta: deferred.</li>
-</ul>
-<p>The audit-first contract is what the package is for.</p>
+<p><code>mixeff</code> does not target bit-exact reproduction of <code>lme4</code>. Its bundled Rust engine and optimizer can take a different numerical path while arriving at a statistically equivalent result. Expected differences on the parity datasets are classified in <code>inst/extdata/expected-mismatches.json</code>, with tolerances enforced by the test suite.</p>
+<p>The current GLMM surface supports binomial, Poisson, Gamma, and negative binomial models for documented links. The default profiled PIRLS estimator is fast but is not the same estimator as <code>glmer()</code>; use <code>method = "joint_laplace"</code> when glmer-equivalent Laplace estimates are needed for a supported family. See the <a href="https://bbuchsbaum.github.io/mixeff/articles/glmm.html">GLMM vignette</a> for the current boundaries.</p>
 </div>
 <div class="section level2">
 <h2 id="acknowledgements">Acknowledgements<a class="anchor" aria-label="anchor" href="#acknowledgements"></a>
 </h2>
-<p>The <code>mixeff-rs</code> Rust crate that powers <code>mixeff</code> is itself modelled on Julia’s <a href="https://juliastats.org/MixedModels.jl/" class="external-link"><code>MixedModels.jl</code></a>, whose formula-to-fit pipeline — formula parser, semantic IR, ThetaMap parameterization, optimizer, and inference contract — is the basis for the corresponding stages here.</p>
+<p>The <code>mixeff-rs</code> engine is modelled on Julia’s <a href="https://juliastats.org/MixedModels.jl/" class="external-link"><code>MixedModels.jl</code></a>. Its staged formula-to-fit design—formula parser, semantic representation, covariance parameterization, optimizer, and inference contract—informed the corresponding parts of <code>mixeff</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>

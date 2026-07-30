@@ -461,10 +461,16 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
     family = stats::binomial(),
     control = mixeff::mm_control(verbose = -1)
   )
-  testthat::skip_if_not(
+  # Assert, don't skip: the payload is available on the current pin, and a
+  # pin bump that regressed it would otherwise silently delete the DiD
+  # estimate + SE parity assertions below from the opt-in run.
+  testthat::expect_true(
     aphantasia_has_glmm_full_vcov(fit),
-    "GLMM fixed-effect covariance payload is not yet available."
+    info = "GLMM fixed-effect covariance payload regressed to unavailable"
   )
+  if (!aphantasia_has_glmm_full_vcov(fit)) {
+    return(invisible(NULL))
+  }
 
   s25 <- (log(0.025) - mean(data_sets$primary$soa_log)) /
     stats::sd(data_sets$primary$soa_log)

@@ -5,6 +5,7 @@
 # honored correctly.
 
 mk_ss_fit <- function() {
+  testthat::skip_if_not_installed("lme4")
   suppressMessages(
     lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,
         control = mm_control(verbose = -1))

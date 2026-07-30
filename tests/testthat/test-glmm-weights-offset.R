@@ -39,6 +39,7 @@ test_that("glmm() fits grouped binomial via cbind(successes, failures)", {
 })
 
 test_that("cbind and proportion+weights spellings give the same fit", {
+  testthat::skip_if_not_installed("lme4")
   data(cbpp, package = "lme4")
   cb <- cbpp
   cb$prop <- cb$incidence / cb$size
@@ -51,6 +52,7 @@ test_that("cbind and proportion+weights spellings give the same fit", {
 })
 
 test_that("cbind response and weights= cannot be combined", {
+  testthat::skip_if_not_installed("lme4")
   data(cbpp, package = "lme4")
   expect_error(
     glmm(cbind(incidence, size - incidence) ~ period + (1 | herd),

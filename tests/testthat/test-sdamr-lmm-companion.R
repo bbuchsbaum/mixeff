@@ -97,7 +97,7 @@ sdamr_cases <- function() {
 }
 
 sdamr_run_slow_parity <- function() {
-  identical(tolower(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")), "true")
+  mm_run_slow_parity()
 }
 
 sdamr_fixef_key <- function(x) {

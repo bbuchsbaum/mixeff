@@ -1,5 +1,9 @@
 test_that("classic lme4 parity checks emit a compact R-facing scoreboard artifact", {
   mm_skip_if_no_lme4()
+  # The 21 fit pairs below re-run exactly the parity assertions of
+  # test-lme4-parity.R; what this block adds is the scoreboard JSON
+  # artifact, which has no audience on CRAN's machines.
+  skip_on_cran()
   mm_scoreboard_reset()
 
   cases <- mm_lme4_parity_cases()

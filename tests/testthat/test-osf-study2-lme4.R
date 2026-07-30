@@ -35,40 +35,50 @@ osf_study2_prefix <- function(time, stim) {
   sprintf("%s_%d", time, stim)
 }
 
+osf_study2_long_cache <- new.env(parent = emptyenv())
+
 osf_study2_long_data <- function() {
+  # Memoized: four calls per run reshape the same wide fixture. Row order is
+  # time fastest, then stim, then subject — identical to the original
+  # row-at-a-time loop this replaces.
+  if (!is.null(osf_study2_long_cache$long)) {
+    return(osf_study2_long_cache$long)
+  }
   wide <- osf_study2_wide_data()
   times <- c("pre", "post", "X")
-  rows <- vector("list", nrow(wide) * 9L * length(times))
-  row_i <- 0L
+  idx <- expand.grid(time_i = seq_along(times), stim = seq_len(9L),
+                     sub_i = seq_len(nrow(wide)), KEEP.OUT.ATTRS = FALSE)
 
-  for (sub_i in seq_len(nrow(wide))) {
-    for (stim in seq_len(9L)) {
-      attractiveness <- ((stim - 1L) %/% 3L) + 1L
-      condition <- ((stim - 1L) %% 3L) + 1L
-      for (time in times) {
-        prefix <- osf_study2_prefix(time, stim)
-        row_i <- row_i + 1L
-        rows[[row_i]] <- data.frame(
-          sub = wide$id[[sub_i]],
-          stim = stim,
-          con = condition,
-          cute_level = attractiveness,
-          time = time,
-          cute = wide[[paste0(prefix, "_cute")]][[sub_i]],
-          warmth = wide[[paste0(prefix, "_warmth")]][[sub_i]],
-          competence = wide[[paste0(prefix, "_competence")]][[sub_i]],
-          stringsAsFactors = FALSE
-        )
-      }
-    }
+  cells <- expand.grid(time_i = seq_along(times), stim = seq_len(9L),
+                       KEEP.OUT.ATTRS = FALSE)
+  measure <- function(what) {
+    cols <- vapply(seq_len(nrow(cells)), function(i) {
+      prefix <- osf_study2_prefix(times[[cells$time_i[[i]]]], cells$stim[[i]])
+      paste0(prefix, "_", what)
+    }, character(1))
+    values <- vapply(cols, function(col) as.numeric(wide[[col]]),
+                     numeric(nrow(wide)))
+    cell_i <- (idx$stim - 1L) * length(times) + idx$time_i
+    values[cbind(idx$sub_i, cell_i)]
   }
 
-  out <- do.call(rbind, rows)
+  out <- data.frame(
+    sub = wide$id[idx$sub_i],
+    stim = idx$stim,
+    con = ((idx$stim - 1L) %% 3L) + 1L,
+    cute_level = ((idx$stim - 1L) %/% 3L) + 1L,
+    time = times[idx$time_i],
+    cute = measure("cute"),
+    warmth = measure("warmth"),
+    competence = measure("competence"),
+    stringsAsFactors = FALSE
+  )
   out$sub <- factor(out$sub)
   out$stim <- factor(out$stim)
   out$con_f <- factor(out$con)
   out$time_f <- factor(out$time, levels = times)
   out$level_f <- factor(out$cute_level)
+  osf_study2_long_cache$long <- out
   out
 }
 

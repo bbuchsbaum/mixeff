@@ -124,6 +124,7 @@ test_that("ordered factor fits (poly-coded) under the standard UNNAMED contrasts
   # The default global option form is unnamed; the ordered-contrast guard must
   # resolve it positionally rather than throwing "subscript out of bounds".
   old <- options(contrasts = c("contr.treatment", "contr.poly"))
+  on.exit(options(old), add = TRUE)
   fit <- tryCatch(
     lmm(y ~ o + (1 | g), dat, REML = TRUE, control = mm_control(verbose = -1)),
     error = function(e) e

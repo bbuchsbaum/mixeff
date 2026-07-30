@@ -92,6 +92,19 @@ test_that("GLMM default-method summary explains withheld inference plainly", {
   }
 })
 
+test_that("GLMM confint refusal advice is actionable on the fit at hand", {
+  d <- mk_ux_lmm_data()
+  set.seed(97)
+  d$yb <- rbinom(nrow(d), 1, 0.4)
+  fit <- glmm(yb ~ x + (1 | g), d, family = binomial(),
+              control = mm_control(verbose = -1))
+  # On the default profiled fit, "use asymptotic" would fail too; the
+  # message must point at the joint_laplace refit instead.
+  cnd <- tryCatch(confint(fit, method = "profile"), error = identity)
+  expect_s3_class(cnd, "mm_inference_unavailable")
+  expect_match(conditionMessage(cnd), "joint_laplace", fixed = TRUE)
+})
+
 test_that("predictor far from unit scale triggers a rescaling notice", {
   set.seed(1)
   g <- factor(rep(1:20, each = 6)); x <- runif(120, 0, 1e5)

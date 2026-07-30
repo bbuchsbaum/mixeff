@@ -6,6 +6,7 @@
 ctl <- mm_control(verbose = -1)
 
 test_that("empty data is refused with a typed data error (no Rust panic)", {
+  testthat::skip_if_not_installed("lme4")
   s <- lme4::sleepstudy[0, ]
   expect_error(
     lmm(Reaction ~ Days + (Days | Subject), s, control = ctl),
@@ -14,6 +15,7 @@ test_that("empty data is refused with a typed data error (no Rust panic)", {
 })
 
 test_that("a single observation is refused as not identifiable", {
+  testthat::skip_if_not_installed("lme4")
   s <- lme4::sleepstudy[1, , drop = FALSE]
   expect_error(
     lmm(Reaction ~ Days + (Days | Subject), s, control = ctl),
@@ -22,6 +24,7 @@ test_that("a single observation is refused as not identifiable", {
 })
 
 test_that("one observation per grouping level is refused (lme4's rule)", {
+  testthat::skip_if_not_installed("lme4")
   # 18 rows, Subject relabelled so every row is its own level: n_levels == nobs.
   d <- lme4::sleepstudy[1:18, ]
   d$Subject <- factor(seq_len(18))
@@ -32,6 +35,7 @@ test_that("one observation per grouping level is refused (lme4's rule)", {
 })
 
 test_that("empty data is refused for glmm() too", {
+  testthat::skip_if_not_installed("lme4")
   expect_error(
     glmm(r2 ~ 1 + (1 | id), lme4::VerbAgg[0, ], family = binomial, control = ctl),
     class = "mm_data_error"
@@ -56,6 +60,7 @@ test_that("an observation-level random effect is NOT refused for a GLMM", {
 })
 
 test_that("valid models across topologies still fit (no false positives)", {
+  testthat::skip_if_not_installed("lme4")
   expect_s3_class(
     lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy, control = ctl),
     "mm_lmm"

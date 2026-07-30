@@ -108,13 +108,29 @@ test_that("reporting_table() supports compact and audit views", {
 test_that("fixed-effect report rows preserve Rust inference status", {
   fit <- mk_reporting_fit()
   fixed <- rt_tbl(fit, "fixed_effects", view = "audit")
-  inf <- inference_table(fit)$table
+  # The report is a reader-facing surface: it must carry the same rows as
+  # summary()'s auto-resolved table (Satterthwaite where feasible), not the
+  # fit-time asymptotic Wald-z cache that inference_table(fit) exposes.
+  resolved <- summary(fit)$inference$table
 
-  expect_identical(fixed$method, inf$method)
-  expect_identical(fixed$status, inf$status)
-  expect_identical(fixed$reason, inf$reason)
+  expect_identical(fixed$method, resolved$method)
+  expect_identical(fixed$status, resolved$status)
+  expect_identical(fixed$reason, resolved$reason)
   expect_true("source" %in% names(fixed))
   expect_true(any(fixed$status == "available"))
+  # Engine-authored provenance fields survive into the report unchanged.
+  expect_identical(fixed$reliability, resolved$reliability)
+  expect_identical(fixed$reliability_reason, resolved$reliability_reason)
+  # Both sides above route through mm_auto_resolved_inference_table(), so
+  # also pin the report against the ENGINE's recomputed satterthwaite rows
+  # directly — otherwise this block could only fail if reporting were
+  # unhooked from the shared helper, not if the helper itself broke.
+  engine <- inference_table(fit, method = "satterthwaite")$table
+  expect_identical(fixed$method, engine$method)
+  expect_identical(fixed$status, engine$status)
+  expect_identical(fixed$p_value, engine$p_value)
+  expect_true(all(fixed$method %in% c("satterthwaite", "kenward_roger",
+                                      "asymptotic_wald_z", "not_computed")))
 })
 
 test_that("random-term report rows preserve Rust-authored cards", {
@@ -216,4 +232,27 @@ test_that("saved fits preserve report sections backed by stored artifacts", {
     rt_tbl(revived, "random_effects", view = "audit"),
     rt_tbl(fit, "random_effects", view = "audit")
   )
+})
+
+test_that("reporting_table and model_report work on GLMM fits", {
+  skip_if_not_installed("lme4")
+  env <- new.env(parent = emptyenv())
+  utils::data("cbpp", package = "lme4", envir = env)
+  g <- glmm(cbind(incidence, size - incidence) ~ period + (1 | herd),
+            get("cbpp", envir = env), family = binomial(),
+            control = mm_control(verbose = -1))
+
+  fixed <- rt_tbl(g, "fixed_effects", view = "audit")
+  expect_true(all(c("term", "estimate", "method", "status") %in% names(fixed)))
+  expect_identical(fixed$term,
+                   c("(Intercept)", "period2", "period3", "period4"))
+  # Default profiled fit: estimates present, inference withheld.
+  expect_identical(unique(fixed$method), "not_computed")
+  expect_s3_class(model_report(g), "mm_model_report")
+
+  # inference_table on a GLMM is the wald view only; other methods refuse
+  # with a typed condition, not a bare dispatch error.
+  expect_s3_class(inference_table(g), "mm_inference_table")
+  expect_error(inference_table(g, method = "satterthwaite"),
+               class = "mm_inference_unavailable")
 })

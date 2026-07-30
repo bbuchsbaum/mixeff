@@ -4,6 +4,7 @@
 # from lme4 on correlated-slope models (documented).
 
 mk_acc_fit <- function() {
+  testthat::skip_if_not_installed("lme4")
   suppressMessages(
     lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,
         control = mm_control(verbose = -1))
@@ -19,6 +20,7 @@ test_that("ngrps returns per-grouping-factor level counts", {
 })
 
 test_that("ngrps counts each crossed grouping factor", {
+  testthat::skip_if_not_installed("lme4")
   m <- suppressMessages(
     lmm(diameter ~ 1 + (1 | plate) + (1 | sample), lme4::Penicillin,
         control = mm_control(verbose = -1))

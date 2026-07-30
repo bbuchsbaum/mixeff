@@ -314,6 +314,21 @@ test_that("parametric bootstrap comparison runs on a tiny nsim", {
   expect_identical(cmp$table$method[[2L]], "parametric_bootstrap_lrt")
 })
 
+test_that("bootstrap LRT p-value uses the (b+1)/(n+1) convention", {
+  full <- mk_phase4_fit(slope = TRUE, reml = FALSE)
+  reduced <- mk_phase4_fit(slope = FALSE, reml = FALSE)
+  cmp <- compare(reduced, full, method = "bootstrap", nsim = 10, seed = 7)
+  p <- cmp$table$p_value[[2L]]
+  n_ok <- cmp$bootstrap$successful_replicates
+  if (identical(cmp$table$status[[2L]], "available") && n_ok > 0L) {
+    # Floor is 1/(n+1), never an exact 0, and p must be k/(n+1) for integer k.
+    expect_gte(p, 1 / (n_ok + 1))
+    expect_lt(abs(p * (n_ok + 1) - round(p * (n_ok + 1))), 1e-8)
+  } else {
+    succeed("bootstrap refused on this fit; convention not exercised")
+  }
+})
+
 test_that("parametric bootstrap LRT refuses non-nested or mismatched fit data", {
   set.seed(401)
   d1 <- data.frame(

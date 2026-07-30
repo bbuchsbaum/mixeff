@@ -26,7 +26,7 @@ brown_fixture_path <- function(file) {
 }
 
 brown_rt_data <- function() {
-  dat <- utils::read.csv(brown_fixture_path("brown_rt_dummy_data.csv"),
+  dat <- utils::read.csv(brown_fixture_path("brown_rt_dummy_data.csv.gz"),
                          stringsAsFactors = FALSE)
   dat$PID <- factor(dat$PID)
   dat$stim <- factor(dat$stim)
@@ -36,7 +36,7 @@ brown_rt_data <- function() {
 
 brown_rt_interaction_data <- function() {
   dat <- utils::read.csv(
-    brown_fixture_path("brown_rt_dummy_data_interaction.csv"),
+    brown_fixture_path("brown_rt_dummy_data_interaction.csv.gz"),
     stringsAsFactors = FALSE
   )
   dat$PID <- factor(dat$PID)
@@ -125,7 +125,7 @@ brown_cases <- function() {
 # bd-01KX33Z3NAB2EVE94CBWR3NXX3; reproducer in
 # planning/probes/MINIMAL_case1_brown_rt_interaction.R. Ungate when it lands.
 brown_run_slow_rt_parity <- function() {
-  identical(tolower(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")), "true")
+  mm_run_slow_parity()
 }
 
 brown_fit_pair <- function(case) {

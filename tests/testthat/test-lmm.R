@@ -167,6 +167,7 @@ test_that("revived extractor paths return typed values", {
 })
 
 test_that("lmm()/glmm() advise rescaling when a predictor is far from unit scale", {
+  testthat::skip_if_not_installed("lme4")
   # lme4 parity: predictors on very different scales get a rescale advisory
   # (a notice, not a refusal). Matches lme4's checkScaleX guidance.
   set.seed(1)

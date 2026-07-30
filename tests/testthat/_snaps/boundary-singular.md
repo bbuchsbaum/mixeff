@@ -17,7 +17,7 @@
       Linear mixed model fit by REML
       Formula: Yield ~ 1 + (1 | Batch)
       Fit status: converged_reduced_rank
-      Optimizer: pattern_search; iterations: 23; objective: 161.828
+      Optimizer: pattern_search; iterations: <n>; objective: 161.828
       nobs: 30, sigma: 3.71568, logLik: -80.9141
       Fixed effects:
       (Intercept) 

@@ -72,8 +72,11 @@ test_that("fixture is faithful to the published Willingness-to-Wait result", {
       (1 + Enjoyment_centered | ID) + (1 + Enjoyment_centered | Title),
     data = d1, family = binomial("logit"),
     control = lme4::glmerControl(optimizer = "bobyqa")))
+  # Loose tolerance by design: this line only anchors that we loaded the
+  # published dataset and model (it exercises lme4's optimizer, not mixeff);
+  # digit-level agreement with the paper varies by platform/BLAS.
   expect_equal(unname(lme4::fixef(g)[["Enjoyment_centered"]]), 0.9439,
-               tolerance = 1e-3)
+               tolerance = 1e-2)
 
   # Comprehension x enjoyment + proficiency. Script: Comp_1a beta = 0.093057.
   d1L <- osf_ww_long("study1a")
@@ -81,8 +84,11 @@ test_that("fixture is faithful to the published Willingness-to-Wait result", {
                       (1 | ID) + (1 | Title),
                     data = d1L, family = binomial("logit"),
                     control = lme4::glmerControl(optimizer = "bobyqa"))
+  # Same published-value anchor policy as above: wide enough not to bet on
+  # cross-platform optimizer digits, tight enough that a data-loading or
+  # contrast-coding regression still fails it.
   expect_equal(unname(lme4::fixef(gc)[["Enjoyment_centered"]]), 0.093057,
-               tolerance = 1e-3)
+               tolerance = 1e-2)
 })
 
 test_that("glmm() coerces raw integer/character grouping like lme4 (fix guard)", {
@@ -198,7 +204,7 @@ test_that("GLMM Wald inference is certified on a real-data random-intercept mode
 
 test_that("full 9-model Willingness-to-Wait sweep matches glmer (slow)", {
   skip_if_not_installed("lme4")
-  skip_if_not(nzchar(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")),
+  skip_if_not(mm_run_slow_parity(),
               "Set MIXEFF_RUN_SLOW_PARITY=true to run the full 9-model sweep.")
   d1 <- osf_ww_data("study1a")
   d1L <- osf_ww_long("study1a")

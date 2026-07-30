@@ -461,6 +461,13 @@ test_that("mclark GPA random slopes (1 + occasion | student) matches lme4", {
   ][1L]
   expect_true(is.numeric(corr_fit),
               info = "gpa_random_slopes: $table$correlation must be numeric")
+  # An NA on either side must fail, not silently assert nothing: mixeff
+  # returning NA correlation here would be a regression this block exists
+  # to catch, and lme4 returning NA would mean the reference lookup broke.
+  expect_false(is.na(corr_fit),
+               info = "gpa_random_slopes: mixeff correlation is NA")
+  expect_false(is.na(corr_ref),
+               info = "gpa_random_slopes: lme4 reference correlation is NA")
   if (!is.na(corr_fit) && !is.na(corr_ref)) {
     expect_equal(corr_fit, corr_ref, tolerance = tol$varcorr,
                  info = "gpa_random_slopes: intercept-slope correlation parity failed")

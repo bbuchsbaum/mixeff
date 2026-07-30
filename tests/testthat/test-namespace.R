@@ -15,7 +15,13 @@ test_that("mixeff does not mask lme4::lmer or lme4::glmer on attach", {
 
 test_that("mm_lmm methods dispatch through lme4 generics when lme4 masks mixeff", {
   testthat::skip_if_not_installed("lme4")
+  already_attached <- "package:lme4" %in% search()
   suppressPackageStartupMessages(suppressWarnings(library(lme4)))
+  if (!already_attached) {
+    # Detach again or every later test file runs with lme4's generics
+    # masking mixeff's — a different dispatch path than a fresh session.
+    on.exit(detach("package:lme4", character.only = TRUE), add = TRUE)
+  }
   df <- data.frame(
     y = c(1.0, 1.2, 2.0, 2.3, 3.1, 3.3, 4.0, 4.1),
     x = rep(0:1, 4),
@@ -25,6 +31,26 @@ test_that("mm_lmm methods dispatch through lme4 generics when lme4 masks mixeff"
   expect_named(fixef(fit), c("(Intercept)", "x"))
   expect_s3_class(ranef(fit), "mm_ranef")
   expect_s3_class(VarCorr(fit), "mm_varcorr")
+  # ngrps must survive the same masking: with lme4 attached last, this call
+  # dispatches through lme4's generic and needs the delayed registration.
+  expect_equal(ngrps(fit), c(subject = 4L))
+
+  # The reverse masking: when mixeff's generics shadow lme4's (mixeff
+  # attached last), lme4's own fits must still work — the mixeff defaults
+  # delegate merMod objects back through lme4's generic.
+  m4 <- suppressWarnings(suppressMessages(lme4::lmer(y ~ x + (1 | subject), df)))
+  expect_equal(mixeff::fixef(m4), lme4::fixef(m4))
+  expect_equal(mixeff::ngrps(m4), lme4::ngrps(m4))
+  expect_identical(class(mixeff::VarCorr(m4)), class(lme4::VarCorr(m4)))
+  expect_equal(unname(mixeff::getME(m4, "theta")), unname(lme4::getME(m4, "theta")))
+
+  # lme4 masks mixeff::refit() after attachment. Delayed registration must
+  # preserve the typed GLMM refusal through lme4's copy of the generic.
+  glmm_stub <- structure(list(), class = c("mm_glmm", "mm_fit"))
+  expect_error(
+    lme4::refit(glmm_stub, numeric()),
+    class = "mm_inference_unavailable"
+  )
 })
 
 test_that("typed condition base class is documented", {

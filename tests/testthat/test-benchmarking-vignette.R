@@ -1,5 +1,7 @@
 test_that("benchmarking vignette stays light and points at benchmark scripts", {
+  skip_on_cran() # duplicates R CMD check's own vignette build
   skip_if_not_installed("rmarkdown")
+  skip_if_not(rmarkdown::pandoc_available(), "pandoc is unavailable")
 
   path <- test_path("../../vignettes/benchmarking.Rmd")
   # Source-tree-only test: the vignette source is not on the installed

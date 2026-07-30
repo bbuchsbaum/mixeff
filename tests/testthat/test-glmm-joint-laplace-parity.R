@@ -59,6 +59,7 @@ test_that("joint_laplace matches glmer on a Poisson random-intercept model", {
 })
 
 test_that("the default profiled estimator is labelled distinctly from joint_laplace", {
+  skip_if_not_installed("lme4")
   data(cbpp, package = "lme4")
   m <- glmm(cbind(incidence, size - incidence) ~ period + (1 | herd), cbpp,
             family = binomial(), control = mm_control(verbose = -1))

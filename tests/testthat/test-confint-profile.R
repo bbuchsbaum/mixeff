@@ -21,19 +21,34 @@ mm_sleepstudy_data <- function() {
   get("sleepstudy", envir = env, inherits = FALSE)
 }
 
+# One fit per criterion for the whole file; the profile computations below
+# are the expensive part and refitting per block only multiplies them.
+mm_sleepstudy_fit_cache <- new.env(parent = emptyenv())
+
 mm_sleepstudy_fit_ml <- function() {
-  lmm(Reaction ~ Days + (1 + Days | Subject),
+  if (is.null(mm_sleepstudy_fit_cache$ml)) {
+    mm_sleepstudy_fit_cache$ml <- lmm(
+      Reaction ~ Days + (1 + Days | Subject),
       data = mm_sleepstudy_data(), REML = FALSE,
-      control = mm_control(verbose = -1))
+      control = mm_control(verbose = -1)
+    )
+  }
+  mm_sleepstudy_fit_cache$ml
 }
 
 mm_sleepstudy_fit_reml <- function() {
-  lmm(Reaction ~ Days + (1 + Days | Subject),
+  if (is.null(mm_sleepstudy_fit_cache$reml)) {
+    mm_sleepstudy_fit_cache$reml <- lmm(
+      Reaction ~ Days + (1 + Days | Subject),
       data = mm_sleepstudy_data(), REML = TRUE,
-      control = mm_control(verbose = -1))
+      control = mm_control(verbose = -1)
+    )
+  }
+  mm_sleepstudy_fit_cache$reml
 }
 
 test_that("confint(method='profile') under ML returns beta/sigma/theta rows", {
+  skip_on_cran() # full profile-likelihood computation, ~1.5s locally
   fit <- mm_sleepstudy_fit_ml()
   ci <- confint(fit, method = "profile", level = 0.95)
 
@@ -67,8 +82,12 @@ test_that("confint(method='profile') under ML returns beta/sigma/theta rows", {
   expect_true(all(beta_rows$estimate <= beta_rows$upper + 1e-8))
 
   # Variance-component rows are allowed to have NA bounds (truncated
-  # profile), but every populated bound must still bracket the estimate.
+  # profile), but at least one sigma/theta row must come back without a
+  # reason_code — an engine that stamps a refusal on every variance
+  # component would otherwise pass this block without asserting anything.
   vc_rows <- finite[finite$parameter_kind != "beta", , drop = FALSE]
+  expect_true(nrow(vc_rows) >= 1L,
+              info = "ML profile must return at least one un-refused sigma/theta row")
   for (i in seq_len(nrow(vc_rows))) {
     row <- vc_rows[i, , drop = FALSE]
     if (is.finite(row$lower)) {
@@ -83,6 +102,7 @@ test_that("confint(method='profile') under ML returns beta/sigma/theta rows", {
 })
 
 test_that("confint(method='profile') under REML omits beta with reason_code", {
+  skip_on_cran() # full profile-likelihood computation, ~1.5s locally
   fit <- mm_sleepstudy_fit_reml()
   ci <- confint(fit, method = "profile", level = 0.95)
 
@@ -104,6 +124,7 @@ test_that("confint(method='profile') under REML omits beta with reason_code", {
 })
 
 test_that("profile CI for beta agrees with Wald CI on a well-behaved ML fit", {
+  skip_on_cran() # profile computed in full even under parm=, ~1.5s locally
   fit <- mm_sleepstudy_fit_ml()
   profile_ci <- confint(fit, parm = c("(Intercept)", "Days"),
                         method = "profile", level = 0.95)
@@ -127,6 +148,7 @@ test_that("profile CI for beta agrees with Wald CI on a well-behaved ML fit", {
 })
 
 test_that("profile CI parm subsetting filters returned rows", {
+  skip_on_cran() # two full profile computations, ~3s locally
   fit <- mm_sleepstudy_fit_ml()
   ci_all <- confint(fit, method = "profile", level = 0.95)
   ci_intercept <- confint(fit, parm = "(Intercept)",
@@ -147,23 +169,23 @@ test_that("profile CI surfaces a typed refusal on a boundary singular fit", {
              data = get("Dyestuff2", envir = env, inherits = FALSE),
              REML = TRUE, control = mm_control(verbose = -1))
 
+  # The current engine returns a profile payload on this boundary fit; a
+  # typed refusal would also be defensible, but accepting either branch
+  # made this test unable to notice the behavior changing. Pin the payload
+  # path; if a pin bump or platform flips it to a refusal, fail with a
+  # message rather than erroring, so a human re-decides the contract.
   result <- tryCatch(
     confint(fit, method = "profile", level = 0.95),
     error = function(cnd) cnd
   )
   if (inherits(result, "condition")) {
-    # Typed refusal path: any of the wrapper's structured error classes
-    # is acceptable so long as it is NOT a silent return of fabricated
-    # numbers.
-    expect_true(any(class(result) %in%
-                    c("mm_inference_unavailable", "mm_schema_error",
-                      "mm_bridge_error", "mm_fit_error")),
-                info = sprintf("unexpected error class: %s",
-                               paste(class(result), collapse = "/")))
-    return(invisible(NULL))
+    testthat::fail(sprintf(
+      "boundary profile CI now refuses (%s) — contract changed, re-decide",
+      paste(class(result)[1L], collapse = "/")
+    ))
   }
-  # Payload path: every NA bound on a boundary fit must carry a
-  # non-empty regularity note (no NA-without-explanation rows).
+  # Every NA bound on a boundary fit must carry a non-empty regularity
+  # note (no NA-without-explanation rows).
   expect_s3_class(result, "mm_confint")
   payload <- attr(result, "mm_profile")
   expect_true(is.list(payload))

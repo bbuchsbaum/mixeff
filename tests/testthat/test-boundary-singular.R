@@ -31,9 +31,10 @@ test_that("singular print advertises random_options when a slope candidate exist
   d$x <- rep_len(c(-1, 0, 1), nrow(d))
   fit <- lmm(Yield ~ x + (1 | Batch), data = d, REML = TRUE,
              control = mm_control(verbose = -1))
-  if (!isTRUE(is_singular(fit))) {
-    testthat::skip("Dyestuff2 + x did not converge to a boundary on this build")
-  }
+  # Dyestuff2 is the canonical singular dataset: failing to reach the
+  # boundary here would itself be a regression, so assert rather than skip.
+  testthat::expect_true(isTRUE(is_singular(fit)),
+                        info = "Dyestuff2 + x must converge to a boundary")
   printed <- paste(capture.output(print(fit)), collapse = "\n")
   expect_match(printed, "Use random_options(spec, group = Batch)", fixed = TRUE)
   expect_s3_class(random_options(fit, group = Batch), "mm_random_options")
@@ -78,23 +79,25 @@ test_that("snapshot: print(fit) on singular fit names rank and points to audit v
     }
     expect_false(grepl("try .* instead", printed, perl = TRUE),
                  info = "forbidden phrase matched: try .* instead")
-    # Scrub the crate version so engine pin bumps don't churn the snapshot.
+    # Scrub the crate version and optimizer iteration count so engine pin
+    # bumps don't churn the snapshot; the iteration count is the most
+    # platform- and pin-sensitive number the certificate prints.
     expect_snapshot(
       cat(printed),
       transform = function(lines) {
-        sub("crate: [0-9][^ ;]*", "crate: <version>", lines)
+        lines <- sub("crate: [0-9][^ ;]*", "crate: <version>", lines)
+        sub("iterations: [0-9]+", "iterations: <n>", lines)
       }
     )
   } else {
-    testthat::skip("Dyestuff2 did not converge to a boundary on this build")
+    testthat::fail("Dyestuff2 must converge to a boundary on this build")
   }
 })
 
 test_that("print(changes(fit)) states the fitted-rank change in one sentence", {
   fit <- mk_boundary_fit()
-  if (!isTRUE(is_singular(fit))) {
-    testthat::skip("Dyestuff2 did not converge to a boundary on this build")
-  }
+  testthat::expect_true(isTRUE(is_singular(fit)),
+                        info = "Dyestuff2 must converge to a boundary")
   printed <- paste(capture.output(print(changes(fit))), collapse = "\n")
   expect_match(
     printed,

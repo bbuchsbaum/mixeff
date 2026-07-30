@@ -33,6 +33,14 @@ mm_skip_if_no_lme4 <- function() {
   testthat::skip_if_not_installed("lme4")
 }
 
+# Single definition of the slow-parity opt-in. Exactly "true" (case
+# insensitive) runs the slow suites; anything else, including "false", "0",
+# or unset, skips. Per-file gates must call this rather than re-reading the
+# env var, so every file interprets the flag the same way.
+mm_run_slow_parity <- function() {
+  identical(tolower(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")), "true")
+}
+
 mm_skip_if_no_lmerTest <- function() {
   testthat::skip_if_not_installed("lmerTest")
 }
@@ -54,6 +62,9 @@ mm_reference_versions <- function() {
 }
 
 mm_lme4_case_data <- function(case) {
+  if (identical(case$package %||% "lme4", "lme4")) {
+    mm_skip_if_no_lme4()
+  }
   env <- new.env(parent = emptyenv())
   utils::data(list = case$dataset, package = case$package %||% "lme4", envir = env)
   if (!exists(case$dataset, envir = env, inherits = FALSE)) {
@@ -162,6 +173,7 @@ mm_lmerTest_p_value <- function(row) {
 }
 
 mm_scalar_contrast_index <- function(ref) {
+  mm_skip_if_no_lme4()
   if (length(lme4::fixef(ref)) > 1L) {
     2L
   } else {
@@ -170,6 +182,7 @@ mm_scalar_contrast_index <- function(ref) {
 }
 
 mm_scalar_contrast_vector <- function(ref, index = mm_scalar_contrast_index(ref)) {
+  mm_skip_if_no_lme4()
   L <- rep(0, length(lme4::fixef(ref)))
   L[[index]] <- 1
   names(L) <- names(lme4::fixef(ref))
@@ -177,6 +190,7 @@ mm_scalar_contrast_vector <- function(ref, index = mm_scalar_contrast_index(ref)
 }
 
 mm_lmerTest_reference_contrast <- function(ref, L, rhs, method) {
+  mm_skip_if_no_lmerTest()
   if (identical(method, "satterthwaite")) {
     row <- lmerTest::contest1D(ref, L, rhs = rhs, ddf = "Satterthwaite")
     p_value <- mm_lmerTest_p_value(row)
@@ -224,6 +238,7 @@ mm_lmerTest_reference_contrast <- function(ref, L, rhs, method) {
 }
 
 mm_lmerTest_scalar_rhs <- function(ref, L) {
+  mm_skip_if_no_lmerTest()
   row <- lmerTest::contest1D(ref, L, rhs = 0, ddf = "Satterthwaite")
   row[["Estimate"]][[1L]] - row[["Std. Error"]][[1L]]
 }
@@ -272,6 +287,7 @@ mm_expect_scalar_lmerTest_parity <- function(case, method) {
 }
 
 mm_lmerTest_anova_table <- function(ref, method) {
+  mm_skip_if_no_lmerTest()
   ddf <- switch(
     method,
     satterthwaite = "Satterthwaite",
@@ -419,9 +435,19 @@ mm_expect_core_lme4_parity <- function(case) {
                   "fixed model matrix", mode = "absolute")
   mm_expect_varcorr_lme4_parity(fit, ref, tol$varcorr, case)
 
-  theta_fit <- tryCatch(getME(fit, "theta"), error = function(cnd) NULL)
+  # No manifest case uses `||`-with-factor (the one documented theta
+  # cardinality divergence), so getME("theta") must succeed and match
+  # lme4's length on every case. A conditional here would silently drop
+  # theta from the scoreboard if either broke; if a divergent case is ever
+  # added to the manifest, give it an explicit per-case flag instead of
+  # reintroducing the blanket guard.
+  theta_fit <- getME(fit, "theta")
   theta_ref <- lme4::getME(ref, "theta")
-  if (!is.null(theta_fit) && length(theta_fit) == length(theta_ref)) {
+  testthat::expect_identical(
+    length(theta_fit), length(theta_ref),
+    info = sprintf("theta cardinality mismatch for case `%s`", case$id)
+  )
+  if (length(theta_fit) == length(theta_ref)) {
     mm_assert_parity(theta_fit, theta_ref, case$id, "theta", tol$theta,
                     "theta")
   }
@@ -430,6 +456,7 @@ mm_expect_core_lme4_parity <- function(case) {
 }
 
 mm_expect_varcorr_lme4_parity <- function(fit, ref, tolerance, case) {
+  mm_skip_if_no_lme4()
   observed <- VarCorr(fit)
   expected <- as.data.frame(lme4::VarCorr(ref))
   expected_diagonal <- expected[is.na(expected$var2) & expected$grp != "Residual", ,
@@ -483,12 +510,18 @@ mm_expect_ranef_lme4_parity <- function(case) {
   fit_keys <- stats::setNames(names(fit_re), mm_lme4_group_key(names(fit_re)))
   ref_keys <- stats::setNames(names(ref_re), mm_lme4_group_key(names(ref_re)))
   common_keys <- intersect(names(fit_keys), names(ref_keys))
-  if (!length(common_keys)) {
-    testthat::skip(sprintf(
-      "No common ranef labels for case `%s`; extractor parity is covered by scalar/fitted fields",
-      case$id
-    ))
-  }
+  # This must fail, not skip: the condition is computed from mixeff's own
+  # ranef() labels, so an empty ranef() or a group-renaming regression would
+  # otherwise silently drop every ranef value comparison in the suite.
+  testthat::expect_true(
+    length(common_keys) > 0L,
+    info = sprintf(
+      "No common ranef labels for case `%s`: mixeff groups [%s] vs lme4 groups [%s]",
+      case$id,
+      paste(names(fit_re), collapse = ", "),
+      paste(names(ref_re), collapse = ", ")
+    )
+  )
   for (key in common_keys) {
     fit_group <- fit_keys[[key]]
     ref_group <- ref_keys[[key]]

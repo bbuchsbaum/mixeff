@@ -354,9 +354,13 @@ test_that("summary auto keeps the labeled asymptotic table when satterthwaite is
   fit <- suppressMessages(
     lmm(y ~ x + (1 + x | g), df, control = mm_control(verbose = -1))
   )
+  # This must be an assertion, not a skip: if the engine ever returned
+  # "available" Satterthwaite rows on this pinned-at-zero-variance fit it
+  # would be fabricating boundary df (or the explicit-method routing would
+  # be broken), and a skip would silence exactly that regression.
   satt <- inference_table(fit, method = "satterthwaite")$table
-  skip_if(any(satt$status == "available"),
-          "satterthwaite unexpectedly available on this fit")
+  expect_true(all(satt$status != "available"),
+              info = "satterthwaite must be refused on this boundary fit")
 
   sm <- summary(fit, tests = "coefficients", method = "auto")
   inf <- sm$inference$table
@@ -449,6 +453,8 @@ test_that("inference_table rows follow lme4 coefficient order on permuted design
 })
 
 test_that("profile.mm_lmm returns a usable mm_profile object", {
+  skip_if_not_installed("lme4")
+  skip_on_cran() # three full profile-likelihood computations, ~4s locally
   fit <- lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,
              REML = FALSE, control = mm_control(verbose = -1))
   prof <- profile(fit)

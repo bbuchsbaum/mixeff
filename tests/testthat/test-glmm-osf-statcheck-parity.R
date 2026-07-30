@@ -38,9 +38,12 @@ test_that("fixture is faithful to the published result (glmer nAGQ=0)", {
     lme4::glmer(Error ~ OpenPractice * Year + (1 | Source), data = d,
                 family = binomial("logit"), nAGQ = 0))
   b <- summary(g0)$coefficients["OpenPracticeTRUE:Year", ]
-  # paper reported b = 0.7958, Z = 1.825, p = .0679
-  expect_equal(unname(b["Estimate"]), 0.7958, tolerance = 1e-3)
-  expect_equal(unname(b["z value"]), 1.825,  tolerance = 2e-3)
+  # paper reported b = 0.7958, Z = 1.825, p = .0679. Loose tolerance by
+  # design: nAGQ = 0 on deliberately ill-scaled data is the most
+  # optimizer-sensitive glmer path there is, and this line only anchors
+  # that we reproduce the published model, not mixeff behavior.
+  expect_equal(unname(b["Estimate"]), 0.7958, tolerance = 1e-2)
+  expect_equal(unname(b["z value"]), 1.825,  tolerance = 1e-2)
 })
 
 test_that("joint_laplace tracks glmer on well-conditioned OSF models", {
@@ -86,10 +89,12 @@ test_that("GLMM Wald standard errors match glmer on OSF statcheck", {
 })
 
 test_that("raw-Year joint_laplace is offset-invariant (pending upstream fix E)", {
+  skip_on_cran() # parked on an upstream engine bug; nothing to run anywhere yet
   skip(paste0(
     "upstream bd-01KT3Z64AY45NHA5144G2ZBMSY: raw-Year joint_laplace converges sub-optimally ",
     "(interaction 0.7959 vs offset-invariant MLE ~0.853) and reports converged_interior ",
-    "with a non-finite objective. Re-enable when fixed."
+    "with a non-finite objective. Re-enable when fixed. The body below is ",
+    "the reproducer to re-enable, kept compiling on purpose."
   ))
   d <- osf_statcheck_data()
   mr <- glmm(Error ~ OpenPractice * Year  + (1 | Source), data = d,

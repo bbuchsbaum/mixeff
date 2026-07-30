@@ -53,6 +53,7 @@ test_that("mm_translate_data refuses ordered factors under a non-poly ordered op
   )
   old <- options(contrasts = c(unordered = "contr.treatment",
                                ordered = "contr.treatment"))
+  on.exit(options(old), add = TRUE)
   err <- tryCatch(mixeff:::mm_translate_data(df), error = function(e) e)
   options(old)
   expect_s3_class(err, "mm_arg_error")
@@ -68,6 +69,7 @@ test_that("mm_translate_data honours the standard UNNAMED contr.poly option", {
   # R's default option form is unnamed; ordered coding is resolved positionally
   # (element 2). Reading it by name would throw and abort a correct fit.
   old <- options(contrasts = c("contr.treatment", "contr.poly"))
+  on.exit(options(old), add = TRUE)
   out <- tryCatch(mixeff:::mm_translate_data(df), error = function(e) e)
   options(old)
   expect_false(inherits(out, "error"))
@@ -81,6 +83,7 @@ test_that("mm_translate_data refuses ordered factors under an unnamed non-poly o
                levels = c("lo", "mid", "hi"), ordered = TRUE)
   )
   old <- options(contrasts = c("contr.treatment", "contr.treatment"))
+  on.exit(options(old), add = TRUE)
   err <- tryCatch(mixeff:::mm_translate_data(df), error = function(e) e)
   options(old)
   expect_s3_class(err, "mm_arg_error")

@@ -65,7 +65,7 @@ iamciera_cases <- function() {
 # upstream as mixeff-rs bd-01KX33ZEQHHE8CWV5Z1KA7EG5G; reproducer in
 # planning/probes/MINIMAL_case2_iamciera_drop_tray.R. Ungate when it lands.
 iamciera_run_slow_parity <- function() {
-  identical(tolower(Sys.getenv("MIXEFF_RUN_SLOW_PARITY")), "true")
+  mm_run_slow_parity()
 }
 
 iamciera_label_key <- function(x) {

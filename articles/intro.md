@@ -11,18 +11,16 @@ written [`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html).
 accepts the same formulas and answers to the same extractors. An `lmer`
 script becomes an `lmm` script with two edits.
 
-What `mixeff` adds is mostly *around* the fit. It exposes the
-random-effects design before optimization, keeps the method behind every
-p-value visible in the output, and produces a fitted object that
-survives [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) without
-losing its audit trail. The goal is not to replace your statistical
-judgment; it is to make the fitted object carry enough information that
-you can inspect, report, save, reload, and compare models without
-guessing which details were used.
+What `mixeff` adds sits around the fit rather than inside it: it exposes
+the random-effects design before optimization, keeps the method behind
+every p-value visible in the output, and produces a fitted object that
+survives [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) with its
+diagnostics and method labels intact.
 
-This vignette is a guided tour at a deliberate pace. The shorter
-elevator pitch is in
-[`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md).
+This vignette works through those pieces one at a time. For the short
+version, read
+[`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md)
+first.
 
 ## What problem does it solve?
 
@@ -113,9 +111,11 @@ this formula mean?”.
 
 Use
 [`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
-when you want a data-frame result instead of printed console output. The
-default view is compact; use `view = "audit"` when you want the full
-provenance columns.
+when you want a data-frame result instead of printed console output. Its
+fixed-effects section resolves the inference method the same way
+[`summary()`](https://rdrr.io/r/base/summary.html) does, so the two
+agree row for row. The default view is compact; use `view = "audit"`
+when you want the full provenance columns.
 
 ``` r
 
@@ -133,19 +133,19 @@ reporting_table(fit, "overview")
 #>      crate_version                                  1.0.0-rc.1
 #>    package_version                                       0.2.0
 reporting_table(fit, "fixed_effects")
-#>                term   estimate  std_error  statistic statistic_name
-#>         (Intercept)  7.6828778 0.19646018  39.106539              z
-#>                week -0.2783994 0.02595083 -10.727955              z
-#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>       p_value            method    status reliability
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0006039485 asymptotic_wald_z available         low
+#>              term   estimate  std_error        df  statistic statistic_name
+#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
+#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       p_value        method    status reliability
+#>  1.665335e-14 satterthwaite available    moderate
+#>  1.776357e-15 satterthwaite available    moderate
+#>  6.440943e-03 satterthwaite available    moderate
 reporting_table(fit, "fixed_effects", view = "audit")$table[, c("term", "source", "status")]
-#>                 term                       source    status
-#> 1        (Intercept) fixed_effect_inference_table available
-#> 2               week fixed_effect_inference_table available
-#> 3 treatment: coached fixed_effect_inference_table available
+#>               term                       source    status
+#> 1      (Intercept) fixed_effect_inference_table available
+#> 2             week fixed_effect_inference_table available
+#> 3 treatmentcoached fixed_effect_inference_table available
 ```
 
 ## Saving and reloading
@@ -163,14 +163,14 @@ fixef(restored)
 #>      (Intercept)             week treatmentcoached 
 #>        7.6828778       -0.2783994       -0.8994747
 reporting_table(restored, "fixed_effects")
-#>                term   estimate  std_error  statistic statistic_name
-#>         (Intercept)  7.6828778 0.19646018  39.106539              z
-#>                week -0.2783994 0.02595083 -10.727955              z
-#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>       p_value            method    status reliability
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0006039485 asymptotic_wald_z available         low
+#>              term   estimate  std_error        df  statistic statistic_name
+#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
+#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       p_value        method    status reliability
+#>  1.665335e-14 satterthwaite available    moderate
+#>  1.776357e-15 satterthwaite available    moderate
+#>  6.440943e-03 satterthwaite available    moderate
 ```
 
 ## Lower-level tools
@@ -197,11 +197,9 @@ The lower-level functions are there when you need them:
   lists the structured artifact schemas understood by this version of
   the package.
 
-The computational backend is intentionally not the opening story for
-most R users. It matters because it lets `mixeff` keep a structured
-audit trail, but the user-facing reason to use the package is simpler:
-fit the model, get the numbers, and keep the status of those numbers
-attached to the object.
+The Rust backend does not change how you write R: you fit the model, get
+the numbers, and the status of those numbers stays attached to the
+object.
 
 ## What’s next?
 

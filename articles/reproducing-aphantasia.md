@@ -124,15 +124,16 @@ unlist(reference$models$primary$fixef)
 
 The same fixture supports the manuscript sensitivity and specificity
 fits: the sensitivity model assigns the four intermediate VVIQ
-participants to the control group. The intact high-baseline Bernoulli
-model defaults to the full-budget joint-Laplace route
-(`method = "joint_laplace"`) in the opt-in reproduction gate, reaching
-near-exact lme4 fixed-effect and log-likelihood parity on a release
-build (~40 s per fit; only the AIC parameter-count semantics for the
-double-bar factor expansion remain ledgered). The combined model stays
-on the profiled ledger path: the engine rejects its joint candidate for
-that case and falls back to fast-PIRLS with an explicit
-`documented_divergence` diagnostic.
+participants to the control group. The estimator matters for two of the
+models that follow. The intact high-baseline Bernoulli model reaches
+near-exact lme4 fixed-effect and log-likelihood parity only under
+`method = "joint_laplace"`, which is how the opt-in reproduction test
+fits it (about 40 seconds per fit on a release build). On the default
+profiled path its coefficients drift well past the strict tolerances, so
+the chunks below do not claim parity for it. The combined model is
+fitted by the default profiled path here and in the test suite; like
+every profiled GLMM fit, it carries the engine’s support note that a
+fast-PIRLS fit is not certified as glmer joint-Laplace parity.
 
 ``` r
 
@@ -202,14 +203,13 @@ c(logLik = as.numeric(logLik(rt_fit)), AIC = AIC(rt_fit))
 fixef(rt_fit)
 ```
 
-## Inferential surfaces
+## What the manuscript reports, computed three ways
 
-Since `mixeff-rs` started serializing the GLMM fixed-effect covariance
-artifact (pin 5e72e0b), the inferential surfaces the manuscript actually
-reports are available through three `mixeff` primitives. The chunks
-below run only when live fitting is enabled
-(`MIXEFF_RUN_APHANTASIA_VIGNETTE=true`); otherwise the same calls remain
-valid against any locally-built fit.
+Since the engine began serializing the GLMM fixed-effect covariance
+artifact, the quantities the manuscript actually reports are available
+through three `mixeff` functions. The chunks below run only when live
+fitting is enabled (`MIXEFF_RUN_APHANTASIA_VIGNETTE=true`); otherwise
+the same calls remain valid against any locally-built fit.
 
 `summary(fit, tests = "coefficients")` returns a Wald-z fixed-effect
 table built from the PIRLS/Laplace working-Hessian covariance:
@@ -222,15 +222,19 @@ sm$vcov_status
 ```
 
 The status block flags `reliability = "moderate"`: the working-Hessian
-flavor is close to but not bit-identical with `lme4::vcov(glmer_fit)`.
-SE estimates on this dataset drift by ~5-10% in absolute terms, without
-flipping any of the manuscript’s qualitative conclusions.
+covariance is not the same estimator as `lme4::vcov(glmer_fit)`. On this
+dataset its Wald standard errors for the difference-in-differences
+contrasts run about 11% *smaller* than glmer’s — anti-conservative, so
+p-values lean optimistic — which the package’s parity ledger classifies
+as an expected mismatch with a 15% bound. The manuscript’s qualitative
+conclusions do not flip, but a reader re-using these SEs should know
+which way they err.
 
 The manuscript’s primary estimand — the difference-in-differences
 contrast at the centered SOA and at the focal 25 ms SOA — is a linear
-combination of fixed effects, and
+combination of fixed effects, which
 [`mm_lincomb()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lincomb.md)
-is its front door:
+computes:
 
 ``` r
 
@@ -262,9 +266,16 @@ as.data.frame(reference$inference$primary_dd)
 #> 2 -0.064707203
 ```
 
-Both contrasts reproduce the manuscript’s sign and significance class:
-negative (larger masking cost in aphantasia), CIs excluding zero, and
-*p* below the conventional α = .05 at both 25 ms and the centered SOA.
+Both contrasts come out negative (larger masking cost in aphantasia), as
+in the manuscript. Be precise about what is pinned. The opt-in test
+suite enforces agreement with the frozen reference at ±0.02 on the
+estimates and ±0.01 on the SEs; at the worst corner of those bands the
+centered-SOA p-value — .039 in the reference — could reach .106, so the
+significance verdict there is not guaranteed by the tests. In practice
+mixeff lands on the other side: its SEs run smaller than glmer’s (see
+above), so its centered-SOA p-value comes out below the reference value,
+not above it. The sign and approximate size of both contrasts are
+pinned.
 
 `emmeans` works on `mm_glmm` via `emm_basis.mm_glmm`. Population-level
 cell means at the centered SOA, on the response (probability) scale,
@@ -300,17 +311,18 @@ age-matched analyses are reproducible against the same fixture and
 reference via `tests/testthat/test-aphantasia-reproduction.R` when
 `MIXEFF_RUN_APHANTASIA=true` is set. The S3 leave-one-participant-out
 sweep, S4 specification curve, and S5 rstanarm posterior are
-intentionally not part of the regular reproduction surface: the first
-two are heavy opt-in jobs, and `mixeff` is not a Bayesian engine.
+intentionally left out of the regular reproduction run: the first two
+are heavy opt-in jobs, and `mixeff` is not a Bayesian engine.
 
 ## Caveats
 
-- GLMM Wald inference in `mixeff` is the PIRLS/Laplace working-Hessian
-  flavor, advertised as `mm_reliability = "moderate"`. Absolute SEs
-  drift 5–10% versus `lme4::vcov()` on this dataset; a hold-the-point
-  experiment attributes ~73% of that to the native `||` random-effect
-  family, ~26% to a uniform working-Hessian scale factor (tracked
-  upstream), and ~1% to optimizer drift.
+- GLMM Wald inference in `mixeff` uses the PIRLS/Laplace working-Hessian
+  covariance, graded `reliability = "moderate"`. Its SEs run about 11%
+  smaller than `lme4::vcov()` on this dataset (anti-conservative; ledger
+  bound 15%). A controlled decomposition attributes roughly 73% of the
+  gap to the native `||` random-effect family, 26% to a uniform
+  working-Hessian scale factor (tracked upstream), and 1% to optimizer
+  drift.
 - Population-level GLMM prediction (`re.form = NA`, `type = "link"` or
   `"response"`) is supported and matches `predict(glmer, re.form = NA)`
   on joint-Laplace fits; `emmeans(..., type = "response")` remains the

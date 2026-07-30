@@ -22,28 +22,32 @@ Statistical answers agree with `lme4` within documented tolerances on
 the parity datasets shipped with the package. It is not a literal
 *drop-in*: you call
 [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) rather
-than `lmer()`, results are not bit-exact, and the package is audit-first
-— it reports or refuses rather than silently transforming a model.
+than `lmer()`, results are not bit-exact, and when the package changes
+or declines a request it says so, in a diagnostic you can read from the
+fitted object.
 
-The reason to switch is what `mixeff` does around the fit. It is faster
-on most designs — typically by a factor of two to five — and it makes
-four things explicit that `lme4` leaves implicit:
+The reason to switch is what `mixeff` does around the fit. On the
+scaling benchmark shipped with the package it ran two to three and a
+half times faster than `lme4` at the largest tested scale of each of
+five common designs (all small fits in absolute terms; see
+[`vignette("benchmarking")`](https://bbuchsbaum.github.io/mixeff/articles/benchmarking.md)
+for what that does and does not establish). And it makes four things
+explicit that `lme4` leaves implicit:
 
 1.  **The formula stays familiar.** Anything you would hand to `lmer()`
     you can hand to
     [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md).
-2.  **Singular fits become labelled facts.** A reduced-rank
-    random-effect covariance is reported with codes, severity, and
-    effective rank, instead of a single warning that scrolls off the
-    screen.
-3.  **Inference labels what asymptotics can and cannot do.** Each
-    p-value carries the method that produced it; where Wald,
-    Satterthwaite, and Kenward-Roger are unavailable in principle, a
-    parametric bootstrap is offered as a labelled first-class peer.
-4.  **The fitted object is a record.** A model saved today reopens six
-    months later with the same coefficients, the same audit trail, and
-    the same method labels — without depending on the original Rust
-    handle.
+2.  **Singular fits become labeled facts.** A reduced-rank random-effect
+    covariance is reported with codes, severity, and effective rank, not
+    as a single console warning.
+3.  **Inference labels its method.** Each p-value carries the method
+    that produced it. Where the package declines to compute
+    Satterthwaite or Kenward–Roger degrees of freedom — at a boundary
+    fit, for example — a parametric bootstrap is offered under the same
+    labeling rules.
+4.  **The fitted object is a record.** A saved model reopens with the
+    same coefficients, the same diagnostics, and the same method labels,
+    without depending on the original Rust handle.
 
 This page demonstrates each of the four on one small dataset.
 
@@ -51,8 +55,8 @@ This page demonstrates each of the four on one small dataset.
 
 A small repeated-measures study: 18 subjects, 10 daily reaction-time
 measurements each, intercepts and slopes that are nearly perfectly
-correlated by construction. This is the kind of design that produces a
-singular fit in any modern engine.
+correlated by construction. This design produces a singular fit in
+`lme4` and in `mixeff` alike.
 
 ``` r
 
@@ -121,11 +125,11 @@ expect.
 ## B. When a fit is degenerate, you find out *which* part
 
 [`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) fits this model
-and reports the situation in one parsimonious line:
-`boundary (singular) fit`. The fact is correct. What it leaves implicit
-is *which* variance component reached the boundary, what the effective
-rank of the random-effect covariance is, and which downstream inference
-methods are no longer defined.
+and reports the situation in one short line: `boundary (singular) fit`.
+The fact is correct. What it leaves implicit is *which* variance
+component reached the boundary, what the effective rank of the
+random-effect covariance is, and which downstream inference methods the
+boundary takes off the table.
 
 ``` r
 
@@ -179,22 +183,20 @@ diagnostics(fit)$table[, c("code", "severity", "stage", "message")]
 #> 2 fitted covariance for (1 + days | subj) has effective rank 1 of requested rank 2
 ```
 
-A reduced-rank covariance is now a *labelled* fact about the fit, not a
-warning that scrolls off the screen.
+A reduced-rank covariance is now a labeled fact about the fit, recorded
+in the object rather than printed once and lost.
 
-## C. Expose when asymptotics are weak, then offer bootstrap
+## C. Which inference methods survive a boundary fit
 
-`mixeff` has two jobs on the inference side. First, it tells you when
-the asymptotic methods (Wald z, Satterthwaite, Kenward-Roger) are
-unreliable on your fit. Then, when bootstrap is the defensible route, it
-offers it as a labelled, first-class peer to the asymptotic methods —
-not a fallback trick.
+On the inference side, `mixeff` first reports which methods (Wald z,
+Satterthwaite, Kenward–Roger, bootstrap) are reliable on your fit, and
+then lets you run the one you choose under the same labeling rules.
 
 [`inference_options()`](https://bbuchsbaum.github.io/mixeff/reference/inference_options.md)
-is the audit verb for that judgment. It enumerates the inference methods
-available on the current fit, gives each one a [closed-enum
+enumerates the inference methods for the current fit, gives each one a
+[fixed-vocabulary
 *reason*](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.md)
-for its status, and names the verb you would call to invoke it.
+for its status, and names the function you would call to invoke it.
 
 ``` r
 
@@ -220,14 +222,18 @@ opt$table[, c("method", "expected_status",
 ```
 
 Two routes are available on this fit: asymptotic Wald z (immediate, but
-labelled `low` reliability), and bootstrap (~seconds, labelled by
-replicate count and Monte-Carlo SE). Satterthwaite and Kenward-Roger
-refuse with a stable reason — `*_unavailable_at_boundary` — because at a
-boundary fit the variance-parameter derivative they need is not defined.
-That is a fact about the math, not a bug.
+labeled `low` reliability), and bootstrap (~seconds, labeled by
+replicate count and Monte-Carlo SE). Satterthwaite and Kenward–Roger
+refuse with a stable reason — `*_unavailable_at_boundary`. Other
+packages will compute degrees of freedom here (`lmerTest` returns a
+number on this same fit); `mixeff` declines to, because those
+approximations rest on an asymptotic argument about the variance
+parameters that does not hold when one of them sits on the boundary. The
+refusal is a policy about what to report, stated as a reason code you
+can test for.
 
-The asymptotic Wald row carries its own warrant.
-[`summary()`](https://rdrr.io/r/base/summary.html) now prints
+The asymptotic Wald row carries its own reason.
+[`summary()`](https://rdrr.io/r/base/summary.html) prints
 `reliability_reason` next to `reliability`:
 
 ``` r
@@ -242,17 +248,16 @@ inf[, c("term", "method", "status", "reliability", "reliability_reason")]
 #> 2 asymptotic_wald_z_fallback
 ```
 
-`degrees_of_freedom_unavailable_so_z_substituted` is the closed-enum
-warrant: a t reference distribution was the requested target but the df
-could not be computed at this boundary fit, so a standard normal was
-substituted. The number is real; the *grade* is calibrated.
+`asymptotic_wald_z_fallback` is the engine’s reason: a t reference
+distribution was the target, the degrees of freedom could not be
+computed at this boundary fit, and a standard normal was substituted —
+which is why the row is graded `low` rather than hidden.
 
 For a defensible p-value on this same fit, route through
 [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md)
 with `method = "bootstrap"`. The Rust engine simulates from the
-constrained null, refits each replicate, and returns a labelled
-inference row plus a run payload (boundary rate, MCSE, replicate count)
-for audit.
+constrained null, refits each replicate, and returns a labeled inference
+row plus a run payload (boundary rate, MCSE, replicate count) for audit.
 
 ``` r
 
@@ -273,21 +278,19 @@ data.frame(
 #> 1                   200          0.46 0.005
 ```
 
-The bootstrap p-value is `available`, the method is named, the run
-payload makes the simulation provenance explicit. The boundary rate is
-visible because singular fits propagate boundary behaviour into their
-own bootstrap replicates — that is honest, not a bug. `mcse` quantifies
-the Monte-Carlo uncertainty of the p-value estimate; raise `nsim` for a
-tighter MCSE.
+The bootstrap p-value is `available`, the method is named, and the run
+payload records how the simulation went. The boundary rate is high
+because a singular fit produces singular replicates; the payload reports
+that rather than smoothing it over. `mcse` quantifies the Monte-Carlo
+uncertainty of the p-value estimate; raise `nsim` for a tighter MCSE.
 
-There are three states for any reported quantity: *available with a
-named method and a closed-enum warrant*, *unavailable with a stable
-reason code*, or *typed error*. There is no fourth state where the
-package guesses.
+Every reported quantity is in one of three states: available, with a
+named method and reason; unavailable, with a stable reason code; or a
+typed error.
 
 ## D. The fit is the record
 
-The fitted object is a serialisable record.
+The fitted object is a serializable record.
 [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) followed by
 [`readRDS()`](https://rdrr.io/r/base/readRDS.html) and
 [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
@@ -308,25 +311,30 @@ identical(diagnostics(restored)$table,   diagnostics(fit)$table)
 #> [1] TRUE
 ```
 
-A reviewer reading the `.rds` six months from now sees the same
-convergence status, the same reduced-rank diagnostic, the same method
-labels on the same coefficients.
+A reviewer reading the `.rds` later sees the same convergence status,
+the same reduced-rank diagnostic, the same method labels on the same
+coefficients.
 
-## What this page did not show
+## Current limits
 
-`mixeff` does not (yet, by design):
-
-- match `lme4` numerics bit-for-bit; statistical equivalence within
-  documented tolerances on parity datasets is the bar.
-- provide the joint-Laplace / AGQ GLMM backend;
-  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
-  currently ships the labelled profiled-PIRLS path and refuses
-  unavailable joint methods explicitly
+- Estimates are not bit-for-bit identical to `lme4`; the bar is
+  statistical agreement within documented tolerances on the parity
+  datasets shipped with the package.
+- [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)’s
+  default estimator (`pirls_profiled`) returns point estimates quickly
+  but refuses Wald standard errors, z statistics, and p-values; refit
+  with `method = "joint_laplace"` when you need glmer-comparable
+  inference
   ([`vignette("glmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md)).
-- ship Kenward-Roger or profile-likelihood confidence intervals in v0.
+- Profile-likelihood confidence intervals for fixed effects require an
+  ML fit; under the REML default they are refused with the reason code
+  `profile_beta_unavailable_under_reml` (variance parameters are
+  profiled under both criteria).
+- [`simulate()`](https://rdrr.io/r/stats/simulate.html) is implemented
+  for LMM fits only.
 
-Each of those is a stable boundary with a name, not a missing feature
-hidden behind a fallback.
+Each limit is reported by the package itself, as a reason code or a
+typed error, when you hit it.
 
 ## Where to read next
 
@@ -337,4 +345,4 @@ hidden behind a fallback.
 - [`vignette("demystifying-formulas", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/demystifying-formulas.md)
   — what `(1 | g)`, `(x | g)`, split blocks, and `||` actually mean.
 - [`vignette("saving-and-reviving", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/saving-and-reviving.md)
-  — the round-trip story in detail.
+  — saving, reloading, and reviving fitted models in detail.

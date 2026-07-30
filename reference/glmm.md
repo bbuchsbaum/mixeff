@@ -3,9 +3,9 @@
 `glmm()` validates the R-side family/link request, compiles the model
 formula, and delegates the numerical fit to the upstream Rust
 `GeneralizedLinearMixedModel`. The default `method = "pirls_profiled"`
-is the labelled fast-PIRLS path. `method = "joint_laplace"` uses the
-upstream labelled joint Laplace route (`fast = FALSE`, `nAGQ = 1`)
-backed by the native dependency-light optimizer in this vendored build.
+is the labeled fast-PIRLS path. `method = "joint_laplace"` uses the
+upstream labeled joint Laplace route (`fast = FALSE`, `nAGQ = 1`) backed
+by the native dependency-light optimizer in this vendored build.
 
 ## Usage
 
@@ -72,7 +72,7 @@ glmm(
 - method:
 
   GLMM estimation method. `"pirls_profiled"` is the default fast-PIRLS
-  profiled path. `"joint_laplace"` requests the labelled joint Laplace
+  profiled path. `"joint_laplace"` requests the labeled joint Laplace
   route and requires `nAGQ <= 1`. The joint route tracks the lme4
   joint-Laplace reference far more closely than the profiled path on
   high-baseline models, at a higher optimizer cost; cap that cost with

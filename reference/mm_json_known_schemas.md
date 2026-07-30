@@ -2,8 +2,9 @@
 
 Returns the known-schema table that backs
 [`mm_json_negotiate()`](https://bbuchsbaum.github.io/mixeff/reference/mm_json_negotiate.md).
-New schemas appear here as later phases add artifacts (compiled-model,
-audit, theta_map, certificate, inference, reproducibility, prediction).
+The wrapper refuses any artifact whose schema name and version are
+absent from this table, so the table grows as new artifact types are
+added.
 
 ## Usage
 

@@ -9,20 +9,19 @@ A fixed-effects coefficient is not a group mean. For a model with
 multiple predictors and interactions, `fixef(fit)["trtactive"]` is the
 treatment effect *at the reference level of every other predictor* — not
 the average treatment effect across the population. Marginal means give
-you the latter: population-level averages at each combination of
-interest, properly accounting for the reference grid and the
-fixed-effect covariance.
+you the latter: averages over a reference grid of predictor
+combinations, with standard errors from the fixed-effect covariance.
 
-`mixeff` provides a native marginal-quantities surface —
+`mixeff` computes these with four functions —
 [`mm_grid()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
 [`mm_predictions()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
 [`mm_means()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
 [`mm_comparisons()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
-— that routes all inference through the same contract machinery as
+— that route all inference through the same machinery as
 [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md).
 Each row in the returned table carries `method`, `status`,
-`reliability`, and `reason` fields so you know exactly what you are
-reporting and when to be cautious.
+`reliability`, and `reason` columns naming how it was computed and how
+far to trust it.
 
 ## The study
 
@@ -36,17 +35,18 @@ head(rehab)
 #>   subj clinic     trt time    score
 #> 1   S1     C1 control  pre 50.83695
 #> 2   S1     C1 control post 46.17501
-#> 3   S2     C1  active  pre 48.25095
-#> 4   S2     C1  active post 41.31640
+#> 3   S2     C1 control  pre 50.35095
+#> 4   S2     C1 control post 46.31640
 #> 5   S3     C1 control  pre 51.03367
 #> 6   S3     C1 control post 47.24603
 ```
 
-Clinics are not perfectly balanced between treatment arms — clinic C1
-has more control patients than average, and clinic C3 has more
-active-arm patients. This imbalance means raw group means are confounded
-by clinic effects: a naive `tapply(rehab$score, rehab$trt, mean)` will
-not answer the treatment question you actually want.
+Clinics are not balanced between treatment arms: clinic C1 has five
+control patients and one active, clinic C3 the reverse. So raw group
+means are confounded with clinic effects — each arm’s mean leans on the
+clinics that arm over-samples, and the clinics differ — and a naive
+`tapply(rehab$score, rehab$trt, mean)` will not answer the treatment
+question.
 
 ## Fit the model
 
@@ -60,16 +60,16 @@ summary(fit, tests = "coefficients")
 #> 
 #> Variance components:
 #>   group        name variance  std_dev correlation
-#>    subj (Intercept) 0.319551 0.565288            
-#>  clinic (Intercept) 1.369530 1.170270            
-#> Residual std. dev.: 0.396581
+#>    subj (Intercept) 0.328791 0.573403            
+#>  clinic (Intercept) 1.267670 1.125910            
+#> Residual std. dev.: 0.399888
 #> 
 #> Fixed effects:
-#>                     Estimate Std. Error       df    t value  Pr(>|t|)
-#> (Intercept)        51.875075  0.6181573  3.39845  83.918896 9.313e-07
-#> trtactive          -1.978847  0.2819065 26.32727  -7.019516 1.747e-07
-#> timepost           -4.002565  0.1619036 21.96772 -24.721911   < 1e-16
-#> trtactive:timepost -2.738668  0.2289662 21.96772 -11.961016 4.314e-11
+#>                     Estimate Std. Error        df    t value  Pr(>|t|)
+#> (Intercept)        51.871482  0.6018249  3.425072  86.190327 7.755e-07
+#> trtactive          -1.971661  0.3156838 25.438945  -6.245684 1.443e-06
+#> timepost           -3.962867  0.1632535 22.009671 -24.274316   < 1e-16
+#> trtactive:timepost -2.818065  0.2308753 22.009671 -12.206006 2.848e-11
 #>                           method
 #> (Intercept)        satterthwaite
 #> trtactive          satterthwaite
@@ -92,7 +92,7 @@ summary(fit, tests = "coefficients")
 #>   Satterthwaite denominator df computed from finite-difference vcov_beta Jacobian and deviance Hessian over varpar
 ```
 
-The interaction coefficient `trt: active:time: post` tells you the
+The interaction coefficient `trtactive:timepost` tells you the
 *additional* post-treatment change for the active arm relative to
 control. It is not the average treatment effect. For that you need
 marginal means.
@@ -130,10 +130,10 @@ confidence interval from the certified covariance.
 preds <- mm_predictions(fit, specs = ~ trt * time)
 preds$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
 #>                    label estimate conf_low conf_high        method
-#> 1  trt=control, time=pre 51.87508 50.03208  53.71807 satterthwaite
-#> 2   trt=active, time=pre 49.89623 48.05324  51.73922 satterthwaite
-#> 3 trt=control, time=post 47.87251 46.02952  49.71550 satterthwaite
-#> 4  trt=active, time=post 43.15499 41.31200  44.99799 satterthwaite
+#> 1  trt=control, time=pre 51.87148 50.08390  53.65906 satterthwaite
+#> 2   trt=active, time=pre 49.89982 48.11224  51.68740 satterthwaite
+#> 3 trt=control, time=post 47.90862 46.12103  49.69620 satterthwaite
+#> 4  trt=active, time=post 43.11889 41.33131  44.90647 satterthwaite
 ```
 
 These are the four population-level cell means. Each row carries its
@@ -151,8 +151,8 @@ effect.
 mt <- mm_means(fit, specs = ~ trt)
 mt$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
 #>         label estimate conf_low conf_high        method
-#> 1 trt=control 49.87379 48.01524  51.73235 satterthwaite
-#> 2  trt=active 46.52561 44.66706  48.38417 satterthwaite
+#> 1 trt=control 49.89005 48.08653  51.69356 satterthwaite
+#> 2  trt=active 46.50935 44.70584  48.31287 satterthwaite
 ```
 
 Compare these to the raw means:
@@ -161,12 +161,14 @@ Compare these to the raw means:
 
 tapply(rehab$score, rehab$trt, mean)
 #>  control   active 
-#> 49.87379 46.52561
+#> 49.45125 46.94815
 ```
 
-The raw means are shifted by the clinic imbalance; the marginal means
-are not. This difference is small in a balanced simulation but can be
-substantial in real data.
+The clinic imbalance pulls each raw mean about 0.44 points toward the
+clinics its arm over-samples; the marginal means average over the
+model’s fixed-effect grid instead and are free of that shift. The size
+of the gap depends on how unbalanced the design is and how large the
+group effects are.
 
 ## Pairwise comparisons with `mm_comparisons()`
 
@@ -178,14 +180,15 @@ same inference method.
 
 ct <- mm_comparisons(fit, specs = ~ trt)
 ct$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
-#>                      label  estimate  conf_low conf_high      p_value
-#> 1 trt=active - trt=control -3.348181 -3.887437 -2.808926 6.814682e-11
+#>                      label  estimate conf_low conf_high     p_value
+#> 1 trt=active - trt=control -3.380694 -3.99461 -2.766778 3.86692e-10
 #>          method
 #> 1 satterthwaite
 ```
 
 The `active - control` row is the average treatment effect across both
-timepoints, with a Satterthwaite *t* test and its certified provenance.
+timepoints, tested with a Satterthwaite *t* and graded `moderate`
+reliability in the same row.
 
 ## Conditional comparisons with `by =`
 
@@ -197,11 +200,11 @@ the analogue of simple effects in a factorial design.
 ct_by <- mm_comparisons(fit, specs = ~ trt | time)
 ct_by$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
 #>                                            label  estimate  conf_low conf_high
-#> 1 trt=active, time=post - trt=control, time=post -4.717515 -5.296632 -4.138399
-#> 2   trt=active, time=pre - trt=control, time=pre -1.978847 -2.557964 -1.399730
+#> 1 trt=active, time=post - trt=control, time=post -4.789727 -5.439321 -4.140132
+#> 2   trt=active, time=pre - trt=control, time=pre -1.971661 -2.621256 -1.322067
 #>        p_value        method
-#> 1 1.554312e-15 satterthwaite
-#> 2 1.746510e-07 satterthwaite
+#> 1 2.953193e-14 satterthwaite
+#> 2 1.442769e-06 satterthwaite
 ```
 
 Two rows: the treatment difference *at pre-intervention* and the
@@ -211,16 +214,17 @@ active arm.
 
 ## Constraining the grid with `at =`
 
-For numeric predictors, `at` pins specific values rather than collapsing
-to the mean.
+`at` pins predictors to chosen values instead of expanding or averaging
+them: a factor to a subset of its levels, a numeric predictor to
+specific points rather than its mean.
 
 ``` r
 
 mt_time <- mm_means(fit, specs = ~ time, at = list(trt = "active"))
 mt_time$table[, c("label", "estimate", "conf_low", "conf_high")]
 #>       label estimate conf_low conf_high
-#> 1  time=pre 49.89623 48.05324  51.73922
-#> 2 time=post 43.15499 41.31200  44.99799
+#> 1  time=pre 49.89982 48.11224  51.68740
+#> 2 time=post 43.11889 41.33131  44.90647
 ```
 
 This gives the pre/post means *within the active arm* only, holding
@@ -247,8 +251,8 @@ w["trtactive:timepost"] <- 1
 
 lc <- mm_lincomb(fit, weights = w)
 lc[, c("estimate", "lower", "upper", "p_value", "method")]
-#>    estimate     lower     upper     p_value        method
-#> 1 -2.738668 -3.213556 -2.263781 4.31376e-11 satterthwaite
+#>    estimate     lower     upper      p_value        method
+#> 1 -2.818065 -3.296859 -2.339271 2.848244e-11 satterthwaite
 ```
 
 [`mm_lincomb()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lincomb.md)
@@ -269,16 +273,16 @@ if (requireNamespace("emmeans", quietly = TRUE)) {
   print(em)
   print(pairs(em))
 }
-#>  trt     emmean    SE   df lower.CL upper.CL
-#>  control   49.9 0.613 3.28     48.0     51.7
-#>  active    46.5 0.613 3.28     44.7     48.4
+#>  trt     emmean    SE  df lower.CL upper.CL
+#>  control   49.9 0.596 3.3     48.1     51.7
+#>  active    46.5 0.596 3.3     44.7     48.3
 #> 
 #> Results are averaged over the levels of: time 
 #> mixeff emmeans bridge: fixed-effect covariance from mixedmodels.fixed_effect_covariance_matrix (model_based); prefer mm_means()/mm_comparisons() when row-level status and reasons are needed. 
 #> Degrees-of-freedom method: mixeff auto 
 #> Confidence level used: 0.95 
-#>  contrast         estimate    SE df t.ratio p.value
-#>  control - active     3.35 0.258 19  12.997 <0.0001
+#>  contrast         estimate    SE   df t.ratio p.value
+#>  control - active     3.38 0.294 19.5  11.506 <0.0001
 #> 
 #> Results are averaged over the levels of: time 
 #> Degrees-of-freedom method: mixeff auto
@@ -299,28 +303,35 @@ fields from the underlying
 [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md)
 call. `emmeans` does not propagate these fields; if a row is
 `"unavailable"` for a documented reason, that information disappears in
-the `emmeans` output. Use `emmeans` for its richer contrasts grammar
-(Tukey correction, back-transformation, custom correction methods);
-prefer the native verbs when auditability and report-ready provenance
-matter.
+the `emmeans` output. Use `emmeans` when you need what it does and
+[`mm_means()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
+does not — Tukey correction, back-transformation, custom contrast
+grammars. Use the native verbs when you need each row to say how it was
+computed and why, because those columns do not survive the trip through
+`emmeans`.
 
 ## Reading `status` and `reason`
 
-Every table returned by the marginal-quantities surface has these
-columns:
+Every table returned by
+[`mm_means()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
+[`mm_comparisons()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
+and
+[`mm_predictions()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
+carries these columns:
 
-| Column | Meaning |
+| Column | Values |
 |----|----|
-| `status` | `"available"` / `"unavailable"` |
-| `reliability` | `"certified"` / `"indicative"` / `"unavailable"` |
-| `reason` | stable code (see [`vignette("inference-method-glossary")`](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.md)) |
+| `status` | `"available"`, `"p_value_unavailable"`, `"not_estimable"`, `"not_assessed"`, or `"unsupported"` |
+| `reliability` | `"high"`, `"moderate"`, `"low"`, or `"not_available"` |
+| `reason` | stable code when a row is degraded or refused, `NA` otherwise (see [`vignette("inference-method-glossary")`](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.md)) |
 | `method` | the inference method that was applied |
 
-A row with `status = "unavailable"` contains `NA` for standard error and
-p-value — the package refuses to invent them. The `reason` code tells
-you why (rank deficiency, missing covariance payload, etc.) and is
-stable across package versions so you can guard on it in reproducible
-scripts.
+On the fits in this vignette every row reads `status = "available"`,
+`reliability = "moderate"`, `method = "satterthwaite"`. A row whose
+status is anything other than `"available"` contains `NA` where the
+refused numbers would go, and `reason` says why (rank deficiency,
+missing covariance payload, and so on). These codes come from the
+engine’s fixed vocabulary, so scripts can test for them by string.
 
 ## Where to read next
 

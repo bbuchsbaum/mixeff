@@ -19,7 +19,7 @@ random_options(spec, group, slope = NULL)
 
   An `mm_spec` from
   [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
-  or, in later phases, an `mm_fit`.
+  or an `mm_fit`.
 
 - group:
 

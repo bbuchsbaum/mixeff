@@ -43,7 +43,7 @@ mm_control(
 - optimizer:
 
   Optional optimizer name, overriding the driver's automatic choice. One
-  of `"auto"` (default behaviour), `"bobyqa"`, `"newuoa"`, `"cobyla"`,
+  of `"auto"` (default behavior), `"bobyqa"`, `"newuoa"`, `"cobyla"`,
   `"pattern_search"`, `"trust_bq"`, or the PRIMA variants
   (`"prima_bobyqa"`, `"prima_cobyla"`, `"prima_lincoa"`,
   `"prima_newuoa"`). An unsupported or not-compiled choice raises a

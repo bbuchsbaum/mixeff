@@ -10,8 +10,7 @@ Nothing is optimized; nothing is fitted.
 [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md),
 [`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md),
 [`random_options()`](https://bbuchsbaum.github.io/mixeff/reference/random_options.md),
-and (in Phase 1.E)
-[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) all
+and [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) all
 consume the same artifact.
 
 ## Usage
@@ -68,15 +67,15 @@ The compiled artifact is the structured truth: every print, summary, and
 audit verb in mixeff reads back from it rather than re-deriving meaning
 from formula text. R formats; Rust authors wording (PRD §9.6).
 
-Phase 1 compile scope: returns a populated `mm_spec` with the JSON
-artifact attached.
+Compiling returns a populated `mm_spec` with the JSON artifact attached.
 [`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md),
 [`random_options()`](https://bbuchsbaum.github.io/mixeff/reference/random_options.md),
 and
 [`compare_covariance()`](https://bbuchsbaum.github.io/mixeff/reference/compare_covariance.md)
-render random-effects guidance from upstream random-term cards; the fit
-driver ([`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md))
-lands in 1.E.
+render random-effects guidance from upstream random-term cards;
+[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) and
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) fit
+the model itself.
 
 ## Errors
 

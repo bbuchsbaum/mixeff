@@ -6,7 +6,7 @@ library(mixeff)
 ```
 
 Random-effects formulas are compact, and compactness hides assumptions.
-The four characters of `(x | g)` commit the analyst to a specific
+Seven characters — `(x | g)` — commit the analyst to a specific
 covariance structure, a specific number of free parameters, and a
 specific identification claim about what the data can support. Two
 formulas that differ by a single character — `||` for `|`, say — fit
@@ -72,12 +72,12 @@ Each random-effects card has two header lines worth pausing on. `wrote:`
 is the term as you typed it. `canonical:` is what the parser hands
 downstream — what the optimizer, the audit, and the inference contract
 will actually see. They are identical here because `(1 | subject)` is
-already in canonical form, and identity is a positive signal: nothing
-was rewritten. The two diverge for more elaborate formulas.
-`(1 | clinic/site)` is rewritten as `(1 | clinic) + (1 | clinic:site)`;
-implicit intercepts are made explicit; double-bar shorthand expands to
-its split-block form. The `canonical:` line is where you read off the
-model the engine will actually fit.
+already in canonical form — nothing was rewritten. The two diverge for
+more elaborate formulas. `(1 | clinic/site)` is rewritten as
+`(1 | clinic) + (1 | clinic:site)`; implicit intercepts are made
+explicit; double-bar shorthand expands to its split-block form. The
+`canonical:` line is where you read off the model the engine will
+actually fit.
 
 The remaining lines decode the term further. `named form:` restates it
 as a function call that names the grouping factor, the intercept, the
@@ -135,9 +135,10 @@ inherit it.
 
 For a 2×2 random-effects matrix, Λ has three free entries — the three
 rows you see below. `theta_value` is what the optimizer worked with;
-`lambda_value` places that same number back into the matrix. They match
-here because the mapping is the identity for this structure; a mismatch
-would point to a parameterization bug rather than a modelling fact.
+`lambda_value` places that same number back into the matrix. The two
+columns always agree, because θ is by construction exactly the free
+entries of Λ in this parameterization — the table shows the mapping, it
+does not test it.
 
 ``` r
 
@@ -156,7 +157,9 @@ parameterization(full_fit)$table[, c("theta_name", "theta_value", "lambda_value"
 A practical use of this table is boundary-fit detection: when a θ entry
 is pinned at zero, the corresponding variance or covariance has reached
 the edge of its parameter space, and the random-effects covariance is
-reduced-rank. The headliner vignette walks through that case end-to-end.
+reduced-rank.
+[`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md)
+walks through that case end-to-end.
 
 ## What do split blocks and `||` mean?
 
@@ -249,8 +252,8 @@ covariances, while `(1 + f + x || g)` does not.
 
 ## What are the three kinds of help?
 
-The audit surface separates three situations that are often mixed
-together in ordinary model output.
+The compile-time diagnostics separate three situations that are often
+mixed together in ordinary model output.
 
 First, a structural impossibility: a requested random slope cannot be
 estimated if that variable does not vary within the group. Here `dose`
@@ -413,7 +416,7 @@ the term it affected, the status of the change, and three side-by-side
 renderings: what was *requested*, what was *effective* (after design
 parsing and identifiability checks), and what was *fitted* (after the
 optimizer landed). A reduced-rank covariance estimate appears here as a
-labelled fact, not an instruction to rewrite the formula.
+labeled fact, not an instruction to rewrite the formula.
 
 The full row carries a lot of text. We show it in two passes so neither
 pass wraps awkwardly in the rendered vignette. The first pass names the

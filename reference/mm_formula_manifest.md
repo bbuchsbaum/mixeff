@@ -3,12 +3,14 @@
 A versioned record of what `mixeff` currently supports — formula syntax
 surface, schema versions per artifact type, and capability flags. The
 manifest is the wrapper's machine-readable answer to *"what does this
-build know how to do?"*. Every `mm_fit` object created by future phases
-will store a snapshot of `mm_formula_manifest()` at construction time so
-the wrapper's
-[`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md) verb
-(Phase 1+) can answer the same question for old fits without consulting
-the Rust handle.
+build know how to do?"*. Fitted objects do not carry the whole manifest:
+each one stamps the narrower `fit$schema` record (artifact schema name
+and version, crate version, package version), which the serialization
+and reporting paths read back. What lets
+[`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md)
+describe a fit after [`readRDS()`](https://rdrr.io/r/base/readRDS.html),
+with no live Rust handle, is the durable compiled artifact stored beside
+it.
 
 ## Usage
 
@@ -26,7 +28,7 @@ A named list with the following elements:
 
 - `crate_version`:
 
-  Version of the bundled `mixedmodels` upstream crate.
+  Version of the bundled `mixeff-rs` upstream crate.
 
 - `schema_versions`:
 
@@ -52,8 +54,8 @@ A named list with the following elements:
 
 ## Details
 
-Capability flags evolve over phases; gate behavior on flags rather than
-on package version.
+Capability flags evolve across releases; gate behavior on flags rather
+than on package version.
 
 ## Examples
 

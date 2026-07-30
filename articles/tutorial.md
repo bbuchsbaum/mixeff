@@ -12,19 +12,25 @@ go deeper on any step.
 
 ## The data
 
-[`lme4::sleepstudy`](https://rdrr.io/pkg/lme4/man/sleepstudy.html)
-records reaction times (ms) for 18 subjects over ten days of sleep
-deprivation. Each subject was deprived of sleep starting on Day 0; by
-Day 9 most show substantial slowing.
+The example simulates reaction times (ms) for 18 subjects over ten days
+of sleep deprivation. Each subject has a different baseline and a
+different response to continued sleep loss. The data are generated
+inside this vignette, so the tutorial runs without an example-data
+package.
 
 ``` r
 
-sleep <- lme4::sleepstudy
 str(sleep)
 #> 'data.frame':    180 obs. of  3 variables:
-#>  $ Reaction: num  250 259 251 321 357 ...
-#>  $ Days    : num  0 1 2 3 4 5 6 7 8 9 ...
-#>  $ Subject : Factor w/ 18 levels "308","309","310",..: 1 1 1 1 1 1 1 1 1 1 ...
+#>  $ Days    : int  0 1 2 3 4 5 6 7 8 9 ...
+#>  $ Subject : Factor w/ 18 levels "1","2","3","4",..: 1 1 1 1 1 1 1 1 1 1 ...
+#>  $ Reaction: num  224 248 293 300 292 ...
+#>  - attr(*, "out.attrs")=List of 2
+#>   ..$ dim     : Named int [1:2] 10 18
+#>   .. ..- attr(*, "names")= chr [1:2] "Days" "Subject"
+#>   ..$ dimnames:List of 2
+#>   .. ..$ Days   : chr [1:10] "Days=0" "Days=1" "Days=2" "Days=3" ...
+#>   .. ..$ Subject: chr [1:18] "Subject=1" "Subject=2" "Subject=3" "Subject=4" ...
 ```
 
 The key structure: `Subject` appears 10 times in the data — once per
@@ -38,17 +44,6 @@ A mixed model handles this by giving each subject its own intercept
 *and* its own slope — their personal baseline and their personal rate of
 slowing — and then estimating a population distribution over those
 person-level parameters.
-
-``` r
-
-library(ggplot2)
-ggplot(sleep, aes(Days, Reaction, group = Subject)) +
-  geom_line(alpha = 0.4) +
-  geom_smooth(aes(group = 1), method = "lm", se = FALSE, colour = "steelblue") +
-  labs(x = "Days of sleep deprivation", y = "Reaction time (ms)",
-       title = "Individual subject trajectories") +
-  theme_minimal()
-```
 
 ![](tutorial_files/figure-html/individual-trajectories-1.png)
 
@@ -105,8 +100,7 @@ fit <- lmm(Reaction ~ Days + (Days | Subject), sleep)
 ```
 
 [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) returns
-an `mm_lmm` object. The actual optimization is performed by the bundled
-Rust engine;
+an `mm_lmm` object. The bundled Rust engine performs the optimization;
 [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) is the R
 entry point and result container.
 
@@ -121,14 +115,14 @@ summary(fit, tests = "coefficients")
 #> 
 #> Variance components:
 #>    group        name variance  std_dev correlation
-#>  Subject (Intercept) 612.0900 24.74050            
-#>  Subject        Days  35.0718  5.92215       +0.07
-#> Residual std. dev.: 25.5918
+#>  Subject (Intercept) 652.6850 25.54770            
+#>  Subject        Days  29.5779  5.43856       -0.08
+#> Residual std. dev.: 23.5051
 #> 
 #> Fixed effects:
 #>              Estimate Std. Error       df   t value  Pr(>|t|)        method
-#> (Intercept) 251.40510   6.824557 17.00085 36.838304   < 1e-16 satterthwaite
-#> Days         10.46729   1.545792 16.99989  6.771473 3.264e-06 satterthwaite
+#> (Intercept) 256.25687   6.845701 16.99932 37.433253   < 1e-16 satterthwaite
+#> Days         10.15023   1.419601 16.99972  7.150056 1.626e-06 satterthwaite
 #> 
 #> Inference status:
 #>         term        method    status reliability
@@ -147,40 +141,40 @@ The summary has four blocks, in print order.
 **Fit status.** Check this line first. `converged_interior` is the good
 outcome: the optimizer found a clean solution and every variance
 component is comfortably positive, so you can read the rest of the
-summary at face value. The status only changes when something needs your
-attention — for example, if a variance component collapses to zero (the
-data show no detectable variation for that term), the status reports a
-*boundary* fit, the affected row is flagged in the variance-components
-table, and the p-values below switch to a more conservative, clearly
-labeled method. In short: a healthy fit says `converged_interior`, and
-an unhealthy one tells you what went wrong instead of leaving you to
-notice.
+summary at face value. The status changes when something needs your
+attention. If a variance component collapses to zero — the data show no
+detectable variation for that term — the status reports a *boundary*
+fit, and the affected row is flagged in the variance-components table.
+The p-values below then switch from Satterthwaite *t* to asymptotic Wald
+*z*, labeled as such and graded `low` reliability: the *z* test drops
+the finite-sample correction, so treat its p-values as optimistic rather
+than cautious.
 
-**Variance components.** `Subject (Intercept)` is the between-subject
-spread in baseline reaction time (SD ≈ 25 ms); `Subject Days` is the
-between-subject spread in sensitivity to sleep loss (SD ≈ 6 ms per day);
-`correlation` is their association (+0.07 — essentially none). The
-residual standard deviation is the within-subject noise left over.
+**Variance components.** `Subject (Intercept)` is the estimated
+between-subject spread in baseline reaction time; `Subject Days` is the
+estimated between-subject spread in sensitivity to sleep loss;
+`correlation` is their estimated association. The residual standard
+deviation is the within-subject noise left over.
 
-**Fixed effects.** `Estimate` is the population-level coefficient.
-`Days = 10.47` means that, on average, reaction time increases by about
-10.5 ms per day of sleep deprivation. The `method` column names how each
-p-value was computed — here `satterthwaite`, a finite-sample *t* test
-whose `df` column (≈ 17) is on the scale of the 18 subjects, not the 180
-raw rows. `mixeff` never reports a number without naming the method
-behind it. On fits where Satterthwaite degrees of freedom cannot be
-computed (for example a variance component at the boundary), the summary
-shows clearly labeled asymptotic Wald *z* rows instead; the `method`
-column always tells you which one you got.
+**Fixed effects.** `Estimate` is the population-level coefficient. The
+`Days` estimate is the fitted average change in reaction time per day;
+the simulation used a population slope of 10.5 ms per day. The `method`
+column names how each p-value was computed — here `satterthwaite`, a
+finite-sample *t* test whose `df` column is on the scale of the 18
+subjects, not the 180 raw rows. Every test statistic and p-value in this
+table names the method behind it. On fits where Satterthwaite degrees of
+freedom cannot be computed (for example a variance component at the
+boundary), the summary shows labeled asymptotic Wald *z* rows instead;
+the `method` column tells you which one you got.
 
 **Inference status.** One row per coefficient stating how much to trust
 the test: `status` says whether it was computed, `reliability` grades
-it, and `reliability_reason` names the engine’s warrant for that grade —
+it, and `reliability_reason` names the engine’s reason for that grade —
 here `satterthwaite_finite_difference_approximation`, meaning the
 degrees of freedom come from a finite-difference approximation, the
 standard route for this method (graded `moderate`). Any further engine
-notes print underneath. Grades and warrants are authored by the Rust
-engine, not by R-side heuristics.
+notes print underneath. The Rust engine assigns these grades and
+reasons; the R side passes them through unchanged.
 
 ## Step 4: Extract components
 
@@ -190,7 +184,7 @@ The lme4-compatible extractors work on `mm_lmm` objects:
 
 fixef(fit)
 #> (Intercept)        Days 
-#>   251.40510    10.46729
+#>   256.25687    10.15023
 ```
 
 ``` r
@@ -198,9 +192,9 @@ fixef(fit)
 VarCorr(fit)
 #> Variance components:
 #>    group        name variance  std_dev correlation
-#>  Subject (Intercept) 612.0900 24.74050            
-#>  Subject        Days  35.0718  5.92215       +0.07
-#> Residual std. dev.: 25.5918
+#>  Subject (Intercept) 652.6850 25.54770            
+#>  Subject        Days  29.5779  5.43856       -0.08
+#> Residual std. dev.: 23.5051
 ```
 
 ``` r
@@ -208,8 +202,8 @@ VarCorr(fit)
 confint(fit, method = "asymptotic")
 #> Confidence intervals:
 #>                 2.5 %    97.5 %
-#> (Intercept) 238.02922 264.78099
-#> Days          7.43759  13.49698
+#> (Intercept) 242.83954 269.67420
+#> Days          7.36786  12.93259
 #> method: wald_asymptotic_from_stored_standard_errors
 #> status: Wald (asymptotic) intervals from stored standard errors (engine-certified profile intervals: method = "profile")
 ```
@@ -223,43 +217,42 @@ slopes.
 ## Step 5: Test a specific claim
 
 [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md)
-evaluates a linear combination of fixed-effect coefficients — the mixeff
-equivalent of
-[`lme4::fixef()`](https://rdrr.io/pkg/nlme/man/fixed.effects.html)
-one-row hypothesis tests, but with method labelling.
+tests a linear combination of fixed-effect coefficients and returns a
+one-row table that names the method behind the p-value.
 
 ``` r
 
 ct <- contrast(fit, c("(Intercept)" = 0, Days = 1))
 ct$table[, c("estimate", "std_error", "p_value", "method", "status", "reliability")]
-#>   estimate std_error      p_value        method    status reliability
-#> 1 10.46729  1.545792 3.263971e-06 satterthwaite available    moderate
+#>   estimate std_error     p_value        method    status reliability
+#> 1 10.15023  1.419601 1.62626e-06 satterthwaite available    moderate
 ```
 
-The `estimate` is the Days slope; `status = "available"` and
-`reliability = "certified"` confirm that the covariance payload was
-present and the inference method was verified as appropriate for this
-fit. If a method cannot be certified (e.g. you request Kenward-Roger on
-a singular fit), `reliability` becomes `"indicative"` and `reason` names
-the problem.
+The `estimate` is the Days slope. `status = "available"` says the test
+was computed; `reliability` grades it on a fixed scale — `high`,
+`moderate`, `low`, or `not_available` — and here reads `moderate`, the
+standard grade for finite-difference Satterthwaite. If you request a
+method the fit cannot support (Satterthwaite on a boundary fit, say),
+the row comes back with `status = "not_assessed"` and a `reason_code`
+naming the problem instead of a number.
 
 ## Step 6: Compare specific conditions
 
 [`mm_comparisons()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
-makes it easy to answer “how much slower is a subject on Day 9 compared
-to Day 0?” without computing the arithmetic yourself.
+answers questions like “how much does the population mean slow between
+Day 0 and Day 9?” directly, so you do not assemble the contrast by hand.
 
 ``` r
 
 cmp <- mm_comparisons(fit, specs = "Days", at = list(Days = c(0, 9)))
 cmp$table[, c("label", "estimate", "conf_low", "conf_high", "p_value")]
-#>             label estimate conf_low conf_high      p_value
-#> 1 Days=9 - Days=0 94.20557 64.85354  123.5576 3.263971e-06
+#>             label estimate conf_low conf_high     p_value
+#> 1 Days=9 - Days=0 91.35204 64.39614  118.3079 1.62626e-06
 ```
 
 The `at` argument pins `Days` to exactly those two values. The
-difference `Days=9 - Days=0` is 9 × the slope: about 94 ms, with a
-confidence interval.
+difference `Days=9 - Days=0` is nine times the fitted slope and includes
+a confidence interval.
 
 ## Step 7: Save and reload
 
@@ -275,18 +268,18 @@ fit2 <- revive(readRDS(tmp))
 stopifnot(isTRUE(all.equal(fixef(fit), fixef(fit2))))
 ```
 
-[`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
-reconnects the R object to the Rust handle so the full inference surface
-is available. Plain [`readRDS()`](https://rdrr.io/r/base/readRDS.html)
-without
-[`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md) is
-sufficient when you only need the JSON-stored extractor values
-(coefficients, variance components, fitted values); call
-[`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
-when you want to run new
+Everything the extractors and inference functions need is stored in the
+R object itself, so [`readRDS()`](https://rdrr.io/r/base/readRDS.html)
+alone is enough:
+[`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
 [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md),
 [`mm_means()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
-or other live-inference calls on the reloaded fit. See
+and the reporting tables all work on the reloaded fit. The Rust handle
+is deliberately left absent after reloading.
+[`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
+resets the object’s process-local cache; calling it after
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html) is cheap and
+recommended, but the current bridge does not require it. See
 [`vignette("saving-and-reviving")`](https://bbuchsbaum.github.io/mixeff/articles/saving-and-reviving.md)
 for the full discussion.
 

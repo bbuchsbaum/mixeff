@@ -9,17 +9,17 @@ A mixed-model report needs more than coefficient estimates. The reader
 needs to know which observations and grouping units were used, what
 random-effects structure was fitted, which inference method produced
 each row, whether the optimizer reached an interior solution, and which
-quantities were not available. Most of those are facts about the fit
-that `lme4` does not store in the fitted object; the analyst has to
-remember them, or reconstruct them from console output weeks after the
-fact.
+quantities were not available. An `lme4` fit stores several of these
+(counts, random-effects structure, optimizer messages); what it does not
+carry is a per-row record of which inference method produced each
+number, or a structured list of what was unavailable and why.
 
-`mixeff` stores every one of them. This vignette follows a structured
-mixed-model reporting checklist — describe the data and design, report
-the model specification, show fixed and random effects, label inference
-methods, preserve software provenance, and make caveats explicit instead
-of hiding them in prose — drawing each section from the same fitted
-object.
+`mixeff` stores all of the above in the fitted object. This vignette
+follows a structured mixed-model reporting checklist — describe the data
+and design, report the model specification, show fixed and random
+effects, label inference methods, preserve software provenance, and make
+caveats explicit instead of hiding them in prose — drawing each section
+from the same fitted object.
 
 ## What model will we report?
 
@@ -131,7 +131,7 @@ reporting_table(fit, "random_terms")
 #>     sufficient `clinic` units may differ in average outcome.
 ```
 
-## How are estimates and p-values labelled?
+## How are estimates and p-values labeled?
 
 [`summary()`](https://rdrr.io/r/base/summary.html) gives a familiar
 coefficient table. Use it for console review.
@@ -156,14 +156,14 @@ p-value, method, row status, and reliability label together.
 ``` r
 
 reporting_table(fit, "fixed_effects")
-#>                term   estimate  std_error  statistic statistic_name
-#>         (Intercept)  7.6828778 0.19646018  39.106539              z
-#>                week -0.2783994 0.02595083 -10.727955              z
-#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>       p_value            method    status reliability
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0006039485 asymptotic_wald_z available         low
+#>              term   estimate  std_error        df  statistic statistic_name
+#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
+#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       p_value        method    status reliability
+#>  1.665335e-14 satterthwaite available    moderate
+#>  1.776357e-15 satterthwaite available    moderate
+#>  6.440943e-03 satterthwaite available    moderate
 ```
 
 When you need to audit where those rows came from, request the audit
@@ -173,10 +173,10 @@ view.
 
 fixed_audit <- reporting_table(fit, "fixed_effects", view = "audit")$table
 fixed_audit[, c("term", "method", "status", "reliability", "source")]
-#>                 term            method    status reliability
-#> 1        (Intercept) asymptotic_wald_z available         low
-#> 2               week asymptotic_wald_z available         low
-#> 3 treatment: coached asymptotic_wald_z available         low
+#>               term        method    status reliability
+#> 1      (Intercept) satterthwaite available    moderate
+#> 2             week satterthwaite available    moderate
+#> 3 treatmentcoached satterthwaite available    moderate
 #>                         source
 #> 1 fixed_effect_inference_table
 #> 2 fixed_effect_inference_table

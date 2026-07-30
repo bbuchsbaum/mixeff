@@ -81,6 +81,7 @@ The familiar lme4 accessor surface.
 - [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md) :
   Refit a mixeff LMM with a new response
 - [`simulate(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/simulate.mm_lmm.md)
+  [`simulate(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/simulate.mm_lmm.md)
   : Simulate from a mixeff LMM
 
 ## Inference
@@ -219,5 +220,4 @@ Make the model’s design, reductions, and optimizer state explicit.
 
 - [`mixeff`](https://bbuchsbaum.github.io/mixeff/reference/mixeff-package.md)
   [`mixeff-package`](https://bbuchsbaum.github.io/mixeff/reference/mixeff-package.md)
-  : mixeff: Audit-First Mixed-Effects Models via the 'mixedmodels' Rust
-  Crate
+  : mixeff: Mixed-Effects Models via the 'mixeff-rs' Rust Crate

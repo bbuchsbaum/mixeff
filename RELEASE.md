@@ -29,10 +29,9 @@ minutes):
 | Aphantasia joint | `+ MIXEFF_APHANTASIA_JOINT=true` | the expensive joint-Laplace route |
 
 Always run the suite against the **installed** package
-(`load_package = "installed"`), not
-[`devtools::test()`](https://devtools.r-lib.org/reference/test.html) /
-`load_all()` — the latter is a debug build ~60x slower and not
-representative of release timing.
+(`load_package = "installed"`), not `devtools::test()` / `load_all()` —
+the latter is a debug build ~60x slower and not representative of
+release timing.
 
 ## Release checklist
 
@@ -56,6 +55,32 @@ are documented Decision-D near-ties, not regressions
 
 Aphantasia reproduction reviewed if the fixture changed
 
+CRAN extra-check court (run the manual **R-hub** workflow with its
+default platform list before submission):
+
+Primary R-devel compilers: `ubuntu-gcc16`, `ubuntu-clang`, `windows`,
+`macos`, `macos-arm64`
+
+Memory/undefined behavior: `clang-asan`, `clang-ubsan`, `gcc-asan`,
+`m1-san`, `valgrind`
+
+Dependency and numeric variants: `nosuggests`, `nold`, `lto`, `mkl`,
+`atlas`
+
+Expanded examples and native-code analysis: `donttest`, `rchk`
+
+Every job is green, or every non-package failure is linked and
+adjudicated in `cran-comments.md`; a green ordinary three-OS check is
+not a substitute for this court
+
+The default list intentionally mirrors the applicable public extra-check
+classes maintained alongside Brian Ripley’s CRAN checks. Some historical
+extra checks are not applicable here (for example C++-language-mode
+checks: the package bridge is C plus Rust), and some are now defaults in
+R-devel (`STRICT_R_HEADERS`). Keep the explicit list synchronized with
+<https://r-hub.github.io/containers/> and
+<https://www.stats.ox.ac.uk/pub/bdr/>.
+
 External state — **each depends on something outside this checkout and
 must be confirmed explicitly, not implied by local green tests**:
 
@@ -72,9 +97,13 @@ remote)
 `release/0.2.0-prep` merged to `main` and pushed; GitHub Actions (R CMD
 check on 3 OS, Release gates, pkgdown) green on the pushed head
 
-R-hub v2 (linux / windows / macos, R-devel) green
+R-hub v2 default CRAN extra-check court green
 
-win-builder + mac-builder dry-runs clean
+win-builder dry-run clean
+
+mac-builder R-devel dry-run clean (closest public reproduction of the
+Oxford arm64 M1 check; that machine has Cargo under `~/.cargo`, not on
+its initial `PATH`)
 
 R-universe: package registered in the bbuchsbaum registry; remote build
 matrix green

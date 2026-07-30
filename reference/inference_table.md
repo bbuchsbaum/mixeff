@@ -17,6 +17,9 @@ inference_table(
   method = c("auto", "satterthwaite", "kenward_roger", "asymptotic", "none"),
   ...
 )
+
+# S3 method for class 'mm_glmm'
+inference_table(fit, method = "auto", ...)
 ```
 
 ## Arguments

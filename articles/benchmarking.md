@@ -10,16 +10,16 @@ Parametric bootstrap is the canonical case: a 1,000-replicate bootstrap
 means roughly 1,000 refits, plus the original fit and summary work. The
 same logic applies to cluster bootstrap, simulation studies, multi-seed
 reanalysis, and anything whose inner loop is “fit the same model again
-with new data”. A small per-refit speedup compounds into the difference
-between an overnight run and a coffee break.
+with new data”. A per-refit speedup multiplies by the replicate count.
 
-`mixeff` is roughly two to five times faster than `lme4` on the parity
-benchmark — enough to make bootstrap a routine option rather than a
-special-occasion calculation. This vignette shows the figures from a
-single run of that benchmark and then documents the harness used to make
-them. The numbers themselves are machine- and model-dependent, so the
-scripts also write CSV files that you can re-plot and rerun on the
-designs you actually care about.
+On the LMM scaling benchmark shipped with the package, `mixeff` ran 2.0
+to 3.5 times faster than `lme4` at the largest tested scale of each
+design (1.3 to 3.5 across the whole grid). This vignette shows the
+figures from a single run of that benchmark and then documents the
+harness used to make them. The numbers are machine- and model-dependent
+— all of these fits complete in tens of milliseconds — so the scripts
+also write CSV files that you can re-plot and rerun on the designs you
+actually care about.
 
 ## What does the benchmark show?
 
@@ -29,8 +29,11 @@ combining crossed grouping with a random slope — across a log-spaced
 grid of scale values. At each cell,
 [`mixeff::lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
 and [`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) fit the
-same model three times. The summary table records median elapsed seconds
-and speedup over `lme4` per cell.
+same model five times. The summary table records median elapsed seconds
+and speedup over `lme4` per cell. The shipped CSV comes from one run on
+2026-07-30: macOS arm64 (M-series), R 4.5.1, mixeff 0.2.0 built with the
+release profile, engine snapshot `4a2abb3`. If any of those differ on
+your machine, rerun the harness rather than reusing these numbers.
 
 ``` r
 
@@ -55,17 +58,20 @@ benchmark$scenario_label <- factor(
 head(benchmark[, c("scenario", "scale_value", "engine",
                    "median_sec", "speedup_vs_lme4")])
 #>   scenario scale_value engine median_sec speedup_vs_lme4
-#> 1  crossed          10   lme4      0.008        1.000000
-#> 2  crossed          10 mixeff      0.002        4.000000
-#> 3  crossed          15   lme4      0.010        1.000000
-#> 4  crossed          15 mixeff      0.003        3.333333
-#> 5  crossed          20   lme4      0.011        1.000000
-#> 6  crossed          20 mixeff      0.004        2.750000
+#> 1  crossed          10   lme4      0.008             1.0
+#> 2  crossed          10 mixeff      0.004             2.0
+#> 3  crossed          15   lme4      0.011             1.0
+#> 4  crossed          15 mixeff      0.005             2.2
+#> 5  crossed          20   lme4      0.011             1.0
+#> 6  crossed          20 mixeff      0.005             2.2
 ```
 
 The first figure plots the median fit time against design scale, on
 log-log axes, with one panel per scenario. `mixeff` runs below `lme4`
-everywhere on the grid; the gap widens as design complexity grows.
+everywhere on this grid. The largest speedup is on the one design that
+combines crossed grouping with a random slope; the other four designs do
+not order by structural complexity (the plain grouped random intercept
+ranks second).
 
 ``` r
 
@@ -124,12 +130,15 @@ ggplot(mixeff_rows,
 ![Speedup of mixeff over lme4 vs design scale, by
 scenario.](benchmarking_files/figure-html/speedup-plot-1.png)
 
-Read the speedup figure with the caveats it deserves. Three replications
-per cell give a stable median but a wide envelope; the absolute timings
-are sub-15 ms throughout, so an extra millisecond of system noise moves
-the ratio visibly. The qualitative pattern is robust: `mixeff` is faster
-everywhere, and the speedup grows with the design’s complexity — exactly
-the regime where bootstrap workflows spend most of their time.
+Two caveats before reading the speedup figure. First, the absolute
+timings run from about 3 ms to 35 ms and the recorded medians are whole
+milliseconds, so timer resolution alone can move a ratio substantially —
+one millisecond on the 4 ms side of a 12 ms / 4 ms cell moves the ratio
+from 3.0 to 2.4 or 4.0; five replications per cell do little to smooth
+that. Second, within a single design the speedup does not trend reliably
+with scale. What the grid does support: `mixeff` ran faster in every
+cell, and the single largest speedup is on the design combining crossed
+grouping with a random slope.
 
 ## What should you measure?
 
@@ -154,8 +163,8 @@ data.frame(
 #> 3                 1000               1000
 ```
 
-The arithmetic is simple, but it is the core product point: small
-per-refit speed differences compound quickly when `nsim` is large.
+The arithmetic is simple but it decides the workflow: per-refit speed
+differences multiply by `nsim`.
 
 ## How do you benchmark fitting?
 
@@ -203,8 +212,8 @@ data.frame(
 
 ## How do you benchmark bootstrap?
 
-Use the bootstrap benchmark when you want to time the inference routes
-that make the audit-then-bootstrap story practical.
+Use the bootstrap benchmark when you want to time the bootstrap and
+simulation-based inference routes themselves.
 
 ``` r
 
@@ -222,7 +231,7 @@ The benchmark includes `test_effect(method = "bootstrap")`,
 `confint(method = "bootstrap")`, `compare(method = "bootstrap")`, and
 [`lme4::bootMer()`](https://rdrr.io/pkg/lme4/man/bootMer.html) as an
 R-engine baseline. If `pbkrtest` is installed, it also times
-`pbkrtest::PBmodcomp()`.
+[`pbkrtest::PBmodcomp()`](https://rdrr.io/pkg/pbkrtest/man/pb__modcomp.html).
 
 ``` r
 
@@ -313,9 +322,10 @@ system2(
 
 The plot below shows whichever metrics are available for each route.
 P-value routes contribute Type I error and power; interval routes
-contribute coverage. Routes not wired in the current package version
-remain in the CSV with `n_reps = 0`, so downstream reports can
-distinguish “not run in fast mode” from “not part of the contract”.
+contribute coverage. Routes that did not run — whether because fast mode
+skips them or because they are not wired in the current package version
+— appear in the CSV with `n_reps = 0` and `NA` metrics; the CSV does not
+record which of those two reasons applies.
 
 ``` r
 

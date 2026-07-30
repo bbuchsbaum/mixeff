@@ -7,8 +7,11 @@ library(mixeff)
 
 Mixed-model users want p-values. They also want to know what those
 p-values mean: which method produced them, and how trustworthy that
-method is for this particular fit. `lme4` reports the number; `mixeff`
-reports the number alongside its provenance.
+method is for this particular fit.
+[`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) famously
+declines to print LMM p-values at all — the reason `lmerTest` exists.
+`mixeff` prints them, and prints the method and a reliability grade
+beside each one.
 
 When a coefficient, contrast, or term test has an available method, the
 p-value is printed with the method name. When the requested method is
@@ -48,15 +51,27 @@ knitr::kable(coef_table, digits = 4)
 | treatmentcoached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
 
 The last column tells you the method used for each available p-value.
+Here `"auto"` resolved to Satterthwaite, because the fit is interior and
+the finite-sample route is feasible.
+
+[`inference_table()`](https://bbuchsbaum.github.io/mixeff/reference/inference_table.md)
+shows a different, lower-level view: the inference rows the engine
+cached at fit time. Those rows use asymptotic Wald *z* — the engine’s
+always-computable baseline — so their p-values are smaller than the
+Satterthwaite ones above, and their `reliability` column says `low`.
+This is the raw artifact, useful for audit; for reporting, use
+[`summary()`](https://rdrr.io/r/base/summary.html) or
+[`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md),
+which resolve to the best feasible method.
 
 ``` r
 
 inference_table(fit)
 #> Inference table:
-#>                term            label        kind   estimate  std_error df
-#>         (Intercept)      (Intercept) coefficient  7.6828778 0.19646018 NA
-#>                week             week coefficient -0.2783994 0.02595083 NA
-#>  treatment: coached treatmentcoached coefficient -0.8994747 0.26225014 NA
+#>              term            label        kind   estimate  std_error df
+#>       (Intercept)      (Intercept) coefficient  7.6828778 0.19646018 NA
+#>              week             week coefficient -0.2783994 0.02595083 NA
+#>  treatmentcoached treatmentcoached coefficient -0.8994747 0.26225014 NA
 #>  numerator_df denominator_df  statistic statistic_name      p_value
 #>            NA             NA  39.106539              z 0.0000000000
 #>            NA             NA -10.727955              z 0.0000000000
@@ -156,7 +171,11 @@ compare(reduced, fit)
 
 [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
 records that likelihood-ratio p-values are asymptotic. If you want a
-simulation-based check for a small example, use the bootstrap path.
+simulation-based check for a small example, use the bootstrap path. The
+bootstrap p-value is `(b + 1) / (nsim + 1)`, where `b` counts replicates
+at or above the observed statistic, so at `nsim = 10` the smallest
+reportable value is 1/11 — use hundreds of replicates before reading the
+p-value as a number rather than a bound.
 
 ``` r
 
@@ -168,12 +187,12 @@ compare(reduced, fit, method = "bootstrap", nsim = 10, seed = 7)
 #>        AIC      BIC delta_aic delta_bic  REML refit         fit_status delta_df
 #>  103.66467 112.7713  7.332086   5.05542 FALSE  TRUE converged_interior       NA
 #>   96.33259 107.7159  0.000000   0.00000 FALSE  TRUE converged_interior        1
-#>       LRT p_value                   method          status
-#>        NA      NA           asymptotic_lrt reference_model
-#>  9.332086       0 parametric_bootstrap_lrt       available
-#>                                               reason reason_code
-#>                                                             <NA>
-#>  parametric bootstrap LRT (10/10 replicates, MCSE=0)        <NA>
+#>       LRT    p_value                   method          status
+#>        NA         NA           asymptotic_lrt reference_model
+#>  9.332086 0.09090909 parametric_bootstrap_lrt       available
+#>                                                     reason reason_code
+#>                                                                   <NA>
+#>  parametric bootstrap LRT (10/10 replicates, MCSE=0.09091)        <NA>
 #>      comparison_class lrt_available information_criteria_available
 #>                  <NA>         FALSE                           TRUE
 #>  nested_fixed_effects          TRUE                           TRUE
@@ -204,11 +223,14 @@ head(predict(fit, re.form = NA, interval = "confidence"))
 ```
 
 *Conditional* prediction standard errors (the default, `re.form = NULL`)
-come from the engine’s prediction-variance payload, which adds the
-random-effect (BLUP) variance and the fixed/random covariance to the
-fixed-effect Wald variance — a surface `lme4::predict()` does not offer
-at all. Conditional confidence and prediction intervals come from the
-same payload.
+come from the engine’s prediction-variance payload, which combines the
+fixed-effect Wald variance with the random-effect (BLUP) variance and
+the fixed/random covariance. The covariance term can be negative, so the
+conditional SE is often *smaller* than the population SE, as it is here.
+(`lme4`’s `predict.merMod()` has offered `se.fit` since version 1.1-35,
+and its conditional standard errors agree with these values closely on
+this model.) Conditional confidence and prediction intervals come from
+the same payload.
 
 ``` r
 

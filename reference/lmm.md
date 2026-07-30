@@ -1,7 +1,7 @@
 # Fit a linear mixed-effects model
 
-`lmm()` is mixeff's Phase 1 linear mixed-model fit driver. It compiles
-the requested lme4-style formula, emits the same
+`lmm()` is mixeff's linear mixed-model fit driver. It compiles the
+requested lme4-style formula, emits the same
 [`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md)
 view that pre-fit audit users see as a message (silence it with
 [`suppressMessages()`](https://rdrr.io/r/base/message.html) or
@@ -54,7 +54,7 @@ lmm(
   [stats::na.omit](https://rdrr.io/r/stats/na.fail.html)). The default
   (`NULL`) refuses any `NA` in a model variable with a typed
   `mm_data_error` (audit-first: missing-data dropping must be opt-in).
-  Pass `na.action = na.omit` for lme4's complete-case behaviour.
+  Pass `na.action = na.omit` for lme4's complete-case behavior.
 
 - contrasts:
 

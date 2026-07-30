@@ -1,8 +1,8 @@
 # Test whether a mixeff fit has a live native handle
 
 The native handle is a process-local cache. A `FALSE` result does not
-mean the fit is unusable: Phase 2 extractors read from the durable
-artifact and flat R-side payload, and
+mean the fit is unusable: extractors read from the durable artifact and
+flat R-side payload, and
 [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
 recreates the lazy cache after serialization.
 

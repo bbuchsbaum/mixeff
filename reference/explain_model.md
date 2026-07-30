@@ -3,9 +3,9 @@
 `explain_model()` renders the random-effects guidance surface for an
 `mm_spec` returned by
 [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
-or, in later phases, an `mm_fit`. It formats the upstream
-`RandomTermCard` and diagnostic payloads; Rust remains the source of
-truth for per-block English wording and design facts.
+or an `mm_fit`. It formats the upstream `RandomTermCard` and diagnostic
+payloads; Rust remains the source of truth for per-block English wording
+and design facts.
 
 ## Usage
 

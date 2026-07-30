@@ -35,14 +35,14 @@ fixef(fit)
 #>      (Intercept)             week treatmentcoached 
 #>        7.6828778       -0.2783994       -0.8994747
 reporting_table(fit, "fixed_effects")
-#>                term   estimate  std_error  statistic statistic_name
-#>         (Intercept)  7.6828778 0.19646018  39.106539              z
-#>                week -0.2783994 0.02595083 -10.727955              z
-#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>       p_value            method    status reliability
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0006039485 asymptotic_wald_z available         low
+#>              term   estimate  std_error        df  statistic statistic_name
+#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
+#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       p_value        method    status reliability
+#>  1.665335e-14 satterthwaite available    moderate
+#>  1.776357e-15 satterthwaite available    moderate
+#>  6.440943e-03 satterthwaite available    moderate
 ```
 
 ## Round trip through RDS
@@ -56,6 +56,13 @@ restored <- readRDS(path)
 restored <- revive(restored)
 ```
 
+[`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
+resets the object’s process-local cache. It is cheap and safe to call
+after every [`readRDS()`](https://rdrr.io/r/base/readRDS.html), but the
+extractors and inference functions shown below also work on the plain
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html) result — the durable
+values live in the object itself.
+
 The restored object still answers the same fitted-model questions.
 
 ``` r
@@ -67,14 +74,14 @@ head(predict(restored))
 #>        1        2        3        4        5        6 
 #> 7.585932 7.307533 7.029134 6.750734 6.472335 6.193935
 reporting_table(restored, "fixed_effects")
-#>                term   estimate  std_error  statistic statistic_name
-#>         (Intercept)  7.6828778 0.19646018  39.106539              z
-#>                week -0.2783994 0.02595083 -10.727955              z
-#>  treatment: coached -0.8994747 0.26225014  -3.429835              z
-#>       p_value            method    status reliability
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0000000000 asymptotic_wald_z available         low
-#>  0.0006039485 asymptotic_wald_z available         low
+#>              term   estimate  std_error        df  statistic statistic_name
+#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
+#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       p_value        method    status reliability
+#>  1.665335e-14 satterthwaite available    moderate
+#>  1.776357e-15 satterthwaite available    moderate
+#>  6.440943e-03 satterthwaite available    moderate
 ```
 
 ## Rebuild design matrices when needed

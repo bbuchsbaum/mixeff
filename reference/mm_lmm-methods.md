@@ -30,12 +30,18 @@ when the modes were extracted with `condVar = TRUE`, and `NA` otherwise.
 ``` r
 fixef(object, ...)
 
+# Default S3 method
+fixef(object, ...)
+
 # S3 method for class 'mm_lmm'
 fixef(object, ...)
 
 # S3 method for class 'mm_glmm'
 fixef(object, ...)
 
+ranef(object, ...)
+
+# Default S3 method
 ranef(object, ...)
 
 # S3 method for class 'mm_lmm'
@@ -50,6 +56,9 @@ coef(object, ...)
 # S3 method for class 'mm_glmm'
 coef(object, ...)
 
+VarCorr(x, ...)
+
+# Default S3 method
 VarCorr(x, ...)
 
 # S3 method for class 'mm_lmm'
@@ -172,9 +181,14 @@ vcov(object, type = c("fixed", "theta"), correlation = FALSE, ...)
 
 - condVar:
 
-  Logical; when `TRUE`, Phase 2 returns the random-effects tables with
-  an `NA` `postVar` array and an `mm_unavailable_reason` attribute
-  rather than fabricating conditional variances.
+  Logical; when `TRUE`, attach a `postVar` array of conditional
+  variances to each random-effects table. Gaussian
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) fits
+  receive the conditional covariances computed by the engine.
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+  fits, and any fit whose conditional-variance computation refuses,
+  receive an all-`NA` `postVar` plus an `mm_unavailable_reason`
+  attribute rather than fabricated conditional variances.
 
 - REML:
 

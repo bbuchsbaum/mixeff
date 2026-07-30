@@ -319,11 +319,13 @@ main <- function() {
       version = "1"
     ),
     provenance = list(
-      manuscript_root = manuscript_root,
-      raw_cache = ".cache/raw_trial_analysis.rds",
-      supplemental_cache = ".cache/supplemental.rds",
-      supplemental_s3_cache = ".cache/supp_S3.rds",
-      supplemental_s9_cache = ".cache/supp_S9.rds",
+      # The fixture ships with the package: record what the sources were,
+      # not where they live on the build machine.
+      source = "aphantasia manuscript archive (revision3), local checkout not distributed",
+      raw_cache = "raw_trial_analysis.rds",
+      supplemental_cache = "supplemental.rds",
+      supplemental_s3_cache = "supp_S3.rds",
+      supplemental_s9_cache = "supp_S9.rds",
       anonymization = list(
         participant_hash = "md5",
         salt_label = salt,

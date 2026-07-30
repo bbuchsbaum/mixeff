@@ -16,10 +16,12 @@ on:
     inputs:
       config:
         description: >-
-          Comma-separated list of R-hub platforms to use.
+          Comma-separated R-hub platforms. The default is the pre-submission
+          CRAN extra-check court: primary R-devel compilers, sanitizers,
+          valgrind, no-Suggests, unusual numeric builds, and native-code checks.
           Full list: https://r-hub.github.io/containers/
         type: string
-        default: 'linux,windows,macos'
+        default: 'ubuntu-gcc16,ubuntu-clang,windows,macos,macos-arm64,m1-san,gcc16,clang-asan,clang-ubsan,gcc-asan,valgrind,nosuggests,nold,lto,mkl,atlas,donttest,rchk'
       name:
         description: 'Run name. You can leave this empty.'
         type: string

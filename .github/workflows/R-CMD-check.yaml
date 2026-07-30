@@ -13,6 +13,9 @@ jobs:
       fail-fast: false
       matrix:
         config:
+          # R-devel runs continuously because late CRAN failures often expose
+          # forward-compatibility problems that release R cannot see.
+          - {os: ubuntu-latest, r: devel}
           - {os: ubuntu-latest, r: release}
           - {os: macos-latest, r: release}
           - {os: windows-latest, r: release}

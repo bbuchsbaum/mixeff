@@ -88,9 +88,9 @@ mm_json_negotiate <- function(header) {
 
 #' Closed list of schema/version pairs the wrapper understands
 #'
-#' Returns the known-schema table that backs [mm_json_negotiate()]. New
-#' schemas appear here as later phases add artifacts (compiled-model,
-#' audit, theta_map, certificate, inference, reproducibility, prediction).
+#' Returns the known-schema table that backs [mm_json_negotiate()]. The
+#' wrapper refuses any artifact whose schema name and version are absent
+#' from this table, so the table grows as new artifact types are added.
 #'
 #' @return A data frame with two character columns: `name` and `version`.
 #'

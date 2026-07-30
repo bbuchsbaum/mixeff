@@ -1,7 +1,9 @@
 #' Refit a mixeff LMM with a new response
 #'
 #' `refit()` fits the same model formula to a new response by calling [lmm()]
-#' with the stored model frame and `REML` setting.
+#' with the stored model frame and `REML` setting. Refitting is implemented
+#' for linear mixed models only; calling `refit()` on a GLMM fit signals a
+#' typed `mm_inference_unavailable` error.
 #'
 #' @param object A fitted `mm_lmm`.
 #' @param newresp Numeric response for `refit()`.
@@ -12,6 +14,37 @@
 #' @export
 refit <- function(object, newresp, ...) {
   UseMethod("refit")
+}
+
+#' @rdname refit
+#' @export
+refit.default <- function(object, newresp, ...) {
+  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
+    if (missing(newresp)) {
+      return(lme4::refit(object, ...))
+    }
+    return(lme4::refit(object, newresp, ...))
+  }
+  mm_abort(
+    message = "`refit()` has no method for this object.",
+    class = "mm_arg_error",
+    input = object
+  )
+}
+
+#' @rdname refit
+#' @method refit mm_glmm
+#' @export
+refit.mm_glmm <- function(object, newresp, ...) {
+  mm_abort(
+    message = paste(
+      "`refit()` is not implemented for GLMM fits.",
+      "Refit the model with `glmm()` on the modified data instead."
+    ),
+    class = "mm_inference_unavailable",
+    reason_code = "glmm_refit_unimplemented",
+    input = class(object)[[1L]]
+  )
 }
 
 #' @rdname refit
@@ -44,7 +77,10 @@ refit.mm_lmm <- function(object, newresp, ...) {
 #' Simulate from a mixeff LMM
 #'
 #' Draws Gaussian responses from the stored fixed effects, random-effect
-#' covariance summaries, and residual scale.
+#' covariance summaries, and residual scale. Simulation is implemented for
+#' linear mixed models only; calling `simulate()` on a GLMM fit signals a
+#' typed `mm_inference_unavailable` error with reason code
+#' `glmm_simulate_unimplemented`.
 #'
 #' @param object A fitted `mm_lmm`.
 #' @param nsim Number of simulated responses.
@@ -95,6 +131,22 @@ simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, re.form = NULL, ...) 
   attr(out, "seed") <- seed
   attr(out, "mm_method") <- "r_side_gaussian_parametric"
   out
+}
+
+#' @rdname simulate.mm_lmm
+#' @method simulate mm_glmm
+#' @export
+simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, re.form = NULL, ...) {
+  mm_abort(
+    message = paste(
+      "`simulate()` is not implemented for GLMM fits.",
+      "The Gaussian simulation path does not apply to a non-Gaussian",
+      "response; a family-aware GLMM simulation route has not been built."
+    ),
+    class = "mm_inference_unavailable",
+    reason_code = "glmm_simulate_unimplemented",
+    input = class(object)[[1L]]
+  )
 }
 
 mm_simulate_once <- function(fit, target) {

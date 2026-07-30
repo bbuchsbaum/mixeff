@@ -66,7 +66,7 @@ mm_abort <- function(message,
 # Signal a typed *informational* message (not an error or warning). Inherits
 # "mm_condition" so it can be caught/muffled like other mixeff signals, and
 # routes through rlang::inform so it goes to stderr, is suppressible, and
-# honours rlang's message-frequency controls.
+# honors rlang's message-frequency controls.
 mm_inform <- function(message,
                       class,
                       ...,

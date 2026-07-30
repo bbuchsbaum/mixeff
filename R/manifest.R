@@ -3,18 +3,20 @@
 #' A versioned record of what `mixeff` currently supports — formula syntax
 #' surface, schema versions per artifact type, and capability flags. The
 #' manifest is the wrapper's machine-readable answer to *"what does this
-#' build know how to do?"*. Every `mm_fit` object created by future phases
-#' will store a snapshot of `mm_formula_manifest()` at construction time so
-#' the wrapper's `audit()` verb (Phase 1+) can answer the same question for
-#' old fits without consulting the Rust handle.
+#' build know how to do?"*. Fitted objects do not carry the whole manifest:
+#' each one stamps the narrower `fit$schema` record (artifact schema name and
+#' version, crate version, package version), which the serialization and
+#' reporting paths read back. What lets [audit()] describe a fit after
+#' `readRDS()`, with no live Rust handle, is the durable compiled artifact
+#' stored beside it.
 #'
-#' Capability flags evolve over phases; gate behavior on flags rather than
+#' Capability flags evolve across releases; gate behavior on flags rather than
 #' on package version.
 #'
 #' @return A named list with the following elements:
 #' \describe{
 #'   \item{`mixeff_rust_version`}{Version of the bundled extendr crate.}
-#'   \item{`crate_version`}{Version of the bundled `mixedmodels` upstream
+#'   \item{`crate_version`}{Version of the bundled `mixeff-rs` upstream
 #'     crate.}
 #'   \item{`schema_versions`}{Named list, one entry per artifact schema
 #'     the wrapper currently emits or consumes.}

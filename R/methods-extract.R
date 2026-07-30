@@ -10,9 +10,12 @@
 #'   deviance generics.
 #' @param scale Ignored; included for S3 compatibility with [extractAIC()].
 #' @param correlation Logical; accepted for S3 compatibility with [vcov()].
-#' @param condVar Logical; when `TRUE`, Phase 2 returns the random-effects
-#'   tables with an `NA` `postVar` array and an `mm_unavailable_reason`
-#'   attribute rather than fabricating conditional variances.
+#' @param condVar Logical; when `TRUE`, attach a `postVar` array of conditional
+#'   variances to each random-effects table. Gaussian [lmm()] fits receive the
+#'   conditional covariances computed by the engine. [glmm()] fits, and any fit
+#'   whose conditional-variance computation refuses, receive an all-`NA`
+#'   `postVar` plus an `mm_unavailable_reason` attribute rather than fabricated
+#'   conditional variances.
 #' @param k Penalty per parameter for [AIC()].
 #' @param ... Reserved for generic compatibility.
 #'
@@ -39,6 +42,23 @@ fixef <- function(object, ...) {
   UseMethod("fixef")
 }
 
+# mixeff exports its own generics for the lme4 verb set, so when mixeff is
+# attached after lme4 these mask lme4's. Each default delegates foreign fits
+# back through lme4's generic (whose dispatch table holds the merMod
+# methods), so attach order does not break lme4's own objects.
+#' @rdname mm_lmm-methods
+#' @export
+fixef.default <- function(object, ...) {
+  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
+    return(lme4::fixef(object, ...))
+  }
+  mm_abort(
+    message = "`fixef()` has no method for this object.",
+    class = "mm_arg_error",
+    input = object
+  )
+}
+
 #' @rdname mm_lmm-methods
 #' @export
 fixef.mm_lmm <- function(object, ...) {
@@ -53,6 +73,19 @@ fixef.mm_glmm <- fixef.mm_lmm
 #' @export
 ranef <- function(object, ...) {
   UseMethod("ranef")
+}
+
+#' @rdname mm_lmm-methods
+#' @export
+ranef.default <- function(object, ...) {
+  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
+    return(lme4::ranef(object, ...))
+  }
+  mm_abort(
+    message = "`ranef()` has no method for this object.",
+    class = "mm_arg_error",
+    input = object
+  )
 }
 
 #' @rdname mm_lmm-methods
@@ -293,6 +326,19 @@ VarCorr <- function(x, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
+VarCorr.default <- function(x, ...) {
+  if (inherits(x, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
+    return(lme4::VarCorr(x, ...))
+  }
+  mm_abort(
+    message = "`VarCorr()` has no method for this object.",
+    class = "mm_arg_error",
+    input = x
+  )
+}
+
+#' @rdname mm_lmm-methods
+#' @export
 VarCorr.mm_lmm <- function(x, ...) {
   mm_varcorr_with_design_notes(x)
 }
@@ -518,6 +564,9 @@ ngrps <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ngrps.default <- function(object, ...) {
+  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
+    return(lme4::ngrps(object, ...))
+  }
   mm_abort(
     message = "`ngrps()` has no method for this object.",
     class = "mm_arg_error",

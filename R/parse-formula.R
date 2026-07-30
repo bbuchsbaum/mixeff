@@ -1,10 +1,9 @@
 #' Parse and canonicalize an lme4-style formula
 #'
 #' `mm_parse_formula()` parses a formula string through the Rust formula
-#' parser and returns its canonical `Display` rendering. This is the Phase 0
-#' round-trip primitive: equivalent formula spellings produce identical
-#' canonical strings, so equivalence-class testing in R is just string
-#' comparison on the canonical form.
+#' parser and returns its canonical `Display` rendering. Equivalent formula
+#' spellings produce identical canonical strings, so equivalence-class testing
+#' in R is just string comparison on the canonical form.
 #'
 #' @param formula A single character string (length 1, non-NA, non-empty), or
 #'   a one-sided / two-sided R `formula` object. R `formula` objects are
@@ -14,7 +13,7 @@
 #'   formula.
 #'
 #' @section Errors:
-#' Parse failures are signalled as a typed `mm_formula_error` condition (also
+#' Parse failures are signaled as a typed `mm_formula_error` condition (also
 #' inheriting from `mm_condition` and `error`). The condition object carries
 #' the original input string in its `formula` field. Catch with
 #' `tryCatch(..., mm_formula_error = handler)`.

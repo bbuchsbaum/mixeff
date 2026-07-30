@@ -33,7 +33,7 @@ one value per row or an expression evaluated in \code{data}.}
 applied to the model variables before fitting (e.g. \link[stats:na.fail]{stats::na.omit}).
 The default (\code{NULL}) refuses any \code{NA} in a model variable with a typed
 \code{mm_data_error} (audit-first: missing-data dropping must be opt-in). Pass
-\code{na.action = na.omit} for lme4's complete-case behaviour.}
+\code{na.action = na.omit} for lme4's complete-case behavior.}
 
 \item{contrasts}{Optional named list of factor contrasts. The engine codes
 unordered factors with treatment contrasts (\code{contr.treatment}) and ordered
@@ -48,7 +48,7 @@ An object of class \code{mm_lmm}, also inheriting from \code{mm_fit} and
 \code{mm_compiled}.
 }
 \description{
-\code{lmm()} is mixeff's Phase 1 linear mixed-model fit driver. It compiles the
+\code{lmm()} is mixeff's linear mixed-model fit driver. It compiles the
 requested lme4-style formula, emits the same \code{\link[=explain_model]{explain_model()}} view that
 pre-fit audit users see as a message (silence it with \code{suppressMessages()}
 or \code{mm_control(verbose = -1)}), then delegates the numerical fit to the

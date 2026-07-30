@@ -36,18 +36,17 @@ design-audit pipeline against the supplied data, and returns an
 \code{mm_spec} object — the audit-first analogue of the design-only step in
 base \code{lm()}'s \code{model.frame()} / \code{model.matrix()} chain. Nothing is
 optimized; nothing is fitted. \code{audit()}, \code{explain_model()},
-\code{random_options()}, and (in Phase 1.E) \code{lmm()} all consume the same
-artifact.
+\code{random_options()}, and \code{lmm()} all consume the same artifact.
 }
 \details{
 The compiled artifact is the structured truth: every print, summary,
 and audit verb in mixeff reads back from it rather than re-deriving
 meaning from formula text. R formats; Rust authors wording (PRD §9.6).
 
-Phase 1 compile scope: returns a populated \code{mm_spec} with the JSON
-artifact attached. \code{explain_model()}, \code{random_options()}, and
+Compiling returns a populated \code{mm_spec} with the JSON artifact
+attached. \code{explain_model()}, \code{random_options()}, and
 \code{compare_covariance()} render random-effects guidance from upstream
-random-term cards; the fit driver (\code{lmm()}) lands in 1.E.
+random-term cards; \code{\link[=lmm]{lmm()}} and \code{\link[=glmm]{glmm()}} fit the model itself.
 }
 \section{Errors}{
 

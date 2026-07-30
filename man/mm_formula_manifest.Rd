@@ -10,7 +10,7 @@ mm_formula_manifest()
 A named list with the following elements:
 \describe{
 \item{\code{mixeff_rust_version}}{Version of the bundled extendr crate.}
-\item{\code{crate_version}}{Version of the bundled \code{mixedmodels} upstream
+\item{\code{crate_version}}{Version of the bundled \code{mixeff-rs} upstream
 crate.}
 \item{\code{schema_versions}}{Named list, one entry per artifact schema
 the wrapper currently emits or consumes.}
@@ -33,13 +33,15 @@ corresponding \code{marginal_quantities} verbs are implemented.}
 A versioned record of what \code{mixeff} currently supports — formula syntax
 surface, schema versions per artifact type, and capability flags. The
 manifest is the wrapper's machine-readable answer to \emph{"what does this
-build know how to do?"}. Every \code{mm_fit} object created by future phases
-will store a snapshot of \code{mm_formula_manifest()} at construction time so
-the wrapper's \code{audit()} verb (Phase 1+) can answer the same question for
-old fits without consulting the Rust handle.
+build know how to do?"}. Fitted objects do not carry the whole manifest:
+each one stamps the narrower \code{fit$schema} record (artifact schema name and
+version, crate version, package version), which the serialization and
+reporting paths read back. What lets \code{\link[=audit]{audit()}} describe a fit after
+\code{readRDS()}, with no live Rust handle, is the durable compiled artifact
+stored beside it.
 }
 \details{
-Capability flags evolve over phases; gate behavior on flags rather than
+Capability flags evolve across releases; gate behavior on flags rather than
 on package version.
 }
 \examples{

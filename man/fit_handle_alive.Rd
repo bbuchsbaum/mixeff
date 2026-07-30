@@ -19,7 +19,7 @@ A length-one logical value.
 }
 \description{
 The native handle is a process-local cache. A \code{FALSE} result does not mean
-the fit is unusable: Phase 2 extractors read from the durable artifact and
+the fit is unusable: extractors read from the durable artifact and
 flat R-side payload, and \code{\link[=revive]{revive()}} recreates the lazy cache after
 serialization.
 }

@@ -5,8 +5,7 @@
 #' current random-term card, it lays out the full, diagonal, and scalar
 #' covariance families without ranking them.
 #'
-#' @param spec An `mm_spec` from [compile_model()] or, in later phases, an
-#'   `mm_fit`.
+#' @param spec An `mm_spec` from [compile_model()] or an `mm_fit`.
 #'
 #' @return An object of class `mm_compare_covariance` with a `table` data
 #'   frame and the upstream cards it was derived from.

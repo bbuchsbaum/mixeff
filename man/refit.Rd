@@ -2,10 +2,16 @@
 % Please edit documentation in R/simulate.R
 \name{refit}
 \alias{refit}
+\alias{refit.default}
+\alias{refit.mm_glmm}
 \alias{refit.mm_lmm}
 \title{Refit a mixeff LMM with a new response}
 \usage{
 refit(object, newresp, ...)
+
+\method{refit}{default}(object, newresp, ...)
+
+\method{refit}{mm_glmm}(object, newresp, ...)
 
 \method{refit}{mm_lmm}(object, newresp, ...)
 }
@@ -21,5 +27,7 @@ A new \code{mm_lmm}.
 }
 \description{
 \code{refit()} fits the same model formula to a new response by calling \code{\link[=lmm]{lmm()}}
-with the stored model frame and \code{REML} setting.
+with the stored model frame and \code{REML} setting. Refitting is implemented
+for linear mixed models only; calling \code{refit()} on a GLMM fit signals a
+typed \code{mm_inference_unavailable} error.
 }

@@ -24,7 +24,7 @@ whose native joint optimizer otherwise runs to an engine-chosen budget.
 \code{NULL} (default) leaves the engine default in place.}
 
 \item{optimizer}{Optional optimizer name, overriding the driver's automatic
-choice. One of \code{"auto"} (default behaviour), \code{"bobyqa"}, \code{"newuoa"},
+choice. One of \code{"auto"} (default behavior), \code{"bobyqa"}, \code{"newuoa"},
 \code{"cobyla"}, \code{"pattern_search"}, \code{"trust_bq"}, or the PRIMA variants
 (\code{"prima_bobyqa"}, \code{"prima_cobyla"}, \code{"prima_lincoa"}, \code{"prima_newuoa"}).
 An unsupported or not-compiled choice raises a typed error rather than

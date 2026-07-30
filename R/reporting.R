@@ -560,7 +560,14 @@ mm_report_random_effects <- function(fit) {
 }
 
 mm_report_fixed_effects <- function(fit) {
-  table <- inference_table(fit)$table
+  # Route through the same "auto" resolution as summary(): the report is a
+  # reader-facing surface, so it must not serve the fit-time Wald-z fallback
+  # on a fit where summary() would resolve to Satterthwaite.
+  table <- if (inherits(fit, "mm_lmm")) {
+    mm_auto_resolved_inference_table(fit)$table
+  } else {
+    inference_table(fit)$table
+  }
   table$source <- "fixed_effect_inference_table"
   mm_report_section(table, "fixed_effect_inference_table")
 }

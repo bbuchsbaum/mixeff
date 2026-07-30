@@ -1162,7 +1162,11 @@ fn mm_bootstrap_lrt_json(
             .iter()
             .filter(|v| v.is_finite() && **v >= observed_lrt)
             .count();
-        Some((count_ge as f64) / (successful as f64))
+        // (b + 1) / (n + 1): the standard Monte-Carlo p-value (Davison &
+        // Hinkley), matching upstream stats::parametric_bootstrap_lrt and the
+        // contrast() bootstrap route. Never returns an exact 0 from a finite
+        // replicate count.
+        Some(((count_ge + 1) as f64) / ((successful + 1) as f64))
     } else {
         None
     };

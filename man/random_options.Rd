@@ -7,8 +7,7 @@
 random_options(spec, group, slope = NULL)
 }
 \arguments{
-\item{spec}{An \code{mm_spec} from \code{\link[=compile_model]{compile_model()}} or, in later phases, an
-\code{mm_fit}.}
+\item{spec}{An \code{mm_spec} from \code{\link[=compile_model]{compile_model()}} or an \code{mm_fit}.}
 
 \item{group}{Grouping factor to inspect. May be supplied bare
 (\code{group = subject}) or as a string.}

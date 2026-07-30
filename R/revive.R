@@ -63,7 +63,7 @@ revive.default <- function(fit, ...) {
 #' Test whether a mixeff fit has a live native handle
 #'
 #' The native handle is a process-local cache. A `FALSE` result does not mean
-#' the fit is unusable: Phase 2 extractors read from the durable artifact and
+#' the fit is unusable: extractors read from the durable artifact and
 #' flat R-side payload, and [revive()] recreates the lazy cache after
 #' serialization.
 #'
@@ -148,6 +148,9 @@ getME.mm_lmm <- function(object, name, ...) {
 
 #' @export
 getME.default <- function(object, name, ...) {
+  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
+    return(lme4::getME(object, name, ...))
+  }
   mm_abort(
     message = "`getME()` expects a fitted mixeff LMM.",
     class = "mm_arg_error",
@@ -479,7 +482,12 @@ inference_table.mm_lmm <- function(fit,
       # Artifact rows carry engine-encoded labels in ENGINE column order;
       # translate to lme4 names and reorder coefficient rows to match
       # names(fit$beta), so positional pairing with fixef()/vcov() is safe.
+      # `term` is the same string as `label` at parse time and must stay in
+      # step, or name-keyed code sees two encodings for one coefficient.
       tbl$label <- mm_coef_engine_to_lme4(tbl$label, fit$coef_map)
+      if (!is.null(tbl$term)) {
+        tbl$term <- mm_coef_engine_to_lme4(tbl$term, fit$coef_map)
+      }
       if (!is.null(tbl$kind) && !is.null(fit$coef_map)) {
         is_coef <- tbl$kind == "coefficient"
         coef_rows <- tbl[is_coef, , drop = FALSE]
@@ -521,6 +529,25 @@ inference_table.mm_lmm <- function(fit,
   obj <- list(table = table, raw = NULL)
   class(obj) <- "mm_inference_table"
   obj
+}
+
+#' @rdname inference_table
+#' @method inference_table mm_glmm
+#' @export
+inference_table.mm_glmm <- function(fit, method = "auto", ...) {
+  if (!identical(method, "auto")) {
+    mm_abort(
+      message = paste(
+        "`inference_table()` supports only `method = \"auto\"` for GLMM",
+        "fits; the table reflects the fit's own estimator (see",
+        "`vignette(\"glmm\", package = \"mixeff\")`)."
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "glmm_inference_table_method_unavailable",
+      input = method
+    )
+  }
+  mm_glmm_wald_z_inference(fit)
 }
 
 #' @method print mm_inference_table

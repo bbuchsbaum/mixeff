@@ -7,8 +7,7 @@
 compare_covariance(spec)
 }
 \arguments{
-\item{spec}{An \code{mm_spec} from \code{\link[=compile_model]{compile_model()}} or, in later phases, an
-\code{mm_fit}.}
+\item{spec}{An \code{mm_spec} from \code{\link[=compile_model]{compile_model()}} or an \code{mm_fit}.}
 }
 \value{
 An object of class \code{mm_compare_covariance} with a \code{table} data

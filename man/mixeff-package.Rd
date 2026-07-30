@@ -4,14 +4,18 @@
 \name{mixeff-package}
 \alias{mixeff}
 \alias{mixeff-package}
-\title{mixeff: Audit-First Mixed-Effects Models via the 'mixedmodels' Rust Crate}
+\title{mixeff: Mixed-Effects Models via the 'mixeff-rs' Rust Crate}
 \description{
-An R wrapper for the \code{mixedmodels} Rust crate. The package is audit-first:
-every printed claim traces back to a versioned JSON artifact produced by
-the Rust compiler, and the package refuses to fabricate inference results
-the engine cannot certify. See \code{vignette("intro", package = "mixeff")} for
-an overview and the demystification surface for random-effects syntax
-(Phase 1+).
+An R wrapper for the \code{mixeff-rs} Rust crate. \code{lmm()} and \code{glmm()} fit
+linear and generalized linear mixed-effects models from lme4-style
+formulas. Fitted models store the compiled model, optimizer result, and
+inference metadata as data, so a result can be inspected, saved, and
+reloaded; where an inference method is unavailable, the result is either
+withheld with a stable reason code or labeled with the method actually
+used, never silently swapped. See
+\code{vignette("intro", package = "mixeff")} for an overview and
+\code{vignette("demystifying-formulas", package = "mixeff")} for what
+random-effects formulas mean.
 }
 \seealso{
 Useful links:

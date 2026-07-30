@@ -53,7 +53,10 @@ mm_register_lme4_s3 <- function() {
   registerS3method("VarCorr", "mm_lmm", VarCorr.mm_lmm, envir = ns)
   registerS3method("VarCorr", "mm_glmm", VarCorr.mm_glmm, envir = ns)
   registerS3method("getME", "mm_lmm", getME.mm_lmm, envir = ns)
+  registerS3method("ngrps", "mm_lmm", ngrps.mm_lmm, envir = ns)
+  registerS3method("ngrps", "mm_glmm", ngrps.mm_glmm, envir = ns)
   registerS3method("refit", "mm_lmm", refit.mm_lmm, envir = ns)
+  registerS3method("refit", "mm_glmm", refit.mm_glmm, envir = ns)
   invisible(TRUE)
 }
 

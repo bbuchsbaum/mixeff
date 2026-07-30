@@ -13,7 +13,7 @@ roles(...)
 An \code{mm_roles} object with a data-frame \code{table}.
 }
 \description{
-\code{roles()} has two Phase 1.F uses. With named string arguments it constructs
+\code{roles()} has two uses. With named string arguments it constructs
 a declared-role object, e.g. \code{roles(subject = "sampled_unit")}. With a
 compiled spec or fit as its only unnamed argument, it returns the observed
 role fallback inferred from the formula and model frame.

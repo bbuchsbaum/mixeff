@@ -1,3 +1,46 @@
+# Resolve the "auto" inference route the way the reader-facing surfaces
+# (summary(), reporting_table()) present it. "auto" resolves to the
+# finite-sample Satterthwaite route whenever it is feasible; the engine's
+# fit-time cached table is the asymptotic Wald-z fallback and stays the
+# honest answer only where Satterthwaite df are refused (singular /
+# boundary optimum). inference_table(fit, method = "auto") itself keeps
+# the raw artifact view; this helper is the shared routing policy on top.
+mm_auto_resolved_inference_table <- function(object, method = "auto") {
+  if (!method %in% c("auto", "satterthwaite", "kenward_roger",
+                     "asymptotic", "none")) {
+    # summary.mm_lmm's match.arg also admits "bootstrap"; silently resolving
+    # it to another method would be exactly the swap this package promises
+    # not to make. Refuse and name the verbs that do run bootstrap.
+    mm_abort(
+      message = sprintf(
+        paste0("`summary()` does not run `method = \"%s\"`; use ",
+               "`contrast()`, `test_effect()`, or `compare()` with ",
+               "`method = \"bootstrap\"` for bootstrap inference."),
+        method
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "summary_bootstrap_unavailable",
+      input = method
+    )
+  }
+  inf_method <- method
+  if (identical(inf_method, "auto") &&
+      !mm_boundary_df_method_unavailable(object, "satterthwaite")) {
+    inf_method <- "satterthwaite"
+  }
+  tbl <- inference_table(object, method = inf_method)
+  if (identical(inf_method, "satterthwaite") && identical(method, "auto") &&
+      !any(tbl$table$status == "available")) {
+    # Satterthwaite was refused for every coefficient (the boundary can be
+    # reached without is_singular() flagging it, e.g. a variance pinned at
+    # zero on a not_optimized fit). Only an unrequested route may be
+    # swapped: the cached rows are labeled asymptotic_wald_z and carry
+    # their own engine fallback note, so nothing is hidden.
+    tbl <- inference_table(object, method = "auto")
+  }
+  tbl
+}
+
 #' @method summary mm_lmm
 #' @export
 summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
@@ -7,31 +50,7 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
   tests <- match.arg(tests)
   method <- match.arg(method)
   inference <- if (identical(tests, "coefficients")) {
-    inf_method <- if (method %in% c("auto", "satterthwaite", "kenward_roger",
-                                    "asymptotic", "none")) {
-      method
-    } else {
-      "auto"
-    }
-    if (identical(inf_method, "auto") &&
-        !mm_boundary_df_method_unavailable(object, "satterthwaite")) {
-      # "auto" resolves to the finite-sample Satterthwaite route whenever it
-      # is feasible; the engine's fit-time cached table is the asymptotic
-      # Wald-z fallback and stays the honest answer only where Satterthwaite
-      # df are refused (singular / boundary optimum).
-      inf_method <- "satterthwaite"
-    }
-    tbl <- inference_table(object, method = inf_method)
-    if (identical(inf_method, "satterthwaite") && identical(method, "auto") &&
-        !any(tbl$table$status == "available")) {
-      # Satterthwaite was refused for every coefficient (the boundary can be
-      # reached without is_singular() flagging it, e.g. a variance pinned at
-      # zero on a not_optimized fit). Only an unrequested route may be
-      # swapped: the cached rows are labeled asymptotic_wald_z and carry
-      # their own engine fallback note, so nothing is hidden.
-      tbl <- inference_table(object, method = "auto")
-    }
-    tbl
+    mm_auto_resolved_inference_table(object, method)
   } else {
     NULL
   }
@@ -156,7 +175,11 @@ mm_glmm_wald_z_inference <- function(object) {
     }
     if (nrow(rows)) {
       # Artifact rows carry engine-encoded labels; fit$beta is lme4-named.
+      # `term` starts as the same string as `label` and must stay in step.
       rows$label <- mm_coef_engine_to_lme4(rows$label, object$coef_map)
+      if (!is.null(rows$term)) {
+        rows$term <- mm_coef_engine_to_lme4(rows$term, object$coef_map)
+      }
       rows <- rows[match(names(object$beta), rows$label), , drop = FALSE]
       out <- list(table = rows, raw = parsed$raw)
       class(out) <- c("mm_inference_table", "list")
@@ -194,6 +217,7 @@ mm_glmm_wald_z_inference <- function(object) {
     p[] <- NA_real_
   }
   rows <- data.frame(
+    term              = names(beta),
     label             = names(beta),
     kind              = "coefficient",
     estimate          = unname(beta),

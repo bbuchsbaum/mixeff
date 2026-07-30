@@ -1,6 +1,6 @@
 #' Fit a linear mixed-effects model
 #'
-#' `lmm()` is mixeff's Phase 1 linear mixed-model fit driver. It compiles the
+#' `lmm()` is mixeff's linear mixed-model fit driver. It compiles the
 #' requested lme4-style formula, emits the same [explain_model()] view that
 #' pre-fit audit users see as a message (silence it with `suppressMessages()`
 #' or `mm_control(verbose = -1)`), then delegates the numerical fit to the
@@ -24,7 +24,7 @@
 #'   applied to the model variables before fitting (e.g. [stats::na.omit]).
 #'   The default (`NULL`) refuses any `NA` in a model variable with a typed
 #'   `mm_data_error` (audit-first: missing-data dropping must be opt-in). Pass
-#'   `na.action = na.omit` for lme4's complete-case behaviour.
+#'   `na.action = na.omit` for lme4's complete-case behavior.
 #' @param contrasts Optional named list of factor contrasts. The engine codes
 #'   unordered factors with treatment contrasts (`contr.treatment`) and ordered
 #'   factors with orthonormal polynomial contrasts (`contr.poly`), matching
@@ -488,7 +488,7 @@ mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
   if (!ok) {
     mm_abort(
       message = paste(
-        "Custom `contrasts` are only honoured when they match the engine's",
+        "Custom `contrasts` are only honored when they match the engine's",
         "coding: `contr.treatment`/`contr.SAS` for unordered factors and",
         "`contr.poly` for ordered factors. Recode the factor (e.g. relevel(),",
         "toggle ordering, or construct numeric columns) for a different coding."

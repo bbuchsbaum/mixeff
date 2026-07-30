@@ -1,7 +1,7 @@
 #' Explain the random-effects structure of a compiled model
 #'
 #' `explain_model()` renders the random-effects guidance surface for an
-#' `mm_spec` returned by [compile_model()] or, in later phases, an `mm_fit`.
+#' `mm_spec` returned by [compile_model()] or an `mm_fit`.
 #' It formats the upstream `RandomTermCard` and diagnostic payloads; Rust
 #' remains the source of truth for per-block English wording and design facts.
 #'

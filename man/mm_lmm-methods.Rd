@@ -3,14 +3,17 @@
 \name{mm_lmm-methods}
 \alias{mm_lmm-methods}
 \alias{fixef}
+\alias{fixef.default}
 \alias{fixef.mm_lmm}
 \alias{fixef.mm_glmm}
 \alias{ranef}
+\alias{ranef.default}
 \alias{ranef.mm_lmm}
 \alias{ranef.mm_glmm}
 \alias{coef.mm_lmm}
 \alias{coef.mm_glmm}
 \alias{VarCorr}
+\alias{VarCorr.default}
 \alias{VarCorr.mm_lmm}
 \alias{VarCorr.mm_glmm}
 \alias{sigma.mm_lmm}
@@ -51,11 +54,15 @@
 \usage{
 fixef(object, ...)
 
+\method{fixef}{default}(object, ...)
+
 \method{fixef}{mm_lmm}(object, ...)
 
 \method{fixef}{mm_glmm}(object, ...)
 
 ranef(object, ...)
+
+\method{ranef}{default}(object, ...)
 
 \method{ranef}{mm_lmm}(object, condVar = FALSE, ...)
 
@@ -66,6 +73,8 @@ ranef(object, ...)
 \method{coef}{mm_glmm}(object, ...)
 
 VarCorr(x, ...)
+
+\method{VarCorr}{default}(x, ...)
 
 \method{VarCorr}{mm_lmm}(x, ...)
 
@@ -144,9 +153,12 @@ ngrps(object, ...)
 
 \item{...}{Reserved for generic compatibility.}
 
-\item{condVar}{Logical; when \code{TRUE}, Phase 2 returns the random-effects
-tables with an \code{NA} \code{postVar} array and an \code{mm_unavailable_reason}
-attribute rather than fabricating conditional variances.}
+\item{condVar}{Logical; when \code{TRUE}, attach a \code{postVar} array of conditional
+variances to each random-effects table. Gaussian \code{\link[=lmm]{lmm()}} fits receive the
+conditional covariances computed by the engine. \code{\link[=glmm]{glmm()}} fits, and any fit
+whose conditional-variance computation refuses, receive an all-\code{NA}
+\code{postVar} plus an \code{mm_unavailable_reason} attribute rather than fabricated
+conditional variances.}
 
 \item{REML}{Ignored; included for S3 compatibility with likelihood and
 deviance generics.}

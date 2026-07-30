@@ -3,6 +3,7 @@
 \name{inference_table}
 \alias{inference_table}
 \alias{inference_table.mm_lmm}
+\alias{inference_table.mm_glmm}
 \title{Fixed-effect inference table}
 \usage{
 inference_table(fit, ...)
@@ -12,6 +13,8 @@ inference_table(fit, ...)
   method = c("auto", "satterthwaite", "kenward_roger", "asymptotic", "none"),
   ...
 )
+
+\method{inference_table}{mm_glmm}(fit, method = "auto", ...)
 }
 \arguments{
 \item{fit}{A fitted \code{mm_lmm}.}

@@ -5,8 +5,7 @@
 #' same upstream audit path as [compile_model()], so support facts and block
 #' meanings come from Rust-authored `RandomTermCard` records.
 #'
-#' @param spec An `mm_spec` from [compile_model()] or, in later phases, an
-#'   `mm_fit`.
+#' @param spec An `mm_spec` from [compile_model()] or an `mm_fit`.
 #' @param group Grouping factor to inspect. May be supplied bare
 #'   (`group = subject`) or as a string.
 #' @param slope Optional slope variable to use for nearby slope-bearing

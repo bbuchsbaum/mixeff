@@ -5,17 +5,16 @@
 #' `mm_spec` object — the audit-first analogue of the design-only step in
 #' base `lm()`'s `model.frame()` / `model.matrix()` chain. Nothing is
 #' optimized; nothing is fitted. `audit()`, `explain_model()`,
-#' `random_options()`, and (in Phase 1.E) `lmm()` all consume the same
-#' artifact.
+#' `random_options()`, and `lmm()` all consume the same artifact.
 #'
 #' The compiled artifact is the structured truth: every print, summary,
 #' and audit verb in mixeff reads back from it rather than re-deriving
 #' meaning from formula text. R formats; Rust authors wording (PRD §9.6).
 #'
-#' Phase 1 compile scope: returns a populated `mm_spec` with the JSON
-#' artifact attached. `explain_model()`, `random_options()`, and
+#' Compiling returns a populated `mm_spec` with the JSON artifact
+#' attached. `explain_model()`, `random_options()`, and
 #' `compare_covariance()` render random-effects guidance from upstream
-#' random-term cards; the fit driver (`lmm()`) lands in 1.E.
+#' random-term cards; [lmm()] and [glmm()] fit the model itself.
 #'
 #' @param formula A two-sided lme4-style formula, e.g.
 #'   `y ~ x + (1 + x | subject)`.

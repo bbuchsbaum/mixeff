@@ -1,21 +1,26 @@
 Package: mixeff
-Title: Audit-First Mixed-Effects Models via the 'mixeff-rs' Rust Crate
+Title: Mixed-Effects Models via the 'mixeff-rs' Rust Crate
 Version: 0.2.0
 Authors@R:
     person("Brad", "Buchsbaum",
            email = "bbuchsbaum@research.baycrest.org",
            role = c("aut", "cre"))
-Description: An R wrapper for the 'mixeff-rs' Rust crate, providing
-    linear and generalized linear mixed-effects model fitting via lme4-style
-    formulas. The wrapper is audit-first: every printed claim traces back to
-    a versioned JSON artifact produced by the Rust compiler, and the package
-    refuses to fabricate inference results that the engine cannot certify.
-    See the package vignettes for migration from 'lme4' and the
-    demystification surface for random-effects syntax.
+Description: Fits linear and generalized linear mixed-effects models
+    from 'lme4'-style formulas, with optimization by the bundled
+    'mixeff-rs' Rust crate. A fitted model stores the compiled model
+    specification, the optimizer certificate, and per-coefficient
+    inference metadata (method, status, reliability) as data, so a result
+    can be inspected, saved, and reloaded without a live handle to the
+    compiled engine. When an inference method is unavailable for a fit,
+    the affected value is either withheld with a stable reason code or
+    reported under the name of the method actually used, never silently
+    swapped. Vignettes cover migration from 'lme4' and the meaning of
+    random-effects formula syntax.
 License: MIT + file LICENSE
 URL: https://bbuchsbaum.github.io/mixeff/, https://github.com/bbuchsbaum/mixeff
 BugReports: https://github.com/bbuchsbaum/mixeff/issues
 Encoding: UTF-8
+Language: en-US
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Config/rextendr/version: 0.5.0
@@ -39,6 +44,7 @@ Suggests:
     lme4,
     lmerTest,
     MASS,
+    pbkrtest,
     rextendr,
     rmarkdown,
     testthat (>= 3.0.0)

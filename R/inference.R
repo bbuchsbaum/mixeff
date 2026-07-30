@@ -932,12 +932,22 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
                                        "bootstrap"), ...) {
   method <- match.arg(method)
   if (method %in% c("profile", "bootstrap")) {
+    # Advice must be actionable on THIS fit: asymptotic Wald intervals are
+    # certified only for joint_laplace fits, so pointing a pirls_profiled
+    # fit at method = "asymptotic" would just fail again downstream.
+    advice <- if (identical(object$method, "joint_laplace")) {
+      "Use method = \"asymptotic\"."
+    } else {
+      paste0("Re-fit with glmm(..., method = \"joint_laplace\") and use ",
+             "method = \"asymptotic\"; no confint() route is certified for ",
+             "the fast default estimator.")
+    }
     mm_abort(
       message = sprintf(
         paste0("`confint(method = \"%s\")` is not available for GLMM fits; the ",
                "upstream contract certifies only asymptotic Wald intervals for ",
-               "generalized models. Use method = \"asymptotic\"."),
-        method
+               "generalized models. %s"),
+        method, advice
       ),
       class = "mm_inference_unavailable",
       reason_code = "glmm_confint_method_unavailable",

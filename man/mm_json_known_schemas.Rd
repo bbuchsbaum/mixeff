@@ -10,9 +10,9 @@ mm_json_known_schemas()
 A data frame with two character columns: \code{name} and \code{version}.
 }
 \description{
-Returns the known-schema table that backs \code{\link[=mm_json_negotiate]{mm_json_negotiate()}}. New
-schemas appear here as later phases add artifacts (compiled-model,
-audit, theta_map, certificate, inference, reproducibility, prediction).
+Returns the known-schema table that backs \code{\link[=mm_json_negotiate]{mm_json_negotiate()}}. The
+wrapper refuses any artifact whose schema name and version are absent
+from this table, so the table grows as new artifact types are added.
 }
 \examples{
 mm_json_known_schemas()

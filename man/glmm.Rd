@@ -43,7 +43,7 @@ counts for proportion responses; weights must be positive and finite.}
 \item{subset, na.action, contrasts}{Reserved for future parity with \code{\link[=lmm]{lmm()}}.}
 
 \item{method}{GLMM estimation method. \code{"pirls_profiled"} is the default
-fast-PIRLS profiled path. \code{"joint_laplace"} requests the labelled joint
+fast-PIRLS profiled path. \code{"joint_laplace"} requests the labeled joint
 Laplace route and requires \code{nAGQ <= 1}. The joint route tracks the lme4
 joint-Laplace reference far more closely than the profiled path on
 high-baseline models, at a higher optimizer cost; cap that cost with
@@ -71,8 +71,8 @@ An object of class \code{mm_glmm}, also inheriting from \code{mm_fit} and
 \code{glmm()} validates the R-side family/link request, compiles the model
 formula, and delegates the numerical fit to the upstream Rust
 \code{GeneralizedLinearMixedModel}. The default \code{method = "pirls_profiled"} is
-the labelled fast-PIRLS path. \code{method = "joint_laplace"} uses the upstream
-labelled joint Laplace route (\code{fast = FALSE}, \code{nAGQ = 1}) backed by the
+the labeled fast-PIRLS path. \code{method = "joint_laplace"} uses the upstream
+labeled joint Laplace route (\code{fast = FALSE}, \code{nAGQ = 1}) backed by the
 native dependency-light optimizer in this vendored build.
 }
 \details{

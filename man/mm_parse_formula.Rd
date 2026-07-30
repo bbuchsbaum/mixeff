@@ -17,14 +17,13 @@ formula.
 }
 \description{
 \code{mm_parse_formula()} parses a formula string through the Rust formula
-parser and returns its canonical \code{Display} rendering. This is the Phase 0
-round-trip primitive: equivalent formula spellings produce identical
-canonical strings, so equivalence-class testing in R is just string
-comparison on the canonical form.
+parser and returns its canonical \code{Display} rendering. Equivalent formula
+spellings produce identical canonical strings, so equivalence-class testing
+in R is just string comparison on the canonical form.
 }
 \section{Errors}{
 
-Parse failures are signalled as a typed \code{mm_formula_error} condition (also
+Parse failures are signaled as a typed \code{mm_formula_error} condition (also
 inheriting from \code{mm_condition} and \code{error}). The condition object carries
 the original input string in its \code{formula} field. Catch with
 \code{tryCatch(..., mm_formula_error = handler)}.

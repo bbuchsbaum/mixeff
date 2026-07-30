@@ -2,9 +2,12 @@
 % Please edit documentation in R/simulate.R
 \name{simulate.mm_lmm}
 \alias{simulate.mm_lmm}
+\alias{simulate.mm_glmm}
 \title{Simulate from a mixeff LMM}
 \usage{
 \method{simulate}{mm_lmm}(object, nsim = 1, seed = NULL, re.form = NULL, ...)
+
+\method{simulate}{mm_glmm}(object, nsim = 1, seed = NULL, re.form = NULL, ...)
 }
 \arguments{
 \item{object}{A fitted \code{mm_lmm}.}
@@ -23,5 +26,8 @@ A data frame of simulated responses.
 }
 \description{
 Draws Gaussian responses from the stored fixed effects, random-effect
-covariance summaries, and residual scale.
+covariance summaries, and residual scale. Simulation is implemented for
+linear mixed models only; calling \code{simulate()} on a GLMM fit signals a
+typed \code{mm_inference_unavailable} error with reason code
+\code{glmm_simulate_unimplemented}.
 }

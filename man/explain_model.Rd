@@ -21,7 +21,7 @@ An object of class \code{mm_explanation} carrying:
 }
 \description{
 \code{explain_model()} renders the random-effects guidance surface for an
-\code{mm_spec} returned by \code{\link[=compile_model]{compile_model()}} or, in later phases, an \code{mm_fit}.
+\code{mm_spec} returned by \code{\link[=compile_model]{compile_model()}} or an \code{mm_fit}.
 It formats the upstream \code{RandomTermCard} and diagnostic payloads; Rust
 remains the source of truth for per-block English wording and design facts.
 }

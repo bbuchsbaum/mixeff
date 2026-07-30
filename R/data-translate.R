@@ -13,7 +13,7 @@
 #'   factor order, not first-appearance).
 #' * `ordered` factor → additionally recorded in `categorical_ordered` so the
 #'   engine codes it with orthonormal polynomial contrasts (`contr.poly`),
-#'   matching lme4's ordered-factor behaviour rather than treatment coding.
+#'   matching lme4's ordered-factor behavior rather than treatment coding.
 #' * `character` → `"categorical"` with `levels = unique(col)`
 #'   (first-appearance order — matches the upstream `CategoricalColumn::new`
 #'   default).
@@ -161,7 +161,7 @@ mm_assert_ordered_contrast_policy <- function(nm, col, .call = rlang::caller_env
       call = .call
     )
   }
-  # An ordered factor is honoured only when its explicit contrasts, if any, is
+  # An ordered factor is honored only when its explicit contrasts, if any, is
   # the string "contr.poly". An attached numeric contrast MATRIX is rejected
   # even when it numerically equals contr.poly, because we cannot cheaply
   # certify equivalence and will not silently substitute our own basis.

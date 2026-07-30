@@ -25,17 +25,14 @@ written `lme4::lmer()`. `mixeff::lmm()` accepts the same formulas
 and answers to the same extractors. An `lmer` script becomes an
 `lmm` script with two edits.
 
-What `mixeff` adds is mostly *around* the fit. It exposes the
-random-effects design before optimization, keeps the method behind
-every p-value visible in the output, and produces a fitted object
-that survives `saveRDS()` without losing its audit trail. The goal
-is not to replace your statistical judgment; it is to make the
-fitted object carry enough information that you can inspect, report,
-save, reload, and compare models without guessing which details were
-used.
+What `mixeff` adds sits around the fit rather than inside it: it
+exposes the random-effects design before optimization, keeps the
+method behind every p-value visible in the output, and produces a
+fitted object that survives `saveRDS()` with its diagnostics and
+method labels intact.
 
-This vignette is a guided tour at a deliberate pace. The shorter
-elevator pitch is in `vignette("mixeff", package = "mixeff")`.
+This vignette works through those pieces one at a time. For the
+short version, read `vignette("mixeff", package = "mixeff")` first.
 
 ## What problem does it solve?
 
@@ -117,8 +114,9 @@ formula mean?".
 ## Reporting tables
 
 Use `reporting_table()` when you want a data-frame result instead of printed
-console output. The default view is compact; use `view = "audit"` when you want
-the full provenance columns.
+console output. Its fixed-effects section resolves the inference method the
+same way `summary()` does, so the two agree row for row. The default view
+is compact; use `view = "audit"` when you want the full provenance columns.
 
 ```{r reporting-tables}
 reporting_table(fit, "overview")
@@ -158,10 +156,8 @@ functions are there when you need them:
 - `mm_json_known_schemas()` lists the structured artifact schemas understood by
   this version of the package.
 
-The computational backend is intentionally not the opening story for most R
-users. It matters because it lets `mixeff` keep a structured audit trail, but
-the user-facing reason to use the package is simpler: fit the model, get the
-numbers, and keep the status of those numbers attached to the object.
+The Rust backend does not change how you write R: you fit the model, get
+the numbers, and the status of those numbers stays attached to the object.
 
 ## What's next?
 

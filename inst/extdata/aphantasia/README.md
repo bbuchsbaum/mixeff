@@ -1,9 +1,8 @@
 # Aphantasia Revision 3 Fixture
 
-This directory contains an anonymized, trial-level fixture generated from the
-Loo aphantasia revision 3 manuscript analysis at:
-
-`/Users/bbuchsbaum/Dropbox/manuscripts/Loo_aphantasia/revision3`
+This directory contains an anonymized, trial-level fixture generated from
+the aphantasia manuscript analysis (revision 3; local manuscript archive,
+not distributed).
 
 Files:
 

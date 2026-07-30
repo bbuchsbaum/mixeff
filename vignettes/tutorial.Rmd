@@ -20,6 +20,22 @@ knitr::opts_chunk$set(
 library(mixeff)
 ```
 
+```{r simulate-data, include = FALSE}
+set.seed(1)
+n_subjects <- 18L
+sleep <- expand.grid(
+  Days = 0:9,
+  Subject = factor(seq_len(n_subjects))
+)
+subject_intercept <- rnorm(n_subjects, sd = 25)
+subject_slope <- rnorm(n_subjects, sd = 6)
+subject_index <- as.integer(sleep$Subject)
+sleep$Reaction <- 250 + 10.5 * sleep$Days +
+  subject_intercept[subject_index] +
+  subject_slope[subject_index] * sleep$Days +
+  rnorm(nrow(sleep), sd = 25)
+```
+
 This vignette fits one model, end-to-end, and explains every number. After
 reading it you will be able to fit a linear mixed model, read its output,
 run an inference test, and save the result. The other vignettes go deeper on
@@ -27,12 +43,12 @@ any step.
 
 ## The data
 
-`lme4::sleepstudy` records reaction times (ms) for 18 subjects over ten days
-of sleep deprivation. Each subject was deprived of sleep starting on Day 0;
-by Day 9 most show substantial slowing.
+The example simulates reaction times (ms) for 18 subjects over ten days of
+sleep deprivation. Each subject has a different baseline and a different
+response to continued sleep loss. The data are generated inside this
+vignette, so the tutorial runs without an example-data package.
 
 ```{r load-data}
-sleep <- lme4::sleepstudy
 str(sleep)
 ```
 
@@ -48,14 +64,12 @@ its own slope — their personal baseline and their personal rate of slowing —
 and then estimating a population distribution over those person-level
 parameters.
 
-```{r individual-trajectories, fig.width = 6, fig.height = 4}
-library(ggplot2)
-ggplot(sleep, aes(Days, Reaction, group = Subject)) +
-  geom_line(alpha = 0.4) +
-  geom_smooth(aes(group = 1), method = "lm", se = FALSE, colour = "steelblue") +
-  labs(x = "Days of sleep deprivation", y = "Reaction time (ms)",
-       title = "Individual subject trajectories") +
-  theme_minimal()
+```{r individual-trajectories, echo = FALSE, fig.width = 6, fig.height = 4}
+subject_lines <- unstack(sleep, Reaction ~ Subject)
+matplot(0:9, subject_lines, type = "l", lty = 1, col = "grey70",
+        xlab = "Days of sleep deprivation", ylab = "Reaction time (ms)",
+        main = "Individual subject trajectories")
+abline(lm(Reaction ~ Days, data = sleep), col = "steelblue", lwd = 2)
 ```
 
 The grey lines are individuals; the blue line is the population average.
@@ -94,8 +108,8 @@ verify before a long fit.
 fit <- lmm(Reaction ~ Days + (Days | Subject), sleep)
 ```
 
-`lmm()` returns an `mm_lmm` object. The actual optimization is performed by
-the bundled Rust engine; `lmm()` is the R entry point and result container.
+`lmm()` returns an `mm_lmm` object. The bundled Rust engine performs the
+optimization; `lmm()` is the R entry point and result container.
 
 ## Step 3: Read the summary
 
@@ -108,39 +122,41 @@ The summary has four blocks, in print order.
 **Fit status.** Check this line first. `converged_interior` is the good
 outcome: the optimizer found a clean solution and every variance component
 is comfortably positive, so you can read the rest of the summary at face
-value. The status only changes when something needs your attention — for
-example, if a variance component collapses to zero (the data show no
-detectable variation for that term), the status reports a *boundary* fit,
-the affected row is flagged in the variance-components table, and the
-p-values below switch to a more conservative, clearly labeled method. In
-short: a healthy fit says `converged_interior`, and an unhealthy one tells
-you what went wrong instead of leaving you to notice.
+value. The status changes when something needs your attention. If a
+variance component collapses to zero — the data show no detectable
+variation for that term — the status reports a *boundary* fit, and the
+affected row is flagged in the variance-components table. The p-values
+below then switch from Satterthwaite *t* to asymptotic Wald *z*, labeled
+as such and graded `low` reliability: the *z* test drops the
+finite-sample correction, so treat its p-values as optimistic rather
+than cautious.
 
-**Variance components.** `Subject (Intercept)` is the between-subject spread
-in baseline reaction time (SD ≈ 25 ms); `Subject Days` is the between-subject
-spread in sensitivity to sleep loss (SD ≈ 6 ms per day); `correlation` is
-their association (+0.07 — essentially none). The residual standard deviation
-is the within-subject noise left over.
+**Variance components.** `Subject (Intercept)` is the estimated
+between-subject spread in baseline reaction time; `Subject Days` is the
+estimated between-subject spread in sensitivity to sleep loss; `correlation`
+is their estimated association. The residual standard deviation is the
+within-subject noise left over.
 
 **Fixed effects.** `Estimate` is the population-level coefficient.
-`Days = 10.47` means that, on average, reaction time increases by about
-10.5 ms per day of sleep deprivation. The `method` column names how each
-p-value was computed — here `satterthwaite`, a finite-sample *t* test whose
-`df` column (≈ 17) is on the scale of the 18 subjects, not the 180 raw rows.
-`mixeff` never reports a number without naming the method behind it. On fits
-where Satterthwaite degrees of freedom cannot be computed (for example a
-variance component at the boundary), the summary shows clearly labeled
-asymptotic Wald *z* rows instead; the `method` column always tells you which
-one you got.
+The `Days` estimate is the fitted average change in reaction time per day;
+the simulation used a population slope of 10.5 ms per day. The `method`
+column names how each p-value was computed — here `satterthwaite`, a
+finite-sample *t* test whose `df` column is on the scale of the 18 subjects,
+not the 180 raw rows.
+Every test statistic and p-value in this table names the method behind it.
+On fits where Satterthwaite degrees of freedom cannot be computed (for
+example a variance component at the boundary), the summary shows labeled
+asymptotic Wald *z* rows instead; the `method` column tells you which one
+you got.
 
 **Inference status.** One row per coefficient stating how much to trust the
 test: `status` says whether it was computed, `reliability` grades it, and
-`reliability_reason` names the engine's warrant for that grade — here
+`reliability_reason` names the engine's reason for that grade — here
 `satterthwaite_finite_difference_approximation`, meaning the degrees of
 freedom come from a finite-difference approximation, the standard route for
 this method (graded `moderate`). Any further engine notes print underneath.
-Grades and warrants are authored by the Rust engine, not by R-side
-heuristics.
+The Rust engine assigns these grades and reasons; the R side passes them
+through unchanged.
 
 ## Step 4: Extract components
 
@@ -165,25 +181,27 @@ range of plausible slopes.
 
 ## Step 5: Test a specific claim
 
-`contrast()` evaluates a linear combination of fixed-effect coefficients —
-the mixeff equivalent of `lme4::fixef()` one-row hypothesis tests, but with
-method labelling.
+`contrast()` tests a linear combination of fixed-effect coefficients and
+returns a one-row table that names the method behind the p-value.
 
 ```{r contrast}
 ct <- contrast(fit, c("(Intercept)" = 0, Days = 1))
 ct$table[, c("estimate", "std_error", "p_value", "method", "status", "reliability")]
 ```
 
-The `estimate` is the Days slope; `status = "available"` and
-`reliability = "certified"` confirm that the covariance payload was present
-and the inference method was verified as appropriate for this fit. If a method
-cannot be certified (e.g. you request Kenward-Roger on a singular fit),
-`reliability` becomes `"indicative"` and `reason` names the problem.
+The `estimate` is the Days slope. `status = "available"` says the test was
+computed; `reliability` grades it on a fixed scale — `high`, `moderate`,
+`low`, or `not_available` — and here reads `moderate`, the standard grade
+for finite-difference Satterthwaite. If you request a method the fit cannot
+support (Satterthwaite on a boundary fit, say), the row comes back with
+`status = "not_assessed"` and a `reason_code` naming the problem instead
+of a number.
 
 ## Step 6: Compare specific conditions
 
-`mm_comparisons()` makes it easy to answer "how much slower is a subject on
-Day 9 compared to Day 0?" without computing the arithmetic yourself.
+`mm_comparisons()` answers questions like "how much does the population
+mean slow between Day 0 and Day 9?" directly, so you do not assemble the
+contrast by hand.
 
 ```{r comparisons}
 cmp <- mm_comparisons(fit, specs = "Days", at = list(Days = c(0, 9)))
@@ -191,7 +209,8 @@ cmp$table[, c("label", "estimate", "conf_low", "conf_high", "p_value")]
 ```
 
 The `at` argument pins `Days` to exactly those two values. The difference
-`Days=9 - Days=0` is 9 × the slope: about 94 ms, with a confidence interval.
+`Days=9 - Days=0` is nine times the fitted slope and includes a confidence
+interval.
 
 ## Step 7: Save and reload
 
@@ -206,12 +225,13 @@ fit2 <- revive(readRDS(tmp))
 stopifnot(isTRUE(all.equal(fixef(fit), fixef(fit2))))
 ```
 
-`revive()` reconnects the R object to the Rust handle so the full inference
-surface is available. Plain `readRDS()` without `revive()` is sufficient when
-you only need the JSON-stored extractor values (coefficients, variance
-components, fitted values); call `revive()` when you want to run new
-`contrast()`, `mm_means()`, or other live-inference calls on the reloaded fit.
-See `vignette("saving-and-reviving")` for the full discussion.
+Everything the extractors and inference functions need is stored in the R
+object itself, so `readRDS()` alone is enough: `fixef()`, `contrast()`,
+`mm_means()`, and the reporting tables all work on the reloaded fit. The
+Rust handle is deliberately left absent after reloading. `revive()` resets
+the object's process-local cache; calling it after `readRDS()` is cheap
+and recommended, but the current bridge does not require it. See
+`vignette("saving-and-reviving")` for the full discussion.
 
 ## Where to go next
 

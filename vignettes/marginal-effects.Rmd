@@ -24,14 +24,14 @@ A fixed-effects coefficient is not a group mean. For a model with multiple
 predictors and interactions, `fixef(fit)["trtactive"]` is the treatment
 effect *at the reference level of every other predictor* — not the
 average treatment effect across the population. Marginal means give you the
-latter: population-level averages at each combination of interest, properly
-accounting for the reference grid and the fixed-effect covariance.
+latter: averages over a reference grid of predictor combinations, with
+standard errors from the fixed-effect covariance.
 
-`mixeff` provides a native marginal-quantities surface — `mm_grid()`,
-`mm_predictions()`, `mm_means()`, `mm_comparisons()` — that routes all
-inference through the same contract machinery as `contrast()`. Each row in
-the returned table carries `method`, `status`, `reliability`, and `reason`
-fields so you know exactly what you are reporting and when to be cautious.
+`mixeff` computes these with four functions — `mm_grid()`,
+`mm_predictions()`, `mm_means()`, `mm_comparisons()` — that route all
+inference through the same machinery as `contrast()`. Each row in the
+returned table carries `method`, `status`, `reliability`, and `reason`
+columns naming how it was computed and how far to trust it.
 
 ## The study
 
@@ -46,8 +46,13 @@ n_subj   <- 24L
 spc      <- n_subj %/% n_clinic   # subjects per clinic
 
 clinic <- factor(rep(paste0("C", seq_len(n_clinic)), each = spc))
-trt    <- factor(
-  rep(c("control", "active"), times = n_clinic * spc / 2L),
+# Deliberately unbalanced assignment: C1 is mostly control, C3 mostly
+# active. The imbalance is the point of this vignette.
+n_control <- c(5L, 3L, 1L, 3L)
+trt <- factor(
+  unlist(lapply(seq_len(n_clinic), function(i) {
+    c(rep("control", n_control[[i]]), rep("active", spc - n_control[[i]]))
+  })),
   levels = c("control", "active")
 )
 subj <- factor(paste0("S", seq_len(n_subj)))
@@ -75,11 +80,12 @@ rehab$score <- 52 +
 head(rehab)
 ```
 
-Clinics are not perfectly balanced between treatment arms — clinic C1 has
-more control patients than average, and clinic C3 has more active-arm
-patients. This imbalance means raw group means are confounded by clinic
-effects: a naive `tapply(rehab$score, rehab$trt, mean)` will not answer
-the treatment question you actually want.
+Clinics are not balanced between treatment arms: clinic C1 has five
+control patients and one active, clinic C3 the reverse. So raw group
+means are confounded with clinic effects — each arm's mean leans on the
+clinics that arm over-samples, and the clinics differ — and a naive
+`tapply(rehab$score, rehab$trt, mean)` will not answer the treatment
+question.
 
 ## Fit the model
 
@@ -88,7 +94,7 @@ fit <- lmm(score ~ trt * time + (1 | clinic) + (1 | subj), rehab)
 summary(fit, tests = "coefficients")
 ```
 
-The interaction coefficient `trt: active:time: post` tells you the
+The interaction coefficient `trtactive:timepost` tells you the
 *additional* post-treatment change for the active arm relative to control.
 It is not the average treatment effect. For that you need marginal means.
 
@@ -136,9 +142,11 @@ Compare these to the raw means:
 tapply(rehab$score, rehab$trt, mean)
 ```
 
-The raw means are shifted by the clinic imbalance; the marginal means are
-not. This difference is small in a balanced simulation but can be substantial
-in real data.
+The clinic imbalance pulls each raw mean about 0.44 points toward the
+clinics its arm over-samples; the marginal means average over the model's
+fixed-effect grid instead and are free of that shift. The size of the gap
+depends on how unbalanced the design is and how large the group effects
+are.
 
 ## Pairwise comparisons with `mm_comparisons()`
 
@@ -151,7 +159,8 @@ ct$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
 ```
 
 The `active - control` row is the average treatment effect across both
-timepoints, with a Satterthwaite *t* test and its certified provenance.
+timepoints, tested with a Satterthwaite *t* and graded `moderate`
+reliability in the same row.
 
 ## Conditional comparisons with `by =`
 
@@ -169,8 +178,9 @@ the interaction drives additional improvement in the active arm.
 
 ## Constraining the grid with `at =`
 
-For numeric predictors, `at` pins specific values rather than collapsing to
-the mean.
+`at` pins predictors to chosen values instead of expanding or averaging
+them: a factor to a subset of its levels, a numeric predictor to specific
+points rather than its mean.
 
 ```{r at-example}
 mt_time <- mm_means(fit, specs = ~ time, at = list(trt = "active"))
@@ -223,25 +233,29 @@ prints an informational message noting which covariance it used.
 row-level audit fields from the underlying `contrast()` call. `emmeans`
 does not propagate these fields; if a row is `"unavailable"` for a
 documented reason, that information disappears in the `emmeans` output.
-Use `emmeans` for its richer contrasts grammar (Tukey correction,
-back-transformation, custom correction methods); prefer the native verbs
-when auditability and report-ready provenance matter.
+Use `emmeans` when you need what it does and `mm_means()` does not —
+Tukey correction, back-transformation, custom contrast grammars. Use the
+native verbs when you need each row to say how it was computed and why,
+because those columns do not survive the trip through `emmeans`.
 
 ## Reading `status` and `reason`
 
-Every table returned by the marginal-quantities surface has these columns:
+Every table returned by `mm_means()`, `mm_comparisons()`, and
+`mm_predictions()` carries these columns:
 
-| Column | Meaning |
+| Column | Values |
 |---|---|
-| `status` | `"available"` / `"unavailable"` |
-| `reliability` | `"certified"` / `"indicative"` / `"unavailable"` |
-| `reason` | stable code (see `vignette("inference-method-glossary")`) |
+| `status` | `"available"`, `"p_value_unavailable"`, `"not_estimable"`, `"not_assessed"`, or `"unsupported"` |
+| `reliability` | `"high"`, `"moderate"`, `"low"`, or `"not_available"` |
+| `reason` | stable code when a row is degraded or refused, `NA` otherwise (see `vignette("inference-method-glossary")`) |
 | `method` | the inference method that was applied |
 
-A row with `status = "unavailable"` contains `NA` for standard error and
-p-value — the package refuses to invent them. The `reason` code tells you
-why (rank deficiency, missing covariance payload, etc.) and is stable across
-package versions so you can guard on it in reproducible scripts.
+On the fits in this vignette every row reads `status = "available"`,
+`reliability = "moderate"`, `method = "satterthwaite"`. A row whose status
+is anything other than `"available"` contains `NA` where the refused
+numbers would go, and `reason` says why (rank deficiency, missing
+covariance payload, and so on). These codes come from the engine's fixed
+vocabulary, so scripts can test for them by string.
 
 ## Where to read next
 

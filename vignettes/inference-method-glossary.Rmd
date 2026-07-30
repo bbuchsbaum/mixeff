@@ -31,31 +31,43 @@ usable on the current fit.
 | `not_assessed` | The method is known but refused for this fit, with the reason named in `expected_reliability_reason` or `reason_code`. |
 | `not_yet_wired` | The method is part of the inference contract but is not exposed through the current R bridge. |
 
-## `expected_reliability_reason`
+## `expected_reliability_reason` and `reliability_reason`
 
-`expected_reliability_reason` is the warrant attached to an expected route in
-`inference_options()`. The same vocabulary also appears as `reliability_reason`
-on actual inference rows when a verb runs or refuses.
+`expected_reliability_reason` is the reason `inference_options()` attaches
+to a route on its map. `reliability_reason` is the reason the engine
+attaches to an actual inference row when a verb runs. The vocabularies
+overlap but are not identical, and where the engine has recorded an
+observed reason for a route, `inference_options()` reports the observed
+value in preference to its own prediction — so on a fitted LMM the Wald
+route usually shows the engine's `asymptotic_wald_z_fallback` rather than
+the two route-map entries marked *(route map)* below.
 
 | Value | Definition | Example |
 |---|---|---|
-| `not_available` | No additional reliability warrant is attached to the row; inspect `status` and `reason_code` for the decision. | A refused cluster-bootstrap p-value row uses a specific `reason_code` while reliability itself is not available. |
-| `asymptotic_wald_z_at_boundary` | Wald z can run, but boundary or reduced-rank fits can make asymptotic uncertainty too optimistic. | `inference_options()` on a singular random-slope fit marks the Wald route with this warrant. |
-| `interior_converged_well_specified` | The fit is interior and the fast Wald route has no boundary caveat from the route map. | `inference_options()` on a non-singular LMM can use this for the Wald route. |
-| `degrees_of_freedom_unavailable_so_z_substituted` | A t reference distribution was desired, but finite-sample degrees of freedom were unavailable, so z was used. | `inference_table()` on a boundary fit can report a low-reliability Wald row with this warrant. |
+| `not_available` | No additional reliability reason is attached to the row; inspect `status` and `reason_code` for the decision. | A refused cluster-bootstrap p-value row uses a specific `reason_code` while reliability itself is not available. |
+| `asymptotic_wald_z_fallback` | A t reference distribution was the target, degrees of freedom could not be computed, and a standard normal was substituted; the row is graded `low`. | `inference_table()` and `summary()` on a boundary fit report their Wald rows with this reason. This is the reason code most users meet first. |
+| `asymptotic_wald_z_at_boundary` *(route map)* | Wald z can run, but boundary or reduced-rank fits can make asymptotic uncertainty too optimistic. | Defined for the `inference_options()` route map; in practice the engine's observed `asymptotic_wald_z_fallback` takes precedence. |
+| `interior_converged_well_specified` *(route map)* | The fit is interior and the fast Wald route has no boundary caveat from the route map. | Defined for the route map; superseded by the observed reason in current output. |
 | `satterthwaite_unavailable_at_boundary` | Satterthwaite degrees of freedom are not certified when variance parameters are on the boundary. | `test_effect(fit, term, method = "satterthwaite")` refuses on a singular fit. |
 | `kenward_roger_unavailable_at_boundary` | Kenward-Roger degrees of freedom and covariance adjustment are not certified when variance parameters are on the boundary. | `test_effect(fit, term, method = "kenward_roger")` refuses on a singular fit. |
-| `satterthwaite_finite_difference_approximation` | The route uses a finite-difference Satterthwaite degrees-of-freedom approximation. | `inference_options()` on an interior fit marks Satterthwaite as available with this warrant. |
-| `kenward_roger_approximation` | The route uses Kenward-Roger finite-sample degrees of freedom with covariance adjustment. | `inference_options()` on an interior fit marks Kenward-Roger as available with this warrant. |
-| `bootstrap_monte_carlo_replicates` | Reliability is governed by replicate count and Monte-Carlo standard error. | Bootstrap term tests and bootstrap LRTs use this when enough successful replicates are available. |
-| `bootstrap_insufficient_replicates` | The bootstrap route ran, but the requested replicate count is too small for a moderate reliability grade. | A demonstration call with `nsim = 10` uses this warrant. |
-| `bootstrap_not_certified` | A bootstrap payload was returned without a certified p-value. | A bootstrap LRT row with no engine-certified p-value uses this warrant. |
-| `inference_unavailable_by_policy` | The method is refused by an explicit policy for this fit and requested target. | A bootstrap LRT on a REML fit returns this reliability warrant with a more specific `reason_code`. |
+| `satterthwaite_finite_difference_approximation` | The route uses a finite-difference Satterthwaite degrees-of-freedom approximation. | The standard reason on Satterthwaite rows for interior fits. |
+| `kenward_roger_approximation` | The route uses Kenward-Roger finite-sample degrees of freedom with covariance adjustment. | The standard reason on Kenward-Roger rows for interior fits. |
+| `parametric_bootstrap_monte_carlo` | The p-value comes from parametric-bootstrap replicates; reliability is governed by replicate count and Monte-Carlo standard error. | `contrast(fit, L, method = "bootstrap")` rows carry this reason. |
+| `glmm_joint_laplace_active_hessian_wald` | GLMM Wald inference from the joint-Laplace fit's certified Hessian. | The `summary()$inference` rows of a `method = "joint_laplace"` GLMM fit (the printed coefficient block shows the statistics, not the reason). |
+| `bootstrap_monte_carlo_replicates` *(route map)* | Reliability is governed by replicate count and Monte-Carlo standard error. | The `inference_options()` prediction for bootstrap routes; the observed row value is `parametric_bootstrap_monte_carlo`. |
+| `bootstrap_insufficient_replicates` | The bootstrap route ran, but the requested replicate count is too small for a moderate reliability grade. | A demonstration call with `nsim = 10` uses this reason. |
+| `bootstrap_not_certified` | A bootstrap payload was returned without a certified p-value. | A bootstrap LRT row with no engine-certified p-value uses this reason. |
+| `inference_unavailable_by_policy` | The method is refused by an explicit policy for this fit and requested target. | A bootstrap LRT on a REML fit returns this reliability reason with a more specific `reason_code`. |
 | `bootstrap_lrt_requires_ml` | A bootstrap likelihood-ratio test requires ML-fitted models, not REML-fitted models. | `test_effect(fit, term, method = "bootstrap_lrt")` refuses on a REML fit. |
-| `bootstrap_cluster_resample_p_value_unavailable` | Cluster resampling describes estimator distributions and does not certify fixed-effect p-values in the current schema. | `test_effect(fit, term, method = "cluster_bootstrap", group = "subj")` refuses with this warrant. |
+| `bootstrap_cluster_resample_p_value_unavailable` | Cluster resampling describes estimator distributions and does not certify fixed-effect p-values in the current schema. | `test_effect(fit, term, method = "cluster_bootstrap", group = "subj")` refuses with this reason. |
 | `profile_likelihood_ci` | Profile-likelihood confidence intervals are available for this requested parameter set. | `inference_options()` marks `profile_ci` available on an ML fit away from the boundary. |
 | `profile_beta_unavailable_under_reml` | Fixed-effect beta profile intervals require an ML fit and are not certified from REML profile payloads. | `confint(fit, method = "profile")` on a REML fit records beta rows with this reason. |
 | `profile_ci_unavailable_at_boundary` | Profile intervals are not certified for boundary or reduced-rank fits. | `inference_options()` refuses `profile_ci` on a singular fit. |
+
+The `method` column has one value worth listing here as well:
+`not_computed`, which appears on GLMM rows fitted by the default
+`pirls_profiled` estimator, whose standard errors and p-values are
+withheld (see `vignette("glmm")`).
 
 ## `reason_code`
 

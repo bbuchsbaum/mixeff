@@ -26,61 +26,62 @@ library(mixeff)
 cat("The executable cbpp examples in this vignette require the `lme4` package.\n")
 ```
 
-This vignette shows the current GLMM contract in `mixeff`. The default path
-is `glmm(..., method = "pirls_profiled")`, which delegates to the upstream
-profiled PIRLS GLMM fitter. `method = "joint_laplace"` requests the labelled
-joint route (`fast = FALSE`, `nAGQ = 1`) and is available in the dependency-light
-vendored build through the native optimizer.
+`glmm()` fits generalized linear mixed models by one of two estimators, and
+the difference between them decides what inference you get:
 
-The example uses the `lme4::cbpp` data. `glmm()` does not yet expose binomial
-case weights, so the grouped counts are expanded to Bernoulli rows before
-fitting.
+- **`method = "pirls_profiled"` (the default)** is a fast profiled PIRLS
+  fitter. It returns point estimates, fitted values, and variance
+  components, but **refuses Wald standard errors, z statistics, p-values,
+  and confidence intervals**: its covariance payload is a working Hessian
+  that the engine does not certify for inference. The engine's own
+  documentation adds a stronger warning: the profiled path is not the same
+  statistical approximation as `glmer()`'s joint Laplace fit, and it can be
+  less accurate for overdispersed models and models with observation-level
+  random effects.
+- **`method = "joint_laplace"`** maximizes the same joint Laplace objective
+  as `lme4::glmer()` (at `nAGQ = 1`). It is slower, and it returns the full
+  inference table — standard errors, z tests, and Wald confidence
+  intervals — from a covariance the engine certifies.
+
+The practical rule: explore with the default, report with
+`joint_laplace`.
+
+The example uses the `lme4::cbpp` data. As in `lme4`, a binomial response
+with grouped counts can be written either as a two-column
+`cbind(successes, failures)` response or as a proportion with case
+`weights`; the two forms give identical fits.
 
 ```{r cbpp-data}
 env <- new.env(parent = emptyenv())
 utils::data("cbpp", package = "lme4", envir = env)
 cbpp <- get("cbpp", envir = env, inherits = FALSE)
+cbpp$prop <- cbpp$incidence / cbpp$size
 
-expand_cbpp <- function(data) {
-  rows <- lapply(seq_len(nrow(data)), function(i) {
-    successes <- data$incidence[[i]]
-    failures <- data$size[[i]] - successes
-    data.frame(
-      herd = data$herd[[i]],
-      period = data$period[[i]],
-      y = c(rep.int(1L, successes), rep.int(0L, failures))
-    )
-  })
-  droplevels(do.call(rbind, rows))
-}
-
-cbpp_binary <- expand_cbpp(cbpp)
-c(n_grouped_rows = nrow(cbpp), n_binary_rows = nrow(cbpp_binary))
+cbpp_family <- binomial(link = "logit")
+cbind_formula  <- cbind(incidence, size - incidence) ~ period + (1 | herd)
+weight_formula <- prop ~ period + (1 | herd)
 ```
 
 ## Family and Audit
 
-The statistical intent is a binomial-logit GLMM with a herd random intercept.
-Before fitting, the same formula can be compiled and explained so the fixed and
-random-effect structure is visible before numerical optimization starts.
+The statistical intent is a binomial-logit GLMM with a herd random
+intercept. Before fitting, the formula can be compiled and explained so the
+fixed- and random-effect structure is visible before optimization starts.
+(`compile_model()` requires a plain-column response, so the audit uses the
+proportion form; `glmm()` itself accepts both.)
 
 ```{r audit-first}
-cbpp_family <- binomial(link = "logit")
-cbpp_formula <- y ~ period + (1 | herd)
-
-cbpp_spec <- compile_model(cbpp_formula, cbpp_binary)
+cbpp_spec <- compile_model(weight_formula, cbpp)
 explain_model(cbpp_spec)
 ```
 
 ## Fit
 
-```{r fit-laplace}
+```{r fit-default}
 glmm_fit <- glmm(
-  cbpp_formula,
-  cbpp_binary,
+  cbind_formula,
+  cbpp,
   family = cbpp_family,
-  method = "pirls_profiled",
-  nAGQ = 1L,
   control = mm_control(verbose = -1)
 )
 
@@ -89,14 +90,27 @@ fixef(glmm_fit)
 VarCorr(glmm_fit)
 ```
 
-The summary prints fitted quantities and deliberately avoids coefficient tests
-unless the inference contract certifies them.
+The weights form reproduces it exactly:
 
-```{r summary}
-summary(glmm_fit)
+```{r fit-weights}
+glmm_fit_w <- glmm(
+  weight_formula,
+  cbpp,
+  family = cbpp_family,
+  weights = cbpp$size,
+  control = mm_control(verbose = -1)
+)
+all.equal(fixef(glmm_fit), fixef(glmm_fit_w))
 ```
 
-Core extractors are available from the durable R object.
+On this default fit, `summary()` prints the estimates and withholds the
+inference columns, with a note naming the alternative:
+
+```{r summary}
+summary(glmm_fit, tests = "coefficients")
+```
+
+Core extractors read from the durable R object:
 
 ```{r extractors}
 head(fitted(glmm_fit))
@@ -110,18 +124,47 @@ c(
 )
 ```
 
+## Inference: refit with joint_laplace
+
+```{r fit-joint}
+glmm_joint <- glmm(
+  cbind_formula,
+  cbpp,
+  family = cbpp_family,
+  method = "joint_laplace",
+  control = mm_control(verbose = -1)
+)
+
+summary(glmm_joint, tests = "coefficients")
+confint(glmm_joint)
+```
+
+The joint-Laplace estimates differ slightly from the profiled ones —
+different estimators, same model — and match `lme4::glmer()` closely:
+
+```{r joint-vs-glmer}
+glmer_fit <- lme4::glmer(
+  cbind(incidence, size - incidence) ~ period + (1 | herd),
+  data = cbpp, family = binomial()
+)
+round(rbind(
+  pirls_profiled = fixef(glmm_fit),
+  joint_laplace  = fixef(glmm_joint),
+  glmer          = lme4::fixef(glmer_fit)
+), 4)
+```
+
 ## Quadrature Sensitivity
 
-`nAGQ` is part of the fit request and is recorded on the object. Values above
-one are a profiled-path sensitivity check; the labelled joint-Laplace path is
+`nAGQ` is part of the fit request and is recorded on the object. Values
+above one are a profiled-path sensitivity check; the joint-Laplace path is
 restricted to `nAGQ = 1`.
 
 ```{r agq-sensitivity}
 glmm_fit_agq3 <- glmm(
-  cbpp_formula,
-  cbpp_binary,
+  cbind_formula,
+  cbpp,
   family = cbpp_family,
-  method = "pirls_profiled",
   nAGQ = 3L,
   control = mm_control(verbose = -1)
 )
@@ -135,86 +178,77 @@ data.frame(
 )
 ```
 
-## Current Boundaries
+On this dataset the quadrature order shifts the objective in the third
+decimal and the coefficients by less than 0.005 on the logit scale —
+visible, but an order of magnitude below the joint-Laplace standard
+errors shown earlier.
 
-In-sample `fitted()` and `residuals()` are available, and
-`summary(fit, tests = "coefficients")` returns a Wald-z fixed-effect
-table built from the upstream PIRLS/Laplace working-Hessian covariance
-payload (reliability label: `moderate`). GLMM `predict()` (population and
-conditional, on the link or response scale), `contrast()`, `drop1()`, and
-multi-model `anova()` are available as R-side computations on top of that
-certified covariance. `confint()` (Wald) requires a joint-Laplace fit: the
-fast-PIRLS/profiled covariance is a working-Hessian payload and the engine
-does not certify Wald intervals for it. `simulate()` and `refit()` for GLMMs
-are not yet implemented and are exposed as ordinary R conditions rather than
-silently filled in. The joint-Laplace fit route is available and labelled
-separately from the profiled fast-PIRLS default.
+```{r agq-check, include = FALSE}
+stopifnot(max(abs(fixef(glmm_fit) - fixef(glmm_fit_agq3))) < 0.005)
+```
+
+## What is refused where
+
+The table below runs each verb on the default fit and reports what
+actually comes back — a result with numbers, a result with the inference
+withheld, or a typed error. A no-error return is not the same thing as
+an answer, so for the coefficient table the harness also checks whether
+the standard errors are finite.
 
 ```{r boundaries}
-glmm_boundary <- function(expr) {
-  cnd <- tryCatch({
-    force(expr)
-    NULL
-  }, error = function(cnd) cnd)
-  if (is.null(cnd)) {
-    return(data.frame(status = "available", class = NA_character_,
-                      message = "", check.names = FALSE))
+glmm_status <- function(expr, has_numbers = NULL) {
+  cnd <- tryCatch({ force(expr); NULL }, error = function(cnd) cnd)
+  if (!is.null(cnd)) {
+    return(data.frame(status = "typed error", class = class(cnd)[[1L]],
+                      check.names = FALSE))
   }
-  data.frame(
-    status = "unavailable",
-    class = class(cnd)[[1L]],
-    message = conditionMessage(cnd),
-    check.names = FALSE
-  )
+  if (isFALSE(has_numbers)) {
+    return(data.frame(status = "returns, inference withheld",
+                      class = NA_character_, check.names = FALSE))
+  }
+  data.frame(status = "available", class = NA_character_, check.names = FALSE)
 }
 
+coef_tab <- summary(glmm_fit, tests = "coefficients")$coefficients
 rbind(
-  predict = glmm_boundary(predict(glmm_fit)),
-  confint = glmm_boundary(confint(glmm_fit)),
-  coefficient_tests = glmm_boundary(summary(glmm_fit, tests = "coefficients")),
-  simulate = glmm_boundary(stats::simulate(glmm_fit, nsim = 1L)),
-  refit = glmm_boundary(refit(glmm_fit, fitted(glmm_fit))),
-  joint_laplace = glmm_boundary(glmm(
-    cbpp_formula,
-    cbpp_binary,
-    family = cbpp_family,
-    method = "joint_laplace",
-    control = mm_control(verbose = -1)
-  ))
+  predict           = glmm_status(predict(glmm_fit)),
+  fitted            = glmm_status(fitted(glmm_fit)),
+  coefficient_tests = glmm_status(coef_tab,
+                                  has_numbers = any(is.finite(coef_tab[, "Std. Error"]))),
+  confint           = glmm_status(confint(glmm_fit)),
+  simulate          = glmm_status(stats::simulate(glmm_fit, nsim = 1L)),
+  refit             = glmm_status(refit(glmm_fit, fitted(glmm_fit)))
 )
 ```
+
+`confint()` on the default fit raises `mm_inference_unavailable` (the
+working-Hessian payload is not certified for Wald intervals); the same
+request on the joint-Laplace fit succeeds, as shown above. `simulate()`
+and `refit()` are not implemented for GLMM fits.
 
 ```{r checks, include = FALSE}
 stopifnot(inherits(glmm_fit, "mm_glmm"))
 stopifnot(identical(glmm_fit$nAGQ, 1L))
 stopifnot(identical(glmm_fit_agq3$nAGQ, 3L))
-stopifnot(nobs(glmm_fit) == nrow(cbpp_binary))
+stopifnot(nobs(glmm_fit) == nrow(cbpp))
 stopifnot(all(is.finite(fixef(glmm_fit))))
+stopifnot(isTRUE(all.equal(fixef(glmm_fit), fixef(glmm_fit_w), tolerance = 1e-8)))
 stopifnot(is.finite(as.numeric(logLik(glmm_fit))))
 stopifnot(is.finite(AIC(glmm_fit)))
-stopifnot(inherits(summary(glmm_fit), "summary.mm_glmm"))
-stopifnot(length(fitted(glmm_fit)) == nrow(cbpp_binary))
-stopifnot(length(residuals(glmm_fit)) == nrow(cbpp_binary))
 
-boundaries <- rbind(
-  predict = glmm_boundary(predict(glmm_fit)),
-  confint = glmm_boundary(confint(glmm_fit)),
-  coefficient_tests = glmm_boundary(summary(glmm_fit, tests = "coefficients")),
-  simulate = glmm_boundary(stats::simulate(glmm_fit, nsim = 1L)),
-  joint_laplace = glmm_boundary(glmm(
-    cbpp_formula,
-    cbpp_binary,
-    family = cbpp_family,
-    method = "joint_laplace",
-    control = mm_control(verbose = -1)
-  ))
-)
-# predict / coefficient tests are available for PIRLS-profiled fits;
-# confint requires joint-Laplace (PIRLS working-Hessian not certified for Wald);
-# simulate remains unavailable; joint-Laplace route is available.
-stopifnot(identical(boundaries["predict", "status"], "available"))
-stopifnot(identical(boundaries["confint", "status"], "unavailable"))
-stopifnot(identical(boundaries["coefficient_tests", "status"], "available"))
-stopifnot(identical(boundaries["simulate", "status"], "unavailable"))
-stopifnot(identical(boundaries["joint_laplace", "status"], "available"))
+# Default path: estimates present, inference withheld (all SEs NA).
+stopifnot(!any(is.finite(coef_tab[, "Std. Error"])))
+# Joint path: full inference table, finite everywhere.
+joint_tab <- summary(glmm_joint, tests = "coefficients")$coefficients
+stopifnot(all(is.finite(joint_tab[, "Std. Error"])))
+stopifnot(all(is.finite(confint(glmm_joint))))
+# Joint-Laplace tracks glmer on this model.
+stopifnot(max(abs(fixef(glmm_joint) - lme4::fixef(glmer_fit))) < 5e-3)
+
+# Refusals stay refusals.
+stopifnot(inherits(tryCatch(confint(glmm_fit), error = identity),
+                   "mm_inference_unavailable"))
+stopifnot(inherits(tryCatch(stats::simulate(glmm_fit, nsim = 1L),
+                            error = identity),
+                   "mm_inference_unavailable"))
 ```

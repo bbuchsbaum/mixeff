@@ -75,6 +75,11 @@ restored <- readRDS(path)
 restored <- revive(restored)
 ```
 
+`revive()` resets the object's process-local cache. It is cheap and safe
+to call after every `readRDS()`, but the extractors and inference
+functions shown below also work on the plain `readRDS()` result — the
+durable values live in the object itself.
+
 The restored object still answers the same fitted-model questions.
 
 ```{r after-restore}

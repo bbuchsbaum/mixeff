@@ -24,12 +24,14 @@ A mixed-model report needs more than coefficient estimates. The
 reader needs to know which observations and grouping units were
 used, what random-effects structure was fitted, which inference
 method produced each row, whether the optimizer reached an interior
-solution, and which quantities were not available. Most of those are
-facts about the fit that `lme4` does not store in the fitted object;
-the analyst has to remember them, or reconstruct them from console
-output weeks after the fact.
+solution, and which quantities were not available. An `lme4` fit
+stores several of these (counts, random-effects structure, optimizer
+messages); what it does not carry is a per-row record of which
+inference method produced each number, or a structured list of what
+was unavailable and why.
 
-`mixeff` stores every one of them. This vignette follows a
+`mixeff` stores all of the above in the fitted object. This vignette
+follows a
 structured mixed-model reporting checklist — describe the data and
 design, report the model specification, show fixed and random
 effects, label inference methods, preserve software provenance, and
@@ -131,7 +133,7 @@ terms <- reporting_table(fit, "random_terms")$table
 stopifnot(all(c("group", "basis", "covariance", "english") %in% names(terms)))
 ```
 
-## How are estimates and p-values labelled?
+## How are estimates and p-values labeled?
 
 `summary()` gives a familiar coefficient table. Use it for console review.
 

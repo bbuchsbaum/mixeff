@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/bbuchsbaum/mixeff/schemas/mixedmodels.random_term_card/1",
   "title": "RandomTermCard",
-  "description": "Per-random-term card authored by the mixedmodels Rust crate. The R wrapper formats; Rust authors English wording and design facts. See planning/PRD.md §9.6 and /Users/bbuchsbaum/code/rust/mixedmodels/docs/random_term_card_prd.md.",
+  "description": "Per-random-term card authored by the mixeff-rs Rust crate. The R wrapper formats; Rust authors English wording and design facts. See planning/PRD.md section 9.6 and the mixeff-rs docs (random_term_card_prd.md).",
   "type": "object",
   "required": [
     "schema_name",

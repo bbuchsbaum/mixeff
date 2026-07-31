@@ -154,6 +154,24 @@ mm_boundary_lrt_json <- function(reduced_payload, full_payload, reduced_formula)
 #' @noRd
 mm_verify_convergence_json <- function(fit_payload, options_json) .Call(wrap__mm_verify_convergence_json, fit_payload, options_json)
 
+#' GLMM convergence verification through
+#' `GeneralizedLinearMixedModel::verify_convergence_with_options`.
+#'
+#' Refits the model from the bridge payload with the requested estimator and
+#' runs the engine-owned verification (restart from optimum plus jittered
+#' refits). When the refit of a substituted (fallback) fit falls back the
+#' same way, every run verifies the profiled objective the fitted numbers
+#' came from, with ordinary objective deltas; the engine reports a
+#' substitution run (no delta) only when the reference refit certifies the
+#' joint route but an individual run falls back.
+#' Options start from `ConvergenceVerificationOptions::glmm_defaults()`
+#' (no consensus pass; objective tolerance sized to the inner-PIRLS noise
+#' floor; beta tolerance sized to the joint path's derivative-free search);
+#' `options_json` carries R-side overrides.
+#'
+#' @noRd
+mm_verify_convergence_glmm_json <- function(fit_payload, options_json) .Call(wrap__mm_verify_convergence_glmm_json, fit_payload, options_json)
+
 #' Render an `audit_design()` artifact as text.
 #'
 #' Takes the JSON produced by `mm_compile_model_json` and returns the

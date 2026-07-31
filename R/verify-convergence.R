@@ -1,18 +1,29 @@
-#' Verify convergence of a fitted linear mixed model
+#' Verify convergence of a fitted mixed model
 #'
 #' `verify_convergence()` re-runs the fit under the engine's bounded
 #' verification workflow and reports whether the extra runs agree with the
 #' fitted optimum: a restart from the optimum, one or more jittered restarts,
-#' and (opt-in) an alternate-optimizer consensus pass. Agreement is judged by
-#' the engine against the objective/theta/beta tolerances below; the verdict
-#' (`status`), the per-run deltas, and the wording are all owned by the Rust
-#' contract — R only formats them.
+#' and (LMM-only, opt-in) an alternate-optimizer consensus pass. Agreement is
+#' judged by the engine against the objective/theta/beta tolerances below;
+#' the verdict (`status`), the per-run deltas, and the wording are all owned
+#' by the Rust contract — R only formats them.
 #'
 #' The verifier refits the model from the stored specification before it
 #' starts, so a call costs roughly `2 + jitter_starts` fits (plus consensus
-#' runs when enabled).
+#' runs when enabled). GLMM verification uses wider default tolerances than
+#' the LMM route (objective `1e-4`, beta `1e-3`): each objective evaluation
+#' carries inner-PIRLS noise, and the joint path's derivative-free beta
+#' search bounds beta reproducibility at its `ftol` stop. A GLMM whose
+#' requested `joint_laplace` estimator was substituted by the labelled
+#' fast-PIRLS fallback (see `optimizer_certificate()`) re-requests the joint
+#' route; when the verification refit falls back the same way — the expected
+#' case — every run verifies the profiled objective the fitted numbers came
+#' from, with ordinary objective deltas. Runs are only reported as
+#' substitution runs (no objective delta) in the asymmetric case where the
+#' reference refit certifies the joint route but an individual verification
+#' run falls back.
 #'
-#' @param fit A fitted `mm_lmm` from [lmm()].
+#' @param fit A fitted `mm_lmm` from [lmm()] or `mm_glmm` from [glmm()].
 #' @param ... Reserved for future methods.
 #' @param restart Logical; re-optimize starting from the fitted optimum and
 #'   compare against it.
@@ -63,7 +74,7 @@ verify_convergence <- function(fit, ...) {
 verify_convergence.default <- function(fit, ...) {
   mm_abort(
     message = sprintf(
-      "verify_convergence() supports linear mixed models fitted by lmm(); got <%s>.",
+      "verify_convergence() supports mixed models fitted by lmm() or glmm(); got <%s>.",
       paste(class(fit), collapse = "/")
     ),
     class = "mm_schema_error",
@@ -136,6 +147,132 @@ verify_convergence.mm_lmm <- function(fit, ...,
   )
   class(obj) <- "mm_convergence_verification"
   obj
+}
+
+#' @rdname verify_convergence
+#' @export
+verify_convergence.mm_glmm <- function(fit, ...,
+                                       restart = TRUE,
+                                       jitter_starts = 1L,
+                                       jitter_scale = 1e-4,
+                                       consensus = FALSE,
+                                       max_feval = 1000L,
+                                       objective_tolerance = 1e-4,
+                                       theta_tolerance = 1e-3,
+                                       beta_tolerance = 1e-3) {
+  # GLMM defaults mirror the engine's glmm_defaults(): a larger evaluation
+  # budget (each objective evaluation pays for inner PIRLS solves), an
+  # objective tolerance sized to the inner-PIRLS noise floor, and a beta
+  # tolerance sized to the joint path's derivative-free beta search. The
+  # optimizer-consensus pass is LMM-only (the GLMM fit drivers own optimizer
+  # selection), so consensus = TRUE is refused rather than ignored.
+  mm_verify_check_flag(restart, "restart")
+  mm_verify_check_flag(consensus, "consensus")
+  if (isTRUE(consensus)) {
+    mm_abort(
+      message = paste0(
+        "The optimizer-consensus verification pass is not available for ",
+        "GLMM fits; call verify_convergence() with consensus = FALSE."
+      ),
+      class = "mm_arg_error",
+      input = consensus
+    )
+  }
+  mm_verify_check_count(jitter_starts, "jitter_starts", min = 0)
+  mm_verify_check_count(max_feval, "max_feval", min = 1)
+  mm_verify_check_positive(jitter_scale, "jitter_scale")
+  mm_verify_check_positive(objective_tolerance, "objective_tolerance")
+  mm_verify_check_positive(theta_tolerance, "theta_tolerance")
+  mm_verify_check_positive(beta_tolerance, "beta_tolerance")
+
+  payload <- mm_rust_glmm_verify_payload(fit)
+  options_json <- jsonlite::toJSON(
+    list(
+      restart_from_optimum = isTRUE(restart),
+      jitter_starts = as.integer(jitter_starts),
+      jitter_scale = as.numeric(jitter_scale),
+      run_optimizer_consensus = FALSE,
+      max_function_evaluations = as.integer(max_feval),
+      objective_tolerance = as.numeric(objective_tolerance),
+      theta_tolerance = as.numeric(theta_tolerance),
+      beta_tolerance = as.numeric(beta_tolerance)
+    ),
+    auto_unbox = TRUE
+  )
+
+  json <- tryCatch(
+    mm_verify_convergence_glmm_json(payload, as.character(options_json)),
+    error = function(cnd) cnd
+  )
+  if (inherits(json, "condition")) {
+    mm_abort_from_bridge(json)
+  }
+  parsed <- mm_json_parse_convergence_verification(json)
+
+  obj <- list(
+    status = mm_scalar_text(parsed$status, "not_run"),
+    message = mm_scalar_text(parsed$message),
+    table = mm_verify_runs_table(parsed$runs %||% list()),
+    reference = list(
+      objective = parsed$reference_objective,
+      theta = as.numeric(unlist(parsed$reference_theta %||% list())),
+      beta = as.numeric(unlist(parsed$reference_beta %||% list())),
+      effective_ranks = as.integer(unlist(parsed$reference_effective_ranks %||%
+                                            list()))
+    ),
+    tolerances = list(
+      objective = parsed$objective_tolerance,
+      theta = parsed$theta_tolerance,
+      beta = parsed$beta_tolerance
+    ),
+    raw = parsed
+  )
+  class(obj) <- "mm_convergence_verification"
+  obj
+}
+
+## Bridge payload for the GLMM verification refit. Carries everything the
+## engine needs to rebuild the SAME model: the post-prep model frame and
+## formula (grouped-binomial responses are already proportion + trial
+## weights here), the exact engine family string recorded at fit time
+## (bernoulli/binomial split, NB theta-mode spelling), and the REQUESTED
+## estimator -- for a substituted (fallback) fit the verification re-requests
+## the joint route; when the refit falls back the same way, all runs verify
+## the profiled objective the fitted numbers came from.
+mm_rust_glmm_verify_payload <- function(fit) {
+  payload <- mm_rust_fit_bridge_payload(fit)
+  payload$offset <- mm_bridge_weights(fit$offset)
+  payload$family <- as.character(
+    fit$engine_family %||% mm_glmm_engine_family_fallback(fit)
+  )
+  payload$link <- as.character(fit$family$link)
+  method <- as.character(fit$method %||% "pirls_profiled")
+  sub <- mm_estimator_substitution(fit)
+  if (!is.null(sub) && !is.na(sub$requested_method)) {
+    method <- sub$requested_method
+  }
+  if (identical(method, "fast_pirls_profiled")) {
+    method <- "pirls_profiled"
+  }
+  payload$method <- method
+  payload$n_agq <- as.numeric(fit$nAGQ %||% 1L)
+  payload
+}
+
+## Engine-family reconstruction for fits saved before `engine_family` was
+## stored on the object (pre-0.2.0 artifacts). Mirrors the fit-time prep
+## rules: NB theta mode rides the family string; a binomial response without
+## prior weights was fitted as bernoulli.
+mm_glmm_engine_family_fallback <- function(fit) {
+  info <- fit$family %||% list()
+  fam <- as.character(info$family %||% NA_character_)
+  if (identical(fam, "negative_binomial")) {
+    return(mm_glmm_nb_engine_spec(info))
+  }
+  if (identical(fam, "binomial")) {
+    return(if (is.null(fit$weights)) "bernoulli" else "binomial")
+  }
+  fam
 }
 
 #' @method print mm_convergence_verification

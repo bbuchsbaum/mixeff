@@ -11,12 +11,17 @@ test_that("lme4 parity mismatch ledger is shipped and well-formed", {
       expect_true(key %in% names(entry),
                   info = sprintf("ledger entry missing `%s` key", key))
     }
+    # `upstream_limitation`: a labelled engine limitation (typed
+    # substitution/refusal on the current pin), as opposed to an
+    # `upstream_bug` awaiting a fix. Both classify as xfail on the
+    # scoreboard and both must carry a numeric bound.
     expect_true(entry$status %in% c("expected_mismatch", "upstream_bug",
-                                    "unsupported",
+                                    "upstream_limitation", "unsupported",
                                     "design_weak_identifiability", "pass"),
                 info = sprintf("ledger entry has unrecognized status `%s` for case `%s` field `%s`",
                                entry$status, entry$case_id, entry$field))
-    if (entry$status %in% c("expected_mismatch", "upstream_bug")) {
+    if (entry$status %in% c("expected_mismatch", "upstream_bug",
+                            "upstream_limitation")) {
       has_bound <- !is.null(entry$expected_max_abs_diff) ||
         !is.null(entry$expected_max_rel_diff)
       expect_true(has_bound,

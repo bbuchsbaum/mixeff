@@ -1362,6 +1362,136 @@ fn mm_verify_convergence_json(
     })
 }
 
+/// GLMM convergence verification through
+/// `GeneralizedLinearMixedModel::verify_convergence_with_options`.
+///
+/// Refits the model from the bridge payload with the requested estimator and
+/// runs the engine-owned verification (restart from optimum plus jittered
+/// refits). When the refit of a substituted (fallback) fit falls back the
+/// same way, every run verifies the profiled objective the fitted numbers
+/// came from, with ordinary objective deltas; the engine reports a
+/// substitution run (no delta) only when the reference refit certifies the
+/// joint route but an individual run falls back.
+/// Options start from `ConvergenceVerificationOptions::glmm_defaults()`
+/// (no consensus pass; objective tolerance sized to the inner-PIRLS noise
+/// floor; beta tolerance sized to the joint path's derivative-free search);
+/// `options_json` carries R-side overrides.
+///
+/// @noRd
+#[extendr]
+fn mm_verify_convergence_glmm_json(
+    fit_payload: Robj,
+    options_json: &str,
+) -> std::result::Result<String, String> {
+    let overrides: Value = serde_json::from_str(options_json)
+        .map_err(|e| format!("mm_arg_error: invalid verification options JSON: {}", e))?;
+
+    let mut options = ConvergenceVerificationOptions::glmm_defaults();
+    if let Some(v) = overrides
+        .get("restart_from_optimum")
+        .and_then(Value::as_bool)
+    {
+        options.restart_from_optimum = v;
+    }
+    if let Some(v) = overrides.get("jitter_starts").and_then(Value::as_u64) {
+        options.jitter_starts = v as usize;
+    }
+    if let Some(v) = overrides.get("jitter_scale").and_then(Value::as_f64) {
+        options.jitter_scale = v;
+    }
+    if let Some(v) = overrides
+        .get("run_optimizer_consensus")
+        .and_then(Value::as_bool)
+    {
+        options.run_optimizer_consensus = v;
+    }
+    if let Some(v) = overrides
+        .get("max_function_evaluations")
+        .and_then(Value::as_u64)
+    {
+        options.max_function_evaluations = v as usize;
+    }
+    if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
+        options.objective_tolerance = v;
+    }
+    if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
+        options.theta_tolerance = v;
+    }
+    if let Some(v) = overrides.get("beta_tolerance").and_then(Value::as_f64) {
+        options.beta_tolerance = v;
+    }
+
+    let mut model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let verification = model
+        .verify_convergence_with_options(options)
+        .map_err(|e| {
+            format!(
+                "mm_inference_unavailable: convergence verification failed: {}",
+                e
+            )
+        })?;
+
+    serde_json::to_string(&verification).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize convergence verification: {}",
+            e
+        )
+    })
+}
+
+fn fit_glmm_from_bridge_payload_robj(
+    payload: &Robj,
+    index: usize,
+) -> std::result::Result<GeneralizedLinearMixedModel, String> {
+    let payload_list = List::try_from(payload).map_err(|e| {
+        format!("mm_schema_error: GLMM bridge payload {index} must be a list: {e:?}")
+    })?;
+    let payload_map = list_to_map(&payload_list, &format!("GLMM bridge payload {index}"))?;
+    let spec_data = required_list(&payload_map, "spec_data", index)?;
+    let spec_map = list_to_map(
+        &spec_data,
+        &format!("GLMM bridge payload {index} spec_data"),
+    )?;
+
+    let formula = required_string(&payload_map, "formula_string", index)?;
+    let family = required_string(&payload_map, "family", index)?;
+    let link = required_string(&payload_map, "link", index)?;
+    let method = required_string(&payload_map, "method", index)?;
+    let n_agq_values = required_doubles(&payload_map, "n_agq", index)?;
+    let n_agq = n_agq_values
+        .iter()
+        .next()
+        .map(|v| v.0)
+        .filter(|v| v.is_finite() && *v >= 1.0)
+        .ok_or_else(|| {
+            format!("mm_schema_error: GLMM bridge payload {index} n_agq must be a positive number")
+        })? as i32;
+    let column_order = required_strings(&spec_map, "column_order", index)?;
+    let numeric_columns = required_list(&spec_map, "numeric_columns", index)?;
+    let categorical_values = required_list(&spec_map, "categorical_values", index)?;
+    let categorical_levels = required_list(&spec_map, "categorical_levels", index)?;
+    let categorical_ordered = required_strings(&spec_map, "categorical_ordered", index)?;
+    let weights = required_doubles(&payload_map, "weights", index)?;
+    let offset = required_doubles(&payload_map, "offset", index)?;
+    let control_json = required_string(&payload_map, "control_json", index)?;
+
+    fit_glmm_from_bridge_data(
+        &formula,
+        &family,
+        &link,
+        &method,
+        n_agq,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &categorical_ordered,
+        &weights,
+        &offset,
+        &control_json,
+    )
+}
+
 fn fit_lmm_from_bridge_data(
     formula: &str,
     reml: bool,
@@ -2462,6 +2592,7 @@ extendr_module! {
     fn mm_compare_models_json;
     fn mm_boundary_lrt_json;
     fn mm_verify_convergence_json;
+    fn mm_verify_convergence_glmm_json;
     fn mm_audit_report_text;
     fn mm_audit_report_summary_text;
     fn mm_audit_report_json;

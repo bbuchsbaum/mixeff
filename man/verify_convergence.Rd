@@ -4,7 +4,8 @@
 \alias{verify_convergence}
 \alias{verify_convergence.default}
 \alias{verify_convergence.mm_lmm}
-\title{Verify convergence of a fitted linear mixed model}
+\alias{verify_convergence.mm_glmm}
+\title{Verify convergence of a fitted mixed model}
 \usage{
 verify_convergence(fit, ...)
 
@@ -22,9 +23,22 @@ verify_convergence(fit, ...)
   theta_tolerance = 0.001,
   beta_tolerance = 1e-04
 )
+
+\method{verify_convergence}{mm_glmm}(
+  fit,
+  ...,
+  restart = TRUE,
+  jitter_starts = 1L,
+  jitter_scale = 1e-04,
+  consensus = FALSE,
+  max_feval = 1000L,
+  objective_tolerance = 1e-04,
+  theta_tolerance = 0.001,
+  beta_tolerance = 0.001
+)
 }
 \arguments{
-\item{fit}{A fitted \code{mm_lmm} from \code{\link[=lmm]{lmm()}}.}
+\item{fit}{A fitted \code{mm_lmm} from \code{\link[=lmm]{lmm()}} or \code{mm_glmm} from \code{\link[=glmm]{glmm()}}.}
 
 \item{...}{Reserved for future methods.}
 
@@ -68,15 +82,26 @@ optimizer, return code, objective/theta/beta deltas, agreement)}
 \code{verify_convergence()} re-runs the fit under the engine's bounded
 verification workflow and reports whether the extra runs agree with the
 fitted optimum: a restart from the optimum, one or more jittered restarts,
-and (opt-in) an alternate-optimizer consensus pass. Agreement is judged by
-the engine against the objective/theta/beta tolerances below; the verdict
-(\code{status}), the per-run deltas, and the wording are all owned by the Rust
-contract — R only formats them.
+and (LMM-only, opt-in) an alternate-optimizer consensus pass. Agreement is
+judged by the engine against the objective/theta/beta tolerances below;
+the verdict (\code{status}), the per-run deltas, and the wording are all owned
+by the Rust contract — R only formats them.
 }
 \details{
 The verifier refits the model from the stored specification before it
 starts, so a call costs roughly \code{2 + jitter_starts} fits (plus consensus
-runs when enabled).
+runs when enabled). GLMM verification uses wider default tolerances than
+the LMM route (objective \code{1e-4}, beta \code{1e-3}): each objective evaluation
+carries inner-PIRLS noise, and the joint path's derivative-free beta
+search bounds beta reproducibility at its \code{ftol} stop. A GLMM whose
+requested \code{joint_laplace} estimator was substituted by the labelled
+fast-PIRLS fallback (see \code{optimizer_certificate()}) re-requests the joint
+route; when the verification refit falls back the same way — the expected
+case — every run verifies the profiled objective the fitted numbers came
+from, with ordinary objective deltas. Runs are only reported as
+substitution runs (no objective delta) in the asymmetric case where the
+reference refit certifies the joint route but an individual verification
+run falls back.
 }
 \examples{
 \dontrun{

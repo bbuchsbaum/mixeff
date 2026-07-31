@@ -295,6 +295,7 @@ mm_match_marginal_comparison <- function(comparison) {
   comparison
 }
 
+#' @method print mm_grid
 #' @export
 print.mm_grid <- function(x, ...) {
   cat("Marginal grid:\n")
@@ -302,6 +303,7 @@ print.mm_grid <- function(x, ...) {
   invisible(x)
 }
 
+#' @method print mm_marginal_quantity
 #' @export
 print.mm_marginal_quantity <- function(x, ...) {
   cat("Marginal quantities:\n")

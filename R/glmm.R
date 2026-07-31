@@ -223,6 +223,11 @@ glmm <- function(formula,
     call           = call,
     formula        = formula,
     family         = family_info,
+    # Exact engine family string used at fit time (bernoulli/binomial split,
+    # NB theta-mode spelling). Stored so refit-based verbs (e.g.
+    # verify_convergence) reconstruct the same model without re-deriving the
+    # prep rules; older saved fits lack it and fall back to reconstruction.
+    engine_family  = engine_family,
     method         = as.character(fit_result$method %||% method),
     nAGQ           = as.integer(fit_result$n_agq %||% nAGQ),
     inference_request = inference,
@@ -262,7 +267,34 @@ glmm <- function(formula,
   )
   fit <- mm_apply_lme4_coef_naming(fit)
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
+  # No silent surgery on the estimator that produced the numbers: when the
+  # engine substituted a fallback for the requested method (typed
+  # `estimator_substitution` record, engine f82c646+), say so at fit time.
+  # The summary() note repeats this ungated, so verbose = -1 loops stay
+  # quiet without hiding the substitution from readers of the result.
+  substitution <- mm_estimator_substitution(fit)
+  if (!is.null(substitution) && control$verbose >= 0L) {
+    mm_inform(
+      mm_glmm_substitution_notice(substitution),
+      class = "mm_estimator_substitution_notice"
+    )
+  }
   fit
+}
+
+mm_glmm_substitution_notice <- function(sub) {
+  sprintf(
+    paste0(
+      "glmm(method = \"%s\"): the requested estimator did not certify ",
+      "(status `%s`, code `%s`); the result is a labelled `%s` fallback fit. ",
+      "Its coefficients are the fallback estimator's, not %s's, and Wald ",
+      "inference is withheld. Evidence: ",
+      "optimizer_certificate(fit)$raw$estimator_substitution; check the ",
+      "optimum with verify_convergence(fit)."
+    ),
+    sub$requested_method, sub$requested_fit_status,
+    sub$requested_return_code, sub$effective_method, sub$requested_method
+  )
 }
 
 mm_glmm_profiled_default_notice <- function() {

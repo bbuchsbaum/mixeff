@@ -436,6 +436,30 @@ optimizer_certificate.mm_compiled <- function(object, ...) {
   obj
 }
 
+## Typed estimator-substitution record (engine f82c646+): present on the
+## optimizer certificate when the requested estimator did not certify and the
+## engine returned a labelled fallback (e.g. joint_laplace -> fast PIRLS).
+## NULL when no substitution happened. This record -- not free-text
+## certificate fields -- is the contract surface for no-silent-surgery
+## gating (fit-time notice, summary note).
+mm_estimator_substitution <- function(fit) {
+  cert <- mm_compiled_artifact(fit)$optimizer_certificate %||% list()
+  sub <- cert$estimator_substitution %||% NULL
+  if (is.null(sub)) return(NULL)
+  list(
+    requested_method = as.character(sub$requested_method %||% NA_character_),
+    effective_method = as.character(sub$effective_method %||% NA_character_),
+    requested_fit_status = as.character(sub$requested_fit_status %||%
+                                          NA_character_),
+    requested_return_code = as.character(sub$requested_return_code %||%
+                                           NA_character_),
+    requested_free_gradient_norm = as.numeric(
+      sub$requested_free_gradient_norm %||% NA_real_
+    ),
+    reason = as.character(sub$reason %||% NA_character_)
+  )
+}
+
 #' @method print mm_optimizer_certificate
 #' @export
 print.mm_optimizer_certificate <- function(x, ...) {

@@ -1855,6 +1855,7 @@ profile.mm_lmm <- function(fitted, which = NULL, level = 0.95, ...) {
   out
 }
 
+#' @method print mm_profile
 #' @export
 print.mm_profile <- function(x, ...) {
   cat(sprintf("Profile-likelihood intervals (%s, level %.2f)\n",

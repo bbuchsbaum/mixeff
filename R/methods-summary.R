@@ -152,7 +152,8 @@ summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...) {
     varcorr = VarCorr(object),
     tests = tests,
     inference = inference,
-    vcov_status = vcov_status
+    vcov_status = vcov_status,
+    estimator_substitution = mm_estimator_substitution(object)
   )
   class(out) <- "summary.mm_glmm"
   out
@@ -292,11 +293,28 @@ print.summary.mm_glmm <- function(x, ...) {
     }
   }
   notes <- c(
+    # Substitution first, and independent of fit_status: a converged_* label
+    # on the fallback must not suppress the fact that a different estimator
+    # than requested produced these numbers (no silent surgery).
+    mm_estimator_substitution_note(x$estimator_substitution),
     mm_fit_status_note(x$fit_status, x$method),
     mm_glmm_withheld_inference_note(x, include_reason = !reason_printed)
   )
   mm_summary_print_notes(notes)
   invisible(x)
+}
+
+mm_estimator_substitution_note <- function(sub) {
+  if (is.null(sub)) return(character())
+  sprintf(
+    paste0(
+      "estimator substitution: `%s` was requested but did not certify ",
+      "(status `%s`); these results come from the labelled `%s` fallback. ",
+      "The fit status above describes the fallback fit, not the requested ",
+      "estimator. Evidence: optimizer_certificate()."
+    ),
+    sub$requested_method, sub$requested_fit_status, sub$effective_method
+  )
 }
 
 # One plain-language sentence when every test statistic in the table is

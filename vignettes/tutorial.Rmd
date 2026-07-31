@@ -119,10 +119,13 @@ summary(fit, tests = "coefficients")
 
 The summary has four blocks, in print order.
 
-**Fit status.** Check this line first. `converged_interior` is the good
-outcome: the optimizer found a clean solution and every variance component
-is comfortably positive, so you can read the rest of the summary at face
-value. The status changes when something needs your attention. If a
+**Fit status.** Check this line first. `converged_interior` means the
+optimizer returned a finite interior solution that passed mixeff's declared
+numerical checks, with every variance component away from zero. It does not
+establish global optimality, correct model specification, or that the data
+carry enough information — no numerical status can — but it is the status
+every other block of the summary assumes. The status changes when something
+needs your attention. If a
 variance component collapses to zero — the data show no detectable
 variation for that term — the status reports a *boundary* fit, and the
 affected row is flagged in the variance-components table. The p-values

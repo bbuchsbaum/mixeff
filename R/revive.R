@@ -219,7 +219,14 @@ mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors,
       identical(as.character(payload$schema_name %||% NA_character_),
                 "mixedmodels.fixed_effect_covariance_matrix")) {
     status <- as.character(payload$status %||% "unavailable")
-    if (!identical(status, "available") && !identical(status, "unavailable")) {
+    # Covariance schema 1.1.0 (engine f82c646) added `available_noninferential`
+    # for the profiled working-Hessian payload: the matrix geometry is usable
+    # (prediction, diagnostics) but the certified fixed-effect inference table
+    # is the sole arbiter for Wald inference. Decode it like a matrix-bearing
+    # status and keep `mm_status` verbatim so inference gates can distinguish
+    # it from `available` -- never alias it to `available`.
+    matrix_bearing <- status %in% c("available", "available_noninferential")
+    if (!matrix_bearing && !identical(status, "unavailable")) {
       mm_abort(
         message = sprintf("Fixed-effect covariance payload has unknown status `%s`.",
                           status),
@@ -228,7 +235,7 @@ mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors,
       )
     }
     matrix_payload <- payload$matrix %||% NULL
-    if (identical(status, "available") && !is.null(matrix_payload)) {
+    if (matrix_bearing && !is.null(matrix_payload)) {
       out <- mm_numeric_matrix_from_rows(matrix_payload)
       payload_names <- as.character(unlist(payload$coef_names %||% coef_names,
                                            use.names = FALSE))
@@ -257,9 +264,12 @@ mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors,
       attr(out, "mm_schema_version") <- as.character(payload$schema_version %||% NA_character_)
       return(out)
     }
-    if (identical(status, "available")) {
+    if (matrix_bearing) {
       mm_abort(
-        message = "Available fixed-effect covariance payload does not contain a matrix.",
+        message = sprintf(
+          "Fixed-effect covariance payload with status `%s` does not contain a matrix.",
+          status
+        ),
         class = "mm_schema_error",
         input = payload
       )

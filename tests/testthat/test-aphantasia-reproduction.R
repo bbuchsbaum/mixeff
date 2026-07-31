@@ -252,7 +252,10 @@ aphantasia_expect_fit_matches_reference <- function(fit, ref, id) {
 
 aphantasia_has_glmm_full_vcov <- function(fit) {
   V <- stats::vcov(fit)
-  identical(attr(V, "mm_status"), "available") &&
+  # Profiled fits carry `available_noninferential` since covariance schema
+  # 1.1.0 (engine f82c646): geometry decodes, Wald certification stays with
+  # the inference table. Joint-Laplace fits still say `available`.
+  attr(V, "mm_status") %in% c("available", "available_noninferential") &&
     is.matrix(V) &&
     all(is.finite(V))
 }

@@ -185,6 +185,20 @@ mm_emmeans_init_messages <- function(V) {
       method
     ))
   }
+  if (identical(status, "available_noninferential")) {
+    # Interim honesty until the inference-capability gate lands (WI-2.2):
+    # the working-Hessian covariance is decoded but is not certified for
+    # Wald inference, so anything computed from it here is uncertified.
+    return(sprintf(
+      paste0(
+        "mixeff emmeans bridge: fixed-effect covariance (%s) is NOT certified ",
+        "for Wald inference (status `available_noninferential`); standard ",
+        "errors and tests derived from it are uncertified. Refit with ",
+        "method = \"joint_laplace\" for certified inference."
+      ),
+      method
+    ))
+  }
   reason <- attr(V, "mm_unavailable_reason") %||%
     attr(V, "mm_reason") %||%
     "fixed_effect_covariance_matrix_unavailable"

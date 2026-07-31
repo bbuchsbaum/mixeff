@@ -94,7 +94,10 @@ test_that("mm_lincomb() exposes the underlying vcov status as an attribute", {
   st <- attr(out, "mm_status")
   expect_true(is.list(st))
   expect_true(all(c("status", "method", "reliability", "reason") %in% names(st)))
-  expect_identical(st$status, "available")
+  # Covariance schema 1.1.0: the profiled working-Hessian payload is
+  # `available_noninferential` -- decodable geometry, but not certified for
+  # Wald inference (the inference table is the sole arbiter).
+  expect_identical(st$status, "available_noninferential")
 })
 
 test_that("mm_lincomb() with method='asymptotic' on mm_lmm matches hand-rolled Wald z", {

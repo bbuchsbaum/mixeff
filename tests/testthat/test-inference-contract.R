@@ -69,6 +69,23 @@ test_that("no public route yields finite Wald inference from a default profiled 
   expect_false(any(is.finite(it$std_error)))
   expect_false(any(is.finite(it$p_value)))
 
+  # reporting tables inherit the gate through the inference table.
+  # Reporting tables inherit the gate: the compact fixed-effects section on
+  # a withheld fit carries estimates with method not_computed and NO
+  # standard-error / p-value columns at all (columns without content are
+  # dropped, which is stronger than printing NA).
+  fe <- reporting_table(fit)$sections$fixed_effects
+  expect_true(is.data.frame(fe) && nrow(fe) > 0L)
+  expect_true(all(fe$method == "not_computed"))
+  se_col <- intersect(c("std_error", "Std. Error", "std.error"), names(fe))
+  if (length(se_col)) {
+    expect_false(any(is.finite(fe[[se_col[1L]]])))
+  }
+  p_col <- intersect(c("p_value", "p.value"), names(fe))
+  if (length(p_col)) {
+    expect_false(any(is.finite(fe[[p_col[1L]]])))
+  }
+
   # broom: NA inference.
   skip_if_not_installed("generics")
   td <- generics::tidy(fit, effects = "fixed")

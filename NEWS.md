@@ -309,6 +309,10 @@ tracked separately and ships as 0.2.0.
   versioning gate; mismatched artifacts raise `mm_schema_error` rather
   than silently misparse.
 * Interrupt FFI: `Ctrl-C` during a long Rust fit cleanly returns to R.
+  *[Correction, 0.2.0: this applied only to the interrupt bridge demo
+  (`mm_interrupt_demo`), never to real fits — ordinary `lmm()`/`glmm()`
+  optimization runs in a single non-interruptible native call. See the
+  0.2.0 documentation.]*
 * Typed condition catalog (`mm_condition` base class):
   `mm_formula_error`, `mm_data_error`, `mm_schema_error`,
   `mm_design_refusal`, `mm_inference_unavailable`, `mm_fit_error`,

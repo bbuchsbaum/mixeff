@@ -41,3 +41,5 @@
 ^RELEASE\.md$
 ^\.release-gate$
 ^figure$
+^\.planning$
+^Audit1\.md$

@@ -1799,13 +1799,28 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
   )
 }
 
-# Grade bootstrap reliability from the engine's replicate accounting rather
-# than asserting a constant. Per the bootstrap contract, `moderate` requires
-# a finite Monte-Carlo standard error and a sufficiently large successful
-# replicate count (>= 999); fewer replicates or a non-finite MCSE are `low`;
-# an uncertified payload is `not_available`.
+# Replicate floor for a `moderate` bootstrap grade -- ONE definition,
+# consumed by mm_bootstrap_reliability() and the inference_options route
+# map (previously the literal 999 was duplicated in two files).
+#
+# Rationale for 999 (documented in the glossary vignette's reliability
+# rubric): (i) with B = 999 the achievable two-sided bootstrap p-values are
+# exact multiples of 1/(B+1) = 0.001, so a reported p of 0.05 is resolved
+# to +/- one grid step; (ii) the Monte Carlo SE of an estimated rejection/
+# coverage rate near 0.05 is sqrt(.05*.95/999) ~ 0.0069 -- small relative
+# to the 0.05 target; below ~1000 replicates that MC noise becomes a
+# material share of the quantity being reported. The step at the threshold
+# is a grading convention, not a claim that B = 998 differs materially
+# from B = 999; the accounting fields (successful replicates, MCSE) ship
+# alongside the grade so readers can judge the evidence directly.
+mm_bootstrap_moderate_min <- function() 999L
+
+# Grade bootstrap reliability from the replicate accounting. `moderate`
+# requires a certified payload, a finite Monte-Carlo standard error, and at
+# least mm_bootstrap_moderate_min() successful replicates; fewer replicates
+# or a non-finite MCSE are `low`; an uncertified payload is `not_available`.
 mm_bootstrap_reliability <- function(certified, successful, mcse,
-                                     min_moderate = 999L) {
+                                     min_moderate = mm_bootstrap_moderate_min()) {
   if (!isTRUE(certified)) {
     return(list(reliability = "not_available",
                 reason = "bootstrap_not_certified"))

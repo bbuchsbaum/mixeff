@@ -27,7 +27,7 @@ glmm(
 \item{data}{A \code{data.frame}.}
 
 \item{family}{A supported GLMM family object or family constructor. The
-certified 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or
+supported 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or
 \code{"cloglog"} links; \code{\link[=poisson]{poisson()}} with \code{"log"} or \code{"sqrt"} links;
 \code{\link[=Gamma]{Gamma()}} with \code{"log"} link; and negative binomial (NB2, \code{"log"} link)
 via \code{\link[=mm_negative_binomial]{mm_negative_binomial()}} (theta estimated, like \code{lme4::glmer.nb()})
@@ -91,7 +91,8 @@ native dependency-light optimizer in this vendored build.
 Optimization runs inside a single native call with no progress output: the
 pre-fit explanation block (when \code{verbose >= 0}) is the last thing printed
 before the fitted result returns, and the call cannot be interrupted from
-R. Every optimizer budget is bounded, so fits always terminate; runtime on
+R. Evaluation budgets are bounded (a bounded budget caps optimizer
+iterations; it does not prove every native evaluation terminates); runtime on
 large problems is governed by \code{mm_control(max_feval = )}.
 }
 \examples{

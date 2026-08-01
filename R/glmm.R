@@ -10,7 +10,7 @@
 #' @param formula A two-sided lme4-style formula.
 #' @param data A `data.frame`.
 #' @param family A supported GLMM family object or family constructor. The
-#'   certified 1.0 surface is: [binomial()] with `"logit"`, `"probit"`, or
+#'   supported 1.0 surface is: [binomial()] with `"logit"`, `"probit"`, or
 #'   `"cloglog"` links; [poisson()] with `"log"` or `"sqrt"` links;
 #'   [Gamma()] with `"log"` link; and negative binomial (NB2, `"log"` link)
 #'   via [mm_negative_binomial()] (theta estimated, like `lme4::glmer.nb()`)
@@ -54,7 +54,8 @@
 #' Optimization runs inside a single native call with no progress output: the
 #' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
 #' before the fitted result returns, and the call cannot be interrupted from
-#' R. Every optimizer budget is bounded, so fits always terminate; runtime on
+#' R. Evaluation budgets are bounded (a bounded budget caps optimizer
+#' iterations; it does not prove every native evaluation terminates); runtime on
 #' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.

@@ -190,7 +190,7 @@ mm_inference_options_row_wald <- function(fit, current_inf, is_boundary) {
   predicted <- if (is_boundary)
     "asymptotic_wald_z_at_boundary"
   else
-    "interior_converged_well_specified"
+    "interior_converged"
   observed <- if (nrow(current_inf) &&
                   identical(current_inf$method[[1L]], "asymptotic_wald_z") &&
                   !is.na(current_inf$reliability_reason[[1L]])) {
@@ -282,7 +282,8 @@ mm_inference_options_row_bootstrap_lrt <- function(fit, is_reml, nsim) {
 }
 
 mm_inference_options_bootstrap_lrt_reliability_reason <- function(nsim) {
-  if (is.numeric(nsim) && length(nsim) == 1L && !is.na(nsim) && nsim >= 999L) {
+  if (is.numeric(nsim) && length(nsim) == 1L && !is.na(nsim) &&
+      nsim >= mm_bootstrap_moderate_min()) {
     "bootstrap_monte_carlo_replicates"
   } else {
     "bootstrap_insufficient_replicates"
@@ -298,7 +299,9 @@ mm_inference_options_row_cluster_bootstrap <- function(n_groups_max, nsim) {
     r_verb = "test_effect(fit, term, method = 'cluster_bootstrap', group = '<group>')",
     approx_cost = "-",
     notes = if (too_few)
-      sprintf("only %d grouping levels; cluster bootstrap is coarse below ~10",
+      sprintf(paste0("heuristic (rule of thumb, not a validated threshold): ",
+                     "resampling only %d clusters gives the cluster ",
+                     "bootstrap little granularity"),
               n_groups_max)
     else
       "cluster_resample is an estimator-distribution target; fixed-effect p-values are not certified"
@@ -373,7 +376,7 @@ mm_inference_options_display_reason <- function(reason, status, method) {
     reason,
     asymptotic_wald_z_at_boundary =
       "Wald route runs, but boundary fits can understate uncertainty",
-    interior_converged_well_specified =
+    interior_converged =
       "interior fit; default fast route",
     satterthwaite_unavailable_at_boundary =
       "variance-parameter derivative undefined at boundary",
@@ -426,17 +429,12 @@ mm_inference_options_next_step <- function(method, status, reason, r_verb) {
 }
 
 mm_inference_options_format_cost <- function(fit, nsim, factor = 1) {
-  # Order-of-magnitude only. Per-replicate fit cost scales roughly with n_obs
-  # and theta complexity; a calibrated estimate is out of scope. We give the
-  # user a sense of "seconds vs minutes" so they can pick nsim deliberately.
-  n <- nrow(fit$model_frame %||% data.frame()) %||% NA
-  per_replicate_seconds <- if (is.na(n) || n < 200) 0.02 else 0.05
-  total <- nsim * per_replicate_seconds * factor
-  if (total < 5) {
-    sprintf("~%.0fs @ nsim=%d", total, nsim)
-  } else if (total < 60) {
-    sprintf("~%.0fs @ nsim=%d", total, nsim)
-  } else {
-    sprintf("~%.1fmin @ nsim=%d", total / 60, nsim)
-  }
+  # Report WORKLOAD, not invented seconds: per-replicate cost depends on the
+  # model, the machine, and the build, and a two-branch constant dressed as
+  # a runtime reads far more precise than it is (Audit1 WI-5.3). One
+  # bootstrap replicate costs one model refit; the bootstrap LRT refits the
+  # reduced and alternative models per replicate.
+  refits <- as.integer(round(nsim * factor))
+  sprintf("%s model refits (nsim = %d)",
+          format(refits, big.mark = ","), as.integer(nsim))
 }

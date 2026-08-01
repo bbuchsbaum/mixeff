@@ -16,7 +16,7 @@ glmm(
   contrasts = NULL,
   method = c("pirls_profiled", "joint_laplace"),
   nAGQ = 1L,
-  inference = c("auto", "none", "asymptotic", "bootstrap"),
+  inference = c("auto", "none", "asymptotic", "bootstrap", "working_hessian"),
   control = mm_control(),
   ...
 )
@@ -57,7 +57,19 @@ to that effect (suppress with \code{mm_control(verbose = -1)}). Use
 Laplace setting. Values above \code{1} are allowed on the profiled path and
 are rejected for \code{method = "joint_laplace"} in the R wrapper.}
 
-\item{inference}{Requested inference method.}
+\item{inference}{Requested inference posture. The default \code{"auto"} keeps
+the certified contract: Wald standard errors, tests, and intervals are
+available only when the engine certifies them (currently
+\code{method = "joint_laplace"}); the default profiled estimator withholds
+them with a typed refusal. \code{"working_hessian"} is an explicit opt-in
+that unlocks the UNCERTIFIED profiled working-Hessian approximation on
+every inference route; each resulting row is labelled
+\code{wald_z_working_hessian} with reliability \code{moderate}. Its standard
+errors ran about 11\% smaller than \code{glmer()}'s on the package's
+reference dataset (anti-conservative), so treat it as an exploration
+and screening tool, not a reporting route; see \code{inference_options()}.
+\code{"none"}, \code{"asymptotic"}, and \code{"bootstrap"} are accepted and recorded
+but currently equivalent to \code{"auto"}.}
 
 \item{control}{A list from \code{\link[=mm_control]{mm_control()}}.}
 

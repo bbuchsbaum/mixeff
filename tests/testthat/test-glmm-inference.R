@@ -52,7 +52,10 @@ test_that("contrast.mm_glmm honours rhs and the wald alias", {
               method = "joint_laplace", control = mm_control(verbose = -1))
   a <- contrast(fit, c(0, 1, 0), rhs = 0.5, method = "wald")
   expect_equal(a$table$estimate, unname(fixef(fit)["x"]) - 0.5, tolerance = 1e-8)
-  expect_identical(a$table$method, "asymptotic")
+  # Method labels come from the capability arbiter's closed vocabulary:
+  # certified rows say asymptotic_wald_z (matching the engine inference
+  # table), not the historical route-local "asymptotic" alias.
+  expect_identical(a$table$method, "asymptotic_wald_z")
 })
 
 test_that("drop1.mm_glmm runs likelihood-ratio term deletions", {

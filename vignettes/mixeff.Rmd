@@ -274,8 +274,11 @@ coefficients.
   datasets shipped with the package.
 - `glmm()`'s default estimator (`pirls_profiled`) returns point
   estimates quickly but refuses Wald standard errors, z statistics,
-  and p-values; refit with `method = "joint_laplace"` when you need
-  glmer-comparable inference (`vignette("glmm", package = "mixeff")`).
+  and p-values; refit with `method = "joint_laplace"` for
+  glmer-comparable certified inference, or use
+  `confint(fit, method = "bootstrap")` for parametric-bootstrap
+  intervals on any supported family, including negative binomial
+  (`vignette("glmm", package = "mixeff")`).
 - Profile-likelihood confidence intervals for fixed effects require an
   ML fit; under the REML default they are refused with the reason code
   `profile_beta_unavailable_under_reml` (variance parameters are

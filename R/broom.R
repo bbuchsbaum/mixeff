@@ -83,6 +83,21 @@ mm_tidy_fixed <- function(x, conf.int, conf.level, glmm) {
   if (is.null(se) || length(se) != length(beta)) {
     se <- rep(NA_real_, length(beta))
   }
+  if (glmm) {
+    # Capability gate (WI-2.3): GLMM tidy inference must come from the
+    # arbiter, never from whatever happens to sit in x$std_errors (the
+    # engine leaves those NaN for uncertified estimators today, but that is
+    # incidental storage, not a contract). Certified fits keep the engine
+    # SEs; the working-Hessian opt-in computes labelled SEs from the
+    # noninferential covariance; everything else is withheld as NA.
+    cap <- mm_glmm_inference_capability(x)
+    if (!isTRUE(cap$wald)) {
+      se <- rep(NA_real_, length(beta))
+    } else if (identical(cap$source, "working_hessian_opt_in")) {
+      V <- as.matrix(unclass(stats::vcov(x)))
+      se <- suppressWarnings(sqrt(diag(V)))
+    }
+  }
   statistic <- beta / se
   out <- data.frame(
     effect = "fixed",

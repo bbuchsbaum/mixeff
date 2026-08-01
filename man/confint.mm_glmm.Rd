@@ -20,16 +20,35 @@
 \item{level}{Confidence level.}
 
 \item{method}{\code{"asymptotic"} (the default; the package-wide name for the
-closed-form Wald interval) or its synonym \code{"wald"}.}
+closed-form Wald interval), its synonym \code{"wald"}, or \code{"bootstrap"}.}
 
-\item{...}{Unused.}
+\item{...}{For \code{method = "bootstrap"}: \code{nsim} (number of replicates,
+default 999) and \code{seed} (non-negative integer; when omitted one is
+drawn from R's RNG so \code{set.seed()} governs reproducibility).}
 }
 \value{
-An \code{mm_confint} matrix of lower/upper bounds.
+An \code{mm_confint} matrix of lower/upper bounds (\code{"asymptotic"}), or
+a plain matrix of percentile bounds with bootstrap-accounting
+attributes (\code{"bootstrap"}).
 }
 \description{
-Asymptotic Wald intervals (\verb{estimate +/- z * SE}) built from the Rust
-fixed-effect inference table. Profile and bootstrap intervals are not
-certified for GLMMs by the upstream contract and are refused with a typed
-reason rather than approximated.
+Two routes are available. \code{method = "asymptotic"} builds Wald intervals
+(\verb{estimate +/- z * SE}) from the Rust fixed-effect inference table; it
+requires a certified fit (\code{method = "joint_laplace"}) or the explicit
+working-Hessian opt-in, and refuses the default profiled estimator with
+a typed reason. \code{method = "bootstrap"} runs a parametric bootstrap —
+each replicate simulates a response from the fitted model under fresh
+random-effect draws and refits the same (effective) estimator — and
+returns percentile intervals; it works on profiled-estimator fits for
+every supported family, including negative binomial (fixed-theta fits
+condition replicates on that theta; estimated-theta fits re-estimate
+theta per replicate, propagating its uncertainty). On \code{joint_laplace}
+fits the bootstrap is refused at this engine pin — replicate refits
+cannot re-run the joint estimator — and those fits have certified Wald
+intervals instead.
+The bootstrap result carries replicate accounting as attributes:
+\code{mm_bootstrap} (requested, successful, failed, seed, per-parameter
+standard errors, Monte Carlo SE, and a reliability grade) and
+\code{mm_estimator}. Failed replicates are counted, never silently dropped.
+Profile intervals are not certified for GLMMs and are refused.
 }

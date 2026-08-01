@@ -1439,6 +1439,68 @@ fn mm_verify_convergence_glmm_json(
     })
 }
 
+/// GLMM parametric bootstrap through
+/// `mixeff_rs::stats::bootstrap::parametricbootstrap_glmm`.
+///
+/// Refits the template model from the bridge payload, then for each
+/// replicate simulates a response under fresh random-effect draws and
+/// refits a clone, recording objective, dispersion, beta, descriptive
+/// replicate SEs, and theta. Failed refits are recorded as NaN replicates
+/// (the caller filters on objective finiteness -- no silent removal).
+/// Supported families: Bernoulli, Binomial, Poisson, NegativeBinomial
+/// (fixed-theta templates condition replicates on that theta;
+/// estimated-theta templates re-estimate theta per replicate), and Gamma. Deterministic under the caller-supplied `seed`.
+///
+/// @noRd
+#[extendr]
+fn mm_glmm_parametric_bootstrap_json(
+    fit_payload: Robj,
+    options_json: &str,
+) -> std::result::Result<String, String> {
+    let opts: Value = serde_json::from_str(options_json)
+        .map_err(|e| format!("mm_arg_error: invalid bootstrap options JSON: {}", e))?;
+    let nsim = opts
+        .get("nsim")
+        .and_then(Value::as_u64)
+        .filter(|v| *v >= 1)
+        .ok_or_else(|| "mm_arg_error: bootstrap nsim must be a positive integer".to_string())?
+        as usize;
+    let seed = opts
+        .get("seed")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "mm_arg_error: bootstrap seed must be a non-negative integer".to_string())?;
+
+    let model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let beta_names = model.coef_names();
+    let mut rng = StdRng::seed_from_u64(seed);
+    let boot = mixeff_rs::stats::bootstrap::parametricbootstrap_glmm(&mut rng, nsim, &model)
+        .map_err(|e| {
+            format!(
+                "mm_inference_unavailable: GLMM parametric bootstrap failed: {}",
+                e
+            )
+        })?;
+
+    let boot_json = serde_json::to_value(&boot).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize GLMM bootstrap replicates: {}",
+            e
+        )
+    })?;
+    serde_json::to_string(&serde_json::json!({
+        "beta_names": beta_names,
+        "requested": nsim,
+        "seed": seed,
+        "bootstrap": boot_json,
+    }))
+    .map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize GLMM bootstrap payload: {}",
+            e
+        )
+    })
+}
+
 fn fit_glmm_from_bridge_payload_robj(
     payload: &Robj,
     index: usize,
@@ -2593,6 +2655,7 @@ extendr_module! {
     fn mm_boundary_lrt_json;
     fn mm_verify_convergence_json;
     fn mm_verify_convergence_glmm_json;
+    fn mm_glmm_parametric_bootstrap_json;
     fn mm_audit_report_text;
     fn mm_audit_report_summary_text;
     fn mm_audit_report_json;

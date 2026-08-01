@@ -172,6 +172,21 @@ mm_verify_convergence_json <- function(fit_payload, options_json) .Call(wrap__mm
 #' @noRd
 mm_verify_convergence_glmm_json <- function(fit_payload, options_json) .Call(wrap__mm_verify_convergence_glmm_json, fit_payload, options_json)
 
+#' GLMM parametric bootstrap through
+#' `mixeff_rs::stats::bootstrap::parametricbootstrap_glmm`.
+#'
+#' Refits the template model from the bridge payload, then for each
+#' replicate simulates a response under fresh random-effect draws and
+#' refits a clone, recording objective, dispersion, beta, descriptive
+#' replicate SEs, and theta. Failed refits are recorded as NaN replicates
+#' (the caller filters on objective finiteness -- no silent removal).
+#' Supported families: Bernoulli, Binomial, Poisson, NegativeBinomial
+#' (fixed-theta templates condition replicates on that theta;
+#' estimated-theta templates re-estimate theta per replicate), and Gamma. Deterministic under the caller-supplied `seed`.
+#'
+#' @noRd
+mm_glmm_parametric_bootstrap_json <- function(fit_payload, options_json) .Call(wrap__mm_glmm_parametric_bootstrap_json, fit_payload, options_json)
+
 #' Render an `audit_design()` artifact as text.
 #'
 #' Takes the JSON produced by `mm_compile_model_json` and returns the

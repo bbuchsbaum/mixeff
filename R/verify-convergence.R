@@ -240,23 +240,44 @@ verify_convergence.mm_glmm <- function(fit, ...,
 ## the joint route; when the refit falls back the same way, all runs verify
 ## the profiled objective the fitted numbers came from.
 mm_rust_glmm_verify_payload <- function(fit) {
+  mm_rust_glmm_refit_payload(fit, mm_glmm_requested_method(fit))
+}
+
+## Shared GLMM refit payload for bridge verbs that rebuild the model
+## (verify_convergence, parametric bootstrap). `method` is explicit because
+## the two verbs need different estimators on a substituted fit: verification
+## re-REQUESTS the joint route (checking what the user asked for), while the
+## bootstrap refits the EFFECTIVE estimator (resampling the distribution of
+## the numbers actually returned).
+mm_rust_glmm_refit_payload <- function(fit, method) {
   payload <- mm_rust_fit_bridge_payload(fit)
   payload$offset <- mm_bridge_weights(fit$offset)
   payload$family <- as.character(
     fit$engine_family %||% mm_glmm_engine_family_fallback(fit)
   )
   payload$link <- as.character(fit$family$link)
+  payload$method <- as.character(method)
+  payload$n_agq <- as.numeric(fit$nAGQ %||% 1L)
+  payload
+}
+
+mm_glmm_requested_method <- function(fit) {
   method <- as.character(fit$method %||% "pirls_profiled")
   sub <- mm_estimator_substitution(fit)
   if (!is.null(sub) && !is.na(sub$requested_method)) {
     method <- sub$requested_method
   }
-  if (identical(method, "fast_pirls_profiled")) {
-    method <- "pirls_profiled"
+  if (identical(method, "fast_pirls_profiled")) "pirls_profiled" else method
+}
+
+mm_glmm_effective_method <- function(fit) {
+  sub <- mm_estimator_substitution(fit)
+  method <- if (!is.null(sub) && !is.na(sub$effective_method)) {
+    sub$effective_method
+  } else {
+    as.character(fit$method %||% "pirls_profiled")
   }
-  payload$method <- method
-  payload$n_agq <- as.numeric(fit$nAGQ %||% 1L)
-  payload
+  if (identical(method, "fast_pirls_profiled")) "pirls_profiled" else method
 }
 
 ## Engine-family reconstruction for fits saved before `engine_family` was

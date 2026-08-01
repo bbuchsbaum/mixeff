@@ -42,14 +42,22 @@ test_that("confint.mm_glmm matches estimate +/- z*SE and respects level/parm", {
   expect_equal(unname(ci[1, 2]), est + z * se, tolerance = 1e-10)
 })
 
-test_that("confint.mm_glmm refuses profile/bootstrap with a typed reason", {
+test_that("confint.mm_glmm refuses profile/bootstrap on joint fits with typed reasons", {
   fit <- glmm(y ~ x + (1 | g), mm_confint_gamma_data(),
               family = Gamma(link = "log"),
               method = "joint_laplace", control = mm_control(verbose = -1))
   expect_error(confint(fit, method = "profile"),
                class = "mm_inference_unavailable")
-  expect_error(confint(fit, method = "bootstrap"),
-               class = "mm_inference_unavailable")
+  # The bootstrap refusal on a joint fit is INTENDED, up-front, and honest:
+  # engine refit() cannot re-run the joint estimator at this pin, so the
+  # route refuses before burning nsim doomed replicate refits (previously
+  # this "passed" by accident via a 0-successful-replicates abort after
+  # running them all).
+  err <- tryCatch(confint(fit, method = "bootstrap", nsim = 20L, seed = 1L),
+                  error = function(e) e)
+  expect_s3_class(err, "mm_inference_unavailable")
+  expect_match(conditionMessage(err), "joint_laplace", fixed = TRUE)
+  expect_match(conditionMessage(err), "asymptotic", fixed = TRUE)
 })
 
 test_that("confint.mm_glmm accepts the asymptotic synonym", {

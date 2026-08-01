@@ -3,11 +3,14 @@
 \name{inference_options}
 \alias{inference_options}
 \alias{inference_options.mm_lmm}
+\alias{inference_options.mm_glmm}
 \title{Inspect inference methods available for this fit}
 \usage{
 inference_options(fit, term = NULL, nsim = 1000L, ...)
 
 \method{inference_options}{mm_lmm}(fit, term = NULL, nsim = 1000L, ...)
+
+\method{inference_options}{mm_glmm}(fit, term = NULL, nsim = 1000L, ...)
 }
 \arguments{
 \item{fit}{A fitted \code{mm_lmm}.}

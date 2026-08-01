@@ -160,7 +160,7 @@ number without comment:
 | Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
 | Satterthwaite df at a boundary | lmerTest prints df anyway | refused with a reason; use bootstrap |
 | Prediction SE for an unseen grouping level | — | `NA` with the reason in `mm_reason` |
-| GLMM `confint()` | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (lowercase; lme4's `method = "Wald"` spelling is not accepted); every `confint()` route refused on the default `pirls_profiled` fit |
+| GLMM `confint()` | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (lowercase; lme4's `method = "Wald"` spelling is not accepted); parametric-bootstrap intervals via `method = "bootstrap"` on profiled-estimator fits (like `bootMer`; refused on `joint_laplace` fits at this engine pin); Wald routes refused on the default `pirls_profiled` fit |
 
 Use `inference_options(fit)` to see, before you run anything, which inference
 routes are available on a given fit and why.

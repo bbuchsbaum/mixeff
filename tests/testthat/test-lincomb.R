@@ -18,7 +18,7 @@ mk_lincomb_lmm <- function(seed = 11L) {
   )
 }
 
-mk_lincomb_glmm <- function(seed = 23L) {
+mk_lincomb_glmm <- function(seed = 23L, inference = "auto") {
   set.seed(seed)
   n_subj <- 12L
   n_per <- 10L
@@ -35,6 +35,7 @@ mk_lincomb_glmm <- function(seed = 23L) {
     family = binomial(),
     method = "pirls_profiled",
     nAGQ = 1L,
+    inference = inference,
     control = mm_control(verbose = -1)
   )
 }
@@ -58,8 +59,18 @@ hand_wald <- function(beta, V, weights, level = 0.95, df = NA_real_) {
        lower = est - q * se, upper = est + q * se)
 }
 
-test_that("mm_lincomb() reproduces hand-rolled Wald z on mm_glmm", {
+test_that("mm_lincomb() refuses a default profiled GLMM with a typed error", {
+  # Capability contract (WI-2.2): without the explicit opt-in, no route may
+  # emit SEs/z/p/CIs from the uncertified working-Hessian covariance.
   fit <- mk_lincomb_glmm()
+  err <- tryCatch(mm_lincomb(fit, c(x = 1)), error = function(e) e)
+  expect_s3_class(err, "mm_inference_unavailable")
+  expect_match(conditionMessage(err), "joint_laplace", fixed = TRUE)
+  expect_match(conditionMessage(err), "inference_options", fixed = TRUE)
+})
+
+test_that("mm_lincomb() reproduces hand-rolled Wald z on mm_glmm (opt-in)", {
+  fit <- mk_lincomb_glmm(inference = "working_hessian")
   beta <- as.numeric(fixef(fit))
   names(beta) <- names(fixef(fit))
   V <- as.matrix(unclass(vcov(fit)))
@@ -88,16 +99,19 @@ test_that("mm_lincomb() reproduces hand-rolled Wald z on mm_glmm", {
   expect_equal(out$upper,      ref$upper,      tolerance = 1e-12)
 })
 
-test_that("mm_lincomb() exposes the underlying vcov status as an attribute", {
-  fit <- mk_lincomb_glmm()
+test_that("mm_lincomb() exposes the capability status as an attribute", {
+  fit <- mk_lincomb_glmm(inference = "working_hessian")
   out <- mm_lincomb(fit, c("x" = 1))
   st <- attr(out, "mm_status")
   expect_true(is.list(st))
   expect_true(all(c("status", "method", "reliability", "reason") %in% names(st)))
-  # Covariance schema 1.1.0: the profiled working-Hessian payload is
-  # `available_noninferential` -- decodable geometry, but not certified for
-  # Wald inference (the inference table is the sole arbiter).
+  # Opt-in rows keep the noninferential wire status and carry the
+  # approximation's own method label -- they can never be mistaken for
+  # certified rows (WI-2.9).
   expect_identical(st$status, "available_noninferential")
+  expect_identical(st$method, "wald_z_working_hessian")
+  expect_identical(st$reliability, "moderate")
+  expect_identical(out$method, "wald_z_working_hessian")
 })
 
 test_that("mm_lincomb() with method='asymptotic' on mm_lmm matches hand-rolled Wald z", {
@@ -139,7 +153,7 @@ test_that("mm_lincomb() default on mm_lmm uses Satterthwaite df via df_for_contr
 })
 
 test_that("mm_lincomb() accepts named list and 1-row data.frame", {
-  fit <- mk_lincomb_glmm()
+  fit <- mk_lincomb_glmm(inference = "working_hessian")
   g_name <- grep("^g", names(fixef(fit)), value = TRUE)[1L]
   vec  <- setNames(c(0.5, 1), c("x", g_name))
   out_vec  <- mm_lincomb(fit, vec)
@@ -151,7 +165,7 @@ test_that("mm_lincomb() accepts named list and 1-row data.frame", {
 })
 
 test_that("mm_lincomb() rejects malformed weights", {
-  fit <- mk_lincomb_glmm()
+  fit <- mk_lincomb_glmm(inference = "working_hessian")
   expect_error(mm_lincomb(fit, NULL),
                class = "mm_arg_error")
   expect_error(mm_lincomb(fit, c(1, 2, 3)),
@@ -180,7 +194,7 @@ test_that("mm_lincomb() default method errors on non-fit input", {
 })
 
 test_that("mm_lincomb() level argument moves the CI as expected", {
-  fit <- mk_lincomb_glmm()
+  fit <- mk_lincomb_glmm(inference = "working_hessian")
   out_95 <- mm_lincomb(fit, c("x" = 1), level = 0.95)
   out_99 <- mm_lincomb(fit, c("x" = 1), level = 0.99)
   expect_lt(out_95$lower, out_99$upper)  ## sanity

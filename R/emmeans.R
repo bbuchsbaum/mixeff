@@ -1,17 +1,23 @@
-#' Optional emmeans support for mixeff LMMs
+#' Optional emmeans support for mixeff models
 #'
-#' These methods let `emmeans` build reference grids for `mm_lmm` objects when
-#' the optional `emmeans` package is installed. They expose the same fixed-effect
-#' design surface used by [mm_grid()] and [mm_means()].
+#' These methods let `emmeans` build reference grids for `mm_lmm` and
+#' `mm_glmm` objects when the optional `emmeans` package is installed. They
+#' expose the same fixed-effect design surface used by [mm_grid()] and
+#' [mm_means()].
 #'
-#' The current bridge is intentionally narrow: Gaussian LMMs only and
-#' population fixed-effect means only. When the fitted artifact carries an
-#' available `mixedmodels.fixed_effect_covariance_matrix` payload, `emmeans`
-#' receives that full fixed-effect covariance matrix. Native [mm_predictions()],
-#' [mm_means()], and [mm_comparisons()] remain the contract-preserving mixeff
-#' surface because they preserve row-level status and reason fields.
+#' The bridge covers population fixed-effect means only. For GLMMs the whole
+#' emmeans surface is gated by the package's inference-capability contract:
+#' a default profiled fit refuses with a typed error (refit with
+#' `method = "joint_laplace"` for certified Wald inference, or opt in to the
+#' labelled working-Hessian approximation at fit time with
+#' `inference = "working_hessian"`). When the fitted artifact carries a
+#' usable `mixedmodels.fixed_effect_covariance_matrix` payload, `emmeans`
+#' receives that full fixed-effect covariance matrix. Native
+#' [mm_predictions()], [mm_means()], and [mm_comparisons()] remain the
+#' contract-preserving mixeff surface for LMMs because they preserve
+#' row-level status and reason fields.
 #'
-#' @param object A fitted `mm_lmm`.
+#' @param object A fitted `mm_lmm` or `mm_glmm`.
 #' @param trms,xlev,grid,... Arguments supplied by `emmeans`.
 #' @param data Optional data override supplied by `emmeans`.
 #'
@@ -100,6 +106,20 @@ recover_data.mm_glmm <- function(object, data = NULL, ...) {
       class = "mm_inference_unavailable"
     )
   }
+  # The emmeans surface is inference (SEs, z tests, CIs on the grid), so it
+  # is gated by the same capability arbiter as every other Wald route
+  # (WI-2.2). Refusing here, at grid recovery, stops the whole emmeans
+  # pipeline with one actionable message instead of letting emm_basis()
+  # fabricate inference from an uncertified covariance.
+  cap <- mm_glmm_inference_capability(object)
+  if (!isTRUE(cap$wald)) {
+    mm_abort(
+      message = mm_glmm_wald_refusal_message("emmeans grid summaries"),
+      class = "mm_inference_unavailable",
+      reason_code = cap$reason_code,
+      input = object
+    )
+  }
   trms <- stats::delete.response(stats::terms(mm_fixed_formula(object)))
   frame <- data %||% object$model_frame
   emmeans::recover_data(
@@ -119,6 +139,18 @@ emm_basis.mm_glmm <- function(object, trms, xlev, grid, ...) {
     mm_abort(
       message = "`emm_basis.mm_glmm()` requires the optional emmeans and estimability packages.",
       class = "mm_inference_unavailable"
+    )
+  }
+  # Same arbiter gate as recover_data.mm_glmm: emm_basis() can also be
+  # reached directly (emmeans passes fitted objects around), so both entry
+  # points enforce the contract independently.
+  cap <- mm_glmm_inference_capability(object)
+  if (!isTRUE(cap$wald)) {
+    mm_abort(
+      message = mm_glmm_wald_refusal_message("emmeans grid summaries"),
+      class = "mm_inference_unavailable",
+      reason_code = cap$reason_code,
+      input = object
     )
   }
   m <- stats::model.frame(trms, grid, na.action = stats::na.pass, xlev = xlev)
@@ -186,15 +218,15 @@ mm_emmeans_init_messages <- function(V) {
     ))
   }
   if (identical(status, "available_noninferential")) {
-    # Interim honesty until the inference-capability gate lands (WI-2.2):
-    # the working-Hessian covariance is decoded but is not certified for
-    # Wald inference, so anything computed from it here is uncertified.
+    # Reachable only through the explicit fit-level opt-in
+    # (`inference = "working_hessian"`): the capability gate refuses
+    # profiled fits before emmeans gets this far otherwise.
     return(sprintf(
       paste0(
-        "mixeff emmeans bridge: fixed-effect covariance (%s) is NOT certified ",
-        "for Wald inference (status `available_noninferential`); standard ",
-        "errors and tests derived from it are uncertified. Refit with ",
-        "method = \"joint_laplace\" for certified inference."
+        "mixeff emmeans bridge: standard errors and tests use the ",
+        "UNCERTIFIED working-Hessian approximation (%s; reliability ",
+        "moderate), as requested via inference = \"working_hessian\". ",
+        "Refit with method = \"joint_laplace\" for certified inference."
       ),
       method
     ))

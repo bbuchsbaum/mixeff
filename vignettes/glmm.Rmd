@@ -43,8 +43,26 @@ the difference between them decides what inference you get:
   inference table — standard errors, z tests, and Wald confidence
   intervals — from a covariance the engine certifies.
 
-The practical rule: explore with the default, report with
-`joint_laplace`.
+Three inference routes exist, and every refusal message names them:
+
+1. **Certified Wald** — refit with `method = "joint_laplace"`; standard
+   errors, z tests, and Wald intervals come from a covariance the engine
+   certifies.
+2. **Parametric bootstrap** — `confint(fit, method = "bootstrap")` works on
+   profiled-estimator fits for every supported family, including negative
+   binomial (which has no joint-Laplace route). Replicates simulate from
+   the fitted model and refit the same estimator; the result carries
+   percentile intervals plus full replicate accounting (requested,
+   successful, failed, Monte Carlo SE). It costs `nsim` refits. On
+   `joint_laplace` fits the bootstrap is refused at this engine pin
+   (replicate refits cannot re-run the joint estimator) — those fits have
+   certified Wald intervals instead.
+3. **Working-Hessian approximation (opt-in)** — for exploration and
+   screening only; see `inference_options(fit)` for the caveat and the
+   invocation.
+
+The practical rule: explore with the default, report with `joint_laplace`
+or the bootstrap.
 
 The example uses the `lme4::cbpp` data. As in `lme4`, a binomial response
 with grouped counts can be written either as a two-column
@@ -221,9 +239,12 @@ rbind(
 )
 ```
 
-`confint()` on the default fit raises `mm_inference_unavailable` (the
+Wald `confint()` on the default fit raises `mm_inference_unavailable` (the
 working-Hessian payload is not certified for Wald intervals); the same
-request on the joint-Laplace fit succeeds, as shown above. `simulate()`
+request on the joint-Laplace fit succeeds, as shown above. The bootstrap
+route complements it from the other side: `confint(glmm_fit, method =
+"bootstrap")` resamples and refits the profiled estimator itself, and is
+refused on joint fits (which have certified Wald instead). `simulate()`
 and `refit()` are not implemented for GLMM fits.
 
 ```{r checks, include = FALSE}
@@ -238,6 +259,9 @@ stopifnot(is.finite(AIC(glmm_fit)))
 
 # Default path: estimates present, inference withheld (all SEs NA).
 stopifnot(!any(is.finite(coef_tab[, "Std. Error"])))
+# Bootstrap route works on the default fit (prose above claims it).
+boot_ci <- confint(glmm_fit, method = "bootstrap", nsim = 25L, seed = 1L)
+stopifnot(all(is.finite(boot_ci)), all(boot_ci[, 1L] < boot_ci[, 2L]))
 # Joint path: full inference table, finite everywhere.
 joint_tab <- summary(glmm_joint, tests = "coefficients")$coefficients
 stopifnot(all(is.finite(joint_tab[, "Std. Error"])))

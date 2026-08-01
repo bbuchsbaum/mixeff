@@ -33,7 +33,19 @@
 #' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` is the
 #'   Laplace setting. Values above `1` are allowed on the profiled path and
 #'   are rejected for `method = "joint_laplace"` in the R wrapper.
-#' @param inference Requested inference method.
+#' @param inference Requested inference posture. The default `"auto"` keeps
+#'   the certified contract: Wald standard errors, tests, and intervals are
+#'   available only when the engine certifies them (currently
+#'   `method = "joint_laplace"`); the default profiled estimator withholds
+#'   them with a typed refusal. `"working_hessian"` is an explicit opt-in
+#'   that unlocks the UNCERTIFIED profiled working-Hessian approximation on
+#'   every inference route; each resulting row is labelled
+#'   `wald_z_working_hessian` with reliability `moderate`. Its standard
+#'   errors ran about 11% smaller than `glmer()`'s on the package's
+#'   reference dataset (anti-conservative), so treat it as an exploration
+#'   and screening tool, not a reporting route; see `inference_options()`.
+#'   `"none"`, `"asymptotic"`, and `"bootstrap"` are accepted and recorded
+#'   but currently equivalent to `"auto"`.
 #' @param control A list from [mm_control()].
 #' @param ... Reserved for future use.
 #'
@@ -76,7 +88,8 @@ glmm <- function(formula,
                  contrasts = NULL,
                  method = c("pirls_profiled", "joint_laplace"),
                  nAGQ = 1L,
-                 inference = c("auto", "none", "asymptotic", "bootstrap"),
+                 inference = c("auto", "none", "asymptotic", "bootstrap",
+                               "working_hessian"),
                  control = mm_control(),
                  ...) {
   call <- match.call()

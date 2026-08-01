@@ -110,6 +110,21 @@ test_that("tidy.mm_glmm withholds Wald p-values for uncertified PIRLS fits", {
   expect_equal(td$estimate, unname(fixef(fit)), tolerance = 1e-8)
 })
 
+test_that("tidy.mm_glmm labels working-Hessian opt-in inference from the covariance", {
+  skip_if_not_installed("generics")
+  # The opt-in computes SEs from the noninferential covariance geometry --
+  # NOT from fit$std_errors, which the engine leaves NaN for uncertified
+  # estimators (the arbiter, not incidental storage, decides; WI-2.3).
+  fit <- glmm(y ~ x + (1 | g), mm_broom_binom_data(), family = binomial(),
+              method = "pirls_profiled", inference = "working_hessian",
+              control = mm_control(verbose = -1))
+  td <- generics::tidy(fit, effects = "fixed")
+  expect_true(all(is.finite(td$std.error)))
+  expect_true(all(td$p.value >= 0 & td$p.value <= 1))
+  V <- as.matrix(unclass(vcov(fit)))
+  expect_equal(td$std.error, unname(sqrt(diag(V))), tolerance = 1e-10)
+})
+
 test_that("glance.mm_glmm works", {
   skip_if_not_installed("generics")
   fit <- glmm(y ~ x + (1 | g), mm_broom_binom_data(), family = binomial(),

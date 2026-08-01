@@ -62,10 +62,11 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
-      # The Rust snapshot is generated from the pinned mixeff-rs revision and
-      # is not committed to git. Recreate it before R-hub builds/checks.
-      - name: Vendor the mixeff-rs Rust crate
-        run: Rscript tools/vendor-rust.R
+      # The Rust snapshot (src/rust/upstream/, vendor.tar.xz) IS committed;
+      # R-hub must check the committed tree — the same artifact CRAN builds.
+      # Verify it matches the pin without regenerating it.
+      - name: Committed vendor snapshot matches the pin
+        run: Rscript tools/check-vendor-drift.R
       - uses: r-hub/actions/setup-deps@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
@@ -91,10 +92,11 @@ jobs:
         with:
           job-config: ${{ matrix.config.job-config }}
           token: ${{ secrets.RHUB_TOKEN }}
-      # The Rust snapshot is generated from the pinned mixeff-rs revision and
-      # is not committed to git. Recreate it before R-hub builds/checks.
-      - name: Vendor the mixeff-rs Rust crate
-        run: Rscript tools/vendor-rust.R
+      # The Rust snapshot (src/rust/upstream/, vendor.tar.xz) IS committed;
+      # R-hub must check the committed tree — the same artifact CRAN builds.
+      # Verify it matches the pin without regenerating it.
+      - name: Committed vendor snapshot matches the pin
+        run: Rscript tools/check-vendor-drift.R
       - uses: r-hub/actions/platform-info@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}

@@ -337,6 +337,17 @@ cat(sprintf(
   substr(resolved_sha, 1, 12),
   length(vendored_crates)
 ))
+
+# CRAN attribution for the bundled sources tracks the vendor set: regenerate
+# inst/AUTHORS and inst/COPYRIGHTS from the fresh archive so a PINNED_REV
+# bump cannot leave stale crate authorship behind (Audit1 WI-6.1).
+attribution <- file.path(pkg_root, "tools", "generate-crate-attribution.R")
+if (file.exists(attribution)) {
+  status <- system2("Rscript", shQuote(attribution))
+  if (!identical(status, 0L)) {
+    stop("[vendor-rust.R] generate-crate-attribution.R failed; inst/AUTHORS / inst/COPYRIGHTS not refreshed.")
+  }
+}
 cat("[vendor-rust.R] next: devtools::check(document = FALSE)\n")
 cat(paste0(
   "[vendor-rust.R] COMMIT the regenerated snapshot: src/rust/upstream/,\n",

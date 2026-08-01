@@ -27,7 +27,12 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Brad Buchsbaum \email{bbuchsbaum@research.baycrest.org}
+\strong{Maintainer}: Brad Buchsbaum \email{bbuchsbaum@research.baycrest.org} (author of mixeff and the bundled 'mixeff-rs' crate) [copyright holder]
+
+Other contributors:
+\itemize{
+  \item Authors of the dependency Rust crates (see inst/AUTHORS for details) [contributor]
+}
 
 }
 \keyword{internal}

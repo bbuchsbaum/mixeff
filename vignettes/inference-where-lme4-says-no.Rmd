@@ -182,13 +182,13 @@ simulates data under the null hypothesis for the tested term, refits the model
 to each simulated data set, and compares the observed test statistic with the
 bootstrap reference distribution.
 
-The small `nsim` value below keeps the vignette fast. For a real analysis, use
-more bootstrap replicates. Note the bootstrap row is also graded `low`
-reliability, and stays `low` at any replicate count: the engine grades
-every Monte-Carlo p-value that way, with the reason code naming the
-mechanism. The reason to use bootstrap here is not a better grade — it is
-that the p-value rests on simulation rather than on asymptotics that fail
-at the boundary.
+The small `nsim` value below keeps the vignette fast, and it earns a `low`
+reliability grade: per the package's grade rubric (see the
+inference-method glossary), a certified bootstrap reaches `moderate` at
+999 or more successful replicates with a finite Monte Carlo SE, and stays
+`low` below that floor. The reason to use bootstrap here is not the grade
+— it is that the p-value rests on simulation rather than on asymptotics
+that mixeff refuses to certify at the boundary.
 
 ```{r bootstrap-term}
 term_boot <- test_effect(

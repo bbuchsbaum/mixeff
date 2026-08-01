@@ -27,12 +27,15 @@ supported_models <- function() {
   fam <- registry$glmm_families
   fam_df <- data.frame(
     family = vapply(fam, function(f) f$family, character(1)),
-    links = vapply(fam, function(f)
-      paste(unlist(f$links), collapse = ", "), character(1)),
-    estimators = vapply(fam, function(f)
-      paste(unlist(f$estimators), collapse = ", "), character(1)),
-    notes = vapply(fam, function(f)
-      as.character(f$notes %||% ""), character(1)),
+    links = vapply(fam, function(f) {
+      paste(unlist(f$links), collapse = ", ")
+    }, character(1)),
+    estimators = vapply(fam, function(f) {
+      paste(unlist(f$estimators), collapse = ", ")
+    }, character(1)),
+    notes = vapply(fam, function(f) {
+      as.character(f$notes %||% "")
+    }, character(1)),
     stringsAsFactors = FALSE
   )
   feats <- registry$features
@@ -40,8 +43,9 @@ supported_models <- function() {
     feature = vapply(feats, function(f) f$feature, character(1)),
     lmm = vapply(feats, function(f) as.character(f$lmm), character(1)),
     glmm = vapply(feats, function(f) as.character(f$glmm), character(1)),
-    notes = vapply(feats, function(f)
-      as.character(f$notes %||% ""), character(1)),
+    notes = vapply(feats, function(f) {
+      as.character(f$notes %||% "")
+    }, character(1)),
     stringsAsFactors = FALSE
   )
   out <- list(

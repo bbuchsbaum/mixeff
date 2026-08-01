@@ -1,0 +1,96 @@
+{
+  "schema_name": "mixeff.model_support",
+  "schema_version": "1.0.0",
+  "description": "Machine-readable support registry (Audit1 WI-4.1). Single source of truth for the supported model envelope: supported_models(), the migration vignette table, and the consistency tests in test-model-support.R are all derived from or checked against this file. Editing the wrapper's support surface without updating this registry fails the suite.",
+  "glmm_families": [
+    {
+      "family": "binomial",
+      "links": ["logit", "probit", "cloglog"],
+      "estimators": ["pirls_profiled", "joint_laplace"],
+      "notes": "Bernoulli 0/1, cbind(successes, failures), and proportion + trial weights responses."
+    },
+    {
+      "family": "poisson",
+      "links": ["log", "sqrt"],
+      "estimators": ["pirls_profiled", "joint_laplace"],
+      "notes": ""
+    },
+    {
+      "family": "Gamma",
+      "links": ["log"],
+      "estimators": ["pirls_profiled", "joint_laplace"],
+      "notes": ""
+    },
+    {
+      "family": "negative_binomial",
+      "links": ["log"],
+      "estimators": ["pirls_profiled"],
+      "refusals": [
+        {
+          "request": "method = \"joint_laplace\"",
+          "condition_class": "mm_inference_unavailable",
+          "reason_code": "nb_joint_laplace_unavailable"
+        }
+      ],
+      "notes": "NB2 via mm_negative_binomial(); theta estimated or fixed. Intervals via confint(method = \"bootstrap\")."
+    }
+  ],
+  "unsupported_family_refusal": {
+    "condition_class": "mm_inference_unavailable",
+    "message_names_supported_set": true
+  },
+  "features": [
+    {
+      "feature": "case weights",
+      "lmm": "supported",
+      "glmm": "supported",
+      "notes": "GLMM binomial weights double as trial counts for proportion responses."
+    },
+    {
+      "feature": "offset",
+      "lmm": "unsupported",
+      "glmm": "supported",
+      "notes": "lmm() has no offset argument; glmm(offset =) is supported."
+    },
+    {
+      "feature": "simulate",
+      "lmm": "supported",
+      "glmm": "refused",
+      "condition_class": "mm_inference_unavailable",
+      "notes": "GLMM simulation is not implemented in this version."
+    },
+    {
+      "feature": "refit",
+      "lmm": "supported",
+      "glmm": "refused",
+      "condition_class": "mm_inference_unavailable",
+      "notes": "Refit GLMMs by calling glmm() on the modified data."
+    },
+    {
+      "feature": "subset / random / custom na.action / custom contrasts (GLMM)",
+      "lmm": "see notes",
+      "glmm": "refused",
+      "condition_class": "mm_fit_error",
+      "notes": "Reserved arguments on glmm(); recode data before fitting. LMMs: default refuses NA unless na.action = na.omit; non-default contrast codings are refused at compile time."
+    },
+    {
+      "feature": "marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect)",
+      "lmm": "supported",
+      "glmm": "refused",
+      "condition_class": "mm_inference_unavailable",
+      "reason_code": "glmm_verb_unavailable",
+      "notes": "GLMM marginal means go through the emmeans bridge on certified fits."
+    },
+    {
+      "feature": "double-bar || with factor terms",
+      "lmm": "mixeff semantics",
+      "glmm": "mixeff semantics",
+      "notes": "mixeff fixes every covariance in the block at zero, including among a factor's level contrasts (matching MixedModels.jl zerocorr()); lme4's || leaves factor terms intact. Announced at compile time (covariance_assumption / double_bar_factor_term); the migration vignette gives the lme4-equivalent expansion."
+    }
+  ],
+  "non_goals": [
+    "nonlinear mixed models",
+    "arbitrary GLM family objects or custom links",
+    "adaptive Gaussian quadrature as a general estimator contract (nAGQ > 1 is a profiled-path sensitivity mode)"
+  ]
+}

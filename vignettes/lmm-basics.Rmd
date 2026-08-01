@@ -25,8 +25,13 @@ visits within clinics, trials within people, students within
 classrooms. The standard R answer is `lme4::lmer()`. `mixeff::lmm()`
 accepts the same formula language — `(1 | group)`, `(x | group)`,
 `(1 + x || group)`, `(1 | a/b)` — and the fitted object answers to
-`fixef()`, `ranef()`, `VarCorr()`, `predict()`, `summary()`, and the
-rest of the generics you already use.
+the common generics: `fixef()`, `ranef()`, `VarCorr()`, `predict()`,
+`summary()`, `confint()`, `anova()`, and friends. The supported
+surface is documented and closed rather than open-ended — a few lme4
+verbs are deliberately absent or refuse with typed reasons
+(`supported_models()` and `vignette("lme4-migration")` give the exact
+map; one caveat worth knowing early: `||` with a *factor* term has
+mixeff-specific semantics, described in the migration vignette).
 
 What it adds, and the reason to use it for a walkthrough like this
 one, is that the fitted object also carries the design, the

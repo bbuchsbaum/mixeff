@@ -21,9 +21,14 @@ library(mixeff)
 ```
 
 If you have ever fit a mixed model in R, you have almost certainly
-written `lme4::lmer()`. `mixeff::lmm()` accepts the same formulas
-and answers to the same extractors. An `lmer` script becomes an
-`lmm` script with two edits.
+written `lme4::lmer()`. `mixeff::lmm()` accepts lme4-style formulas
+and answers to the familiar extractors, so a typical `lmer` script
+becomes an `lmm` script with two edits. The correspondence is a
+documented, tested envelope rather than a blanket promise: for
+supported model and method combinations, behavior is checked against
+pinned lme4 references; unsupported requests fail explicitly with
+stable reason codes (`supported_models()` and
+`vignette("lme4-migration")` map the envelope exactly).
 
 What `mixeff` adds sits around the fit rather than inside it: it
 exposes the random-effects design before optimization, keeps the

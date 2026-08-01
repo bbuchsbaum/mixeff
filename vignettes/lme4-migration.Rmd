@@ -40,13 +40,17 @@ sleepstudy_data <- function() {
 }
 ```
 
-`mixeff` aims to be *functionally equivalent* to `lme4`: the same formula
-language, the same extractors, and statistical answers that agree within
-documented tolerances. It is **not** a literal drop-in — you call `lmm()` /
+`mixeff` implements Gaussian LMMs and a documented subset of GLMMs with
+lme4-style formulas, the familiar extractors, and — **on its supported
+envelope** — statistical answers tested against pinned lme4 references
+within documented tolerances. It is not a replacement for everything
+`lme4` does (no nonlinear models, no arbitrary family objects, a closed
+family/link table), and it is not a literal drop-in — you call `lmm()` /
 `glmm()` rather than `lmer()` / `glmer()`, results are not bit-exact, and
 where mixeff changes or declines a request it reports that in a diagnostic
 rather than proceeding silently. This vignette is the verb-for-verb,
-argument-for-argument map.
+argument-for-argument map; the generated tables below are the envelope's
+exact boundary.
 
 ## The two edits
 
@@ -128,8 +132,11 @@ glmm(y ~ x + (1 | g), data, family = binomial(),
 **4. `||` with a factor means full decorrelation.** In mixeff, `||` fixes
 *every* covariance in the block at zero — including the covariances among a
 factor's level contrasts (each treatment-coded contrast gets an independent
-variance). lme4's `||` does **not** split factor terms: a factor keeps its
-full within-factor covariance block. So `(1 + cond + x || subj)` with a
+variance), matching `MixedModels.jl`'s `zerocorr()`. These are mixeff's own
+semantics, stated directly: lme4 documents its `||` as intended for numeric
+predictors, and as currently implemented it leaves factor terms intact (the
+factor keeps its full within-factor covariance block) rather than promising
+a factor behavior. So `(1 + cond + x || subj)` with a
 factor `cond` fits a strictly larger model in lme4 than in mixeff. The two
 therefore disagree on the parameter count, hence on `df` and AIC — and on
 the optimum itself whenever the fitted within-factor covariance is
@@ -147,6 +154,33 @@ glmm(y ~ cond * x + (1 + cond + x || subj), data, family = binomial())
 glmm(y ~ cond * x + (1 | subj) + (0 + cond | subj) + (0 + x | subj),
      data, family = binomial())
 ```
+
+## The supported envelope, generated
+
+The tables below are rendered from the package's machine-readable support
+registry (`inst/support/model-support.json`, via `supported_models()`), so
+this vignette cannot drift from what the code enforces — the test suite
+holds the fitting code, this registry, and the `glmm()` documentation to
+the same envelope.
+
+```{r support-matrix, echo = FALSE}
+sm <- supported_models()
+knitr::kable(sm$glmm_families,
+             col.names = c("family", "links", "estimators", "notes"),
+             caption = "Supported GLMM family/link/estimator cells.")
+knitr::kable(sm$features[, c("feature", "lmm", "glmm", "notes")],
+             caption = "Feature support (see notes for mixeff-specific semantics).")
+```
+
+```{r support-matrix-checks, include = FALSE}
+stopifnot(nrow(sm$glmm_families) >= 4L, nrow(sm$features) >= 5L)
+stopifnot(identical(
+  sort(sm$glmm_families$family),
+  sort(names(mixeff:::mm_glmm_supported_family_links()))
+))
+```
+
+Explicit non-goals: `r paste(sm$non_goals, collapse = "; ")`.
 
 ## What is `NA`-with-a-reason (and why)
 

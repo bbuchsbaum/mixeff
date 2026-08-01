@@ -21,15 +21,16 @@ library(mixeff)
 ```
 
 If you fit mixed-effects models in R, you most likely use
-`lme4::lmer()`. `mixeff::lmm()` aims to be *functionally equivalent*:
-the formula language is the same, and the extractors —
-`fixef()`, `ranef()`, `VarCorr()`, `predict()`, `simulate()`,
-`anova()`, `summary()`, `update()` — do what you expect. Statistical
-answers agree with `lme4` within documented tolerances on the parity
-datasets shipped with the package. It is not a literal *drop-in*: you
-call `lmm()` rather than `lmer()`, results are not bit-exact, and when
-the package changes or declines a request it says so, in a diagnostic
-you can read from the fitted object.
+`lme4::lmer()`. `mixeff::lmm()` speaks the same formula language, and
+the extractors — `fixef()`, `ranef()`, `VarCorr()`, `predict()`,
+`simulate()`, `anova()`, `summary()`, `update()` — do what you expect.
+On the package's supported envelope, statistical answers agree with
+`lme4` within documented tolerances on the parity datasets shipped
+with the package; the envelope itself is documented, closed, and
+machine-readable (`supported_models()`). It is not a literal
+*drop-in*: you call `lmm()` rather than `lmer()`, results are not
+bit-exact, and when the package changes or declines a request it says
+so, in a diagnostic you can read from the fitted object.
 
 The reason to switch is what `mixeff` does around the fit. On the
 scaling benchmark shipped with the package it ran two to three and a

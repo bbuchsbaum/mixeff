@@ -78,6 +78,21 @@ stopifnot(nrow(benchmark) > 0L)
 stopifnot(all(c("rows", "groups", "slopes", "crossed",
                 "crossed_slope") %in% benchmark$scenario))
 stopifnot(all(c("lme4", "mixeff") %in% benchmark$engine))
+# Derive the prose numbers from the shipped CSV (two significant digits).
+mixeff_cells <- benchmark[benchmark$engine == "mixeff", ]
+stopifnot(all(mixeff_cells$speedup_vs_lme4 > 1))  # faster in every cell
+largest_scale <- do.call(rbind, lapply(
+  split(mixeff_cells, mixeff_cells$scenario),
+  function(d) d[which.max(d$scale_value), , drop = FALSE]
+))
+largest_speedup <- signif(largest_scale$speedup_vs_lme4, 2)
+stopifnot(min(largest_speedup) == 2.0, max(largest_speedup) == 3.5)
+stopifnot(signif(min(mixeff_cells$speedup_vs_lme4), 2) == 1.3)
+stopifnot(signif(max(mixeff_cells$speedup_vs_lme4), 2) == 3.5)
+stopifnot(identical(
+  mixeff_cells$scenario[which.max(mixeff_cells$speedup_vs_lme4)],
+  "crossed_slope"
+))
 ```
 
 The first figure plots the median fit time against design scale, on
@@ -270,7 +285,7 @@ locate_extdata <- function(file) {
   path <- system.file("extdata", file, package = "mixeff")
   if (nzchar(path)) return(path)
   local_path <- file.path("inst", "extdata", file)
-  if (file.exists(local_path)) local_path else file.path("..", local_path)
+  if (file.exists(local_path)) local_path else file.path("..", "..", local_path)
 }
 simulation <- read.csv(locate_extdata("inference-method-simulation-summary.csv"),
                        stringsAsFactors = FALSE)

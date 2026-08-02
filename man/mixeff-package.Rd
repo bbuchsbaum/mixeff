@@ -13,9 +13,9 @@ inference metadata as data, so a result can be inspected, saved, and
 reloaded; where an inference method is unavailable, the result is either
 withheld with a stable reason code or labeled with the method actually
 used, never silently swapped. See
-\code{vignette("intro", package = "mixeff")} for an overview and
-\code{vignette("demystifying-formulas", package = "mixeff")} for what
-random-effects formulas mean.
+\code{vignette("mixeff", package = "mixeff")} for an overview and the
+supported model contract, and \code{vignette("lmm", package = "mixeff")}
+for what random-effects formulas mean.
 }
 \seealso{
 Useful links:

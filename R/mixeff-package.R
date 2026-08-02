@@ -7,9 +7,9 @@
 #' reloaded; where an inference method is unavailable, the result is either
 #' withheld with a stable reason code or labeled with the method actually
 #' used, never silently swapped. See
-#' `vignette("intro", package = "mixeff")` for an overview and
-#' `vignette("demystifying-formulas", package = "mixeff")` for what
-#' random-effects formulas mean.
+#' `vignette("mixeff", package = "mixeff")` for an overview and the
+#' supported model contract, and `vignette("lmm", package = "mixeff")`
+#' for what random-effects formulas mean.
 #'
 #' @importFrom stats AIC BIC coef deviance df.residual fitted formula logLik model.frame nobs predict residuals setNames sigma update
 #' @keywords internal

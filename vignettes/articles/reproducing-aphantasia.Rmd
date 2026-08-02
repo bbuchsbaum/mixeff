@@ -30,7 +30,7 @@ drift, but small enough to ship as package test data.
 ```{r load-fixture}
 fixture_candidates <- c(
   system.file("extdata", "aphantasia", package = "mixeff"),
-  file.path("..", "inst", "extdata", "aphantasia"),
+  file.path("..", "..", "inst", "extdata", "aphantasia"),
   file.path("inst", "extdata", "aphantasia")
 )
 fixture_dir <- fixture_candidates[
@@ -312,16 +312,19 @@ two are heavy opt-in jobs, and `mixeff` is not a Bayesian engine.
   routes are `method = "joint_laplace"` and the parametric bootstrap).
   The approximation is graded `reliability = "moderate"`, and its SEs run
   about 11% smaller than `lme4::vcov()` on this dataset
-  (anti-conservative; ledger bound 15%). A controlled decomposition attributes roughly 73% of the
+  (anti-conservative; ledger bound 15%). A hold-the-point decomposition,
+  measured once at engine pin `6731062`, attributes roughly 73% of the
   gap to the native `||` random-effect family, 26% to a uniform
   working-Hessian scale factor (tracked upstream), and 1% to optimizer
-  drift.
+  drift; the measurement is recorded in the package's parity ledger
+  (`inst/extdata/expected-mismatches.json`, case `aphantasia_primary`,
+  field `inference.primary_dd.SE`).
 * Population-level GLMM prediction (`re.form = NA`, `type = "link"` or
   `"response"`) is supported and matches `predict(glmer, re.form = NA)`
   on joint-Laplace fits; `emmeans(..., type = "response")` remains the
   route for averaged marginal probabilities.
-* Coefficient names are lme4-identical since 0.2.0 (`"groupaphant"`),
-  so hand-written lincombs copy straight across from `lme4` code.
+* Coefficient names are lme4-identical since 0.2.0; see
+  `vignette("lme4-migration")`.
 
 ## Citation
 

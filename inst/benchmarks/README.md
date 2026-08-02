@@ -1,6 +1,7 @@
 # mixeff benchmarks
 
-The pkgdown article `vignette("benchmarking", package = "mixeff")` explains how
+The benchmarking article on the package site
+(<https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html>) explains how
 to use these scripts and how to read the CSV outputs.
 
 ## mixeff/lme4 scaling benchmark

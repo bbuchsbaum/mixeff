@@ -1,12 +1,12 @@
-test_that("benchmarking vignette stays light and points at benchmark scripts", {
-  skip_on_cran() # duplicates R CMD check's own vignette build
+test_that("benchmarking article stays light and points at benchmark scripts", {
+  skip_on_cran() # the article renders outside the CRAN tarball
   skip_if_not_installed("rmarkdown")
   skip_if_not(rmarkdown::pandoc_available(), "pandoc is unavailable")
 
-  path <- test_path("../../vignettes/benchmarking.Rmd")
-  # Source-tree-only test: the vignette source is not on the installed
+  path <- test_path("../../vignettes/articles/benchmarking.Rmd")
+  # Source-tree-only test: the article source is not on the installed
   # tests path during R CMD check, only during devtools::test().
-  skip_if_not(file.exists(path), "vignette source path is not available")
+  skip_if_not(file.exists(path), "article source path is not available")
   text <- readLines(path, warn = FALSE)
   expect_true(any(grepl("inst/benchmarks/lme4-scaling.R", text, fixed = TRUE)))
   expect_true(any(grepl("inst/benchmarks/bootstrap-inference.R", text, fixed = TRUE)))

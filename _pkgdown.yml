@@ -88,29 +88,21 @@ articles:
 - title: Get started
   navbar: Get started
   contents:
-  - tutorial
   - mixeff
-  - intro
   - lme4-migration
 - title: Models
   navbar: Models
   contents:
-  - lmm-basics
+  - lmm
   - glmm
-  - demystifying-formulas
-- title: Marginal effects
-  navbar: Marginal effects
-  contents:
-  - marginal-effects
-- title: Inference & reporting
+- title: Convergence & inference
   navbar: Inference
   contents:
+  - convergence
   - inference
-  - inference-method-glossary
-  - inference-where-lme4-says-no
-  - reporting-lmms
-- title: Performance & persistence
+- title: Validation & case studies
   contents:
-  - benchmarking
-  - saving-and-reviving
-  - reproducing-aphantasia
+  - articles/benchmarking
+  - articles/inference-method-glossary
+  - articles/reporting-lmms
+  - articles/reproducing-aphantasia

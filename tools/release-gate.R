@@ -463,7 +463,8 @@ if (release_candidate) {
   if (!install_ok) {
     record("aphantasia vignette (live)", FALSE, "skipped: install failed")
   } else run("aphantasia vignette (live)", {
-    vig <- file.path(pkg_root, "vignettes", "reproducing-aphantasia.Rmd")
+    vig <- file.path(pkg_root, "vignettes", "articles",
+                     "reproducing-aphantasia.Rmd")
     if (!requireNamespace("rmarkdown", quietly = TRUE) ||
         !rmarkdown::pandoc_available()) {
       record("aphantasia vignette (live)", FALSE, "rmarkdown/pandoc unavailable")

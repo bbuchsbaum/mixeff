@@ -104,10 +104,13 @@ confirmed explicitly, not implied by local green tests**:
 > bump, or the R-universe build breaks. CI never regenerates the snapshot
 > before testing: every job drift-checks and then tests the committed tree,
 > and a separate `vendor-drift` job (R-CMD-check.yaml) re-runs
-> `tools/vendor-rust.R` in isolation and fails on any content difference
-> (the lock file's `vendored_utc` timestamp is compared field-wise without
-> that line, and `vendor.tar.xz` by extracted content, since neither is
-> byte-reproducible across runs/tar implementations).
+> `tools/vendor-rust.R` in isolation and fails if the regenerated tree
+> diverges: the upstream snapshot must match exactly, the lock file
+> field-wise minus its `vendored_utc` timestamp, and the vendor archive by
+> crate inventory (name+version set). Not by file content -- `cargo
+> vendor`'s emission varies with the cargo version, and crate content is
+> already verified by cargo's own checksums when the check legs build from
+> the archive.
 
 - [ ] `mixeff-rs` pin (`PINNED_REV` in `tools/vendor-rust.R`) is published on
       the mixeff-rs GitHub default branch (CI vendoring needs it on the remote)

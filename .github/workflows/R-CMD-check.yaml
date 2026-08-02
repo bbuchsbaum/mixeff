@@ -110,4 +110,9 @@ jobs:
           mkdir -p /tmp/vendor-committed /tmp/vendor-fresh
           tar -xJf /tmp/committed-vendor.tar.xz -C /tmp/vendor-committed
           tar -xJf src/rust/vendor.tar.xz -C /tmp/vendor-fresh
-          diff -r /tmp/vendor-committed /tmp/vendor-fresh
+          # Exclude cargo's own .cargo-checksum.json bookkeeping: its FORMAT is
+          # cargo-version-dependent (newer cargo adds a "$comment" key), while
+          # the per-file hashes it records are derived from the very files this
+          # diff already compares. Comparing it would make the job fail
+          # whenever the runner's cargo differs from the one that vendored.
+          diff -r -x .cargo-checksum.json /tmp/vendor-committed /tmp/vendor-fresh

@@ -48,6 +48,10 @@ jobs:
       # INSTALLED build, all six MIXEFF_* tier flags cleared, NOT_CRAN=true so
       # skip_on_cran blocks run here. stop_on_failure makes any test failure
       # fail the job.
+        # PowerShell aliases `R` to Invoke-History, so `R CMD ...` never runs
+        # as a command on windows runners; git-bash is present on all three.
+        shell: bash
+
       - name: Full fast test suite (installed build)
         env:
           NOT_CRAN: true

@@ -1,4 +1,4 @@
-# Why mixeff?
+# Introduction and the Supported Model Contract
 
 ``` r
 
@@ -8,8 +8,7 @@ library(mixeff)
 If you fit mixed-effects models in R, you most likely use
 [`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html).
 [`mixeff::lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
-aims to be *functionally equivalent*: the formula language is the same,
-and the extractors —
+speaks the same formula language, and the extractors —
 [`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
 [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
 [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
@@ -18,28 +17,31 @@ and the extractors —
 [`anova()`](https://rdrr.io/r/stats/anova.html),
 [`summary()`](https://rdrr.io/r/base/summary.html),
 [`update()`](https://rdrr.io/r/stats/update.html) — do what you expect.
-Statistical answers agree with `lme4` within documented tolerances on
-the parity datasets shipped with the package. It is not a literal
-*drop-in*: you call
+On the package’s supported envelope, statistical answers agree with
+`lme4` within documented tolerances on the parity datasets shipped with
+the package; the envelope itself is documented, closed, and
+machine-readable
+([`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)).
+It is not a literal *drop-in*: you call
 [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) rather
 than `lmer()`, results are not bit-exact, and when the package changes
 or declines a request it says so, in a diagnostic you can read from the
 fitted object.
 
 The reason to switch is what `mixeff` does around the fit. On the
-scaling benchmark shipped with the package it ran two to three and a
-half times faster than `lme4` at the largest tested scale of each of
-five common designs (all small fits in absolute terms; see
-[`vignette("benchmarking")`](https://bbuchsbaum.github.io/mixeff/articles/benchmarking.md)
-for what that does and does not establish). And it makes four things
-explicit that `lme4` leaves implicit:
+scaling benchmark shipped with the package it ran faster than `lme4` at
+the largest tested scale of each of five common designs — all small fits
+in absolute terms; the benchmarking article on the package site,
+<https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html>,
+reports the numbers and what they do and do not establish. And it makes
+four things explicit that `lme4` leaves implicit:
 
 1.  **The formula stays familiar.** Anything you would hand to `lmer()`
     you can hand to
     [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md).
 2.  **Singular fits become labeled facts.** A reduced-rank random-effect
-    covariance is reported with codes, severity, and effective rank, not
-    as a single console warning.
+    covariance is reported on the fitted object, not as a single console
+    warning.
 3.  **Inference labels its method.** Each p-value carries the method
     that produced it. Where the package declines to compute
     Satterthwaite or Kenward–Roger degrees of freedom — at a boundary
@@ -49,7 +51,15 @@ explicit that `lme4` leaves implicit:
     same coefficients, the same diagnostics, and the same method labels,
     without depending on the original Rust handle.
 
-This page demonstrates each of the four on one small dataset.
+Behind the four is one design habit. In ordinary mixed-model work, three
+questions come up again and again: what does this random-effects formula
+actually mean; are the p-values or tests available, and by what method;
+can the model state be reconstructed after the fit has been saved.
+`mixeff` makes those questions part of the fitted object.
+
+This page demonstrates each of the four on one small dataset, then
+states the supported-model contract and the persistence guarantees. The
+other vignettes go deeper on every step.
 
 ## The dataset
 
@@ -122,47 +132,11 @@ fit
 [`summary()`](https://rdrr.io/r/base/summary.html) all do what you
 expect.
 
-## B. When a fit is degenerate, you find out *which* part
+## B. When a fit is degenerate, the object says so
 
-[`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) fits this model
-and reports the situation in one short line: `boundary (singular) fit`.
-The fact is correct. What it leaves implicit is *which* variance
-component reached the boundary, what the effective rank of the
-random-effect covariance is, and which downstream inference methods the
-boundary takes off the table.
-
-``` r
-
-m <- suppressMessages(lme4::lmer(
-  rt ~ days + (1 + days | subj),
-  data = sleep_like
-))
-m
-#> Linear mixed model fit by REML ['lmerMod']
-#> Formula: rt ~ days + (1 + days | subj)
-#>    Data: sleep_like
-#> REML criterion at convergence: 1647.697
-#> Random effects:
-#>  Groups   Name        Std.Dev. Corr 
-#>  subj     (Intercept) 23.682        
-#>           days         3.221   1.00 
-#>  Residual             20.065        
-#> Number of obs: 180, groups:  subj, 18
-#> Fixed Effects:
-#> (Intercept)         days  
-#>     239.879        9.251  
-#> optimizer (nloptwrap) convergence code: 0 (OK) ; 0 optimizer warnings; 1 lme4 warnings
-lme4::isSingular(m)
-#> [1] TRUE
-```
-
-`mixeff` reports the same fact, and then unpacks it.
-[`fit_status()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
-names the convergence outcome,
-[`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md)
-shows the requested-to-effective transition, and
-[`diagnostics()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
-returns stable codes.
+By construction, this design pushes the random-effect covariance to
+reduced rank. `mixeff` fits the model and records the outcome on the
+object, where you can query it later:
 
 ``` r
 
@@ -170,33 +144,29 @@ fit_status(fit)
 #> [1] "converged_reduced_rank"
 is_singular(fit)
 #> [1] TRUE
-changes(fit)
-#> Model changes:
-#>   Fitted covariance for (1 + days | subj): requested rank 2, fitted rank 1 [reduced_rank].
-#> Stage-by-stage records available via $table.
-diagnostics(fit)$table[, c("code", "severity", "stage", "message")]
-#>                 code severity         stage
-#> 1 boundary_parameter     info certification
-#> 2 covariance_reduced     info certification
-#>                                                                            message
-#> 1           standard deviation for days in (1 + days | subj) is on its lower bound
-#> 2 fitted covariance for (1 + days | subj) has effective rank 1 of requested rank 2
 ```
 
-A reduced-rank covariance is now a labeled fact about the fit, recorded
-in the object rather than printed once and lost.
+What this status means, which variance component reached the boundary,
+the diagnostic codes behind the label
+([`diagnostics()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)),
+the requested-to-effective-to-fitted record
+([`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md)),
+and what a boundary does to downstream inference are the subject of
+[`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md).
 
-## C. Which inference methods survive a boundary fit
+## C. Inference labels its method
 
-On the inference side, `mixeff` first reports which methods (Wald z,
-Satterthwaite, Kenward–Roger, bootstrap) are reliable on your fit, and
-then lets you run the one you choose under the same labeling rules.
+On the inference side, `mixeff` first reports which methods are
+available on your fit, and then lets you run the one you choose under
+the same labeling rules.
 
 [`inference_options()`](https://bbuchsbaum.github.io/mixeff/reference/inference_options.md)
 enumerates the inference methods for the current fit, gives each one a
-[fixed-vocabulary
-*reason*](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.md)
-for its status, and names the function you would call to invoke it.
+fixed-vocabulary *reason* for its status (the vocabularies are defined
+in the [inference-method
+glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html)
+on the package site), and names the function you would call to invoke
+it.
 
 ``` r
 
@@ -221,72 +191,86 @@ opt$table[, c("method", "expected_status",
 #> 7             profile_ci_unavailable_at_boundary   FALSE
 ```
 
-Two routes are available on this fit: asymptotic Wald z (immediate, but
-labeled `low` reliability), and bootstrap (~seconds, labeled by
-replicate count and Monte-Carlo SE). Satterthwaite and Kenward–Roger
-refuse with a stable reason — `*_unavailable_at_boundary`. Other
-packages will compute degrees of freedom here (`lmerTest` returns a
-number on this same fit); `mixeff` declines to, because those
-approximations rest on an asymptotic argument about the variance
-parameters that does not hold when one of them sits on the boundary. The
-refusal is a policy about what to report, stated as a reason code you
-can test for.
-
-The asymptotic Wald row carries its own reason.
-[`summary()`](https://rdrr.io/r/base/summary.html) prints
-`reliability_reason` next to `reliability`:
-
-``` r
-
-inf <- inference_table(fit)$table
-inf[, c("term", "method", "status", "reliability", "reliability_reason")]
-#>          term            method    status reliability
-#> 1 (Intercept) asymptotic_wald_z available         low
-#> 2        days asymptotic_wald_z available         low
-#>           reliability_reason
-#> 1 asymptotic_wald_z_fallback
-#> 2 asymptotic_wald_z_fallback
-```
-
-`asymptotic_wald_z_fallback` is the engine’s reason: a t reference
-distribution was the target, the degrees of freedom could not be
-computed at this boundary fit, and a standard normal was substituted —
-which is why the row is graded `low` rather than hidden.
-
-For a defensible p-value on this same fit, route through
-[`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md)
-with `method = "bootstrap"`. The Rust engine simulates from the
-constrained null, refits each replicate, and returns a labeled inference
-row plus a run payload (boundary rate, MCSE, replicate count) for audit.
-
-``` r
-
-ct <- contrast(fit, c(0, 1), method = "bootstrap",
-               bootstrap = bootstrap_control(nsim = 200, seed = 1))
-ct$table[, c("contrast", "estimate", "p_value",
-             "method", "status", "reliability")]
-#>   contrast estimate     p_value    method    status reliability
-#> 1       c1 9.250949 0.004975124 bootstrap available         low
-
-run <- ct$table$details[[1]]$bootstrap
-data.frame(
-  successful_replicates = run$successful_replicates,
-  boundary_rate         = round(run$boundary_rate, 3),
-  mcse                  = round(run$mcse, 4)
-)
-#>   successful_replicates boundary_rate  mcse
-#> 1                   200          0.46 0.005
-```
-
-The bootstrap p-value is `available`, the method is named, and the run
-payload records how the simulation went. The boundary rate is high
-because a singular fit produces singular replicates; the payload reports
-that rather than smoothing it over. `mcse` quantifies the Monte-Carlo
-uncertainty of the p-value estimate; raise `nsim` for a tighter MCSE.
+Some routes are immediately available on this fit; others decline with a
+stable reason code rather than printing a number without comment. Why a
+boundary fit takes some methods off the table is explained in
+[`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md);
+the routes themselves — including the parametric bootstrap that yields a
+defensible p-value on a fit like this one — are walked through in
+[`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md).
 
 Every reported quantity is in one of three states: available, with a
 named method and reason; unavailable, with a stable reason code; or a
 typed error.
+
+## The supported model contract
+
+The envelope is machine-readable.
+[`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)
+returns the same registry the fitting code enforces
+(`inst/support/model-support.json`); the test suite holds the fitting
+code, the registry, and the documentation to the same envelope.
+
+``` r
+
+sm <- supported_models()
+knitr::kable(sm$glmm_families[, c("family", "links", "estimators")],
+             caption = "GLMM family/link/estimator cells, from the registry.")
+```
+
+| family            | links                  | estimators                    |
+|:------------------|:-----------------------|:------------------------------|
+| binomial          | logit, probit, cloglog | pirls_profiled, joint_laplace |
+| poisson           | log, sqrt              | pirls_profiled, joint_laplace |
+| Gamma             | log                    | pirls_profiled, joint_laplace |
+| negative_binomial | log                    | pirls_profiled                |
+
+GLMM family/link/estimator cells, from the registry. {.table}
+
+``` r
+
+knitr::kable(sm$features[, c("feature", "lmm", "glmm")],
+             caption = "Feature support, from the registry.")
+```
+
+| feature | lmm | glmm |
+|:---|:---|:---|
+| case weights | supported | supported |
+| offset | unsupported | supported |
+| simulate | supported | refused |
+| refit | supported | refused |
+| subset / random / custom na.action / custom contrasts (GLMM) | see notes | refused |
+| marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect) | supported | refused |
+| double-bar \|\| with factor terms | mixeff semantics | mixeff semantics |
+
+Feature support, from the registry. {.table}
+
+Explicit non-goals, from the same registry: nonlinear mixed models;
+arbitrary GLM family objects or custom links; adaptive Gaussian
+quadrature as a general estimator contract (nAGQ \> 1 is a profiled-path
+sensitivity mode).
+
+These are the short forms.
+[`vignette("lme4-migration", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md)
+renders the full registry tables with their notes columns and is the
+verb-for-verb, argument-for-argument map for porting an lme4 script.
+
+Two boundary conditions of the contract are worth stating up front:
+
+- Estimates are not bit-for-bit identical to `lme4`; the bar is
+  statistical agreement within documented tolerances on the parity
+  datasets shipped with the package. Where results are *expected* to
+  differ, the differences are classified in
+  `inst/extdata/expected-mismatches.json`, with tolerances enforced by
+  the test suite.
+- Generalized fits carry their own estimator and inference contract; see
+  [`vignette("glmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md)
+  for the estimators and
+  [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)
+  for the inference routes.
+
+Each limit is reported by the package itself, as a reason code or a
+typed error, when you hit it.
 
 ## D. The fit is the record
 
@@ -301,13 +285,13 @@ original Rust handle.
 
 path <- tempfile(fileext = ".rds")
 saveRDS(fit, path)
-restored <- revive(readRDS(path))
+restored_fit <- revive(readRDS(path))
 
-identical(fixef(restored),               fixef(fit))
+identical(fixef(restored_fit),             fixef(fit))
 #> [1] TRUE
-identical(changes(restored)$table,       changes(fit)$table)
+identical(changes(restored_fit)$table,     changes(fit)$table)
 #> [1] TRUE
-identical(diagnostics(restored)$table,   diagnostics(fit)$table)
+identical(diagnostics(restored_fit)$table, diagnostics(fit)$table)
 #> [1] TRUE
 ```
 
@@ -315,34 +299,157 @@ A reviewer reading the `.rds` later sees the same convergence status,
 the same reduced-rank diagnostic, the same method labels on the same
 coefficients.
 
-## Current limits
+### Saving, reloading, and reviving in practice
 
-- Estimates are not bit-for-bit identical to `lme4`; the bar is
-  statistical agreement within documented tolerances on the parity
-  datasets shipped with the package.
-- [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)’s
-  default estimator (`pirls_profiled`) returns point estimates quickly
-  but refuses Wald standard errors, z statistics, and p-values; refit
-  with `method = "joint_laplace"` when you need glmer-comparable
-  inference
-  ([`vignette("glmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md)).
-- Profile-likelihood confidence intervals for fixed effects require an
-  ML fit; under the REML default they are refused with the reason code
-  `profile_beta_unavailable_under_reml` (variance parameters are
-  profiled under both criteria).
-- [`simulate()`](https://rdrr.io/r/stats/simulate.html) is implemented
-  for LMM fits only.
+A mixed-model fit often outlives the R session that produced it: you fit
+a model today, save it with the analysis, hand the script to a
+collaborator, and reopen the fit six months later for a contrast, a
+revision, or a referee response. `mixeff` stores the fitted values, the
+random-effects design, the convergence record, and the inference labels
+inside the R object, so each of those tasks works after
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html) without recomputing
+the fit.
 
-Each limit is reported by the package itself, as a reason code or a
-typed error, when you hit it.
+The round trip above used the singular fit; the same guarantees hold for
+an ordinary interior fit.
+
+``` r
+
+fit2 <- lmm(
+  score ~ week + treatment + (1 | clinic),
+  clinic_visits,
+  control = mm_control(verbose = -1)
+)
+
+path2 <- tempfile(fileext = ".rds")
+saveRDS(fit2, path2)
+
+restored <- readRDS(path2)
+restored <- revive(restored)
+```
+
+[`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
+resets the object’s process-local cache. It is cheap and safe to call
+after every [`readRDS()`](https://rdrr.io/r/base/readRDS.html), but the
+extractors and inference functions shown below also work on the plain
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html) result — the durable
+values live in the object itself, and the Rust handle is deliberately
+absent after reload.
+
+``` r
+
+fixef(restored)
+#>      (Intercept)             week treatmentcoached 
+#>        7.6828778       -0.2783994       -0.8994747
+head(predict(restored))
+#>        1        2        3        4        5        6 
+#> 7.585932 7.307533 7.029134 6.750734 6.472335 6.193935
+reporting_table(restored, "fixed_effects")
+#>              term   estimate  std_error        df  statistic statistic_name
+#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
+#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       p_value        method    status reliability
+#>  1.665335e-14 satterthwaite available    moderate
+#>  1.776357e-15 satterthwaite available    moderate
+#>  6.440943e-03 satterthwaite available    moderate
+```
+
+Conditional variances for random effects also survive the round trip.
+With `condVar = TRUE`, each grouping table carries a finite `postVar`
+array.
+
+``` r
+
+re <- ranef(restored, condVar = TRUE)
+attr(re, "mm_unavailable_reason")
+#> NULL
+dim(attr(re$clinic, "postVar"))
+#> [1]  1  1 12
+```
+
+Two related surfaces are documented elsewhere: the honest-covariance
+contract behind [`vcov()`](https://rdrr.io/r/stats/vcov.html) is part of
+the inference contract
+([`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)),
+and rebuilding design matrices
+([`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html),
+[`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md))
+from the stored formula and model frame is shown in
+[`vignette("lmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lmm.md).
+
+### The artifact contract
+
+The structured JSON artifacts stored in the fitted object are the source
+of truth; external pointers such as the Rust handle are caches.
+[`mm_json_known_schemas()`](https://bbuchsbaum.github.io/mixeff/reference/mm_json_known_schemas.md)
+lists the artifact schemas this version of the package understands:
+
+``` r
+
+head(mm_json_known_schemas())
+#>                                       name version
+#> 1                                  formula      v0
+#> 2      mixedmodels.compiled_model_artifact       1
+#> 3           mixedmodels.model_audit_report       2
+#> 4             mixedmodels.random_term_card       1
+#> 5 mixedmodels.fixed_effect_inference_table   1.1.0
+#> 6      mixedmodels.marginal_quantity_table   1.0.0
+```
+
+## Lower-level tools
+
+Most users start with
+[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md),
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md),
+[`summary()`](https://rdrr.io/r/base/summary.html),
+[`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md),
+[`test_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_effect.md),
+[`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md),
+and
+[`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md).
+The lower-level functions are there when you need them:
+
+- [`mm_parse_formula()`](https://bbuchsbaum.github.io/mixeff/reference/mm_parse_formula.md)
+  checks formula syntax and returns the canonical spelling (demonstrated
+  in
+  [`vignette("lmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lmm.md)).
+- [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
+  builds a pre-fit model specification;
+  [`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md)
+  translates it into named forms and plain-language scopes (also in
+  [`vignette("lmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lmm.md)).
+- [`diagnostics()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
+  and
+  [`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md)
+  expose model-state checks.
+- [`mm_json_known_schemas()`](https://bbuchsbaum.github.io/mixeff/reference/mm_json_known_schemas.md)
+  lists the structured artifact schemas understood by this version of
+  the package.
+
+The Rust backend does not change how you write R: you fit the model, get
+the numbers, and the status of those numbers stays attached to the
+object.
 
 ## Where to read next
 
-- [`vignette("lmm-basics", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lmm-basics.md)
-  — fitting and the standard extractors at a slower pace.
+- [`vignette("lmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lmm.md)
+  — linear mixed models end-to-end: reading random-effects formulas,
+  fitting, summaries, extractors, weights, and prediction.
+- [`vignette("glmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md)
+  — the generalized families and estimators.
+- [`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md)
+  — convergence statuses, boundary and singular fits, and verification.
 - [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)
-  — coefficient tests, contrasts, term tests, and model comparisons.
-- [`vignette("demystifying-formulas", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/demystifying-formulas.md)
-  — what `(1 | g)`, `(x | g)`, split blocks, and `||` actually mean.
-- [`vignette("saving-and-reviving", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/saving-and-reviving.md)
-  — saving, reloading, and reviving fitted models in detail.
+  — p-values, contrasts, term tests, bootstrap methods, confidence
+  intervals, and marginal means.
+- [`vignette("lme4-migration", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md)
+  — the verb-for-verb map and the generated envelope tables.
+- On the package site: the [benchmarking
+  article](https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html),
+  the [inference-method
+  glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html),
+  [reporting
+  workflows](https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.html),
+  and a [full published-study
+  reproduction](https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html).

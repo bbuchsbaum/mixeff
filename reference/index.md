@@ -16,6 +16,9 @@ Construct and fit linear and generalized linear mixed models.
   Negative-binomial family for
   [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
 
+- [`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)
+  : The supported model envelope
+
 - [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
   : Compile a mixed-effects model spec without fitting
 
@@ -94,6 +97,8 @@ Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   : Test a fixed-effect term
 - [`test_random_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_random_effect.md)
   : Test a random-effect variance component
+- [`anova(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/anova.mm_lmm.md)
+  : Analysis of variance for a mixeff LMM
 - [`anova(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/anova.mm_glmm.md)
   : Analysis of deviance for GLMMs
 - [`drop1(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/drop1.mm_lmm.md)
@@ -130,7 +135,7 @@ Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   [`emm_basis.mm_lmm()`](https://bbuchsbaum.github.io/mixeff/reference/emmeans-support.md)
   [`recover_data.mm_glmm()`](https://bbuchsbaum.github.io/mixeff/reference/emmeans-support.md)
   [`emm_basis.mm_glmm()`](https://bbuchsbaum.github.io/mixeff/reference/emmeans-support.md)
-  : Optional emmeans support for mixeff LMMs
+  : Optional emmeans support for mixeff models
 
 ## Model comparison & reporting
 
@@ -181,7 +186,7 @@ Make the model’s design, reductions, and optimizer state explicit.
   : Inspect the optimizer certificate
 
 - [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
-  : Verify convergence of a fitted linear mixed model
+  : Verify convergence of a fitted mixed model
 
 - [`reproducibility()`](https://bbuchsbaum.github.io/mixeff/reference/reproducibility.md)
   : Inspect reproducibility metadata

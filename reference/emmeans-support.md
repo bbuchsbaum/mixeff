@@ -1,8 +1,8 @@
-# Optional emmeans support for mixeff LMMs
+# Optional emmeans support for mixeff models
 
-These methods let `emmeans` build reference grids for `mm_lmm` objects
-when the optional `emmeans` package is installed. They expose the same
-fixed-effect design surface used by
+These methods let `emmeans` build reference grids for `mm_lmm` and
+`mm_glmm` objects when the optional `emmeans` package is installed. They
+expose the same fixed-effect design surface used by
 [`mm_grid()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
 and
 [`mm_means()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md).
@@ -30,7 +30,7 @@ emm_basis.mm_glmm(object, trms, xlev, grid, ...)
 
 - object:
 
-  A fitted `mm_lmm`.
+  A fitted `mm_lmm` or `mm_glmm`.
 
 - data:
 
@@ -49,13 +49,17 @@ and
 
 ## Details
 
-The current bridge is intentionally narrow: Gaussian LMMs only and
-population fixed-effect means only. When the fitted artifact carries an
-available `mixedmodels.fixed_effect_covariance_matrix` payload,
-`emmeans` receives that full fixed-effect covariance matrix. Native
+The bridge covers population fixed-effect means only. For GLMMs the
+whole emmeans surface is gated by the package's inference-capability
+contract: a default profiled fit refuses with a typed error (refit with
+`method = "joint_laplace"` for certified Wald inference, or opt in to
+the labelled working-Hessian approximation at fit time with
+`inference = "working_hessian"`). When the fitted artifact carries a
+usable `mixedmodels.fixed_effect_covariance_matrix` payload, `emmeans`
+receives that full fixed-effect covariance matrix. Native
 [`mm_predictions()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
 [`mm_means()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md),
 and
 [`mm_comparisons()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
-remain the contract-preserving mixeff surface because they preserve
-row-level status and reason fields.
+remain the contract-preserving mixeff surface for LMMs because they
+preserve row-level status and reason fields.

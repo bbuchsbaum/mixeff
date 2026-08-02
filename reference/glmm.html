@@ -31,23 +31,15 @@ native dependency-light optimizer in this vendored build.'></head><body>
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="../articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="../articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="../articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="../articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="../articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="../articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="../articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="../articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="../articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="../articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="../articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="../articles/index.html">More articles...</a></li>
   </ul></li>
@@ -91,7 +83,7 @@ native dependency-light optimizer in this vendored build.</p>
 <span>  contrasts <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pirls_profiled"</span>, <span class="st">"joint_laplace"</span><span class="op">)</span>,</span>
 <span>  nAGQ <span class="op">=</span> <span class="fl">1L</span>,</span>
-<span>  inference <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"none"</span>, <span class="st">"asymptotic"</span>, <span class="st">"bootstrap"</span><span class="op">)</span>,</span>
+<span>  inference <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"none"</span>, <span class="st">"asymptotic"</span>, <span class="st">"bootstrap"</span>, <span class="st">"working_hessian"</span><span class="op">)</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="mm_control.html">mm_control</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -111,7 +103,7 @@ native dependency-light optimizer in this vendored build.</p>
 
 <dt id="arg-family">family<a class="anchor" aria-label="anchor" href="#arg-family"></a></dt>
 <dd><p>A supported GLMM family object or family constructor. The
-certified 1.0 surface is: <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial()</a></code> with <code>"logit"</code>, <code>"probit"</code>, or
+supported 1.0 surface is: <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial()</a></code> with <code>"logit"</code>, <code>"probit"</code>, or
 <code>"cloglog"</code> links; <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">poisson()</a></code> with <code>"log"</code> or <code>"sqrt"</code> links;
 <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">Gamma()</a></code> with <code>"log"</code> link; and negative binomial (NB2, <code>"log"</code> link)
 via <code><a href="mm_negative_binomial.html">mm_negative_binomial()</a></code> (theta estimated, like <code><a href="https://rdrr.io/pkg/lme4/man/glmer.nb.html" class="external-link">lme4::glmer.nb()</a></code>)
@@ -155,7 +147,19 @@ are rejected for <code>method = "joint_laplace"</code> in the R wrapper.</p></dd
 
 
 <dt id="arg-inference">inference<a class="anchor" aria-label="anchor" href="#arg-inference"></a></dt>
-<dd><p>Requested inference method.</p></dd>
+<dd><p>Requested inference posture. The default <code>"auto"</code> keeps
+the certified contract: Wald standard errors, tests, and intervals are
+available only when the engine certifies them (currently
+<code>method = "joint_laplace"</code>); the default profiled estimator withholds
+them with a typed refusal. <code>"working_hessian"</code> is an explicit opt-in
+that unlocks the UNCERTIFIED profiled working-Hessian approximation on
+every inference route; each resulting row is labelled
+<code>wald_z_working_hessian</code> with reliability <code>moderate</code>. Its standard
+errors ran about 11% smaller than <code>glmer()</code>'s on the package's
+reference dataset (anti-conservative), so treat it as an exploration
+and screening tool, not a reporting route; see <code><a href="inference_options.html">inference_options()</a></code>.
+<code>"none"</code>, <code>"asymptotic"</code>, and <code>"bootstrap"</code> are accepted and recorded
+but currently equivalent to <code>"auto"</code>.</p></dd>
 
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>
@@ -176,7 +180,8 @@ are rejected for <code>method = "joint_laplace"</code> in the R wrapper.</p></dd
     <p>Optimization runs inside a single native call with no progress output: the
 pre-fit explanation block (when <code>verbose &gt;= 0</code>) is the last thing printed
 before the fitted result returns, and the call cannot be interrupted from
-R. Every optimizer budget is bounded, so fits always terminate; runtime on
+R. Evaluation budgets are bounded (a bounded budget caps optimizer
+iterations; it does not prove every native evaluation terminates); runtime on
 large problems is governed by <code>mm_control(max_feval = )</code>.</p>
     </div>
 

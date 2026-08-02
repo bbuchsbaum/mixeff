@@ -1,4 +1,4 @@
-# GLMM Fitting and Model Comparison
+# Generalized Linear Mixed Models
 
 ``` r
 
@@ -12,12 +12,11 @@ difference between them decides what inference you get:
 - **`method = "pirls_profiled"` (the default)** is a fast profiled PIRLS
   fitter. It returns point estimates, fitted values, and variance
   components, but **refuses Wald standard errors, z statistics,
-  p-values, and confidence intervals**: its covariance payload is a
-  working Hessian that the engine does not certify for inference. The
-  engine’s own documentation adds a stronger warning: the profiled path
-  is not the same statistical approximation as `glmer()`’s joint Laplace
-  fit, and it can be less accurate for overdispersed models and models
-  with observation-level random effects.
+  p-values, and confidence intervals**: its working-Hessian covariance
+  payload is not certified for inference (the full contract, including
+  the engine’s accuracy caveats for the profiled approximation, is
+  stated in
+  [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)).
 - **`method = "joint_laplace"`** maximizes the same joint Laplace
   objective as
   [`lme4::glmer()`](https://rdrr.io/pkg/lme4/man/glmer.html) (at
@@ -25,14 +24,35 @@ difference between them decides what inference you get:
   standard errors, z tests, and Wald confidence intervals — from a
   covariance the engine certifies.
 
+Three inference routes exist, and every refusal message names them:
+
+1.  **Certified Wald** — refit with `method = "joint_laplace"` for
+    standard errors, z tests, and Wald intervals from an
+    engine-certified covariance.
+2.  **Parametric bootstrap** — `confint(fit, method = "bootstrap")` on
+    profiled-estimator fits, including negative binomial (which has no
+    joint-Laplace route).
+3.  **Working-Hessian approximation (opt-in)** —
+    `inference_options(fit)` shows the invocation and its caveat.
+
+The contract behind these routes — what each one targets, the replicate
+accounting the bootstrap reports, and the full availability/refusal
+matrix — is stated once, in
+[`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md).
 The practical rule: explore with the default, report with
-`joint_laplace`.
+`joint_laplace` or the bootstrap.
 
 The example uses the
 [`lme4::cbpp`](https://rdrr.io/pkg/lme4/man/cbpp.html) data. As in
 `lme4`, a binomial response with grouped counts can be written either as
 a two-column `cbind(successes, failures)` response or as a proportion
 with case `weights`; the two forms give identical fits.
+
+**Response forms and coercion.** Logical responses are converted to 0/1;
+a two-level factor response is accepted with its second level treated as
+success, announced via an `mm_factor_coercion` condition; factor
+responses with more than two levels are refused with a typed
+`mm_data_error`.
 
 ``` r
 
@@ -149,7 +169,7 @@ summary(glmm_fit, tests = "coefficients")
 #> Wald-z reliability: not_available (not_computed).
 #> 
 #> Notes:
-#>   standard errors, z statistics, and p-values are not available from the fast default method (pirls_profiled). Re-fit with method = "joint_laplace" for glmer-equivalent Wald inference.
+#>   standard errors, z statistics, and p-values are not available from the fast default method (pirls_profiled). Re-fit with method = "joint_laplace" for glmer-equivalent Wald inference, or use confint(fit, method = "bootstrap") for parametric-bootstrap intervals. inference_options(fit) lists every route.
 ```
 
 Core extractors read from the durable R object:
@@ -181,6 +201,11 @@ c(
 ```
 
 ## Inference: refit with joint_laplace
+
+The joint route prints an up-front runtime notice before iterating — the
+engine chooses its evaluation budget and announces it; cap it with
+`mm_control(max_feval = )`. (The `verbose = -1` control below silences
+the notice for the vignette.)
 
 ``` r
 
@@ -243,6 +268,28 @@ round(rbind(
 #> glmer              -1.3983 -0.9919 -1.1282 -1.5797
 ```
 
+## Prediction
+
+[`predict()`](https://rdrr.io/r/stats/predict.html) works on both
+estimators. Population-level prediction (`re.form = NA`, on the link or
+response scale) matches `glmer` on joint-Laplace fits. Conditional
+predictions (`re.form = NULL`, the default) carry per-row engine
+certificates: where the engine certifies the payload, `se.fit = TRUE`
+returns finite standard errors; where it does not — an unseen grouping
+level under `allow.new.levels = TRUE`, for example — the affected rows
+come back `NA` with the engine’s reason in an `mm_reason` attribute, not
+a silent zero.
+
+``` r
+
+head(predict(glmm_joint, type = "response"))
+#>          1          2          3          4          5          6 
+#> 0.30820858 0.14174900 0.12595820 0.08402924 0.15480072 0.06358002
+head(predict(glmm_joint, re.form = NA, type = "response"))
+#>          1          2          3          4          5          6 
+#> 0.19804877 0.08387191 0.07397289 0.04839073 0.19804877 0.08387191
+```
+
 ## Quadrature Sensitivity
 
 `nAGQ` is part of the fit request and is recorded on the object. Values
@@ -271,10 +318,10 @@ data.frame(
 #> 2    3 -92.0451 194.0902
 ```
 
-On this dataset the quadrature order shifts the objective in the third
-decimal and the coefficients by less than 0.005 on the logit scale —
-visible, but an order of magnitude below the joint-Laplace standard
-errors shown earlier.
+On this dataset the quadrature order shifts the coefficients by less
+than 0.005 on the logit scale (the table above shows the corresponding
+movement in the objective) — visible, but an order of magnitude below
+the joint-Laplace standard errors shown earlier.
 
 ## What is refused where
 
@@ -318,10 +365,12 @@ rbind(
 #> refit                             typed error mm_inference_unavailable
 ```
 
-[`confint()`](https://rdrr.io/r/stats/confint.html) on the default fit
-raises `mm_inference_unavailable` (the working-Hessian payload is not
-certified for Wald intervals); the same request on the joint-Laplace fit
-succeeds, as shown above.
+Wald [`confint()`](https://rdrr.io/r/stats/confint.html) on the default
+fit raises `mm_inference_unavailable` (the working-Hessian payload is
+not certified for Wald intervals); the same request on the joint-Laplace
+fit succeeds, as shown above. The bootstrap route complements it from
+the other side: `confint(glmm_fit, method = "bootstrap")` succeeds on
+this default fit (route 2 above).
 [`simulate()`](https://rdrr.io/r/stats/simulate.html) and
 [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md) are
 not implemented for GLMM fits.

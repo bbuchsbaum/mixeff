@@ -37,23 +37,15 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="../articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="../articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="../articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="../articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="../articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="../articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="../articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="../articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="../articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="../articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="../articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="../articles/index.html">More articles...</a></li>
   </ul>
@@ -89,15 +81,23 @@
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
-<p><code>mixeff</code> aims to be <em>functionally equivalent</em> to
-<code>lme4</code>: the same formula language, the same extractors, and
-statistical answers that agree within documented tolerances. It is
-<strong>not</strong> a literal drop-in — you call <code><a href="../reference/lmm.html">lmm()</a></code> /
+<p><code>mixeff</code> fits lme4-style formulas with the familiar
+extractors and, on its supported envelope, gives statistical answers
+tested against pinned lme4 references within documented tolerances. It
+is not a literal drop-in — you call <code><a href="../reference/lmm.html">lmm()</a></code> /
 <code><a href="../reference/glmm.html">glmm()</a></code> rather than <code>lmer()</code> /
-<code>glmer()</code>, results are not bit-exact, and where mixeff
-changes or declines a request it reports that in a diagnostic rather
-than proceeding silently. This vignette is the verb-for-verb,
-argument-for-argument map.</p>
+<code>glmer()</code>, and requests outside the envelope are changed or
+declined with a diagnostic, never silently. This vignette is the
+verb-for-verb, argument-for-argument map; the generated tables below are
+the envelope’s exact boundary. It is the migration entry in the
+package’s six-vignette set: the support contract itself is stated in
+<code><a href="../articles/mixeff.html">vignette("mixeff", package = "mixeff")</a></code>, the fitting
+workflows in <code><a href="../articles/lmm.html">vignette("lmm", package = "mixeff")</a></code> and
+<code><a href="../articles/glmm.html">vignette("glmm", package = "mixeff")</a></code>, convergence and
+boundary semantics in
+<code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>, and the
+inference contract in
+<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>.</p>
 <div class="section level2">
 <h2 id="the-two-edits">The two edits<a class="anchor" aria-label="anchor" href="#the-two-edits"></a>
 </h2>
@@ -167,8 +167,10 @@ a string</td>
 </td>
 <td>identical</td>
 <td>
-<code>confint</code> supports Wald, profile (LMM), bootstrap
-(LMM)</td>
+<code>confint</code> supports Wald, profile, and bootstrap on LMMs;
+Wald/profile/bootstrap availability per GLMM fit type is the route
+matrix in <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>
+</td>
 </tr>
 <tr class="even">
 <td>
@@ -206,7 +208,10 @@ GLMM fits with a typed error</td>
 <tr class="even">
 <td><code>emmeans::emmeans(fit, ~ x)</code></td>
 <td>identical</td>
-<td>mixeff registers an emmeans basis</td>
+<td>mixeff registers an emmeans basis on the same covariance payload, so
+estimates and SEs agree; mixeff’s status/reliability/reason audit
+columns do not survive the emmeans trip, and a default profiled GLMM
+refuses inference through emmeans too</td>
 </tr>
 <tr class="odd">
 <td>
@@ -266,26 +271,37 @@ GLMM fits with a typed error</td>
 <td>partial</td>
 <td>unordered factors use treatment coding, ordered factors
 <code>contr.poly</code> (both matching R/lme4 defaults); other codings
-are refused — recode the factor</td>
+are refused — recode the factor. Contrast attributes set on factor
+columns and <code>options(contrasts=)</code> are currently ignored — the
+fit uses treatment coding — a known gap (bd-01KZ050ADJ2Y7SS20YH9CTE2NS);
+recode factors explicitly when porting</td>
 </tr>
 <tr class="odd">
+<td>numeric/character grouping (accepted silently)</td>
+<td>coerced to factor</td>
+<td>non-factor grouping columns are coerced to factor, announced via an
+<code>mm_grouping_coercion_notice</code>; silence it with
+<code>mm_control(verbose = -1)</code>
+</td>
+</tr>
+<tr class="even">
 <td><code>family = "binomial"</code></td>
 <td><code>family = binomial()</code></td>
 <td>string families are not accepted</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>nAGQ</code></td>
 <td><code>glmm(..., nAGQ=)</code></td>
 <td>
 <code>&gt;1</code> on the profiled path</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>control = lmerControl(optimizer=, optCtrl=)</code></td>
 <td><code>mm_control(optimizer=, max_feval=, ...)</code></td>
 <td>the engine picks a default optimizer; <code><a href="../reference/mm_control.html">mm_control()</a></code> can
 override it or cap the evaluation budget</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>start</code></td>
 <td><code>mm_control(start=)</code></td>
 <td>theta warm starts</td>
@@ -301,9 +317,9 @@ override it or cap the evaluation budget</td>
 <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> dimnames, and <code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code> weight names
 use lme4’s naming and column order (<code>"recipeB"</code>,
 <code>"temperature.L"</code>, <code>"recipeB:temperature.L"</code>), so
-name-keyed lme4 code is drop-in compatible. (Earlier versions used an
-engine encoding like <code>"recipe: B"</code>; if you wrote
-normalization shims for those, delete them.)</p>
+lme4 code keyed on coefficient names carries over without renaming.
+(Earlier versions used an engine encoding like <code>"recipe: B"</code>;
+if you wrote normalization shims for those, delete them.)</p>
 <p><strong>2. Grouped binomial responses.</strong> <code><a href="../reference/glmm.html">glmm()</a></code>
 accepts the <code>cbind(successes, failures)</code> spelling like
 <code>glmer</code>:</p>
@@ -322,11 +338,14 @@ estimates, ask for them:</p>
 decorrelation.</strong> In mixeff, <code>||</code> fixes <em>every</em>
 covariance in the block at zero — including the covariances among a
 factor’s level contrasts (each treatment-coded contrast gets an
-independent variance). lme4’s <code>||</code> does <strong>not</strong>
-split factor terms: a factor keeps its full within-factor covariance
-block. So <code>(1 + cond + x || subj)</code> with a factor
-<code>cond</code> fits a strictly larger model in lme4 than in mixeff.
-The two therefore disagree on the parameter count, hence on
+independent variance), matching <code>MixedModels.jl</code>’s
+<code>zerocorr()</code>. These are mixeff’s own semantics, stated
+directly: lme4 documents its <code>||</code> as intended for numeric
+predictors, and as currently implemented it leaves factor terms intact
+(the factor keeps its full within-factor covariance block) rather than
+promising a factor behavior. So <code>(1 + cond + x || subj)</code> with
+a factor <code>cond</code> fits a strictly larger model in lme4 than in
+mixeff. The two therefore disagree on the parameter count, hence on
 <code>df</code> and AIC — and on the optimum itself whenever the fitted
 within-factor covariance is non-zero. mixeff announces the situation at
 compile time with an info diagnostic
@@ -341,6 +360,136 @@ correlated block:</p>
 <span><span class="co"># lme4-equivalent family: the factor keeps its within-factor covariance block</span></span>
 <span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">cond</span> <span class="op">*</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0</span> <span class="op">+</span> <span class="va">cond</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0</span> <span class="op">+</span> <span class="va">x</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span>,</span>
 <span>     <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="the-supported-envelope-generated">The supported envelope, generated<a class="anchor" aria-label="anchor" href="#the-supported-envelope-generated"></a>
+</h2>
+<p>The tables below are rendered from the package’s machine-readable
+support registry (<code>inst/support/model-support.json</code>, via
+<code><a href="../reference/supported_models.html">supported_models()</a></code>), so this vignette cannot drift from
+what the code enforces — the test suite holds the fitting code, this
+registry, and the <code><a href="../reference/glmm.html">glmm()</a></code> documentation to the same
+envelope.</p>
+<table class="table">
+<caption>Supported GLMM family/link/estimator cells.</caption>
+<colgroup>
+<col width="10%">
+<col width="13%">
+<col width="17%">
+<col width="59%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">family</th>
+<th align="left">links</th>
+<th align="left">estimators</th>
+<th align="left">notes</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">binomial</td>
+<td align="left">logit, probit, cloglog</td>
+<td align="left">pirls_profiled, joint_laplace</td>
+<td align="left">Bernoulli 0/1, cbind(successes, failures), and
+proportion + trial weights responses.</td>
+</tr>
+<tr class="even">
+<td align="left">poisson</td>
+<td align="left">log, sqrt</td>
+<td align="left">pirls_profiled, joint_laplace</td>
+<td align="left"></td>
+</tr>
+<tr class="odd">
+<td align="left">Gamma</td>
+<td align="left">log</td>
+<td align="left">pirls_profiled, joint_laplace</td>
+<td align="left"></td>
+</tr>
+<tr class="even">
+<td align="left">negative_binomial</td>
+<td align="left">log</td>
+<td align="left">pirls_profiled</td>
+<td align="left">NB2 via mm_negative_binomial(); theta estimated or
+fixed. Intervals via confint(method = “bootstrap”).</td>
+</tr>
+</tbody>
+</table>
+<table class="table">
+<caption>Feature support (see notes for mixeff-specific
+semantics).</caption>
+<colgroup>
+<col width="20%">
+<col width="3%">
+<col width="3%">
+<col width="71%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">feature</th>
+<th align="left">lmm</th>
+<th align="left">glmm</th>
+<th align="left">notes</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">case weights</td>
+<td align="left">supported</td>
+<td align="left">supported</td>
+<td align="left">GLMM binomial weights double as trial counts for
+proportion responses.</td>
+</tr>
+<tr class="even">
+<td align="left">offset</td>
+<td align="left">unsupported</td>
+<td align="left">supported</td>
+<td align="left">lmm() has no offset argument; glmm(offset =) is
+supported.</td>
+</tr>
+<tr class="odd">
+<td align="left">simulate</td>
+<td align="left">supported</td>
+<td align="left">refused</td>
+<td align="left">GLMM simulation is not implemented in this
+version.</td>
+</tr>
+<tr class="even">
+<td align="left">refit</td>
+<td align="left">supported</td>
+<td align="left">refused</td>
+<td align="left">Refit GLMMs by calling glmm() on the modified
+data.</td>
+</tr>
+<tr class="odd">
+<td align="left">subset / random / custom na.action / custom contrasts
+(GLMM)</td>
+<td align="left">see notes</td>
+<td align="left">refused</td>
+<td align="left">Reserved arguments on glmm(); recode data before
+fitting. LMMs: default refuses NA unless na.action = na.omit;
+non-default contrast codings are refused at compile time.</td>
+</tr>
+<tr class="even">
+<td align="left">marginal means verbs (mm_means / mm_comparisons /
+mm_grid / mm_predictions / test_effect)</td>
+<td align="left">supported</td>
+<td align="left">refused</td>
+<td align="left">GLMM marginal means go through the emmeans bridge on
+certified fits.</td>
+</tr>
+<tr class="odd">
+<td align="left">double-bar || with factor terms</td>
+<td align="left">mixeff semantics</td>
+<td align="left">mixeff semantics</td>
+<td align="left">mixeff fixes every covariance in the block at zero,
+including among a factor’s level contrasts (matching MixedModels.jl
+zerocorr()); lme4’s || leaves factor terms intact. Announced at compile
+time (covariance_assumption / double_bar_factor_term); the migration
+vignette gives the lme4-equivalent expansion.</td>
+</tr>
+</tbody>
+</table>
+<p>Explicit non-goals: nonlinear mixed models; arbitrary GLM family
+objects or custom links; adaptive Gaussian quadrature as a general
+estimator contract (nAGQ &gt; 1 is a profiled-path sensitivity
+mode).</p>
 </div>
 <div class="section level2">
 <h2 id="what-is-na-with-a-reason-and-why">What is <code>NA</code>-with-a-reason (and why)<a class="anchor" aria-label="anchor" href="#what-is-na-with-a-reason-and-why"></a>
@@ -390,15 +539,17 @@ condition, rather than printing a number without comment:</p>
 <td>computed</td>
 <td>Wald intervals on <code>joint_laplace</code> fits via
 <code>method = "asymptotic"</code> (lowercase; lme4’s
-<code>method = "Wald"</code> spelling is not accepted); every
-<code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> route refused on the default
-<code>pirls_profiled</code> fit</td>
+<code>method = "Wald"</code> spelling is not accepted);
+parametric-bootstrap intervals via <code>method = "bootstrap"</code> on
+profiled-estimator fits (like <code>bootMer</code>; refused on
+<code>joint_laplace</code> fits at this engine pin); Wald routes refused
+on the default <code>pirls_profiled</code> fit</td>
 </tr>
 </tbody>
 </table>
 <p>Use <code>inference_options(fit)</code> to see, before you run
-anything, which inference routes are available on a given fit and why.
-```</p>
+anything, which inference routes are available on a given fit and
+why.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

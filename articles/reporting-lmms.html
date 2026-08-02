@@ -37,23 +37,15 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="../articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="../articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="../articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="../articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="../articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="../articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="../articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="../articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="../articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="../articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="../articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="../articles/index.html">More articles...</a></li>
   </ul>
@@ -81,7 +73,7 @@
       <h1>Reporting Linear Mixed Models</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/reporting-lmms.Rmd" class="external-link"><code>vignettes/reporting-lmms.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/articles/reporting-lmms.Rmd" class="external-link"><code>vignettes/articles/reporting-lmms.Rmd</code></a></small>
       <div class="d-none name"><code>reporting-lmms.Rmd</code></div>
     </div>
 
@@ -359,9 +351,10 @@ from the analysis record.</li>
 </ul>
 <p>The important habit is to report from the fitted object rather than
 from memory. Use <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>
-for term tests, contrasts, and model comparisons. Use
-<code><a href="../articles/saving-and-reviving.html">vignette("saving-and-reviving", package = "mixeff")</a></code> when
-the report needs to survive an RDS round trip.</p>
+for term tests, contrasts, and model comparisons. Use the introduction
+vignette’s save-and-revive section
+(<code><a href="../articles/mixeff.html">vignette("mixeff", package = "mixeff")</a></code>) when the report
+needs to survive an RDS round trip.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

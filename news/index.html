@@ -21,23 +21,15 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="../articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="../articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="../articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="../articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="../articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="../articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="../articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="../articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="../articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="../articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="../articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="../articles/index.html">More articles...</a></li>
   </ul></li>
@@ -178,7 +170,8 @@
 <code><a href="../reference/mm_formula_manifest.html">mm_formula_manifest()</a></code> — capability discovery for the bridge.</li>
 <li>
 <code><a href="../reference/mm_json_negotiate.html">mm_json_negotiate()</a></code> and <code><a href="../reference/mm_json_known_schemas.html">mm_json_known_schemas()</a></code> — schema versioning gate; mismatched artifacts raise <code>mm_schema_error</code> rather than silently misparse.</li>
-<li>Interrupt FFI: <code>Ctrl-C</code> during a long Rust fit cleanly returns to R.</li>
+<li>Interrupt FFI: <code>Ctrl-C</code> during a long Rust fit cleanly returns to R. <em>[Correction, 0.2.0: this applied only to the interrupt bridge demo (<code>mm_interrupt_demo</code>), never to real fits — ordinary <code><a href="../reference/lmm.html">lmm()</a></code>/<code><a href="../reference/glmm.html">glmm()</a></code> optimization runs in a single non-interruptible native call. See the 0.2.0 documentation.]</em>
+</li>
 <li>Typed condition catalog (<code>mm_condition</code> base class): <code>mm_formula_error</code>, <code>mm_data_error</code>, <code>mm_schema_error</code>, <code>mm_design_refusal</code>, <code>mm_inference_unavailable</code>, <code>mm_fit_error</code>, <code>mm_not_identifiable</code>, <code>mm_fit_not_optimized</code>.</li>
 </ul></div>
 <div class="section level3">

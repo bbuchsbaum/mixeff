@@ -1,12 +1,12 @@
-# Verify convergence of a fitted linear mixed model
+# Verify convergence of a fitted mixed model
 
 `verify_convergence()` re-runs the fit under the engine's bounded
 verification workflow and reports whether the extra runs agree with the
 fitted optimum: a restart from the optimum, one or more jittered
-restarts, and (opt-in) an alternate-optimizer consensus pass. Agreement
-is judged by the engine against the objective/theta/beta tolerances
-below; the verdict (`status`), the per-run deltas, and the wording are
-all owned by the Rust contract — R only formats them.
+restarts, and (LMM-only, opt-in) an alternate-optimizer consensus pass.
+Agreement is judged by the engine against the objective/theta/beta
+tolerances below; the verdict (`status`), the per-run deltas, and the
+wording are all owned by the Rust contract — R only formats them.
 
 ## Usage
 
@@ -29,6 +29,20 @@ verify_convergence(
   theta_tolerance = 0.001,
   beta_tolerance = 1e-04
 )
+
+# S3 method for class 'mm_glmm'
+verify_convergence(
+  fit,
+  ...,
+  restart = TRUE,
+  jitter_starts = 1L,
+  jitter_scale = 1e-04,
+  consensus = FALSE,
+  max_feval = 1000L,
+  objective_tolerance = 1e-04,
+  theta_tolerance = 0.001,
+  beta_tolerance = 0.001
+)
 ```
 
 ## Arguments
@@ -36,7 +50,9 @@ verify_convergence(
 - fit:
 
   A fitted `mm_lmm` from
-  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md).
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) or
+  `mm_glmm` from
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md).
 
 - ...:
 
@@ -109,7 +125,19 @@ An object of class `mm_convergence_verification` carrying:
 
 The verifier refits the model from the stored specification before it
 starts, so a call costs roughly `2 + jitter_starts` fits (plus consensus
-runs when enabled).
+runs when enabled). GLMM verification uses wider default tolerances than
+the LMM route (objective `1e-4`, beta `1e-3`): each objective evaluation
+carries inner-PIRLS noise, and the joint path's derivative-free beta
+search bounds beta reproducibility at its `ftol` stop. A GLMM whose
+requested `joint_laplace` estimator was substituted by the labelled
+fast-PIRLS fallback (see
+[`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md))
+re-requests the joint route; when the verification refit falls back the
+same way — the expected case — every run verifies the profiled objective
+the fitted numbers came from, with ordinary objective deltas. Runs are
+only reported as substitution runs (no objective delta) in the
+asymmetric case where the reference refit certifies the joint route but
+an individual verification run falls back.
 
 ## See also
 

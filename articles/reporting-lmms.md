@@ -261,6 +261,7 @@ Use the report sections as the source material for prose:
 The important habit is to report from the fitted object rather than from
 memory. Use
 [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)
-for term tests, contrasts, and model comparisons. Use
-[`vignette("saving-and-reviving", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/saving-and-reviving.md)
+for term tests, contrasts, and model comparisons. Use the introduction
+vignette’s save-and-revive section
+([`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md))
 when the report needs to survive an RDS round trip.

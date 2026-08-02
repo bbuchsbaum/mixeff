@@ -21,23 +21,15 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="articles/index.html">More articles...</a></li>
   </ul></li>
@@ -61,10 +53,16 @@
 
 <p>The one canonical acceptance command, run from a <strong>clean checkout</strong>:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="ex">Rscript</span> tools/release-gate.R</span></code></pre></div>
-<p>It builds the tarball, runs <code>R CMD check --as-cran</code> on that tarball (never on the source directory), lints, runs the fast test suite + error-UX battery + schema/manifest tests against the installed release build, and runs the offline-install gate. It writes <code>release-gate-report.txt</code> — that file is the acceptance artifact to attach to an R-universe / CRAN submission. Exit status is non-zero if any gate fails. Use <code>--fast</code> to skip the two slowest gates (R CMD check, offline install) during iteration.</p>
-<div class="section level2">
+<p>It builds ONE tarball and runs everything against that artifact: <code>R CMD check --as-cran</code> on the tarball (never on the source directory), <code>R CMD INSTALL &lt;tarball&gt;</code> into a throwaway gate library, then lint, the fast test suite + error-UX battery + schema/manifest tests against that installed build, and the offline-install gate. It writes <code>release-gate-report.txt</code> — that file is the acceptance artifact to attach to an R-universe / CRAN submission. Its header records the evidence identity: mode, git commit (with a dirty-tree flag), the mixeff-rs pin, tarball size + sha256, sha256 of <code>src/rust/vendor.tar.xz</code> and the upstream <code>Cargo.lock</code>, and the R / rustc / cargo versions. The gate also refreshes the “Size of tarball” figure in <code>cran-comments.md</code> from the tarball it just built. Exit status is non-zero if any gate fails.</p>
+<p>Modes:</p>
+<ul><li>default — the full gate above.</li>
+<li>
+<code>--fast</code> — skips the two slowest gates (as-cran check, offline install) during iteration; the report is stamped <code>FAST RUN -- NOT RELEASE EVIDENCE</code>.</li>
+<li>
+<code>--release-candidate</code> — the pre-submission run: the full gate, plus <code>MIXEFF_RUN_SLOW_PARITY=true</code> and <code>MIXEFF_RUN_APHANTASIA=true</code> in the suite, a live render of the aphantasia vignette (<code>MIXEFF_RUN_APHANTASIA_VIGNETTE=true</code>), and a skip audit — any suite skip outside a short allowlist (missing Suggests / pandoc, the deeper stress / joint-proof tiers) fails the gate.</li>
+</ul><div class="section level2">
 <h2 id="fast-suite-vs-slow-suites">Fast suite vs. slow suites<a class="anchor" aria-label="anchor" href="#fast-suite-vs-slow-suites"></a></h2>
-<p>The default test run is the <strong>fast release suite</strong> — a few minutes on an installed build. Three opt-in tiers are gated behind environment variables and are NOT part of the release gate (they can run for many minutes):</p>
+<p>The default test run is the <strong>fast release suite</strong> — a few minutes on an installed build. Three opt-in tiers are gated behind environment variables and are NOT part of the default gate (they can run for many minutes); <code>--release-candidate</code> turns the first two on. The gate clears all six <code>MIXEFF_*</code> tier flags before the suite, so exported shell variables cannot change what a gate run tests:</p>
 <table class="table"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><thead><tr><th>Tier</th>
 <th>Enable with</th>
 <th>What it covers</th>
@@ -83,13 +81,15 @@
 <h2 id="release-checklist">Release checklist<a class="anchor" aria-label="anchor" href="#release-checklist"></a></h2>
 <p>Local gates (automated by <code>tools/release-gate.R</code>):</p>
 <ul class="task-list"><li><label><input type="checkbox">Vendor provenance current (<code>inst/LICENSE.note</code>, vendored-snapshot drift)</label></li>
+<li><label><input type="checkbox">Tarball built; identity (commit, pin, sha256s, toolchain) recorded in <code>release-gate-report.txt</code>; <code>cran-comments.md</code> tarball size current</label></li>
 <li><label><input type="checkbox"><code>R CMD check --as-cran</code> on the built tarball: 0E / 0W / only the new-submission NOTE</label></li>
 <li><label><input type="checkbox"><code>lint_package()</code> == 0</label></li>
-<li><label><input type="checkbox">Fast suite + error-UX battery + schema/manifest tests green</label></li>
+<li><label><input type="checkbox">Fast suite + error-UX battery + schema/manifest tests green (against the installed tarball)</label></li>
 <li><label><input type="checkbox">Offline source install (no network, <code>CARGO_NET_OFFLINE=true</code>)</label></li>
-</ul><p>Opt-in verification (run separately, record outcomes):</p>
-<ul class="task-list"><li><label><input type="checkbox">Slow-parity suite reviewed (<code>MIXEFF_RUN_SLOW_PARITY=true</code>) — any misses are documented Decision-D near-ties, not regressions</label></li>
-<li><label><input type="checkbox">Aphantasia reproduction reviewed if the fixture changed</label></li>
+</ul><p>Pre-submission run (<code>--release-candidate</code>, record the report):</p>
+<ul class="task-list"><li><label><input type="checkbox">Slow-parity suite green (<code>MIXEFF_RUN_SLOW_PARITY=true</code>) — any misses are documented Decision-D near-ties, not regressions</label></li>
+<li><label><input type="checkbox">Aphantasia reproduction green (<code>MIXEFF_RUN_APHANTASIA=true</code>) and the vignette renders live</label></li>
+<li><label><input type="checkbox">No suite skips outside the gate’s allowlist</label></li>
 </ul><p>CRAN extra-check court (run the manual <strong>R-hub</strong> workflow with its default platform list before submission):</p>
 <ul class="task-list"><li><label><input type="checkbox">Primary R-devel compilers: <code>ubuntu-gcc16</code>, <code>ubuntu-clang</code>, <code>windows</code>, <code>macos</code>, <code>macos-arm64</code></label></li>
 <li><label><input type="checkbox">Memory/undefined behavior: <code>clang-asan</code>, <code>clang-ubsan</code>, <code>gcc-asan</code>, <code>m1-san</code>, <code>valgrind</code></label></li>
@@ -99,10 +99,10 @@
 </ul><p>The default list intentionally mirrors the applicable public extra-check classes maintained alongside Brian Ripley’s CRAN checks. Some historical extra checks are not applicable here (for example C++-language-mode checks: the package bridge is C plus Rust), and some are now defaults in R-devel (<code>STRICT_R_HEADERS</code>). Keep the explicit list synchronized with <a href="https://r-hub.github.io/containers/" class="external-link uri">https://r-hub.github.io/containers/</a> and <a href="https://www.stats.ox.ac.uk/pub/bdr/" class="external-link uri">https://www.stats.ox.ac.uk/pub/bdr/</a>.</p>
 <p>External state — <strong>each depends on something outside this checkout and must be confirmed explicitly, not implied by local green tests</strong>:</p>
 <blockquote>
-<p><strong>Self-contained repo:</strong> the vendored engine (<code>src/rust/upstream/</code>, <code>vendor.tar.xz</code>, <code>vendor-config.toml</code>) is committed so R-universe (which builds from the repo, not a pre-vendored tarball) can build. Re-run <code>tools/vendor-rust.R</code> <strong>and re-commit those paths</strong> on every <code>PINNED_REV</code> bump, or the R-universe build breaks.</p>
+<p><strong>Self-contained repo:</strong> the vendored engine (<code>src/rust/upstream/</code>, <code>vendor.tar.xz</code>, <code>vendor-config.toml</code>) is committed so R-universe (which builds from the repo, not a pre-vendored tarball) can build. Re-run <code>tools/vendor-rust.R</code> <strong>and re-commit those paths</strong> on every <code>PINNED_REV</code> bump, or the R-universe build breaks. CI never regenerates the snapshot before testing: every job drift-checks and then tests the committed tree, and a separate <code>vendor-drift</code> job (R-CMD-check.yaml) re-runs <code>tools/vendor-rust.R</code> in isolation and fails on any content difference (the lock file’s <code>vendored_utc</code> timestamp is compared field-wise without that line, and <code>vendor.tar.xz</code> by extracted content, since neither is byte-reproducible across runs/tar implementations).</p>
 </blockquote>
 <ul class="task-list"><li><label><input type="checkbox"><code>mixeff-rs</code> pin (<code>PINNED_REV</code> in <code>tools/vendor-rust.R</code>) is published on the mixeff-rs GitHub default branch (CI vendoring needs it on the remote)</label></li>
-<li><label><input type="checkbox"><code>release/0.2.0-prep</code> merged to <code>main</code> and pushed; GitHub Actions (R CMD check on 3 OS, Release gates, pkgdown) green on the pushed head</label></li>
+<li><label><input type="checkbox"><code>release/0.2.0-prep</code> merged to <code>main</code> and pushed; GitHub Actions (R CMD check on 3 OS incl. the PDF-manual leg, vendor-drift, Release gates with the full fast suite, pkgdown) green on the pushed head</label></li>
 <li><label><input type="checkbox">R-hub v2 default CRAN extra-check court green</label></li>
 <li><label><input type="checkbox">win-builder dry-run clean</label></li>
 <li><label><input type="checkbox">mac-builder R-devel dry-run clean (closest public reproduction of the Oxford arm64 M1 check; that machine has Cargo under <code>~/.cargo</code>, not on its initial <code>PATH</code>)</label></li>

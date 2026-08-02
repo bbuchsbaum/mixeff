@@ -14,6 +14,9 @@ inference_options(fit, term = NULL, nsim = 1000L, ...)
 
 # S3 method for class 'mm_lmm'
 inference_options(fit, term = NULL, nsim = 1000L, ...)
+
+# S3 method for class 'mm_glmm'
+inference_options(fit, term = NULL, nsim = 1000L, ...)
 ```
 
 ## Arguments

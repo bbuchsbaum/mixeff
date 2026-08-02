@@ -22,7 +22,7 @@ glmm(
   contrasts = NULL,
   method = c("pirls_profiled", "joint_laplace"),
   nAGQ = 1L,
-  inference = c("auto", "none", "asymptotic", "bootstrap"),
+  inference = c("auto", "none", "asymptotic", "bootstrap", "working_hessian"),
   control = mm_control(),
   ...
 )
@@ -40,7 +40,7 @@ glmm(
 
 - family:
 
-  A supported GLMM family object or family constructor. The certified
+  A supported GLMM family object or family constructor. The supported
   1.0 surface is: [`binomial()`](https://rdrr.io/r/stats/family.html)
   with `"logit"`, `"probit"`, or `"cloglog"` links;
   [`poisson()`](https://rdrr.io/r/stats/family.html) with `"log"` or
@@ -90,7 +90,20 @@ glmm(
 
 - inference:
 
-  Requested inference method.
+  Requested inference posture. The default `"auto"` keeps the certified
+  contract: Wald standard errors, tests, and intervals are available
+  only when the engine certifies them (currently
+  `method = "joint_laplace"`); the default profiled estimator withholds
+  them with a typed refusal. `"working_hessian"` is an explicit opt-in
+  that unlocks the UNCERTIFIED profiled working-Hessian approximation on
+  every inference route; each resulting row is labelled
+  `wald_z_working_hessian` with reliability `moderate`. Its standard
+  errors ran about 11% smaller than `glmer()`'s on the package's
+  reference dataset (anti-conservative), so treat it as an exploration
+  and screening tool, not a reporting route; see
+  [`inference_options()`](https://bbuchsbaum.github.io/mixeff/reference/inference_options.md).
+  `"none"`, `"asymptotic"`, and `"bootstrap"` are accepted and recorded
+  but currently equivalent to `"auto"`.
 
 - control:
 
@@ -111,8 +124,9 @@ An object of class `mm_glmm`, also inheriting from `mm_fit` and
 Optimization runs inside a single native call with no progress output:
 the pre-fit explanation block (when `verbose >= 0`) is the last thing
 printed before the fitted result returns, and the call cannot be
-interrupted from R. Every optimizer budget is bounded, so fits always
-terminate; runtime on large problems is governed by
+interrupted from R. Evaluation budgets are bounded (a bounded budget
+caps optimizer iterations; it does not prove every native evaluation
+terminates); runtime on large problems is governed by
 `mm_control(max_feval = )`.
 
 ## Examples

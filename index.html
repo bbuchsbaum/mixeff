@@ -39,23 +39,15 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="articles/index.html">More articles...</a></li>
   </ul>
@@ -89,7 +81,7 @@
 <p>Three parts of the design are useful in practice:</p>
 <ul>
 <li>
-<strong>Fast repeated fitting.</strong> In the LMM scaling benchmark included with the package, <code>mixeff</code> was 2.0 to 3.5 times faster than <code>lme4</code> at the largest tested scale for five common random-effects structures. This matters most for bootstrap, simulation, and sensitivity analyses, where the same model may be refit hundreds or thousands of times.</li>
+<strong>Fast repeated fitting.</strong> On the LMM scaling benchmark shipped with the package, <code>mixeff</code> was faster than <code>lme4</code> at every tested size, with small absolute timings either way; the measured numbers are in the <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html">benchmarking article</a>. This matters most for bootstrap, simulation, and sensitivity analyses, where the same model may be refit hundreds or thousands of times.</li>
 <li>
 <strong>You can inspect the model before fitting it.</strong> <code><a href="reference/compile_model.html">compile_model()</a></code> turns the formula into an explicit model specification. <code><a href="reference/audit.html">audit()</a></code> shows the canonical formula, random-effects structure, covariance parameterization, and design diagnostics before optimization starts.</li>
 <li>
@@ -173,65 +165,11 @@
 <div class="section level2">
 <h2 id="performance">Performance<a class="anchor" aria-label="anchor" href="#performance"></a>
 </h2>
-<p>The committed scaling benchmark fits the same LMM with <code><a href="reference/lmm.html">mixeff::lmm()</a></code> and <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code> five times per cell. The table below reports the largest cell for each design, from a run on 2026-07-30 (macOS arm64, R 4.5.1, mixeff 0.2.0 release build, engine snapshot <code>4a2abb3</code>).</p>
-<table class="table">
-<colgroup>
-<col width="15%">
-<col width="21%">
-<col width="21%">
-<col width="21%">
-<col width="21%">
-</colgroup>
-<thead><tr>
-<th>design</th>
-<th align="right">largest tested scale</th>
-<th align="right">mixeff median</th>
-<th align="right">lme4 median</th>
-<th align="right">speedup</th>
-</tr></thead>
-<tbody>
-<tr>
-<td>random intercept, varying rows</td>
-<td align="right">5,000 rows</td>
-<td align="right">7 ms</td>
-<td align="right">14 ms</td>
-<td align="right">2.0x</td>
-</tr>
-<tr>
-<td>random intercept, varying groups</td>
-<td align="right">200 subjects</td>
-<td align="right">4 ms</td>
-<td align="right">12 ms</td>
-<td align="right">3.0x</td>
-</tr>
-<tr>
-<td>correlated random slope</td>
-<td align="right">200 subjects</td>
-<td align="right">8 ms</td>
-<td align="right">17 ms</td>
-<td align="right">2.1x</td>
-</tr>
-<tr>
-<td>crossed random intercepts</td>
-<td align="right">30 subjects and 30 items</td>
-<td align="right">8 ms</td>
-<td align="right">20 ms</td>
-<td align="right">2.5x</td>
-</tr>
-<tr>
-<td>crossed design with random slope</td>
-<td align="right">30 subjects and 30 items</td>
-<td align="right">10 ms</td>
-<td align="right">35 ms</td>
-<td align="right">3.5x</td>
-</tr>
-</tbody>
-</table>
-<p>These are small absolute timings from one benchmark run, with five replications per cell. They show the behavior of this harness, not a universal speed guarantee. The scripts and full CSV are included so the comparison can be rerun on a relevant machine and model:</p>
+<p>The committed scaling benchmark fits the same LMM with <code><a href="reference/lmm.html">mixeff::lmm()</a></code> and <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code> across five common random-effects designs. On that benchmark, <code>mixeff</code> was faster at every tested size, with small absolute timings in every cell — the behavior of one harness, not a universal speed guarantee. The measured timings live in the <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html">benchmarking article</a>, and the scripts and full CSV are included so the comparison can be rerun on a relevant machine and model:</p>
 <ul>
 <li><code>inst/benchmarks/lme4-scaling.R</code></li>
 <li><code>inst/extdata/lme4-scaling-summary.csv</code></li>
-<li>the <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html">benchmarking vignette</a>
+<li>the <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html">benchmarking article</a>
 </li>
 </ul>
 </div>
@@ -256,13 +194,13 @@
 <span><span class="co">#&gt;</span></span>
 <span><span class="co">#&gt; Design notes:</span></span>
 <span><span class="co">#&gt;   scope_note: `week` varies within `clinic`, so a `clinic`-level slope is structurally possible</span></span></code></pre></div>
-<p>Split-block, double-bar, and nested formulas are expanded explicitly. For example, <code>(1 | a/b)</code> is shown as <code>(1 | a) + (1 | a:b)</code> and labeled as a syntax expansion.</p>
+<p>Split-block, double-bar, and nested formulas are expanded explicitly and labeled as syntax expansions; see <code><a href="articles/lmm.html">vignette("lmm")</a></code>.</p>
 </div>
 <div class="section level2">
 <h2 id="numerical-compatibility-with-lme4">Numerical compatibility with lme4<a class="anchor" aria-label="anchor" href="#numerical-compatibility-with-lme4"></a>
 </h2>
-<p><code>mixeff</code> does not target bit-exact reproduction of <code>lme4</code>. Its bundled Rust engine and optimizer can take a different numerical path while arriving at a statistically equivalent result. Expected differences on the parity datasets are classified in <code>inst/extdata/expected-mismatches.json</code>, with tolerances enforced by the test suite.</p>
-<p><code><a href="reference/glmm.html">glmm()</a></code> supports binomial, Poisson, Gamma, and negative binomial models for documented links. The default profiled PIRLS estimator is fast but is not the same estimator as <code>glmer()</code>, and it returns point estimates only — standard errors, z tests, p-values, and confidence intervals are withheld with a note naming the alternative. Use <code>method = "joint_laplace"</code> when glmer-equivalent Laplace estimates are needed for a supported family. See the <a href="https://bbuchsbaum.github.io/mixeff/articles/glmm.html">GLMM vignette</a> for the current boundaries.</p>
+<p><code>mixeff</code> does not target bit-exact reproduction of <code>lme4</code>; it targets statistical agreement within documented tolerances on the parity datasets, and the family/link table ships as a machine-readable registry (<code><a href="reference/supported_models.html">supported_models()</a></code>).</p>
+<p>The default profiled PIRLS estimator is fast but is not the same estimator as <code>glmer()</code>, and it returns point estimates only — standard errors, z tests, p-values, and confidence intervals are withheld with a note naming the alternative. Use <code>method = "joint_laplace"</code> when glmer-equivalent Laplace estimates are needed for a supported family. See the <a href="https://bbuchsbaum.github.io/mixeff/articles/glmm.html">GLMM vignette</a> for the current boundaries.</p>
 </div>
 <div class="section level2">
 <h2 id="acknowledgements">Acknowledgements<a class="anchor" aria-label="anchor" href="#acknowledgements"></a>
@@ -303,7 +241,8 @@
 <div class="developers">
 <h2 data-toc-skip>Developers</h2>
 <ul class="list-unstyled">
-<li>Brad Buchsbaum <br><small class="roles"> Author, maintainer </small>   </li>
+<li>Brad Buchsbaum <br><small class="roles"> Author, maintainer, copyright holder </small>   </li>
+<li><a href="authors.html">More about authors...</a></li>
 </ul>
 </div>
 

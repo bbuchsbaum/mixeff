@@ -37,23 +37,15 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="../articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="../articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="../articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="../articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="../articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="../articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="../articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="../articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="../articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="../articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="../articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="../articles/index.html">More articles...</a></li>
   </ul>
@@ -81,7 +73,7 @@
       <h1>Inference Method Glossary</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/inference-method-glossary.Rmd" class="external-link"><code>vignettes/inference-method-glossary.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/articles/inference-method-glossary.Rmd" class="external-link"><code>vignettes/articles/inference-method-glossary.Rmd</code></a></small>
       <div class="d-none name"><code>inference-method-glossary.Rmd</code></div>
     </div>
 
@@ -190,11 +182,13 @@ takes precedence.</td>
 </tr>
 <tr class="even">
 <td>
-<code>interior_converged_well_specified</code> <em>(route
-map)</em>
+<code>interior_converged</code> <em>(route map)</em>
 </td>
 <td>The fit is interior and the fast Wald route has no boundary caveat
-from the route map.</td>
+from the route map. An interior optimum says nothing about model
+specification, so the value deliberately does not claim it (the
+pre-0.2.0 spelling <code>interior_converged_well_specified</code>
+overclaimed and is retired).</td>
 <td>Defined for the route map; superseded by the observed reason in
 current output.</td>
 </tr>
@@ -319,6 +313,94 @@ a singular fit.</td>
 well: <code>not_computed</code>, which appears on GLMM rows fitted by
 the default <code>pirls_profiled</code> estimator, whose standard errors
 and p-values are withheld (see <code><a href="../articles/glmm.html">vignette("glmm")</a></code>).</p>
+</div>
+<div class="section level2">
+<h2 id="reliability-the-grade-rubric">
+<code>reliability</code> — the grade rubric<a class="anchor" aria-label="anchor" href="#reliability-the-grade-rubric"></a>
+</h2>
+<p><code>reliability</code> is a closed four-value scale:
+<code>"high"</code>, <code>"moderate"</code>, <code>"low"</code>, or
+<code>"not_available"</code>. This section is the rubric (rubric version
+1, mixeff 0.2.0): the exact mapping the code implements from observable
+facts to a grade. The grade is a summary of <em>which method produced
+the number and what is known about that method’s approximation</em> —
+nothing more.</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>Grade</th>
+<th>Earned by</th>
+<th>Where you see it</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>high</code></td>
+<td>A model-based covariance route with no approximation beyond the
+model itself (the LMM <code>model_based</code> fixed-effect
+covariance).</td>
+<td>LMM Wald/Satterthwaite covariance status.</td>
+</tr>
+<tr class="even">
+<td><code>moderate</code></td>
+<td>A named, documented approximation within the validated envelope:
+finite-difference Satterthwaite df; the joint-Laplace active-Hessian
+GLMM covariance; the working-Hessian approximation under its explicit
+opt-in; a certified bootstrap with at least 999 successful replicates
+and a finite Monte Carlo SE.</td>
+<td>Most certified inference rows.</td>
+</tr>
+<tr class="odd">
+<td><code>low</code></td>
+<td>The route ran but with a known weakening: a t target that fell back
+to standard-normal z (degenerate df), or a bootstrap below the
+999-replicate floor.</td>
+<td>Boundary-fit Wald rows; small-<code>nsim</code> bootstrap
+results.</td>
+</tr>
+<tr class="even">
+<td><code>not_available</code></td>
+<td>No graded quantity: the row is a refusal, or reliability is not
+defined for the target.</td>
+<td>Withheld GLMM rows; refusal rows.</td>
+</tr>
+</tbody>
+</table>
+<p>The 999-replicate bootstrap floor is a grading convention, documented
+rather than asserted: at <code>B = 999</code> bootstrap p-values resolve
+on an exact 1/(B+1) = 0.001 grid, and the Monte Carlo SE of a rate near
+0.05 is about 0.0069. <code>B = 998</code> does not differ materially
+from <code>B = 999</code> — which is why the replicate accounting
+(successful count, Monte Carlo SE) ships alongside the grade, so you can
+judge the evidence directly instead of trusting the label.</p>
+<p>What a grade does <strong>not</strong> mean: no grade asserts that
+the model is correctly specified, that the estimate is unbiased, or that
+a p-value is exactly calibrated. Those are properties of the model and
+the data; mixeff’s measured calibration evidence for its routes lives in
+the benchmarking article’s simulation study, with Wilson intervals and
+replicate accounting.</p>
+</div>
+<div class="section level2">
+<h2 id="what-certified-means">What “certified” means<a class="anchor" aria-label="anchor" href="#what-certified-means"></a>
+</h2>
+<p>Several surfaces use the word <em>certified</em>. It has one
+definition:</p>
+<blockquote>
+<p>The engine’s inference contract marks this estimator/target
+combination available: the required numerical invariants passed, the
+value was produced by the named method, and that method is inside the
+package’s validated support envelope.</p>
+</blockquote>
+<p>“Certified” does <strong>not</strong> mean statistically guaranteed
+correct, and it does not mean the model is well specified. An absent
+certificate is never treated as a certificate: surfaces that cannot see
+a certified inference table withhold rather than assume. The uncertified
+alternatives are always explicitly labelled (for example
+<code>wald_z_working_hessian</code> rows under the
+<code>inference = "working_hessian"</code> opt-in).</p>
 </div>
 <div class="section level2">
 <h2 id="reason_code">

@@ -37,23 +37,15 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
-    <li><a class="dropdown-item" href="../articles/tutorial.html">Your First Mixed Model with mixeff</a></li>
-    <li><a class="dropdown-item" href="../articles/intro.html">Introduction to mixeff</a></li>
     <li><a class="dropdown-item" href="../articles/lme4-migration.html">Migrating from lme4</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Models</h6></li>
-    <li><a class="dropdown-item" href="../articles/lmm-basics.html">Fitting Linear Mixed Models</a></li>
-    <li><a class="dropdown-item" href="../articles/glmm.html">GLMM Fitting and Model Comparison</a></li>
-    <li><a class="dropdown-item" href="../articles/demystifying-formulas.html">Demystifying Random-Effects Formulas</a></li>
-    <li><hr class="dropdown-divider"></li>
-    <li><h6 class="dropdown-header" data-toc-skip>Marginal effects</h6></li>
-    <li><a class="dropdown-item" href="../articles/marginal-effects.html">Marginal Means and Comparisons</a></li>
+    <li><a class="dropdown-item" href="../articles/lmm.html">Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/glmm.html">Generalized Linear Mixed Models</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Inference</h6></li>
-    <li><a class="dropdown-item" href="../articles/inference.html">Inference You Can Report</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-method-glossary.html">Inference Method Glossary</a></li>
-    <li><a class="dropdown-item" href="../articles/inference-where-lme4-says-no.html">Inference Where Standard Mixed-Model p-values Break Down</a></li>
-    <li><a class="dropdown-item" href="../articles/reporting-lmms.html">Reporting Linear Mixed Models</a></li>
+    <li><a class="dropdown-item" href="../articles/convergence.html">Convergence, Boundaries, and Singularity</a></li>
+    <li><a class="dropdown-item" href="../articles/inference.html">Inference</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><a class="dropdown-item" href="../articles/index.html">More articles...</a></li>
   </ul>
@@ -81,7 +73,7 @@
       <h1>Reproducing the Loo Aphantasia GLMMs</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/reproducing-aphantasia.Rmd" class="external-link"><code>vignettes/reproducing-aphantasia.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/articles/reproducing-aphantasia.Rmd" class="external-link"><code>vignettes/articles/reproducing-aphantasia.Rmd</code></a></small>
       <div class="d-none name"><code>reproducing-aphantasia.Rmd</code></div>
     </div>
 
@@ -97,7 +89,7 @@ package test data.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fixture_candidates</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"extdata"</span>, <span class="st">"aphantasia"</span>, package <span class="op">=</span> <span class="st">"mixeff"</span><span class="op">)</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="st">".."</span>, <span class="st">"inst"</span>, <span class="st">"extdata"</span>, <span class="st">"aphantasia"</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="st">".."</span>, <span class="st">".."</span>, <span class="st">"inst"</span>, <span class="st">"extdata"</span>, <span class="st">"aphantasia"</span><span class="op">)</span>,</span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="st">"inst"</span>, <span class="st">"extdata"</span>, <span class="st">"aphantasia"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">fixture_dir</span> <span class="op">&lt;-</span> <span class="va">fixture_candidates</span><span class="op">[</span></span>
@@ -161,11 +153,17 @@ reproduction runs under <code>MIXEFF_RUN_APHANTASIA=true</code>, and the
 slower S1 random-effects stability variants run under
 <code>MIXEFF_RUN_APHANTASIA_STRESS=true</code>.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">primary_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="co"># inference = "working_hessian": this vignette DELIBERATELY opts in to the</span></span>
+<span><span class="co"># uncertified working-Hessian approximation, because its purpose below is to</span></span>
+<span><span class="co"># measure that approximation against the frozen glmer reference (the ~11%</span></span>
+<span><span class="co"># anti-conservatism behind the opt-in's documented caveat). A default fit</span></span>
+<span><span class="co"># refuses Wald inference on every route.</span></span>
+<span><span class="va">primary_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
 <span>  <span class="va">correct</span> <span class="op">~</span> <span class="va">group</span> <span class="op">*</span> <span class="va">mask</span> <span class="op">*</span> <span class="va">soa_s</span> <span class="op">+</span> <span class="va">block</span> <span class="op">+</span></span>
 <span>    <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">mask</span> <span class="op">+</span> <span class="va">soa_s</span> <span class="op">||</span> <span class="va">participant</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">item</span><span class="op">)</span>,</span>
 <span>  <span class="va">primary_dat</span>,</span>
 <span>  family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  inference <span class="op">=</span> <span class="st">"working_hessian"</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -273,22 +271,30 @@ through three <code>mixeff</code> functions. The chunks below run only
 when live fitting is enabled
 (<code>MIXEFF_RUN_APHANTASIA_VIGNETTE=true</code>); otherwise the same
 calls remain valid against any locally-built fit.</p>
-<p><code>summary(fit, tests = "coefficients")</code> returns a Wald-z
-fixed-effect table built from the PIRLS/Laplace working-Hessian
-covariance:</p>
+<p>This section is the worked example behind the package’s
+working-Hessian caveat. The fit above passes
+<code>inference = "working_hessian"</code> — the explicit opt-in that
+unlocks the UNCERTIFIED profiled working-Hessian approximation. Without
+it, a default profiled fit withholds standard errors, tests, and
+intervals on every route (refit with
+<code>method = "joint_laplace"</code> for certified Wald inference, or
+use <code>confint(fit, method = "bootstrap")</code>). With the opt-in,
+<code>summary(fit, tests = "coefficients")</code> returns a Wald-z table
+in which every row is labelled <code>wald_z_working_hessian</code>:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sm</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">primary_fit</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">sm</span><span class="op">$</span><span class="va">coefficients</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">sm</span><span class="op">$</span><span class="va">coefficients</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Estimate"</span>, <span class="st">"Std. Error"</span>, <span class="st">"z value"</span>, <span class="st">"Pr(&gt;|z|)"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="va">sm</span><span class="op">$</span><span class="va">vcov_status</span></span></code></pre></div>
-<p>The status block flags <code>reliability = "moderate"</code>: the
-working-Hessian covariance is not the same estimator as
-<code>lme4::vcov(glmer_fit)</code>. On this dataset its Wald standard
-errors for the difference-in-differences contrasts run about 11%
-<em>smaller</em> than glmer’s — anti-conservative, so p-values lean
-optimistic — which the package’s parity ledger classifies as an expected
-mismatch with a 15% bound. The manuscript’s qualitative conclusions do
-not flip, but a reader re-using these SEs should know which way they
-err.</p>
+<p>The rows carry <code>reliability = "moderate"</code> and status
+<code>available_noninferential</code>: the working-Hessian covariance is
+not the same estimator as <code>lme4::vcov(glmer_fit)</code>. On this
+dataset its Wald standard errors for the difference-in-differences
+contrasts run about 11% <em>smaller</em> than glmer’s —
+anti-conservative, so p-values lean optimistic — which the package’s
+parity ledger classifies as an expected mismatch with a 15% bound. That
+measured gap is exactly why the approximation is opt-in rather than
+default: the manuscript’s qualitative conclusions do not flip here, but
+a reader re-using these SEs should know which way they err.</p>
 <p>The manuscript’s primary estimand — the difference-in-differences
 contrast at the centered SOA and at the focal 25 ms SOA — is a linear
 combination of fixed effects, which <code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code>
@@ -364,22 +370,28 @@ Bayesian engine.</p>
 <h2 id="caveats">Caveats<a class="anchor" aria-label="anchor" href="#caveats"></a>
 </h2>
 <ul>
-<li>GLMM Wald inference in <code>mixeff</code> uses the PIRLS/Laplace
-working-Hessian covariance, graded
-<code>reliability = "moderate"</code>. Its SEs run about 11% smaller
-than <code>lme4::vcov()</code> on this dataset (anti-conservative;
-ledger bound 15%). A controlled decomposition attributes roughly 73% of
-the gap to the native <code>||</code> random-effect family, 26% to a
+<li>The Wald numbers in this article come from the PIRLS/Laplace
+working-Hessian covariance via the explicit
+<code>inference = "working_hessian"</code> opt-in (default fits refuse
+Wald inference; certified routes are
+<code>method = "joint_laplace"</code> and the parametric bootstrap). The
+approximation is graded <code>reliability = "moderate"</code>, and its
+SEs run about 11% smaller than <code>lme4::vcov()</code> on this dataset
+(anti-conservative; ledger bound 15%). A hold-the-point decomposition,
+measured once at engine pin <code>6731062</code>, attributes roughly 73%
+of the gap to the native <code>||</code> random-effect family, 26% to a
 uniform working-Hessian scale factor (tracked upstream), and 1% to
-optimizer drift.</li>
+optimizer drift; the measurement is recorded in the package’s parity
+ledger (<code>inst/extdata/expected-mismatches.json</code>, case
+<code>aphantasia_primary</code>, field
+<code>inference.primary_dd.SE</code>).</li>
 <li>Population-level GLMM prediction (<code>re.form = NA</code>,
 <code>type = "link"</code> or <code>"response"</code>) is supported and
 matches <code>predict(glmer, re.form = NA)</code> on joint-Laplace fits;
 <code>emmeans(..., type = "response")</code> remains the route for
 averaged marginal probabilities.</li>
-<li>Coefficient names are lme4-identical since 0.2.0
-(<code>"groupaphant"</code>), so hand-written lincombs copy straight
-across from <code>lme4</code> code.</li>
+<li>Coefficient names are lme4-identical since 0.2.0; see
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration")</a></code>.</li>
 </ul>
 </div>
 <div class="section level2">

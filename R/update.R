@@ -114,6 +114,20 @@ mm_glmm_family_from_info <- function(info) {
     binomial = stats::binomial(link = link),
     poisson  = stats::poisson(link = link),
     gamma    = stats::Gamma(link = link),
+    # NB carries its theta mode in family_info (see mm_glmm_family_info /
+    # glmm()'s post-fit theta record): `nb_theta_estimated` stays TRUE for
+    # estimate-mode fits even though `nb_theta` holds the fitted value, so
+    # the refit re-estimates theta — matching lme4::glmer.nb()'s update()
+    # semantics. Fixed-theta fits refit conditional on the SAME stored theta
+    # (no silent theta loss). Legacy fits saved before the theta fields
+    # existed cannot distinguish the modes; fall back to estimate mode
+    # rather than refusing.
+    negative_binomial = if (isFALSE(info$nb_theta_estimated) &&
+                              !is.null(info$nb_theta)) {
+      mm_negative_binomial(theta = info$nb_theta)
+    } else {
+      mm_negative_binomial()
+    },
     mm_abort(
       message = sprintf(
         "Cannot reconstruct a family object for engine family `%s`; pass `family =` explicitly to update().",

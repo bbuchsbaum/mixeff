@@ -155,6 +155,16 @@ stopifnot(any(av$table$status == "available"))
 stopifnot(is.finite(te$table$p_value))
 ```
 
+One caveat on `type = "III"` while an upstream question is settled: on
+*unbalanced* designs with an interaction, the current engine tests
+main-effect rows as the coefficient block — under treatment coding, the
+simple effect at the other factor's reference level — which is not the
+marginal Type III hypothesis that SAS, `car`, or `lmerTest` compute
+(interaction and covariate rows agree with `lmerTest`). On balanced or
+orthogonally coded designs the two coincide. The divergence is pinned by
+the test suite and tracked upstream; if you need marginal Type III
+main-effect tests on unbalanced data today, use `lmerTest` for that row.
+
 ## Model comparisons
 
 For nested fixed-effect comparisons, fit the reduced model and compare it with

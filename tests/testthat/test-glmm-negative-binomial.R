@@ -86,6 +86,45 @@ test_that("NB accepts a fixed theta through mm_negative_binomial(theta = )", {
                tolerance = 1e-10)
 })
 
+test_that("mm_glmm_family_from_info round-trips both NB theta modes", {
+  skip_if_not_installed("MASS")
+  d <- nb_test_data()
+
+  # estimate mode: nb_theta_estimated stays TRUE after the fit (nb_theta then
+  # holds the fitted value), so reconstruction requests re-estimation
+  fit_est <- glmm(y ~ x + (1 | g), data = d, family = mm_negative_binomial(),
+                  control = mm_control(verbose = -1))
+  fam_est <- mixeff:::mm_glmm_family_from_info(fit_est$family)
+  expect_identical(fam_est$family, "negative_binomial")
+  expect_identical(fam_est$link, "log")
+  expect_null(fam_est$theta)
+
+  # fixed mode (MASS spelling): reconstruction carries the exact theta
+  fit_fix <- glmm(y ~ x + (1 | g), data = d,
+                  family = MASS::negative.binomial(1.8),
+                  control = mm_control(verbose = -1))
+  fam_fix <- mixeff:::mm_glmm_family_from_info(fit_fix$family)
+  expect_identical(fam_fix$family, "negative_binomial")
+  expect_identical(fam_fix$theta, fit_fix$family$nb_theta)
+  expect_equal(fam_fix$theta, 1.8, tolerance = 1e-12)
+})
+
+test_that("drop1() runs term LRTs on a negative-binomial fit", {
+  d <- nb_test_data()
+  fit <- glmm(y ~ x + (1 | g), data = d, family = mm_negative_binomial(),
+              control = mm_control(verbose = -1))
+
+  dr <- drop1(fit, test = "Chisq")
+  expect_s3_class(dr, "mm_drop1")
+  tab <- dr$table
+  expect_identical(tab$dropped, "x")
+  expect_equal(tab$df, 1)
+  expect_true(is.finite(tab$LRT))
+  expect_gte(tab$LRT, 0)
+  expect_true(tab$p_value >= 0 && tab$p_value <= 1)
+  expect_identical(tab$method, "asymptotic_lrt")
+})
+
 test_that("NB family validation refuses bad specs with typed errors", {
   d <- nb_test_data()
 

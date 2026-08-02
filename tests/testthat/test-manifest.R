@@ -100,7 +100,7 @@ test_that("manifest exposes the audit report and random term card schemas", {
   schemas <- mm_formula_manifest()$schema_versions
   expect_identical(schemas[["mixedmodels.model_audit_report"]], "2")
   expect_identical(schemas[["mixedmodels.random_term_card"]], "1")
-  expect_identical(schemas[["mixedmodels.fixed_effect_inference_table"]], "1.0.0")
+  expect_identical(schemas[["mixedmodels.fixed_effect_inference_table"]], "1.1.0")
   expect_identical(schemas[["mixedmodels.model_comparison_table"]], "1.0.0")
   expect_identical(schemas[["mixedmodels.fit_summary"]], "1.0.0")
   expect_identical(schemas[["mixedmodels.marginal_quantity_table"]], "1.0.0")

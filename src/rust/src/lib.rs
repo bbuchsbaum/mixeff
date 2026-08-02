@@ -1978,6 +1978,10 @@ fn fixed_effect_term_test_type(
         "I" | "1" | "type_i" | "type_1" => Ok(FixedEffectTermTestType::TypeI),
         "II" | "2" | "type_ii" | "type_2" => Ok(FixedEffectTermTestType::TypeII),
         "III" | "3" | "type_iii" | "type_3" => Ok(FixedEffectTermTestType::TypeIII),
+        // Simple effects at reference levels under treatment coding: the
+        // hypothesis mixeff labelled "III" before engine 1f3f689, kept
+        // available under its honest name.
+        "block" | "coefficient_block" => Ok(FixedEffectTermTestType::CoefficientBlock),
         other => Err(format!(
             "mm_inference_unavailable: unsupported fixed-effect term test type `{other}`"
         )),

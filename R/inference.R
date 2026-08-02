@@ -1260,7 +1260,7 @@ mm_fixed_effect_term_type_label <- function(type) {
   type <- as.character(type)
   if (length(type) != 1L || is.na(type) || !nzchar(type)) {
     mm_abort(
-      message = "`type` must be one of `I`, `II`, or `III`.",
+      message = "`type` must be one of `I`, `II`, `III`, or `block`.",
       class = "mm_arg_error",
       input = type
     )
@@ -1270,8 +1270,11 @@ mm_fixed_effect_term_type_label <- function(type) {
     I = "type_i",
     II = "type_ii",
     III = "type_iii",
+    # Simple effects at reference levels (the pre-1f3f689 "Type III"),
+    # kept available under its honest name (engine coefficient_block).
+    BLOCK = "coefficient_block",
     mm_abort(
-      message = "`type` must be one of `I`, `II`, or `III`.",
+      message = "`type` must be one of `I`, `II`, `III`, or `block`.",
       class = "mm_arg_error",
       input = type
     )

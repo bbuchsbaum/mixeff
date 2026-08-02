@@ -155,15 +155,20 @@ stopifnot(any(av$table$status == "available"))
 stopifnot(is.finite(te$table$p_value))
 ```
 
-One caveat on `type = "III"` while an upstream question is settled: on
-*unbalanced* designs with an interaction, the current engine tests
-main-effect rows as the coefficient block — under treatment coding, the
-simple effect at the other factor's reference level — which is not the
-marginal Type III hypothesis that SAS, `car`, or `lmerTest` compute
-(interaction and covariate rows agree with `lmerTest`). On balanced or
-orthogonally coded designs the two coincide. The divergence is pinned by
-the test suite and tracked upstream; if you need marginal Type III
-main-effect tests on unbalanced data today, use `lmerTest` for that row.
+`type` selects the term hypothesis. `"III"` (the default) is marginal
+Type III: a term's own contrast columns plus the equally-weighted average
+over the levels of every term that contains it. That construction makes
+the test invariant to which factor level is the reference — the defining
+property of Type III, and what SAS, `car`, and `lmerTest` compute.
+`"II"` respects marginality; `"I"` is sequential in `terms()` order.
+
+There is a fourth value, `"block"`, for the raw coefficient block of each
+term. Under treatment coding that is the *simple effect at the other
+factors' reference levels* — a legitimate quantity, but not Type III. On
+an unbalanced design the two can disagree sharply: on the package's test
+fixture the same fit gives F = 0.29 for a main effect under `"block"` and
+F = 49.95 under `"III"`. If you want simple effects, ask for them by
+name; if you want Type III, the default is Type III.
 
 ## Model comparisons
 

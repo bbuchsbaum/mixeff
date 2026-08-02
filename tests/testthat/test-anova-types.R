@@ -27,8 +27,10 @@
 #     contain it (marginality: main effects adjusted for other main effects
 #     and the covariate, never for the interaction), then Wald F on the
 #     resulting hypothesis row space. Cross-checked against lmerTest type 2.
-#   * Type III -- lmerTest::anova(type = 3, ddf = "Satterthwaite")
-#     (partially blocked; see FINDING below).
+#   * Type III -- lmerTest::anova(type = 3, ddf = "Satterthwaite"), all
+#     rows (marginal Type III since engine 1f3f689), plus a
+#     reference-level invariance test and coverage of the honestly named
+#     `type = "block"` (the pre-1f3f689 coefficient-block hypothesis).
 #
 # Tolerances: the own constructions are the same estimator on the same fit,
 # so they must agree to numerical noise (measured ~1e-15 relative; asserted
@@ -154,48 +156,47 @@ test_that("Type I matches its own sequential Doolittle reference and lmerTest ty
                tolerance = 1e-3)
 })
 
-test_that("Type I sequences terms in literal formula-expansion order", {
-  # FINDING (WI-9.1, candidate upstream semantics divergence): with
-  # y ~ A * B + x the engine sequences Type I in literal expansion order
-  # (A, B, A:B, x), while R's terms()/lmerTest convention sorts by
-  # interaction order (A, B, x, A:B). Measured on this design (pin 0.2.0,
-  # method = "satterthwaite"):
-  #   mixeff   type I:  A 41.4707, B 9.0882, A:B 5.9516, x 56.0998
-  #   lmerTest type 1:  A 41.4710, B 9.0883, x 63.3114, A:B 2.0445
-  # The A and B rows agree (identical leading subsequence); the x and A:B
-  # rows test different sequential hypotheses. Type I is order-dependent by
-  # definition and the engine order is a coherent sequential decomposition
-  # (asserted below), but the divergence from the R convention is silent to
-  # the user. Surface upstream before pinning lmerTest agreement for
-  # interaction-before-covariate formulas.
+test_that("Type I sequences terms in terms() order (interaction degree)", {
+  # Engine 1f3f689 (upstream bd-01KZ15535G) fixed Type I sequencing: terms
+  # are ordered by interaction degree, stable within a degree, matching R's
+  # terms() convention -- so `y ~ A * B + x` sequences A, B, x, A:B, and a
+  # covariate written after an interaction is no longer adjusted for it.
+  # Before the fix the engine used literal expansion order (A, B, A:B, x),
+  # giving x an F of 56.0998 instead of 63.3110 on this design.
   df <- mm_anova_types_data()
   fit <- lmm(y ~ A * B + x + (1 | g), df, REML = FALSE,
              control = mm_control(verbose = -1))
   obs <- mm_anova_rows(fit, "I")
-  # The table itself is emitted in engine order.
-  expect_identical(obs$term, c("A", "B", "A:B", "x"))
+  expect_identical(obs$term, c("A", "B", "x", "A:B"))
 
-  # Own construction in the ENGINE's column order (A, B, A:B, x): permute
-  # the R model-matrix columns into that order, take the sequential
-  # Doolittle basis there, and map each contrast row back to the beta
-  # layout used by fixef()/vcov(). R's assign ids: A = 1, B = 2, x = 3,
-  # A:B = 4, so engine term order is assign 1, 2, 4, 3.
+  # Own construction in that order: permute the R model-matrix columns into
+  # terms() order, take the sequential Doolittle basis there, and map each
+  # contrast row back to the beta layout used by fixef()/vcov(). R's assign
+  # ids for ~ A * B + x are A = 1, B = 2, x = 3, A:B = 4, which IS
+  # terms() order, so no permutation of the assign sequence is needed.
   X <- stats::model.matrix(~ A * B + x, df)
   asgn <- attr(X, "assign")
-  engine_terms <- c(1L, 2L, 4L, 3L)
-  ord <- order(match(asgn, c(0L, engine_terms)))
+  seq_terms <- c(1L, 2L, 3L, 4L)
+  ord <- order(match(asgn, c(0L, seq_terms)))
   Lseq <- t(mm_doolittle_l(crossprod(X[, ord])))
   b <- fixef(fit)
   expect_identical(names(b), colnames(X))
   C <- as.matrix(vcov(fit))
-  own_f <- vapply(engine_terms, function(j) {
+  own_f <- vapply(seq_terms, function(j) {
     rows <- Lseq[asgn[ord] == j, , drop = FALSE]
     L <- matrix(0, nrow(rows), ncol(X))
     L[, ord] <- rows
     mm_own_wald_f(L, b, C)
   }, numeric(1))
-  expect_equal(obs[c("A", "B", "A:B", "x"), "statistic"], own_f,
+  expect_equal(obs[c("A", "B", "x", "A:B"), "statistic"], own_f,
                tolerance = 1e-8)
+
+  # Writing the covariate before the interaction must now give the same
+  # sequence (both spellings canonicalize to terms() order).
+  fit2 <- lmm(y ~ x + A * B + (1 | g), df, REML = FALSE,
+              control = mm_control(verbose = -1))
+  obs2 <- mm_anova_rows(fit2, "I")
+  expect_identical(obs2$term, c("x", "A", "B", "A:B"))
 })
 
 test_that("Type II matches the marginality-respecting own construction and lmerTest type 2", {
@@ -280,35 +281,65 @@ test_that("Type III matches lmerTest type 3 where the hypotheses coincide", {
                  tolerance = 1e-3)
   }
 
-  # FINDING (WI-9.1, candidate upstream bug): mixeff's Type III main-effect
-  # rows under an interaction are the raw coefficient-BLOCK hypothesis
-  # (drop the term's treatment-coded columns from the full model), not the
-  # SAS/car/lmerTest Type III marginal-means hypothesis. Because
-  # mm_translate_data() only permits treatment coding for unordered factors,
-  # the block hypothesis is the simple effect at the other factor's
-  # reference level, so on unbalanced data anova(type = "III") main effects
-  # disagree with every mainstream Type III implementation. Measured on this
-  # design (pin 0.2.0, method = "satterthwaite"):
-  #   term A: mixeff F = 11.9358 (den_df 50.74)  vs lmerTest F = 56.5100
-  #   term B: mixeff F =  8.8897 (den_df 50.46)  vs lmerTest F =  7.3172
-  # Evidence that the block hypothesis is exactly what is computed: Wald F
-  # for L = rows of diag(p) selecting the term's columns, using the fit's
-  # own fixef()/vcov(), reproduces mixeff's statistics to < 1e-14 relative
-  # (A: 11.935775, B: 8.889718), and lmerTest::contest(ref, L,
-  # ddf = "Satterthwaite") on the same L gives F = 11.93584 / 8.88977 with
-  # matching den_df. This matches the upstream contract language
-  # ("Type III coefficient-block hypothesis",
-  # mixeff-rs/docs/fixed_effect_p_value_validation.md), but the existing
-  # parity suite only exercised balanced/orthogonally-coded designs (cake,
-  # sleepstudy) where block == marginal, so the divergence was invisible.
-  # The expectations below are the intended contract; unblock them when the
-  # engine computes contrast-coding-invariant Type III main effects.
-  # expect_equal(obs["A", "statistic"], exp_tab["A", "F value"],
-  #              tolerance = 1e-3)
-  # expect_equal(obs["B", "statistic"], exp_tab["B", "F value"],
-  #              tolerance = 1e-3)
+  # Engine 1f3f689 (upstream bd-01KZ1551AE) made Type III MARGINAL: a term's
+  # own contrast columns plus the equally-weighted average over the levels
+  # of every containing term. Main-effect rows now agree with lmerTest on
+  # this unbalanced treatment-coded design, where the previous
+  # coefficient-block hypothesis did not (A: 0.2914 block vs 49.9498
+  # marginal -- opposite conclusions from the same fit).
+  expect_equal(obs["A", "statistic"], exp_tab["A", "F value"],
+               tolerance = 1e-3)
+  expect_equal(obs["B", "statistic"], exp_tab["B", "F value"],
+               tolerance = 1e-3)
 })
 
+test_that("Type III is invariant to the reference level; block is not", {
+  # The defining property of a marginal Type III hypothesis: relabeling
+  # which level of a factor is the reference must not move the test. The
+  # coefficient-block hypothesis is reference-dependent by construction
+  # (it IS the simple effect at the reference), so it must move.
+  df <- mm_anova_types_data()
+  df_relevel <- df
+  df_relevel$B <- stats::relevel(df_relevel$B, ref = "b3")
+
+  f1 <- lmm(y ~ x + A * B + (1 | g), df, REML = FALSE,
+            control = mm_control(verbose = -1))
+  f2 <- lmm(y ~ x + A * B + (1 | g), df_relevel, REML = FALSE,
+            control = mm_control(verbose = -1))
+
+  a1 <- mm_anova_rows(f1, "III")
+  a2 <- mm_anova_rows(f2, "III")
+  expect_equal(a1["A", "statistic"], a2["A", "statistic"], tolerance = 1e-6)
+  expect_equal(a1["A:B", "statistic"], a2["A:B", "statistic"],
+               tolerance = 1e-6)
+
+  b1 <- mm_anova_rows(f1, "block")
+  b2 <- mm_anova_rows(f2, "block")
+  expect_gt(abs(b1["A", "statistic"] - b2["A", "statistic"]) /
+              max(abs(b1["A", "statistic"]), abs(b2["A", "statistic"])), 0.05)
+})
+
+test_that("type = 'block' reproduces the coefficient-block hypothesis", {
+  # The block rows must equal a Wald F on the identity block over each
+  # term's own columns, computed from the fit's own fixef()/vcov().
+  df <- mm_anova_types_data()
+  fit <- lmm(y ~ x + A * B + (1 | g), df, REML = FALSE,
+             control = mm_control(verbose = -1))
+  obs <- mm_anova_rows(fit, "block")
+  X <- stats::model.matrix(~ x + A * B, df)
+  asgn <- attr(X, "assign")
+  b <- fixef(fit)
+  C <- as.matrix(vcov(fit))
+  labels <- attr(stats::terms(y ~ x + A * B), "term.labels")
+  for (j in seq_along(labels)) {
+    cols <- which(asgn == j)
+    L <- matrix(0, length(cols), length(b))
+    for (i in seq_along(cols)) L[i, cols[i]] <- 1
+    expect_equal(obs[labels[[j]], "statistic"], mm_own_wald_f(L, b, C),
+                 tolerance = 1e-8,
+                 info = sprintf("block row %s", labels[[j]]))
+  }
+})
 test_that("Types I, II, and III actually differ on the unbalanced design", {
   # Guards the unbalanced-ness of the fixture: if the cell counts were ever
   # rebalanced, the three types would collapse and the tests above would

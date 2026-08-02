@@ -384,6 +384,11 @@ rc_skip_allowlist <- c(
   "pandoc is unavailable",                  # rmarkdown::pandoc_available()
   "Set MIXEFF_RUN_APHANTASIA_STRESS=true",  # deeper opt-in tier, off here
   "Set MIXEFF_APHANTASIA_JOINT_PROOF=true", # deeper opt-in tier, off here
+  # Evidence-gated on the engine's typed estimator_substitution record: the
+  # offset-invariance assertion activates automatically when the joint
+  # frontier lands upstream (bd-01KX66CNV2QJ5SKPXMTX1BW8SQ). A documented
+  # upstream limitation, not an unexpected skip.
+  "offset invariance is asserted only for a certified joint fit",
   "empty test"
 )
 if (install_ok) run("suite + error-UX + schema/manifest", {
@@ -416,6 +421,14 @@ if (install_ok) run("suite + error-UX + schema/manifest", {
   df <- as.data.frame(res)
   fails <- sum(df$failed) + sum(df$error)
   suite_elapsed <- round(proc.time()["elapsed"] - suite_t)
+  if (fails > 0) {
+    # A count alone is undiagnosable from the log; name the casualties.
+    bad <- unique(df[df$failed > 0 | df$error, c("file", "test")])
+    cat("Failing tests:\n")
+    for (i in seq_len(nrow(bad))) {
+      cat(sprintf("  - %s: %s\n", bad$file[[i]], bad$test[[i]]))
+    }
+  }
   record(suite_gate, fails == 0,
          sprintf("%d pass / %d fail / %d skip in %ds",
                  sum(df$passed), fails, sum(df$skipped), suite_elapsed))

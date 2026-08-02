@@ -72,9 +72,10 @@ brown_cases <- function() {
       # close it: the two engines reach a REML-equivalent point whose
       # random-effect BLUPs differ slightly on the flat ridge of a maximal
       # crossed fit (PRD Decision D: statistical equivalence, not bit-exact).
-      # The fitted tolerance below is PENDING a user tolerance decision (cf.
-      # the sdamr_speeddate precedent, commit 96076e4); left at 2e-3 so the
-      # opt-in miss stays visible.
+      # RESOLVED (user decision, 2026-08-01): residual parity is judged on
+      # the response scale (see the loop below), same tolerance as fitted;
+      # the sdamr_speeddate precedent (commit 96076e4) carried the same
+      # logic. Fitted tolerance stays at 2e-3.
       tolerance = list(fixef = 2e-4, scalar = 2e-3, fitted = 2e-3,
                        varcorr = 3e-1)
     ),
@@ -244,9 +245,18 @@ test_that("Brown 2021 LMM tutorial examples match core lme4 outputs", {
     expect_equal(fitted(pair$mixeff), fitted(pair$lme4),
                  tolerance = tol$fitted,
                  info = sprintf("fitted-value parity failed for `%s`", label))
-    expect_equal(residuals(pair$mixeff), residuals(pair$lme4),
-                 tolerance = tol$fitted,
-                 info = sprintf("residual parity failed for `%s`", label))
+    # Residuals are y - fitted with a SHARED response, so their differences
+    # are identical in absolute size to the fitted differences asserted
+    # above; comparing them relative to the residuals' own near-zero scale
+    # only re-measures the same drift against a treacherous denominator
+    # (flat-ridge BLUP redistribution on maximal crossed fits; logLik/fixef/
+    # varcorr all agree). Decision (user, 2026-08-01, resolving the pending
+    # tolerance note in brown_cases()): judge residual parity on the
+    # response scale, same tolerance as fitted values.
+    resid_gap <- max(abs(residuals(pair$mixeff) - residuals(pair$lme4)))
+    resid_scale <- max(abs(fitted(pair$lme4)))
+    expect_lt(resid_gap / resid_scale, tol$fitted,
+              label = sprintf("response-scaled residual gap for `%s`", label))
     brown_expect_varcorr_close(pair$mixeff, pair$lme4, tol$varcorr, label)
   }
 })
@@ -280,9 +290,18 @@ test_that("Brown 2021 large RT tutorial examples match lme4 when slow parity is 
     expect_equal(fitted(pair$mixeff), fitted(pair$lme4),
                  tolerance = tol$fitted,
                  info = sprintf("fitted-value parity failed for `%s`", label))
-    expect_equal(residuals(pair$mixeff), residuals(pair$lme4),
-                 tolerance = tol$fitted,
-                 info = sprintf("residual parity failed for `%s`", label))
+    # Residuals are y - fitted with a SHARED response, so their differences
+    # are identical in absolute size to the fitted differences asserted
+    # above; comparing them relative to the residuals' own near-zero scale
+    # only re-measures the same drift against a treacherous denominator
+    # (flat-ridge BLUP redistribution on maximal crossed fits; logLik/fixef/
+    # varcorr all agree). Decision (user, 2026-08-01, resolving the pending
+    # tolerance note in brown_cases()): judge residual parity on the
+    # response scale, same tolerance as fitted values.
+    resid_gap <- max(abs(residuals(pair$mixeff) - residuals(pair$lme4)))
+    resid_scale <- max(abs(fitted(pair$lme4)))
+    expect_lt(resid_gap / resid_scale, tol$fitted,
+              label = sprintf("response-scaled residual gap for `%s`", label))
     brown_expect_varcorr_close(pair$mixeff, pair$lme4, tol$varcorr, label)
   }
 })

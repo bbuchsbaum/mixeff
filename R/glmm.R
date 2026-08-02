@@ -10,7 +10,7 @@
 #' @param formula A two-sided lme4-style formula.
 #' @param data A `data.frame`.
 #' @param family A supported GLMM family object or family constructor. The
-#'   certified 1.0 surface is: [binomial()] with `"logit"`, `"probit"`, or
+#'   supported 1.0 surface is: [binomial()] with `"logit"`, `"probit"`, or
 #'   `"cloglog"` links; [poisson()] with `"log"` or `"sqrt"` links;
 #'   [Gamma()] with `"log"` link; and negative binomial (NB2, `"log"` link)
 #'   via [mm_negative_binomial()] (theta estimated, like `lme4::glmer.nb()`)
@@ -33,7 +33,19 @@
 #' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` is the
 #'   Laplace setting. Values above `1` are allowed on the profiled path and
 #'   are rejected for `method = "joint_laplace"` in the R wrapper.
-#' @param inference Requested inference method.
+#' @param inference Requested inference posture. The default `"auto"` keeps
+#'   the certified contract: Wald standard errors, tests, and intervals are
+#'   available only when the engine certifies them (currently
+#'   `method = "joint_laplace"`); the default profiled estimator withholds
+#'   them with a typed refusal. `"working_hessian"` is an explicit opt-in
+#'   that unlocks the UNCERTIFIED profiled working-Hessian approximation on
+#'   every inference route; each resulting row is labelled
+#'   `wald_z_working_hessian` with reliability `moderate`. Its standard
+#'   errors ran about 11% smaller than `glmer()`'s on the package's
+#'   reference dataset (anti-conservative), so treat it as an exploration
+#'   and screening tool, not a reporting route; see `inference_options()`.
+#'   `"none"`, `"asymptotic"`, and `"bootstrap"` are accepted and recorded
+#'   but currently equivalent to `"auto"`.
 #' @param control A list from [mm_control()].
 #' @param ... Reserved for future use.
 #'
@@ -42,7 +54,8 @@
 #' Optimization runs inside a single native call with no progress output: the
 #' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
 #' before the fitted result returns, and the call cannot be interrupted from
-#' R. Every optimizer budget is bounded, so fits always terminate; runtime on
+#' R. Evaluation budgets are bounded (a bounded budget caps optimizer
+#' iterations; it does not prove every native evaluation terminates); runtime on
 #' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.
@@ -76,7 +89,8 @@ glmm <- function(formula,
                  contrasts = NULL,
                  method = c("pirls_profiled", "joint_laplace"),
                  nAGQ = 1L,
-                 inference = c("auto", "none", "asymptotic", "bootstrap"),
+                 inference = c("auto", "none", "asymptotic", "bootstrap",
+                               "working_hessian"),
                  control = mm_control(),
                  ...) {
   call <- match.call()
@@ -223,6 +237,11 @@ glmm <- function(formula,
     call           = call,
     formula        = formula,
     family         = family_info,
+    # Exact engine family string used at fit time (bernoulli/binomial split,
+    # NB theta-mode spelling). Stored so refit-based verbs (e.g.
+    # verify_convergence) reconstruct the same model without re-deriving the
+    # prep rules; older saved fits lack it and fall back to reconstruction.
+    engine_family  = engine_family,
     method         = as.character(fit_result$method %||% method),
     nAGQ           = as.integer(fit_result$n_agq %||% nAGQ),
     inference_request = inference,
@@ -262,7 +281,34 @@ glmm <- function(formula,
   )
   fit <- mm_apply_lme4_coef_naming(fit)
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
+  # No silent surgery on the estimator that produced the numbers: when the
+  # engine substituted a fallback for the requested method (typed
+  # `estimator_substitution` record, engine f82c646+), say so at fit time.
+  # The summary() note repeats this ungated, so verbose = -1 loops stay
+  # quiet without hiding the substitution from readers of the result.
+  substitution <- mm_estimator_substitution(fit)
+  if (!is.null(substitution) && control$verbose >= 0L) {
+    mm_inform(
+      mm_glmm_substitution_notice(substitution),
+      class = "mm_estimator_substitution_notice"
+    )
+  }
   fit
+}
+
+mm_glmm_substitution_notice <- function(sub) {
+  sprintf(
+    paste0(
+      "glmm(method = \"%s\"): the requested estimator did not certify ",
+      "(status `%s`, code `%s`); the result is a labelled `%s` fallback fit. ",
+      "Its coefficients are the fallback estimator's, not %s's, and Wald ",
+      "inference is withheld. Evidence: ",
+      "optimizer_certificate(fit)$raw$estimator_substitution; check the ",
+      "optimum with verify_convergence(fit)."
+    ),
+    sub$requested_method, sub$requested_fit_status,
+    sub$requested_return_code, sub$effective_method, sub$requested_method
+  )
 }
 
 mm_glmm_profiled_default_notice <- function() {

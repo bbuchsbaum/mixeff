@@ -911,19 +911,38 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 
 #' Confidence intervals for fixed effects of a mixeff GLMM
 #'
-#' Asymptotic Wald intervals (`estimate +/- z * SE`) built from the Rust
-#' fixed-effect inference table. Profile and bootstrap intervals are not
-#' certified for GLMMs by the upstream contract and are refused with a typed
-#' reason rather than approximated.
+#' Two routes are available. `method = "asymptotic"` builds Wald intervals
+#' (`estimate +/- z * SE`) from the Rust fixed-effect inference table; it
+#' requires a certified fit (`method = "joint_laplace"`) or the explicit
+#' working-Hessian opt-in, and refuses the default profiled estimator with
+#' a typed reason. `method = "bootstrap"` runs a parametric bootstrap —
+#' each replicate simulates a response from the fitted model under fresh
+#' random-effect draws and refits the same (effective) estimator — and
+#' returns percentile intervals; it works on profiled-estimator fits for
+#' every supported family, including negative binomial (fixed-theta fits
+#' condition replicates on that theta; estimated-theta fits re-estimate
+#' theta per replicate, propagating its uncertainty). On `joint_laplace`
+#' fits the bootstrap is refused at this engine pin — replicate refits
+#' cannot re-run the joint estimator — and those fits have certified Wald
+#' intervals instead.
+#' The bootstrap result carries replicate accounting as attributes:
+#' `mm_bootstrap` (requested, successful, failed, seed, per-parameter
+#' standard errors, Monte Carlo SE, and a reliability grade) and
+#' `mm_estimator`. Failed replicates are counted, never silently dropped.
+#' Profile intervals are not certified for GLMMs and are refused.
 #'
 #' @param object A fitted `mm_glmm`.
 #' @param parm Optional fixed-effect names or indices; defaults to all.
 #' @param level Confidence level.
 #' @param method `"asymptotic"` (the default; the package-wide name for the
-#'   closed-form Wald interval) or its synonym `"wald"`.
-#' @param ... Unused.
+#'   closed-form Wald interval), its synonym `"wald"`, or `"bootstrap"`.
+#' @param ... For `method = "bootstrap"`: `nsim` (number of replicates,
+#'   default 999) and `seed` (non-negative integer; when omitted one is
+#'   drawn from R's RNG so `set.seed()` governs reproducibility).
 #'
-#' @return An `mm_confint` matrix of lower/upper bounds.
+#' @return An `mm_confint` matrix of lower/upper bounds (`"asymptotic"`), or
+#'   a plain matrix of percentile bounds with bootstrap-accounting
+#'   attributes (`"bootstrap"`).
 #'
 #' @method confint mm_glmm
 #' @export
@@ -931,23 +950,24 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
                             method = c("asymptotic", "wald", "profile",
                                        "bootstrap"), ...) {
   method <- match.arg(method)
-  if (method %in% c("profile", "bootstrap")) {
+  if (identical(method, "profile")) {
     # Advice must be actionable on THIS fit: asymptotic Wald intervals are
-    # certified only for joint_laplace fits, so pointing a pirls_profiled
-    # fit at method = "asymptotic" would just fail again downstream.
+    # certified only for joint_laplace fits.
     advice <- if (identical(object$method, "joint_laplace")) {
+      # The bootstrap cannot refit a joint template at this engine pin, so
+      # it must not be advised here.
       "Use method = \"asymptotic\"."
     } else {
-      paste0("Re-fit with glmm(..., method = \"joint_laplace\") and use ",
-             "method = \"asymptotic\"; no confint() route is certified for ",
-             "the fast default estimator.")
+      paste0("Use method = \"bootstrap\", or re-fit with ",
+             "glmm(..., method = \"joint_laplace\") and use ",
+             "method = \"asymptotic\".")
     }
     mm_abort(
       message = sprintf(
-        paste0("`confint(method = \"%s\")` is not available for GLMM fits; the ",
-               "upstream contract certifies only asymptotic Wald intervals for ",
-               "generalized models. %s"),
-        method, advice
+        paste0("`confint(method = \"profile\")` is not available for GLMM ",
+               "fits; profile likelihood is not certified for generalized ",
+               "models. %s"),
+        advice
       ),
       class = "mm_inference_unavailable",
       reason_code = "glmm_confint_method_unavailable",
@@ -979,25 +999,24 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
       input = unknown
     )
   }
+  if (identical(method, "bootstrap")) {
+    return(mm_glmm_parametric_bootstrap_confint(object, parm = parm,
+                                                level = level, ...))
+  }
   inference <- mm_glmm_wald_z_inference(object)
   rows <- inference$table
   rows <- rows[match(parm, rows$label), , drop = FALSE]
+  # `available` = certified rows; `available_noninferential` = the labelled
+  # working-Hessian rows produced only under the explicit fit-level opt-in
+  # (the builder never emits them otherwise; WI-2.9).
   bad <- is.na(rows$label) |
     is.na(rows$status) |
-    rows$status != "available" |
+    !(rows$status %in% c("available", "available_noninferential")) |
     !is.finite(rows$std_error) |
     rows$std_error <= 0
   if (any(bad)) {
-    reason <- rows$reason[bad]
-    reason <- reason[!is.na(reason) & nzchar(reason)]
-    if (!length(reason)) {
-      reason <- "certified GLMM Wald inference is unavailable"
-    }
     mm_abort(
-      message = paste(
-        "`confint(method = \"wald\")` is unavailable for this GLMM fit because",
-        paste(unique(reason), collapse = "; ")
-      ),
+      message = mm_glmm_wald_refusal_message("confint() Wald intervals"),
       class = "mm_inference_unavailable",
       reason_code = "glmm_wald_confint_unavailable",
       input = parm[bad]
@@ -1010,8 +1029,18 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
   out <- cbind(est - crit * se, est + crit * se)
   colnames(out) <- c(sprintf("%.1f %%", 100 * alpha / 2),
                      sprintf("%.1f %%", 100 * (1 - alpha / 2)))
-  attr(out, "method") <- "wald_asymptotic_from_rust_inference_table"
-  attr(out, "status") <- "available"
+  # The attrs must carry the rows' own certificate, not a blanket one: for
+  # an inference = "working_hessian" fit the intervals come from the
+  # labelled uncertified approximation, and stamping them
+  # available/from-the-inference-table would be a false certificate
+  # (Audit1 WI-2.9).
+  if (any(rows$method == "wald_z_working_hessian", na.rm = TRUE)) {
+    attr(out, "method") <- "wald_z_working_hessian"
+    attr(out, "status") <- "available_noninferential"
+  } else {
+    attr(out, "method") <- "wald_asymptotic_from_rust_inference_table"
+    attr(out, "status") <- "available"
+  }
   mm_new_confint(out)
 }
 
@@ -1231,7 +1260,7 @@ mm_fixed_effect_term_type_label <- function(type) {
   type <- as.character(type)
   if (length(type) != 1L || is.na(type) || !nzchar(type)) {
     mm_abort(
-      message = "`type` must be one of `I`, `II`, or `III`.",
+      message = "`type` must be one of `I`, `II`, `III`, or `block`.",
       class = "mm_arg_error",
       input = type
     )
@@ -1241,8 +1270,11 @@ mm_fixed_effect_term_type_label <- function(type) {
     I = "type_i",
     II = "type_ii",
     III = "type_iii",
+    # Simple effects at reference levels (the pre-1f3f689 "Type III"),
+    # kept available under its honest name (engine coefficient_block).
+    BLOCK = "coefficient_block",
     mm_abort(
-      message = "`type` must be one of `I`, `II`, or `III`.",
+      message = "`type` must be one of `I`, `II`, `III`, or `block`.",
       class = "mm_arg_error",
       input = type
     )
@@ -1770,13 +1802,28 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
   )
 }
 
-# Grade bootstrap reliability from the engine's replicate accounting rather
-# than asserting a constant. Per the bootstrap contract, `moderate` requires
-# a finite Monte-Carlo standard error and a sufficiently large successful
-# replicate count (>= 999); fewer replicates or a non-finite MCSE are `low`;
-# an uncertified payload is `not_available`.
+# Replicate floor for a `moderate` bootstrap grade -- ONE definition,
+# consumed by mm_bootstrap_reliability() and the inference_options route
+# map (previously the literal 999 was duplicated in two files).
+#
+# Rationale for 999 (documented in the glossary vignette's reliability
+# rubric): (i) with B = 999 the achievable two-sided bootstrap p-values are
+# exact multiples of 1/(B+1) = 0.001, so a reported p of 0.05 is resolved
+# to +/- one grid step; (ii) the Monte Carlo SE of an estimated rejection/
+# coverage rate near 0.05 is sqrt(.05*.95/999) ~ 0.0069 -- small relative
+# to the 0.05 target; below ~1000 replicates that MC noise becomes a
+# material share of the quantity being reported. The step at the threshold
+# is a grading convention, not a claim that B = 998 differs materially
+# from B = 999; the accounting fields (successful replicates, MCSE) ship
+# alongside the grade so readers can judge the evidence directly.
+mm_bootstrap_moderate_min <- function() 999L
+
+# Grade bootstrap reliability from the replicate accounting. `moderate`
+# requires a certified payload, a finite Monte-Carlo standard error, and at
+# least mm_bootstrap_moderate_min() successful replicates; fewer replicates
+# or a non-finite MCSE are `low`; an uncertified payload is `not_available`.
 mm_bootstrap_reliability <- function(certified, successful, mcse,
-                                     min_moderate = 999L) {
+                                     min_moderate = mm_bootstrap_moderate_min()) {
   if (!isTRUE(certified)) {
     return(list(reliability = "not_available",
                 reason = "bootstrap_not_certified"))
@@ -1855,6 +1902,7 @@ profile.mm_lmm <- function(fitted, which = NULL, level = 0.95, ...) {
   out
 }
 
+#' @method print mm_profile
 #' @export
 print.mm_profile <- function(x, ...) {
   cat(sprintf("Profile-likelihood intervals (%s, level %.2f)\n",
@@ -2169,6 +2217,18 @@ mm_lincomb.mm_glmm <- function(fit, weights, level = 0.95, method = NULL, ...) {
       input = method
     )
   }
+  # Wald capability comes from the single arbiter (WI-2.1) -- never from the
+  # covariance payload's own status, which reads available_noninferential for
+  # the uncertified working Hessian (see mm_glmm_inference_capability).
+  cap <- mm_glmm_inference_capability(fit)
+  if (!isTRUE(cap$wald)) {
+    mm_abort(
+      message = mm_glmm_wald_refusal_message("mm_lincomb() standard errors and Wald intervals"),
+      class = "mm_inference_unavailable",
+      reason_code = cap$reason_code,
+      input = fit
+    )
+  }
   beta_named <- mm_lincomb_fixef(fit)
   beta  <- as.numeric(beta_named)
   bnms  <- names(beta_named)
@@ -2190,11 +2250,11 @@ mm_lincomb.mm_glmm <- function(fit, weights, level = 0.95, method = NULL, ...) {
     p_value        = p,
     lower          = est - q * se,
     upper          = est + q * se,
-    method         = "asymptotic",
+    method         = cap$method,
     stringsAsFactors = FALSE,
     check.names    = FALSE
   )
-  attr(out, "mm_status") <- mm_lincomb_status_from_vcov(Vfull)
+  attr(out, "mm_status") <- mm_glmm_capability_status(cap)
   out
 }
 

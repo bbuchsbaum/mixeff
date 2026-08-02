@@ -21,12 +21,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::compiler::{
-    compile_formula_ir, BasisLoading, BootstrapInferenceDetails, CertificateCheck,
-    CompiledModelArtifact, CompilerPolicy, ContrastFamilyDetails, ConvergenceVerification,
-    ConvergenceVerificationRun, ConvergenceVerificationStatus, CovarianceFamily,
-    CovarianceFamilyTransition, DesignAudit, Diagnostic, DiagnosticCode, DiagnosticSeverity,
-    DiagnosticStage, DominantLoading, EffectiveCovarianceSummary, EffectiveRankStatus,
-    EstimabilityAssessment, EstimabilityStatus, EvidenceMethod, FitStatus,
+    compile_formula_ir, BasisLoading, BootstrapInferenceDetails, CategoricalContrastAudit,
+    CertificateCheck, CompiledModelArtifact, CompilerPolicy, ContrastFamilyDetails,
+    ConvergenceVerification, ConvergenceVerificationRun, ConvergenceVerificationStatus,
+    CovarianceFamily, CovarianceFamilyTransition, DesignAudit, Diagnostic, DiagnosticCode,
+    DiagnosticSeverity, DiagnosticStage, DominantLoading, EffectiveCovarianceSummary,
+    EffectiveRankStatus, EstimabilityAssessment, EstimabilityStatus, EvidenceMethod, FitStatus,
     FixedContrastEstimability, FixedEffectCovarianceDetails, FixedEffectCovarianceMatrix,
     FixedEffectCovarianceMethod, FixedEffectHypothesis, FixedEffectInferenceDetails,
     FixedEffectInferenceMethod, FixedEffectInferenceRow, FixedEffectInferenceRowKind,
@@ -78,7 +78,7 @@ use bootstrap::{quantile_sorted, validate_level};
 
 mod predict;
 
-mod optimizer;
+pub(in crate::model) mod optimizer;
 use optimizer::*;
 
 mod inference;
@@ -599,6 +599,27 @@ impl Default for ConvergenceVerificationOptions {
             objective_tolerance: 1e-5,
             theta_tolerance: 1e-3,
             beta_tolerance: 1e-4,
+        }
+    }
+}
+
+impl ConvergenceVerificationOptions {
+    /// Defaults for the GLMM verification route: same restart/jitter shape as
+    /// the LMM route, but no optimizer-consensus run (the GLMM fit drivers own
+    /// optimizer selection), a larger evaluation budget (a GLMM refit pays for
+    /// inner PIRLS solves per objective evaluation), an objective tolerance
+    /// sized to the inner-PIRLS deviance noise floor rather than the exact
+    /// LMM profiled deviance, and a beta tolerance sized to the joint path's
+    /// derivative-free beta search (beta is not solved exactly per theta the
+    /// way the LMM profiled step solves it, so its reproducibility is bounded
+    /// by the optimizer's ftol stop).
+    pub fn glmm_defaults() -> Self {
+        Self {
+            run_optimizer_consensus: false,
+            max_function_evaluations: 1000,
+            objective_tolerance: 1e-4,
+            beta_tolerance: 1e-3,
+            ..Self::default()
         }
     }
 }
@@ -4296,7 +4317,7 @@ fn aliased_fixed_effect_names(coef_names: &[String], pivot: &[usize], rank: usiz
         .collect()
 }
 
-fn max_abs_delta(left: &[f64], right: &[f64]) -> Option<f64> {
+pub(in crate::model) fn max_abs_delta(left: &[f64], right: &[f64]) -> Option<f64> {
     if left.len() != right.len() {
         return None;
     }

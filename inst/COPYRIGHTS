@@ -1,0 +1,167 @@
+Copyright notices for mixeff and the bundled Rust sources
+==========================================================
+
+mixeff (R package) and the bundled mixeff-rs engine:
+  Copyright (c) Bradley Buchsbaum (MIT + file LICENSE)
+
+Vendored Cargo registry dependencies: the notices below are the distinct
+'Copyright ...' lines preserved in each crate's shipped LICENSE/COPYING/
+NOTICE files (cargo vendor keeps the full texts next to each crate inside
+src/rust/vendor.tar.xz; per-crate license identifiers are recorded in
+inst/LICENSE.note). Crates listing no explicit notice line publish under
+their declared license with copyright retained by their authors (see
+inst/AUTHORS).
+
+autocfg 1.5.0:
+  Copyright (c) 2018 Josh Stone
+
+bytemuck 1.25.0:
+  Copyright (c) 2019 Daniel "Lokathor" Gee.
+
+cfg-if 1.0.4:
+  Copyright (c) 2014 Alex Crichton
+
+cobyla 1.0.0:
+  Copyright (c) 2020-2023 Rémi Lafage
+
+csv 1.4.0:
+  Copyright (c) 2015 Andrew Gallant
+
+csv-core 0.1.13:
+  Copyright (c) 2015 Andrew Gallant
+
+equivalent 1.0.2:
+  Copyright (c) 2016--2023
+
+getrandom 0.2.17:
+  Copyright (c) 2018-2024 The rust-random Project Developers
+  Copyright (c) 2014 The Rust Project Developers
+
+hashbrown 0.17.0:
+  Copyright (c) 2016 Amanieu d'Antras
+
+indexmap 2.14.0:
+  Copyright (c) 2016--2017
+
+lazy_static 1.5.0:
+  Copyright (c) 2010 The Rust Project Developers
+
+libc 0.2.186:
+  Copyright (c) The Rust Project Developers
+
+libm 0.2.16:
+  Copyright (c) 2018 Jorge Aparicio
+  Copyright © 2005-2020 Rich Felker, et al.
+  Copyright © 1993,2004 Sun Microsystems or
+  Copyright © 2003-2011 David Schultz or
+  Copyright © 2003-2009 Steven G. Kargl or
+  Copyright © 2003-2009 Bruce D. Evans or
+  Copyright © 2008 Stephen L. Moshier or
+  Copyright © 2017-2018 Arm Limited
+
+log 0.4.29:
+  Copyright (c) 2014 The Rust Project Developers
+
+matrixmultiply 0.3.10:
+  Copyright (c) 2016 - 2023 Ulrik Sverdrup "bluss"
+  Copyright (c) 2021 DutchGhost [constparse.rs]
+
+matrixmultiply 0.2.4:
+  Copyright (c) 2016 - 2018 Ulrik Sverdrup "bluss"
+
+memchr 2.8.0:
+  Copyright (c) 2015 Andrew Gallant
+
+nalgebra 0.33.3:
+  Copyright 2020 Sébastien Crozet
+
+ndarray 0.13.1:
+  Copyright (c) 2015 - 2018 Ulrik Sverdrup "bluss",
+
+num-bigint 0.4.6:
+  Copyright (c) 2014 The Rust Project Developers
+
+num-complex 0.4.6:
+  Copyright (c) 2014 The Rust Project Developers
+
+num-complex 0.2.4:
+  Copyright (c) 2014 The Rust Project Developers
+
+num-integer 0.1.46:
+  Copyright (c) 2014 The Rust Project Developers
+
+num-rational 0.4.2:
+  Copyright (c) 2014 The Rust Project Developers
+
+num-traits 0.2.19:
+  Copyright (c) 2014 The Rust Project Developers
+
+num-traits 0.1.43:
+  Copyright (c) 2014 The Rust Project Developers
+
+ppv-lite86 0.2.21:
+  Copyright 2019 The CryptoCorrosion Contributors
+  Copyright (c) 2019 The CryptoCorrosion Contributors
+
+rand 0.8.6:
+  Copyright 2018 Developers of the Rand project
+  Copyright (c) 2014 The Rust Project Developers
+
+rand_chacha 0.3.1:
+  Copyright 2018 Developers of the Rand project
+  Copyright (c) 2014 The Rust Project Developers
+
+rand_core 0.6.4:
+  Copyright 2018 Developers of the Rand project
+  Copyright (c) 2014 The Rust Project Developers
+
+rand_distr 0.4.3:
+  Copyright 2018 Developers of the Rand project
+
+rawpointer 0.2.1:
+  Copyright (c) 2015
+
+safe_arch 0.7.4:
+  Copyright (c) 2023 Daniel "Lokathor" Gee.
+  Copyright (c) 2020 Daniel "Lokathor" Gee.
+
+serde_spanned 0.6.9:
+  Copyright (c) Individual contributors
+
+simba 0.9.1:
+  Copyright 2020 Sébastien Crozet
+
+sprs 0.7.1:
+  Copyright (c) 2015 The sprs Developers
+
+statrs 0.18.0:
+  Copyright (c) 2016 Michael Ma
+
+toml 0.8.23:
+  Copyright (c) Individual contributors
+
+toml_datetime 0.6.11:
+  Copyright (c) Individual contributors
+
+toml_edit 0.22.27:
+  Copyright (c) Individual contributors
+
+typenum 1.20.0:
+  Copyright 2014 Paho Lurie-Gregg
+  Copyright (c) 2014 Paho Lurie-Gregg
+
+unicode-ident 1.0.24:
+  Copyright © 1991-2023 Unicode, Inc.
+
+wide 0.7.33:
+  Copyright (c) 2020 Daniel "Lokathor" Gee.
+
+zerocopy 0.8.48:
+  Copyright 2023 The Fuchsia Authors
+  Copyright 2019 The Fuchsia Authors.
+
+zerocopy-derive 0.8.48:
+  Copyright 2023 The Fuchsia Authors
+  Copyright 2019 The Fuchsia Authors.
+
+

@@ -1,0 +1,688 @@
+---
+title: Linear Mixed Models
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Linear Mixed Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+```{r load-package}
+library(mixeff)
+```
+
+You use a linear mixed model when observations are not independent:
+visits within clinics, trials within people, students within
+classrooms. The standard R answer is `lme4::lmer()`. `mixeff::lmm()`
+accepts the same formula language — `(1 | group)`, `(x | group)`,
+`(1 + x || group)`, `(1 | a/b)`, crossed blocks — and the fitted
+object answers to the common generics: `fixef()`, `ranef()`,
+`VarCorr()`, `predict()`, `summary()`, `confint()`, `anova()`, and
+friends. The supported surface is documented and closed rather than
+open-ended: `vignette("mixeff", package = "mixeff")` states the
+contract, and `vignette("lme4-migration", package = "mixeff")` gives
+the exact verb-and-argument map.
+
+What `lmm()` adds is that the fitted object carries the design, the
+convergence status, and the inference labels with it. You can audit,
+summarize, save, and reload without recomputing.
+
+This vignette is the LMM walkthrough: reading a random-effects
+formula before you fit, fitting, reading the summary, the standard
+extractors, prediction, and weights — followed by a longer section on
+what the random-effects spellings themselves mean and the
+compile-time design help.
+
+## The data
+
+```{r simulate-data, include = FALSE}
+set.seed(1)
+n_subjects <- 18L
+sleep <- expand.grid(
+  Days = 0:9,
+  Subject = factor(seq_len(n_subjects))
+)
+subject_intercept <- rnorm(n_subjects, sd = 25)
+subject_slope <- rnorm(n_subjects, sd = 6)
+subject_index <- as.integer(sleep$Subject)
+sleep$Reaction <- 250 + 10.5 * sleep$Days +
+  subject_intercept[subject_index] +
+  subject_slope[subject_index] * sleep$Days +
+  rnorm(nrow(sleep), sd = 25)
+```
+
+The example simulates reaction times (ms) for 18 subjects over ten
+days of sleep deprivation. Each subject has a different baseline and
+a different response to continued sleep loss. The data are generated
+inside this vignette, so the walkthrough runs without an example-data
+package.
+
+```{r show-data}
+str(sleep)
+```
+
+The key structure: `Subject` appears 10 times in the data — once per
+day. Those 10 observations are *not* independent. They share the
+subject's baseline speed, their individual sensitivity to sleep loss,
+and any other between-person trait that we haven't measured. If you
+fit a plain OLS regression, those correlations inflate your Type I
+error rate and make standard errors too small.
+
+A mixed model handles this by giving each subject its own intercept
+*and* its own slope — their personal baseline and their personal rate
+of slowing — and then estimating a population distribution over those
+person-level parameters.
+
+```{r individual-trajectories, echo = FALSE, fig.width = 6, fig.height = 4}
+subject_lines <- unstack(sleep, Reaction ~ Subject)
+matplot(0:9, subject_lines, type = "l", lty = 1, col = "grey70",
+        xlab = "Days of sleep deprivation", ylab = "Reaction time (ms)",
+        main = "Individual subject trajectories")
+abline(lm(Reaction ~ Days, data = sleep), col = "steelblue", lwd = 2)
+```
+
+The grey lines are individuals; the blue line is the population
+average. Subjects vary in their starting point *and* in how fast they
+slow down — which is exactly what a random-intercept-and-slope model
+captures.
+
+## Step 1: Read the formula before you fit
+
+Before fitting, compile the model to see what `mixeff` understands
+about your formula. This separates formula interpretation from
+optimization; you can catch mis-specified random effects without
+paying the cost of a full fit.
+
+```{r compile}
+spec <- compile_model(Reaction ~ Days + (Days | Subject), sleep)
+explain_model(spec)
+```
+
+This pre-fit explanation confirms:
+
+- one fixed effect (`Days`) plus an intercept,
+- one random-effects block with a correlated intercept and slope per
+  subject,
+- the formula has been canonicalized to the explicit
+  `(1 + Days | Subject)` form that the optimizer will receive.
+
+Use `audit(spec)` when you want the deeper design audit. Its compact
+print starts with the audit summary and requested model;
+`print(audit(spec), full = TRUE)` shows the complete upstream report.
+
+If you had written `(1 | Subject)` by mistake (random intercepts
+only), the explanation would show only one random-effects column per
+subject — useful to verify before a long fit. The second half of this
+vignette works through the random-effects spellings, canonical forms,
+and design diagnostics in detail.
+
+## Step 2: Fit
+
+```{r fit}
+fit <- lmm(Reaction ~ Days + (Days | Subject), sleep)
+```
+
+`lmm()` returns an `mm_lmm` object. The bundled Rust engine performs
+the optimization; `lmm()` is the R entry point and result container.
+
+```{r fit-checks, include = FALSE}
+stopifnot(inherits(fit, "mm_lmm"))
+stopifnot(all(is.finite(fixef(fit))))
+stopifnot(length(predict(fit)) == nrow(sleep))
+```
+
+Printing the fit gives the formula, convergence status, likelihood
+summary, residual scale, and fixed effects.
+
+```{r print-fit}
+fit
+```
+
+## Step 3: Read the summary
+
+```{r summary}
+summary(fit, tests = "coefficients")
+```
+
+The summary has four blocks, in print order.
+
+**Fit status.** Check this line first: `converged_interior` is the
+status every other block of the summary assumes. When a fit lands
+somewhere else — a variance component at zero, a reduced-rank
+covariance — the status says so and the available inference methods
+change with it. What the statuses mean, and what a boundary does to
+the rest of the output, is the subject of
+`vignette("convergence", package = "mixeff")`.
+
+**Variance components.** `Subject (Intercept)` is the estimated
+between-subject spread in baseline reaction time; `Subject Days` is
+the estimated between-subject spread in sensitivity to sleep loss;
+`correlation` is their estimated association. The residual standard
+deviation is the within-subject noise left over.
+
+**Fixed effects.** `Estimate` is the population-level coefficient.
+The `Days` estimate is the fitted average change in reaction time per
+day; the simulation used a population slope of 10.5 ms per day. The
+`method` column names how each p-value was computed — here
+`satterthwaite`, a finite-sample *t* test whose `df` column is on the
+scale of the 18 subjects, not the 180 raw rows. Which methods exist,
+when each applies, and how to choose among them is covered in
+`vignette("inference", package = "mixeff")`.
+
+**Inference status.** One row per coefficient stating how much to
+trust the test: `status` says whether it was computed, `reliability`
+grades it, and `reliability_reason` names the engine's reason for
+that grade — here `satterthwaite_finite_difference_approximation`,
+the standard route for this method. The Rust engine assigns these
+grades and reasons; the R side passes them through unchanged. The
+closed vocabularies behind these columns are defined in the
+[inference-method
+glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html)
+on the package site.
+
+```{r summary-method-checks, include = FALSE}
+s_auto <- summary(fit, method = "auto")
+stopifnot(all(s_auto$inference$table$method == "satterthwaite"))
+stopifnot("satterthwaite_finite_difference_approximation" %in%
+            s_auto$inference$table$reliability_reason)
+ctab <- s_auto$coefficients
+p_col <- grep("^Pr\\(|^p\\.value$", names(ctab), value = TRUE)
+stopifnot(length(p_col) == 1L)
+stopifnot(any(is.finite(ctab[[p_col]])))
+stopifnot(all(is.finite(ctab$df)), all(ctab$df < 40))
+```
+
+## Step 4: Extract components
+
+The lme4-compatible extractors work on `mm_lmm` objects.
+
+```{r fixed-effects}
+fixef(fit)
+sigma(fit)
+logLik(fit)
+```
+
+`VarCorr()` reports fitted variance components, and `ranef()` returns
+conditional random effects by grouping factor.
+
+```{r random-effects}
+VarCorr(fit)
+head(ranef(fit)$Subject)
+```
+
+```{r extractor-checks, include = FALSE}
+stopifnot(nrow(ranef(fit)$Subject) == length(unique(sleep$Subject)))
+stopifnot(is.finite(as.numeric(logLik(fit))))
+stopifnot(is.finite(deviance(fit)))
+```
+
+```{r confint}
+confint(fit, method = "asymptotic")
+```
+
+`confint()` with `method = "asymptotic"` gives Wald intervals. The
+`(Intercept)` interval is the population mean reaction time on Day 0;
+the `Days` interval is the range of plausible slopes. The other
+interval methods, and when each is available, are covered in
+`vignette("inference", package = "mixeff")`.
+
+Design matrices can be rebuilt from the stored formula and model
+frame — including after a save/reload cycle
+(`vignette("mixeff", package = "mixeff")` covers persistence).
+`getME()` provides a small familiar subset for code that expects
+lme4-style names.
+
+```{r design-matrices}
+X <- model.matrix(fit, type = "fixed")
+Z <- model.matrix(fit, type = "random")
+
+dim(X)
+dim(Z)
+class(Z)
+
+getME(fit, c("theta", "beta", "cnms"))
+```
+
+```{r design-checks, include = FALSE}
+stopifnot(nrow(X) == nrow(sleep))
+stopifnot(nrow(Z) == nrow(sleep))
+stopifnot(inherits(Z, "dgCMatrix"))
+```
+
+For report-ready data-frame tables of the same fit — design summary,
+random terms, fixed effects — see the [reporting
+article](https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.html)
+on the package site.
+
+## Step 5: Prediction and residuals
+
+For fitted data, `predict()` returns in-sample fitted values. Use
+`re.form = NA` for the fixed-effect part only.
+
+```{r predictions}
+prediction_check <- data.frame(
+  Reaction = sleep$Reaction,
+  fitted = predict(fit),
+  fixed_only = predict(fit, re.form = NA),
+  residual = residuals(fit)
+)
+head(prediction_check)
+```
+
+```{r prediction-checks, include = FALSE}
+stopifnot(all(is.finite(prediction_check$fitted)))
+stopifnot(all(is.finite(prediction_check$residual)))
+stopifnot(max(abs(prediction_check$Reaction -
+                    prediction_check$fitted -
+                    prediction_check$residual)) < 1e-8)
+```
+
+### Prediction standard errors and intervals
+
+Population-level prediction standard errors and intervals are
+available via `re.form = NA` (the Wald SE of the fixed-effect linear
+predictor):
+
+```{r predict-se-population}
+pop <- predict(fit, re.form = NA, se.fit = TRUE)
+head(pop$se.fit)
+head(predict(fit, re.form = NA, interval = "confidence"))
+```
+
+*Conditional* prediction standard errors (the default,
+`re.form = NULL`) come from the engine's prediction-variance payload,
+which combines the fixed-effect Wald variance with the random-effect
+(BLUP) variance and the fixed/random covariance. The covariance term
+can be negative, so the conditional SE can come out *smaller* than
+the population SE. Conditional confidence and prediction intervals
+come from the same payload.
+
+```{r predict-se-conditional}
+pred <- predict(fit, se.fit = TRUE)
+head(data.frame(population_se = pop$se.fit, conditional_se = pred$se.fit))
+head(predict(fit, interval = "confidence"))
+```
+
+```{r predict-se-checks, include = FALSE}
+stopifnot(all(is.finite(pop$se.fit)))
+stopifnot(all(is.finite(pred$se.fit)), all(pred$se.fit > 0))
+```
+
+Rows the engine cannot certify — for example an unseen grouping level
+predicted with `allow.new.levels = TRUE`, where there is no posterior
+variance for the missing level — return `NA` with the engine's reason
+in the `mm_reason` attribute rather than a fabricated number. That
+refusal vocabulary is part of the inference contract
+(`vignette("inference", package = "mixeff")`).
+
+## Step 6: Case weights
+
+`lmm()` accepts case weights: one finite, positive value per row,
+evaluated in `data` like the formula variables. A common use is rows
+that summarize different numbers of underlying trials.
+
+```{r fit-weights}
+sleep$n_trials <- rep(c(1, 2), length.out = nrow(sleep))
+
+fit_w <- lmm(Reaction ~ Days + (Days | Subject), sleep,
+             weights = n_trials,
+             control = mm_control(verbose = -1))
+fixef(fit_w)
+head(fit_w$weights)
+```
+
+The weights are stored on the fit and reused by `refit()` and the
+inference routines. Invalid weights — wrong length, negative, or
+non-finite — are refused with a typed `mm_data_error` rather than
+silently recycled.
+
+```{r weights-checks, include = FALSE}
+stopifnot(isTRUE(all.equal(fit_w$weights, sleep$n_trials)))
+stopifnot(all(is.finite(fixef(fit_w))))
+bad <- tryCatch(
+  lmm(Reaction ~ Days + (Days | Subject), sleep, weights = rep(1, 5),
+      control = mm_control(verbose = -1)),
+  error = identity
+)
+stopifnot(inherits(bad, "mm_data_error"))
+```
+
+For contrasts, term tests, marginal means, and model comparisons on a
+fit like this one, continue with
+`vignette("inference", package = "mixeff")`. The rest of this
+vignette turns to the random-effects formulas themselves.
+
+## Random-effects formulas in depth
+
+Random-effects formulas are compact, and compactness hides
+assumptions. Seven characters — `(x | g)` — commit the analyst to
+a specific covariance structure, a specific number of free
+parameters, and a specific identification claim about what the data
+can support. Two formulas that differ by a single character — `||`
+for `|`, say — fit different models.
+
+`mixeff` shares the formula language with `lme4`, so the notation
+you already read transfers directly. What it adds is a way to read
+the formula *before* the optimizer runs: the named form of every
+random term, the plain-language scope, the parameter count, and the
+design facts that support or refuse the formula on this particular
+data.
+
+The goal of this section is not to pick a model for you. It is to
+show what the model you wrote can and cannot express, and to make
+the difference between nearby spellings legible.
+
+We use a second small repeated-measures dataset with one row per
+subject per time point.
+
+```{r study-data, include = FALSE}
+set.seed(11)
+n_subj <- 30L
+n_time <- 5L
+study <- expand.grid(subject = factor(seq_len(n_subj)),
+                     time = seq_len(n_time))
+subj_dose <- rnorm(n_subj, sd = 1)
+study$dose <- subj_dose[as.integer(study$subject)]
+b0 <- rnorm(n_subj, sd = 0.6)[as.integer(study$subject)]
+b1 <- rnorm(n_subj, sd = 0.2)[as.integer(study$subject)]
+study$x <- rnorm(nrow(study))
+study$z <- rnorm(nrow(study))
+study$score <- 2 + 0.3 * study$time + b0 + b1 * study$time +
+  rnorm(nrow(study), sd = 0.4)
+study$y <- 1 + 0.4 * study$x + 0.2 * study$z + b0 +
+  rnorm(nrow(study), sd = 0.5)
+study$hit <- rbinom(nrow(study), size = 1, prob = plogis(0.5 + study$x))
+
+# A between-subject covariate is required to demonstrate the
+# structural-refusal case.
+between_study <- study
+between_study$dose <- between_study$dose
+
+# A small-N variant to demonstrate the low-information-budget case.
+low_n <- 4L
+low_study <- subset(study, as.integer(subject) <= low_n)
+low_study$subject <- factor(low_study$subject)
+```
+
+```{r study-preview}
+head(study)
+```
+
+### What does `(1 | subject)` say?
+
+A random intercept is the simplest random-effects structure:
+subjects may differ in average score, but the fixed `time` effect
+is the same across subjects. It is often the right choice, and it
+is always a reasonable starting point. `explain_model()` spells
+out what the model assumes and reports that no random slopes were
+added.
+
+```{r intercept-only-explanation}
+intercept_only <- compile_model(score ~ time + (1 | subject), study)
+explain_model(intercept_only)
+```
+
+```{r intercept-only-checks, include = FALSE}
+intercept_only_explanation <- explain_model(intercept_only)
+intercept_only_slopes <-
+  intercept_only_explanation$cards[[1L]]$blocks[[1L]]$slopes
+stopifnot(length(intercept_only_slopes) == 0L)
+stopifnot(any(vapply(
+  intercept_only_explanation$diagnostics,
+  function(x) identical(x$code, "scope_note"),
+  logical(1)
+)))
+```
+
+Each random-effects card has two header lines worth pausing on.
+`wrote:` is the term as you typed it. `canonical:` is what the
+parser hands downstream — what the optimizer, the audit, and the
+inference contract will actually see. They are identical here
+because `(1 | subject)` is already in canonical form — nothing was
+rewritten. The two diverge for
+more elaborate formulas. `(1 | clinic/site)` is rewritten as
+`(1 | clinic) + (1 | clinic:site)`; implicit intercepts are made
+explicit; double-bar shorthand expands to its split-block form.
+The `canonical:` line is where you read off the model the engine
+will actually fit.
+
+The remaining lines decode the term further. `named form:`
+restates it as a function call that names the grouping factor, the
+intercept, the slopes (if any), and the covariance family.
+`scope:` is a plain-language sentence. `covariance` and `support`
+report parameter cost and design sufficiency.
+
+The `Design notes:` section at the bottom records facts about the
+data that the fitted formula did not use. Here `time` varies
+within each subject, so a subject-level `time` slope is
+structurally possible. That is reported as a note, not a
+correction: whether to add `(time | subject)` is a scientific
+question about whether subjects plausibly differ in their `time`
+slopes, not a mechanical one about what the package can do.
+
+### What changes when you add a random slope?
+
+`(1 + time | subject)` requests a two-dimensional random effect for each
+subject: one baseline coefficient and one `time` coefficient, with a fitted
+covariance between them.
+
+```{r full-slope-explanation}
+full <- compile_model(score ~ time + (1 + time | subject), study)
+explain_model(full)
+```
+
+After fitting, `parameterization()` shows the optimizer's *internal*
+coordinates: the vector θ the engine actually searched over, and
+where each entry sits in the random-effects covariance factor.
+
+```{r full-parameterization}
+full_fit <- lmm(
+  score ~ time + (1 + time | subject),
+  study,
+  control = mm_control(verbose = -1)
+)
+parameterization(full_fit)$table[, c("theta_name", "theta_value", "lambda_value")]
+```
+
+What θ is, why the engine optimizes it rather than the covariance
+matrix directly, and how boundary fits are read off this table are
+covered in `vignette("convergence", package = "mixeff")`.
+
+### What do split blocks and `||` mean?
+
+The formula `(1 | subject) + (0 + time | subject)` uses two separate blocks for
+the same grouping factor. That fixes the intercept-slope covariance to zero.
+
+```{r split-blocks}
+split_blocks <- compile_model(
+  score ~ time + (1 | subject) + (0 + time | subject),
+  study
+)
+explain_model(split_blocks)
+```
+
+`(1 + time || subject)` is a shorthand for the same split-block model.
+
+```{r double-bar}
+double_bar <- compile_model(score ~ time + (1 + time || subject), study)
+explain_model(double_bar)
+```
+
+```{r split-checks, include = FALSE}
+split_text <- explain_model(split_blocks)$text
+double_text <- explain_model(double_bar)$text
+stopifnot(grepl("separate random-effect blocks fix the covariance", split_text, fixed = TRUE))
+stopifnot(grepl("double-bar syntax fixes the covariance", double_text, fixed = TRUE))
+stopifnot(grepl("covariance_assumption", split_text, fixed = TRUE))
+stopifnot(grepl("covariance_assumption", double_text, fixed = TRUE))
+```
+
+One caveat: when a **factor** appears inside `||`, mixeff's expansion
+differs from lme4's — `vignette("lme4-migration", package =
+"mixeff")` states the exact semantics and the explicit spelling that
+reproduces lme4's model family.
+
+### Nested and crossed grouping
+
+Nesting is written with `/` and expands mechanically:
+`(1 | clinic/ward)` means one intercept block per clinic plus one per
+ward-within-clinic. Crossed factors are simply two blocks —
+`(1 | subject) + (1 | item)` — and nothing is rewritten, because that
+spelling is already canonical. `mm_parse_formula()` shows the
+canonical string for any formula without touching data:
+
+```{r canonical-spellings}
+mm_parse_formula("rt ~ days + (1 | subject/task)")
+mm_parse_formula("rt ~ days + (1 | subject) + (1 | item)")
+mm_parse_formula("rt ~ days + (1 + days || subject)")
+```
+
+```{r canonical-checks, include = FALSE}
+stopifnot(identical(
+  mm_parse_formula("rt ~ days + (1 | subject/task)"),
+  "rt ~ 1 + days + (1 | subject) + (1 | subject:task)"
+))
+stopifnot(identical(
+  mm_parse_formula("rt ~ days + (1 | subject) + (1 | item)"),
+  "rt ~ 1 + days + (1 | subject) + (1 | item)"
+))
+stopifnot(identical(
+  mm_parse_formula("rt ~ days + (1 + days || subject)"),
+  "rt ~ 1 + days + (1 + days || subject)"
+))
+```
+
+The `explain_model()` cards agree with these canonicalizations — they
+show the model the engine actually fits — with one display difference:
+`mm_parse_formula()` keeps a `||` term as written, while the cards
+additionally show it as the split blocks the engine fits.
+
+### What are the three kinds of help?
+
+The compile-time diagnostics separate three situations that are often mixed
+together in ordinary model output.
+
+First, a structural impossibility: a requested random slope cannot be estimated
+if that variable does not vary within the group. Here `dose` is constant within
+each subject.
+
+```{r structural-impossibility}
+impossible <- compile_model(score ~ dose + (1 + dose | subject), between_study)
+explain_model(impossible)
+```
+
+Second, low information budget: a requested full covariance can be estimable
+in principle while still having little grouping-level support. The package
+reports the parameter count and observed levels.
+
+```{r low-information}
+low_info <- compile_model(score ~ time + (1 + time | subject), low_study)
+diagnostics(low_info)$table[, c("code", "severity", "message")]
+```
+
+Third, unmodeled-but-possible: a fixed effect varies within group, but the
+random-effects formula does not include the corresponding slope. This is the
+quiet design note you saw for `(1 | subject)`.
+
+```{r unmodeled-possible}
+diagnostics(intercept_only)$table[, c("code", "severity", "message")]
+```
+
+```{r help-checks, include = FALSE}
+stopifnot("structural_refusal" %in% diagnostics(impossible)$table$code)
+stopifnot("covariance_too_rich" %in% diagnostics(low_info)$table$code)
+stopifnot("scope_note" %in% diagnostics(intercept_only)$table$code)
+```
+
+### How do you inspect nearby formulas?
+
+`random_options()` is a map of nearby random-effect spellings for one grouping
+factor. It marks the current spelling and reports parameter costs and support
+facts. It does not rank the rows.
+
+```{r random-options-map}
+random_options(intercept_only, group = subject, slope = time)
+```
+
+The same information is available as a data frame if you want to build a
+custom report.
+
+```{r random-options-table}
+opts <- random_options(intercept_only, group = subject, slope = time)
+opts$options[, c("formula", "theta_parameters", "design_status", "current")]
+```
+
+### Why is there no recommendation row?
+
+`mixeff` treats formula explanations as an audit problem, not a model-selection
+problem. The package reports the current model, nearby spellings, assumptions,
+and data-support facts. Choosing among scientifically different random-effects
+structures remains part of the analysis design.
+
+`compare_covariance()` gives another view of the same principle: full,
+diagonal, and scalar covariance families are displayed side by side, without a
+preferred row.
+
+```{r compare-covariance}
+compare_covariance(full)
+```
+
+```{r no-recommendation-check, include = FALSE}
+opts <- random_options(intercept_only, group = subject, slope = time)
+cmp <- compare_covariance(full)
+stopifnot(!"recommended" %in% tolower(names(opts$options)))
+stopifnot(!"recommended" %in% tolower(names(cmp$table)))
+```
+
+### Where do fitted-model changes appear?
+
+After fitting, `changes()` records the journey from the formula you
+wrote to the model the engine actually solved. Each row carries the
+stage at which something happened, the term it affected, the status
+of the change, and three side-by-side renderings: what was
+*requested*, what was *effective* (after design parsing and
+identifiability checks), and what was *fitted* (after the optimizer
+landed). A reduced-rank covariance estimate appears here as a
+labeled fact, not an instruction to rewrite the formula (boundary
+and reduced-rank outcomes are the subject of
+`vignette("convergence", package = "mixeff")`).
+
+The full row carries a lot of text. We show it in two passes so
+neither pass wraps awkwardly in the rendered vignette. The first
+pass names the stage of each change and its status:
+
+```{r fitted-changes-status}
+knitr::kable(
+  changes(full_fit)$table[, c("stage", "term_id", "status", "detail")]
+)
+```
+
+The second pass shows the requested → effective → fitted arc
+itself, where the three columns are the substance of the report:
+
+```{r fitted-changes-arc}
+knitr::kable(
+  changes(full_fit)$table[, c("stage", "requested", "effective", "fitted")]
+)
+```
+
+## Where to go next
+
+| Question | Where |
+|---|---|
+| What is the supported envelope, and how do fits persist across sessions? | `vignette("mixeff", package = "mixeff")` |
+| How are p-values computed, and which method is right for my fit? | `vignette("inference", package = "mixeff")` |
+| How do I compute marginal means and treatment contrasts? | `vignette("inference", package = "mixeff")` |
+| What do convergence statuses, boundaries, and singular fits mean? | `vignette("convergence", package = "mixeff")` |
+| Can I fit a binomial/Poisson/negative-binomial GLMM? | `vignette("glmm", package = "mixeff")` |
+| I'm coming from lme4 — what's different? | `vignette("lme4-migration", package = "mixeff")` |
+| How do I write up the results for a paper? | the [reporting article](https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.html) on the package site |

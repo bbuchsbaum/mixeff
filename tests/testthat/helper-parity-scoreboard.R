@@ -5,7 +5,7 @@
 #   - No ledger entry  -> strict expect_equal at the case tolerance.
 #                         Failure means an unclassified parity regression.
 #   - status pass      -> same as no entry (entry exists only for documentation).
-#   - status expected_mismatch / upstream_bug
+#   - status expected_mismatch / upstream_bug / upstream_limitation
 #                      -> assert observed_max_abs_diff <= entry$expected_max_abs_diff
 #                         and observed_max_rel_diff <= entry$expected_max_rel_diff,
 #                         then succeed() with the documented reason.
@@ -68,7 +68,7 @@ mm_scoreboard_classify_status <- function(status) {
       identical(status, "design_weak_identifiability")) {
     return(status)
   }
-  if (identical(status, "expected_mismatch") || identical(status, "upstream_bug")) {
+  if (status %in% c("expected_mismatch", "upstream_bug", "upstream_limitation")) {
     return("xfail")
   }
   "pass"

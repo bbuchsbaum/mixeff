@@ -32,7 +32,7 @@ depends-only check produced the same 0 errors, 0 warnings, 1 NOTE result.
 
 1. **CRAN incoming feasibility** — the single NOTE carries exactly two
    lines beyond the maintainer address: "New submission", and
-   "Size of tarball: 6340443 bytes" (the Rust sources are vendored for
+   "Size of tarball: 6240378 bytes" (the Rust sources are vendored for
    fully offline builds).
 
 ## Downstream dependencies

@@ -64,7 +64,8 @@ truth.
 Optimization runs inside a single native call with no progress output: the
 pre-fit explanation block (when \code{verbose >= 0}) is the last thing printed
 before the fitted result returns, and the call cannot be interrupted from
-R. Every optimizer budget is bounded, so fits always terminate; runtime on
+R. Evaluation budgets are bounded (a bounded budget caps optimizer
+iterations; it does not prove every native evaluation terminates); runtime on
 large problems is governed by \code{mm_control(max_feval = )}.
 }
 \examples{

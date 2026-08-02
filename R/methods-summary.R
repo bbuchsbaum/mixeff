@@ -152,7 +152,8 @@ summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...) {
     varcorr = VarCorr(object),
     tests = tests,
     inference = inference,
-    vcov_status = vcov_status
+    vcov_status = vcov_status,
+    estimator_substitution = mm_estimator_substitution(object)
   )
   class(out) <- "summary.mm_glmm"
   out
@@ -165,6 +166,15 @@ summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...) {
 ## available for univariate Wald z, but the mm_vcov_status attribute
 ## still flags the moderate / unavailable reliability for callers.
 mm_glmm_wald_z_inference <- function(object) {
+  # Explicit working-Hessian opt-in (WI-2.9): when the certified table
+  # refuses but the user unlocked the labelled approximation at fit time,
+  # build the rows from the noninferential covariance geometry, permanently
+  # labelled with method wald_z_working_hessian. The certified table always
+  # wins when it certifies.
+  cap <- mm_glmm_inference_capability(object)
+  if (isTRUE(cap$wald) && identical(cap$source, "working_hessian_opt_in")) {
+    return(mm_glmm_working_hessian_rows(object, cap))
+  }
   parsed <- mm_json_parse_fixed_effect_inference_table(
     object$artifact$fixed_effect_inference_table %||% NULL
   )
@@ -193,7 +203,9 @@ mm_glmm_wald_z_inference <- function(object) {
   Vfull <- stats::vcov(object)
   V <- as.matrix(unclass(Vfull))
   status <- list(
-    status      = attr(Vfull, "mm_status")      %||% "available",
+    # An absent status attribute is NOT capability: default to unavailable
+    # (an absent certificate is not a certificate; Audit1 WI-2.1).
+    status      = attr(Vfull, "mm_status")      %||% "unavailable",
     method      = attr(Vfull, "mm_method")      %||% NA_character_,
     reliability = attr(Vfull, "mm_reliability") %||% NA_character_,
     reason      = attr(Vfull, "mm_reason")      %||%
@@ -207,15 +219,15 @@ mm_glmm_wald_z_inference <- function(object) {
   }
   z <- beta / se
   p <- 2 * stats::pnorm(abs(z), lower.tail = FALSE)
-  method_used <- if (identical(status$status, "available")) {
-    "asymptotic"
-  } else {
-    "not_computed"
-  }
-  if (identical(method_used, "not_computed")) {
-    z[] <- NA_real_
-    p[] <- NA_real_
-  }
+  # This branch only runs when the certified inference table is absent
+  # (legacy/revived artifacts). An absent certificate is not a certificate,
+  # and the covariance payload's own status must not resurrect inference
+  # here that contrast()/mm_lincomb()/emmeans refuse via the arbiter on the
+  # same fit (WI-2.1: one contract across routes). Estimates and stored SEs
+  # stay visible; z/p are withheld.
+  method_used <- "not_computed"
+  z[] <- NA_real_
+  p[] <- NA_real_
   rows <- data.frame(
     term              = names(beta),
     label             = names(beta),
@@ -236,6 +248,44 @@ mm_glmm_wald_z_inference <- function(object) {
   out <- list(table = rows, raw = NULL)
   class(out) <- c("mm_inference_table", "list")
   attr(out, "mm_vcov_status") <- status
+  out
+}
+
+## Labelled working-Hessian Wald rows for the explicit fit-level opt-in
+## (`inference = "working_hessian"`, WI-2.9). SEs come from the
+## noninferential covariance geometry -- never from fit$std_errors, which
+## the engine deliberately leaves NaN for uncertified estimators. Every row
+## carries the approximation's own method name and moderate grade; the
+## status stays available_noninferential on purpose so no consumer can
+## mistake these for certified rows.
+mm_glmm_working_hessian_rows <- function(object, cap) {
+  beta <- as.numeric(object$beta)
+  names(beta) <- names(object$beta)
+  Vfull <- stats::vcov(object)
+  V <- as.matrix(unclass(Vfull))
+  se <- suppressWarnings(sqrt(diag(V)))
+  z <- beta / se
+  p <- 2 * stats::pnorm(abs(z), lower.tail = FALSE)
+  rows <- data.frame(
+    term              = names(beta),
+    label             = names(beta),
+    kind              = "coefficient",
+    estimate          = unname(beta),
+    std_error         = unname(se),
+    denominator_df    = NA_real_,
+    statistic         = unname(z),
+    statistic_name    = "z",
+    p_value           = unname(p),
+    method            = cap$method,
+    status            = cap$status,
+    reliability       = cap$reliability,
+    reliability_reason = cap$reason,
+    reason            = cap$reason,
+    stringsAsFactors  = FALSE
+  )
+  out <- list(table = rows, raw = NULL)
+  class(out) <- c("mm_inference_table", "list")
+  attr(out, "mm_vcov_status") <- mm_glmm_capability_status(cap)
   out
 }
 
@@ -292,11 +342,47 @@ print.summary.mm_glmm <- function(x, ...) {
     }
   }
   notes <- c(
+    # Substitution first, and independent of fit_status: a converged_* label
+    # on the fallback must not suppress the fact that a different estimator
+    # than requested produced these numbers (no silent surgery).
+    mm_estimator_substitution_note(x$estimator_substitution),
     mm_fit_status_note(x$fit_status, x$method),
+    mm_glmm_working_hessian_note(x),
     mm_glmm_withheld_inference_note(x, include_reason = !reason_printed)
   )
   mm_summary_print_notes(notes)
   invisible(x)
+}
+
+## Permanent caveat whenever any printed Wald column comes from the
+## working-Hessian opt-in: the label alone (method column) is easy to skim
+## past, so the note states the epistemic status in words (WI-2.9 tier 3).
+mm_glmm_working_hessian_note <- function(x) {
+  inf <- x$inference
+  if (is.null(inf) || is.null(inf$table) ||
+      !any(inf$table$method == "wald_z_working_hessian", na.rm = TRUE)) {
+    return(character())
+  }
+  paste0(
+    "Wald columns use the UNCERTIFIED working-Hessian approximation ",
+    "(requested via inference = \"working_hessian\"; reliability moderate). ",
+    "Its standard errors ran ~11% smaller than glmer's on the package's ",
+    "reference data (anti-conservative). For reporting, refit with ",
+    "method = \"joint_laplace\"."
+  )
+}
+
+mm_estimator_substitution_note <- function(sub) {
+  if (is.null(sub)) return(character())
+  sprintf(
+    paste0(
+      "estimator substitution: `%s` was requested but did not certify ",
+      "(status `%s`); these results come from the labelled `%s` fallback. ",
+      "The fit status above describes the fallback fit, not the requested ",
+      "estimator. Evidence: optimizer_certificate()."
+    ),
+    sub$requested_method, sub$requested_fit_status, sub$effective_method
+  )
 }
 
 # One plain-language sentence when every test statistic in the table is
@@ -316,7 +402,9 @@ mm_glmm_withheld_inference_note <- function(x, include_reason = TRUE) {
     paste0(
       "standard errors, z statistics, and p-values are not available from ",
       "the fast default method (pirls_profiled). Re-fit with ",
-      'method = "joint_laplace" for glmer-equivalent Wald inference.'
+      'method = "joint_laplace" for glmer-equivalent Wald inference, or ',
+      'use confint(fit, method = "bootstrap") for parametric-bootstrap ',
+      "intervals. inference_options(fit) lists every route."
     )
   } else {
     paste0(

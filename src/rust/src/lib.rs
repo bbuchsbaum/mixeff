@@ -1362,6 +1362,198 @@ fn mm_verify_convergence_json(
     })
 }
 
+/// GLMM convergence verification through
+/// `GeneralizedLinearMixedModel::verify_convergence_with_options`.
+///
+/// Refits the model from the bridge payload with the requested estimator and
+/// runs the engine-owned verification (restart from optimum plus jittered
+/// refits). When the refit of a substituted (fallback) fit falls back the
+/// same way, every run verifies the profiled objective the fitted numbers
+/// came from, with ordinary objective deltas; the engine reports a
+/// substitution run (no delta) only when the reference refit certifies the
+/// joint route but an individual run falls back.
+/// Options start from `ConvergenceVerificationOptions::glmm_defaults()`
+/// (no consensus pass; objective tolerance sized to the inner-PIRLS noise
+/// floor; beta tolerance sized to the joint path's derivative-free search);
+/// `options_json` carries R-side overrides.
+///
+/// @noRd
+#[extendr]
+fn mm_verify_convergence_glmm_json(
+    fit_payload: Robj,
+    options_json: &str,
+) -> std::result::Result<String, String> {
+    let overrides: Value = serde_json::from_str(options_json)
+        .map_err(|e| format!("mm_arg_error: invalid verification options JSON: {}", e))?;
+
+    let mut options = ConvergenceVerificationOptions::glmm_defaults();
+    if let Some(v) = overrides
+        .get("restart_from_optimum")
+        .and_then(Value::as_bool)
+    {
+        options.restart_from_optimum = v;
+    }
+    if let Some(v) = overrides.get("jitter_starts").and_then(Value::as_u64) {
+        options.jitter_starts = v as usize;
+    }
+    if let Some(v) = overrides.get("jitter_scale").and_then(Value::as_f64) {
+        options.jitter_scale = v;
+    }
+    if let Some(v) = overrides
+        .get("run_optimizer_consensus")
+        .and_then(Value::as_bool)
+    {
+        options.run_optimizer_consensus = v;
+    }
+    if let Some(v) = overrides
+        .get("max_function_evaluations")
+        .and_then(Value::as_u64)
+    {
+        options.max_function_evaluations = v as usize;
+    }
+    if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
+        options.objective_tolerance = v;
+    }
+    if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
+        options.theta_tolerance = v;
+    }
+    if let Some(v) = overrides.get("beta_tolerance").and_then(Value::as_f64) {
+        options.beta_tolerance = v;
+    }
+
+    let mut model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let verification = model
+        .verify_convergence_with_options(options)
+        .map_err(|e| {
+            format!(
+                "mm_inference_unavailable: convergence verification failed: {}",
+                e
+            )
+        })?;
+
+    serde_json::to_string(&verification).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize convergence verification: {}",
+            e
+        )
+    })
+}
+
+/// GLMM parametric bootstrap through
+/// `mixeff_rs::stats::bootstrap::parametricbootstrap_glmm`.
+///
+/// Refits the template model from the bridge payload, then for each
+/// replicate simulates a response under fresh random-effect draws and
+/// refits a clone, recording objective, dispersion, beta, descriptive
+/// replicate SEs, and theta. Failed refits are recorded as NaN replicates
+/// (the caller filters on objective finiteness -- no silent removal).
+/// Supported families: Bernoulli, Binomial, Poisson, NegativeBinomial
+/// (fixed-theta templates condition replicates on that theta;
+/// estimated-theta templates re-estimate theta per replicate), and Gamma. Deterministic under the caller-supplied `seed`.
+///
+/// @noRd
+#[extendr]
+fn mm_glmm_parametric_bootstrap_json(
+    fit_payload: Robj,
+    options_json: &str,
+) -> std::result::Result<String, String> {
+    let opts: Value = serde_json::from_str(options_json)
+        .map_err(|e| format!("mm_arg_error: invalid bootstrap options JSON: {}", e))?;
+    let nsim = opts
+        .get("nsim")
+        .and_then(Value::as_u64)
+        .filter(|v| *v >= 1)
+        .ok_or_else(|| "mm_arg_error: bootstrap nsim must be a positive integer".to_string())?
+        as usize;
+    let seed = opts
+        .get("seed")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "mm_arg_error: bootstrap seed must be a non-negative integer".to_string())?;
+
+    let model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let beta_names = model.coef_names();
+    let mut rng = StdRng::seed_from_u64(seed);
+    let boot = mixeff_rs::stats::bootstrap::parametricbootstrap_glmm(&mut rng, nsim, &model)
+        .map_err(|e| {
+            format!(
+                "mm_inference_unavailable: GLMM parametric bootstrap failed: {}",
+                e
+            )
+        })?;
+
+    let boot_json = serde_json::to_value(&boot).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize GLMM bootstrap replicates: {}",
+            e
+        )
+    })?;
+    serde_json::to_string(&serde_json::json!({
+        "beta_names": beta_names,
+        "requested": nsim,
+        "seed": seed,
+        "bootstrap": boot_json,
+    }))
+    .map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize GLMM bootstrap payload: {}",
+            e
+        )
+    })
+}
+
+fn fit_glmm_from_bridge_payload_robj(
+    payload: &Robj,
+    index: usize,
+) -> std::result::Result<GeneralizedLinearMixedModel, String> {
+    let payload_list = List::try_from(payload).map_err(|e| {
+        format!("mm_schema_error: GLMM bridge payload {index} must be a list: {e:?}")
+    })?;
+    let payload_map = list_to_map(&payload_list, &format!("GLMM bridge payload {index}"))?;
+    let spec_data = required_list(&payload_map, "spec_data", index)?;
+    let spec_map = list_to_map(
+        &spec_data,
+        &format!("GLMM bridge payload {index} spec_data"),
+    )?;
+
+    let formula = required_string(&payload_map, "formula_string", index)?;
+    let family = required_string(&payload_map, "family", index)?;
+    let link = required_string(&payload_map, "link", index)?;
+    let method = required_string(&payload_map, "method", index)?;
+    let n_agq_values = required_doubles(&payload_map, "n_agq", index)?;
+    let n_agq = n_agq_values
+        .iter()
+        .next()
+        .map(|v| v.0)
+        .filter(|v| v.is_finite() && *v >= 1.0)
+        .ok_or_else(|| {
+            format!("mm_schema_error: GLMM bridge payload {index} n_agq must be a positive number")
+        })? as i32;
+    let column_order = required_strings(&spec_map, "column_order", index)?;
+    let numeric_columns = required_list(&spec_map, "numeric_columns", index)?;
+    let categorical_values = required_list(&spec_map, "categorical_values", index)?;
+    let categorical_levels = required_list(&spec_map, "categorical_levels", index)?;
+    let categorical_ordered = required_strings(&spec_map, "categorical_ordered", index)?;
+    let weights = required_doubles(&payload_map, "weights", index)?;
+    let offset = required_doubles(&payload_map, "offset", index)?;
+    let control_json = required_string(&payload_map, "control_json", index)?;
+
+    fit_glmm_from_bridge_data(
+        &formula,
+        &family,
+        &link,
+        &method,
+        n_agq,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &categorical_ordered,
+        &weights,
+        &offset,
+        &control_json,
+    )
+}
+
 fn fit_lmm_from_bridge_data(
     formula: &str,
     reml: bool,
@@ -1786,6 +1978,10 @@ fn fixed_effect_term_test_type(
         "I" | "1" | "type_i" | "type_1" => Ok(FixedEffectTermTestType::TypeI),
         "II" | "2" | "type_ii" | "type_2" => Ok(FixedEffectTermTestType::TypeII),
         "III" | "3" | "type_iii" | "type_3" => Ok(FixedEffectTermTestType::TypeIII),
+        // Simple effects at reference levels under treatment coding: the
+        // hypothesis mixeff labelled "III" before engine 1f3f689, kept
+        // available under its honest name.
+        "block" | "coefficient_block" => Ok(FixedEffectTermTestType::CoefficientBlock),
         other => Err(format!(
             "mm_inference_unavailable: unsupported fixed-effect term test type `{other}`"
         )),
@@ -2462,6 +2658,8 @@ extendr_module! {
     fn mm_compare_models_json;
     fn mm_boundary_lrt_json;
     fn mm_verify_convergence_json;
+    fn mm_verify_convergence_glmm_json;
+    fn mm_glmm_parametric_bootstrap_json;
     fn mm_audit_report_text;
     fn mm_audit_report_summary_text;
     fn mm_audit_report_json;

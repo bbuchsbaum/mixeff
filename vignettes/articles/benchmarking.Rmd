@@ -78,6 +78,21 @@ stopifnot(nrow(benchmark) > 0L)
 stopifnot(all(c("rows", "groups", "slopes", "crossed",
                 "crossed_slope") %in% benchmark$scenario))
 stopifnot(all(c("lme4", "mixeff") %in% benchmark$engine))
+# Derive the prose numbers from the shipped CSV (two significant digits).
+mixeff_cells <- benchmark[benchmark$engine == "mixeff", ]
+stopifnot(all(mixeff_cells$speedup_vs_lme4 > 1))  # faster in every cell
+largest_scale <- do.call(rbind, lapply(
+  split(mixeff_cells, mixeff_cells$scenario),
+  function(d) d[which.max(d$scale_value), , drop = FALSE]
+))
+largest_speedup <- signif(largest_scale$speedup_vs_lme4, 2)
+stopifnot(min(largest_speedup) == 2.0, max(largest_speedup) == 3.5)
+stopifnot(signif(min(mixeff_cells$speedup_vs_lme4), 2) == 1.3)
+stopifnot(signif(max(mixeff_cells$speedup_vs_lme4), 2) == 3.5)
+stopifnot(identical(
+  mixeff_cells$scenario[which.max(mixeff_cells$speedup_vs_lme4)],
+  "crossed_slope"
+))
 ```
 
 The first figure plots the median fit time against design scale, on
@@ -249,84 +264,107 @@ calibration evidence: how often a method rejects under a null, how often it
 detects a small alternative, and whether interval routes cover that small
 alternative.
 
-The lightweight simulation scaffold records those three quantities over four
-fixtures: an interior fit, a boundary-like fit, a reduced-rank fit, and a
-small-group fit. The checked-in summary is produced by the default fast mode,
-which excludes bootstrap routes so the script runs in seconds. Slow mode adds
-bootstrap and bootstrap-LRT routes for local evidence gathering.
+The shipped artifact is produced by the simulation study's **release mode**:
+2,500 replications per analytic route (Monte Carlo SE at a true 0.05 rate:
+about 0.0044), 500 per bootstrap route (about 0.0097), and 1,000 for the
+certified joint-Laplace GLMM route. Every rate below carries a Wilson 95%
+interval, and every cell records requested, evaluated, refused, failed, and
+boundary replicate counts — nothing is silently dropped. The study covers
+four Gaussian LMM regimes (interior, boundary, reduced-rank, small-group)
+and one binomial GLMM fixture with three routes (certified joint Wald, the
+opt-in working-Hessian approximation, and the parametric bootstrap). That is
+the scope of the claim: calibration evidence **for these regimes**, not a
+general guarantee — a broader condition matrix (crossed effects, rare
+events, overdispersion) is future work.
+
+The artifact's provenance (package commit, engine pin, lockfile checksum,
+exact invocation, seeds) ships next to it as a manifest:
 
 ```{r inference-simulation-data}
-simulation_path <- system.file(
-  "extdata", "inference-method-simulation-summary.csv",
-  package = "mixeff"
-)
-if (!nzchar(simulation_path)) {
-  simulation_file <- file.path("inst", "extdata",
-                               "inference-method-simulation-summary.csv")
-  simulation_path <- if (file.exists(simulation_file)) {
-    simulation_file
-  } else {
-    file.path("..", simulation_file)
-  }
+locate_extdata <- function(file) {
+  path <- system.file("extdata", file, package = "mixeff")
+  if (nzchar(path)) return(path)
+  local_path <- file.path("inst", "extdata", file)
+  if (file.exists(local_path)) local_path else file.path("..", "..", local_path)
 }
-simulation <- read.csv(simulation_path, stringsAsFactors = FALSE)
-
-head(simulation)
+simulation <- read.csv(locate_extdata("inference-method-simulation-summary.csv"),
+                       stringsAsFactors = FALSE)
+manifest <- jsonlite::read_json(
+  locate_extdata("inference-method-simulation-manifest.json")
+)
+cat(sprintf(
+  "mode: %s | analytic reps: %d | bootstrap reps: %d | joint reps: %d\npackage %s @ %.9s | engine %.9s\nreproduce: %s\n",
+  manifest$mode, manifest$reps_analytic, manifest$reps_bootstrap,
+  manifest$reps_joint, manifest$package_version, manifest$package_commit,
+  manifest$rust_pin, manifest$invocation
+))
 ```
 
 ```{r inference-simulation-checks, include = FALSE}
-stopifnot(nrow(simulation) > 0L)
-stopifnot(all(c("method", "fixture", "mode", "n_reps", "type_I_error",
-                "power_at_alt", "coverage_at_alt") %in% names(simulation)))
+# The vignette refuses to present smoke-mode output as calibration evidence,
+# and the shipped artifact must meet the release-mode replication floor.
+stopifnot(identical(manifest$mode, "release"))
+stopifnot(manifest$reps_analytic >= 2500L, manifest$reps_bootstrap >= 500L)
+stopifnot(all(c("method", "fixture", "mode", "n_requested",
+                "n_evaluated_null", "n_refused_null", "n_boundary_null",
+                "type_I_error", "type_I_lower", "type_I_upper",
+                "coverage_at_alt", "coverage_lower", "coverage_upper",
+                "reason") %in% names(simulation)))
+stopifnot(all(simulation$mode == "release"))
+ran <- simulation[simulation$n_requested > 0, ]
+stopifnot(nrow(ran) > 0L)
+# Accounting closes: evaluated + refused + failed + fit_failed == requested.
+stopifnot(all(ran$n_evaluated_null + ran$n_refused_null +
+                ran$n_failed_null + ran$n_fit_failed_null == ran$n_requested))
 ```
 
-```{r inference-simulation-command, eval = FALSE}
-system2(
-  "Rscript",
-  c(
-    "inst/benchmarks/inference-method-simulation.R",
-    "--mode=slow",
-    "--reps=100",
-    "--nsim=199"
-  )
-)
-```
+The plot shows each route's empirical rates with their Wilson intervals.
+P-value routes contribute Type I error and power; interval routes contribute
+coverage. Rates are conditional on a successful evaluation; the CSV also
+carries unconditional versions (refusals and failures counted against the
+route) and the full replicate accounting. Routes that did not run carry an
+explicit `reason` — "excluded in this mode" is machine-distinguishable from
+"not wired".
 
-The plot below shows whichever metrics are available for each route. P-value
-routes contribute Type I error and power; interval routes contribute coverage.
-Routes that did not run — whether because fast mode skips them or because
-they are not wired in the current package version — appear in the CSV with
-`n_reps = 0` and `NA` metrics; the CSV does not record which of those two
-reasons applies.
-
-```{r inference-simulation-plot, eval = requireNamespace("ggplot2", quietly = TRUE), fig.width = 8, fig.height = 5, fig.alt = "Inference simulation metrics by method and fixture."}
+```{r inference-simulation-plot, eval = requireNamespace("ggplot2", quietly = TRUE), fig.width = 8, fig.height = 6, fig.alt = "Inference calibration: Type I error, power, and coverage with Wilson intervals, by method and fixture."}
 library(ggplot2)
 
-simulation_long <- stats::reshape(
-  simulation,
-  varying = c("type_I_error", "power_at_alt", "coverage_at_alt"),
-  v.names = "value",
-  timevar = "metric",
-  times = c("Type I error", "Power at small alternative", "Coverage at small alternative"),
-  direction = "long"
+metric_frame <- function(d, value, lower, upper, label) {
+  out <- d[, c("method", "fixture", value, lower, upper)]
+  names(out) <- c("method", "fixture", "value", "lower", "upper")
+  out$metric <- label
+  out
+}
+simulation_long <- rbind(
+  metric_frame(ran, "type_I_error", "type_I_lower", "type_I_upper",
+               "Type I error"),
+  metric_frame(ran, "power_at_alt", "power_lower", "power_upper",
+               "Power at small alternative"),
+  metric_frame(ran, "coverage_at_alt", "coverage_lower", "coverage_upper",
+               "Coverage at small alternative")
 )
-simulation_long <- subset(simulation_long, n_reps > 0 & is.finite(value))
+simulation_long <- subset(simulation_long, is.finite(value))
 simulation_long$metric <- factor(
   simulation_long$metric,
   levels = c("Type I error", "Power at small alternative",
              "Coverage at small alternative")
 )
+nominal <- data.frame(
+  metric = factor(c("Type I error", "Coverage at small alternative"),
+                  levels = levels(simulation_long$metric)),
+  y = c(0.05, 0.95)
+)
 
-ggplot(simulation_long, aes(method, value, fill = method)) +
-  geom_col(width = 0.7, show.legend = FALSE) +
+ggplot(simulation_long, aes(method, value)) +
+  geom_hline(data = nominal, aes(yintercept = y), linetype = 2,
+             linewidth = 0.3, colour = "grey40") +
+  geom_pointrange(aes(ymin = lower, ymax = upper), linewidth = 0.4,
+                  fatten = 1.5) +
   facet_grid(metric ~ fixture) +
-  coord_cartesian(ylim = c(0, 1)) +
-  labs(x = NULL, y = "empirical proportion") +
+  coord_flip(ylim = c(0, 1)) +
+  labs(x = NULL, y = "empirical proportion (Wilson 95% interval)") +
   theme_minimal(base_size = 10) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    panel.grid.minor = element_blank()
-  )
+  theme(panel.grid.minor = element_blank())
 ```
 
 ## How do you read the result?

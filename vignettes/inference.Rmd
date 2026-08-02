@@ -1,8 +1,8 @@
 ---
-title: Inference You Can Report
+title: Inference
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Inference You Can Report}
+  %\VignetteIndexEntry{Inference}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -30,7 +30,18 @@ one.
 When a coefficient, contrast, or term test has an available method,
 the p-value is printed with the method name. When the requested
 method is unavailable on this fit, the row says so, with a stable
-[reason](inference-method-glossary.html) rather than an apologetic substitute.
+reason code rather than an apologetic substitute. The full vocabulary
+of reason codes, and the grading rubric behind the `reliability`
+column, live in the inference-method glossary on the package site
+(<https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html>);
+this vignette points there rather than restating them.
+
+This vignette covers the whole inference surface: coefficient tests,
+contrasts, term tests, and model comparisons on a well-behaved fit;
+the full route map — including what is refused at a boundary fit and
+why; the GLMM three-route contract; and the marginal-means verbs,
+starting with the question every marginal summary should answer first:
+*which estimand are you averaging toward?*
 
 ## What model are we fitting?
 
@@ -86,7 +97,7 @@ the engine's always-computable baseline — so their p-values are smaller
 than the Satterthwaite ones above, and their `reliability` column says
 `low`. This is the raw artifact, useful for audit; for reporting, use
 `summary()` or `reporting_table()`, which resolve to the best feasible
-method.
+method and agree with each other row for row.
 
 ```{r inference-table}
 inference_table(fit)
@@ -96,6 +107,12 @@ inference_table(fit)
 inf <- inference_table(fit)$table
 stopifnot(any(inf$status == "available"))
 stopifnot(all(is.finite(inf$p_value[inf$status == "available"])))
+stopifnot(all(coef_table$method == "satterthwaite"))
+# The Wald-z baseline p-values are smaller than the Satterthwaite ones.
+p_col <- grep("^Pr\\(", names(coef_table), value = TRUE)[[1L]]
+avail <- inf$status == "available"
+satt_p <- coef_table[[p_col]][match(inf$term[avail], rownames(coef_table))]
+stopifnot(all(inf$p_value[avail] <= satt_p + 1e-12))
 ```
 
 ## Contrasts
@@ -138,6 +155,21 @@ stopifnot(any(av$table$status == "available"))
 stopifnot(is.finite(te$table$p_value))
 ```
 
+`type` selects the term hypothesis. `"III"` (the default) is marginal
+Type III: a term's own contrast columns plus the equally-weighted average
+over the levels of every term that contains it. That construction makes
+the test invariant to which factor level is the reference — the defining
+property of Type III, and what SAS, `car`, and `lmerTest` compute.
+`"II"` respects marginality; `"I"` is sequential in `terms()` order.
+
+There is a fourth value, `"block"`, for the raw coefficient block of each
+term. Under treatment coding that is the *simple effect at the other
+factors' reference levels* — a legitimate quantity, but not Type III. On
+an unbalanced design the two can disagree sharply: on the package's test
+fixture the same fit gives F = 0.29 for a main effect under `"block"` and
+F = 49.95 under `"III"`. If you want simple effects, ask for them by
+name; if you want Type III, the default is Type III.
+
 ## Model comparisons
 
 For nested fixed-effect comparisons, fit the reduced model and compare it with
@@ -155,10 +187,12 @@ compare(reduced, fit)
 
 `compare()` records that likelihood-ratio p-values are asymptotic. If you want
 a simulation-based check for a small example, use the bootstrap path. The
-bootstrap p-value is `(b + 1) / (nsim + 1)`, where `b` counts replicates at
-or above the observed statistic, so at `nsim = 10` the smallest reportable
-value is 1/11 — use hundreds of replicates before reading the p-value as a
-number rather than a bound.
+bootstrap p-value is `(b + 1) / (successful + 1)`, where `b` counts
+replicates at or above the observed statistic and `successful` counts the
+refits that completed with a finite statistic — equal to `nsim` only when
+every replicate succeeds, as it does in these seeded runs. So at
+`nsim = 10` the smallest reportable value is 1/11 — use hundreds of
+replicates before reading the p-value as a number rather than a bound.
 
 ```{r bootstrap-comparison}
 compare(reduced, fit, method = "bootstrap", nsim = 10, seed = 7)
@@ -171,45 +205,860 @@ stopifnot(is.finite(cmp$table$p_value[[2L]]))
 stopifnot(identical(boot$table$method[[2L]], "parametric_bootstrap_lrt"))
 stopifnot(boot$table$status[[2L]] %in% c("available", "not_assessed"))
 if (identical(boot$table$status[[2L]], "available")) {
-  stopifnot(is.finite(boot$table$p_value[[2L]]))
+  boot_p <- boot$table$p_value[[2L]]
+  stopifnot(is.finite(boot_p))
+  # The p-value sits on the (b + 1) / (successful + 1) grid; all 10 seeded
+  # replicates succeed here, so the denominator is 11.
+  grid_pos <- boot_p * 11
+  stopifnot(abs(grid_pos - round(grid_pos)) < 1e-8)
+  stopifnot(boot_p >= 1 / 11 - 1e-12)
 }
 ```
 
-## Unavailable is still useful information
+## When standard p-values are not well justified
 
-Population-level prediction standard errors and intervals are available via
-`re.form = NA` (the Wald SE of the fixed-effect linear predictor):
+Mixed models sometimes converge but still leave us in a difficult
+inference situation. The fit exists, the estimates are usable, and
+the model may be scientifically reasonable, but some familiar
+p-values are no longer well justified.
 
-```{r prediction-se-population}
-pop <- predict(fit, re.form = NA, se.fit = TRUE)
-head(pop$se.fit)
-head(predict(fit, re.form = NA, interval = "confidence"))
+The common case is a boundary or singular fit: a variance component
+estimated at or near zero, or random-effect terms estimated as
+perfectly correlated — equivalently, a fitted random-effect covariance
+with lower effective rank than the model requested. What those labels
+mean, how they are recorded on the object, and how singularity is
+decided are covered in `vignette("convergence")`; here we take the
+labels as given and ask what they do to inference.
+
+The statistical background is well known. Self and Liang (1987) showed
+that likelihood-ratio statistics do not necessarily follow their
+usual chi-square reference distributions when a parameter lies on
+the boundary of its parameter space. Stram and Lee (1994) specialized
+this issue to variance components in linear mixed models. Kenward and
+Roger (1997) derived their fixed-effect adjustment from a Taylor
+expansion of the variance estimator; that derivation assumes a regular
+interior solution for the variance parameters, and at a boundary those
+derivatives may not exist or may not behave regularly. Parametric
+bootstrap methods have a long history as the better-supported route in
+this setting; Halekoh and Højsgaard (2014) implemented them in
+`pbkrtest` for small-sample and boundary cases.
+
+`mixeff` handles this by making the inference rules explicit. Asymptotic
+rows are labeled with a reliability reason from a fixed vocabulary,
+such as `asymptotic_wald_z_fallback` or `*_unavailable_at_boundary`,
+and bootstrap inference is exposed as a labeled method rather than an
+informal workaround. The goal is not to say that a singular fit is
+automatically useless; it is to keep the covariance state attached to
+the inference result, so that available numbers and unavailable numbers
+are both documented.
+
+This small repeated-measures example has subject-specific intercepts
+and slopes that are nearly collinear by construction — enough to
+produce a reduced-rank random-effect covariance estimate.
+
+```{r singular-data, include = FALSE}
+set.seed(3)
+n_subj <- 18L
+days <- 0:9
+b0 <- rnorm(n_subj, sd = 30)
+b1 <- 0.5 * b0 / 30 * 10 + rnorm(n_subj, sd = 0.5)
+
+sleep_like <- do.call(rbind, lapply(seq_len(n_subj), function(i) {
+  data.frame(
+    subj = factor(i),
+    days = days,
+    rt = 250 + b0[i] + (10 + b1[i]) * days +
+      rnorm(length(days), sd = 20)
+  )
+}))
 ```
 
-*Conditional* prediction standard errors (the default, `re.form = NULL`) come
-from the engine's prediction-variance payload, which combines the
-fixed-effect Wald variance with the random-effect (BLUP) variance and the
-fixed/random covariance. The covariance term can be negative, so the
-conditional SE is often *smaller* than the population SE, as it is here.
-(`lme4`'s `predict.merMod()` has offered `se.fit` since version 1.1-35,
-and its conditional standard errors agree with these values closely on
-this model.) Conditional confidence and prediction intervals come from
-the same payload.
+```{r fit-singular}
+sfit <- lmm(
+  rt ~ days + (1 + days | subj),
+  sleep_like,
+  control = mm_control(verbose = -1)
+)
 
-```{r prediction-se}
-pred <- predict(fit, se.fit = TRUE)
-head(pred$fit)
-head(pred$se.fit)
-head(predict(fit, interval = "confidence"))
+fit_status(sfit)
+is_singular(sfit)
 ```
 
-The boundary has moved, not vanished: rows the engine cannot certify — for
-example an unseen grouping level predicted with `allow.new.levels = TRUE`,
-where there is no posterior variance for the missing level — still return
-`NA` with the engine's reason in the `mm_reason` attribute rather than a
-fabricated number.
-
-```{r unavailable-checks, include = FALSE}
-stopifnot(all(is.finite(pop$se.fit)))
-stopifnot(all(is.finite(pred$se.fit)), all(pred$se.fit > 0))
+```{r singular-checks, include = FALSE}
+stopifnot(inherits(sfit, "mm_lmm"))
+stopifnot(isTRUE(is_singular(sfit)))
+stopifnot(identical(fit_status(sfit), "converged_reduced_rank"))
 ```
+
+## The route map
+
+Before testing a term, ask which inference routes are defined for this fit.
+`inference_options()` is an audit map, not a recommender. Each row describes one
+method that `mixeff` knows about. The row says whether the method can run, why
+it can or cannot run, and what the rough computational cost is.
+
+The printed object is the reader-facing map. It keeps the raw enum
+columns in `routes$table` for scripts, but explains the route status
+with display columns. The complete contract vocabulary is in the
+[inference-method glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html).
+
+```{r route-map}
+routes <- inference_options(sfit, "days", nsim = 200)
+routes
+```
+
+```{r route-checks, include = FALSE}
+stopifnot("bootstrap" %in% routes$table$method)
+satt <- routes$table[routes$table$method == "satterthwaite", ]
+stopifnot(identical(satt$expected_status, "not_assessed"))
+stopifnot(identical(satt$expected_reliability_reason,
+                    "satterthwaite_unavailable_at_boundary"))
+```
+
+Read this table as follows. The Wald route can run immediately, but it
+is labeled as a low-reliability asymptotic fallback. Satterthwaite and
+Kenward–Roger are refused on this fit by mixeff's validated-support
+policy: both approximations are derived under asymptotics that assume
+the variance parameters lie in the interior of their parameter space,
+and this fit has a variance parameter on the boundary. Other packages
+will compute degrees of freedom here (`lmerTest` returns a number on
+this same fit); `mixeff` declines to, and states the refusal as a
+stable reason code — `satterthwaite_unavailable_at_boundary`,
+`kenward_roger_unavailable_at_boundary` — you can test for. That is a
+policy about what the package will certify, not a theorem that the
+numbers other packages print are wrong.
+
+The parametric bootstrap route can run and is the documented
+fixed-effect testing route for this fit. The bootstrap LRT route is
+refused here because this model was fit by REML, while that route
+requires an ML fit (`bootstrap_lrt_requires_ml`). The cluster bootstrap
+route is refused for fixed-effect p-values because its current target
+is an estimator distribution, not a null hypothesis test. Profile
+confidence intervals are not certified for this boundary fit
+(`profile_ci_unavailable_at_boundary`).
+
+```{r wald-status}
+inference_table(sfit)$table[, c("term", "method", "status",
+                                "reliability", "reliability_reason")]
+```
+
+`asymptotic_wald_z_fallback` on these rows is the engine's reason: a
+*t* reference distribution was the target, the degrees of freedom could
+not be computed at this boundary fit, and a standard normal was
+substituted — which is why the row is graded `low` rather than hidden.
+The *z* test drops the finite-sample correction, so treat its p-values
+as optimistic rather than cautious.
+
+```{r wald-status-checks, include = FALSE}
+sinf <- inference_table(sfit)$table
+stopifnot(all(sinf$reliability[sinf$status == "available"] == "low"))
+stopifnot(all(sinf$reliability_reason[sinf$status == "available"] ==
+                "asymptotic_wald_z_fallback"))
+```
+
+The important point is that `mixeff` distinguishes three cases:
+
+1. A method can run and is considered available.
+2. A method can produce a number, but the number is labeled as low reliability.
+3. A method is refused because the method's assumptions or target are not
+   defined for this fit.
+
+That distinction is especially useful in scripts and reports, because
+unavailable inference is recorded with stable reason codes rather than
+disappearing as an error message.
+
+## How do I test the term anyway?
+
+For the fixed-effect term `days`, request the parametric bootstrap route
+explicitly. Here the bootstrap target is a fixed-effect null model. `mixeff`
+simulates data under the null hypothesis for the tested term, refits the model
+to each simulated data set, and compares the observed test statistic with the
+bootstrap reference distribution.
+
+The small `nsim` value below keeps the vignette fast, and it earns a `low`
+reliability grade: per the package's grade rubric (see the
+inference-method glossary linked above), a certified bootstrap reaches
+`moderate` at 999 or more successful replicates with a finite Monte
+Carlo SE, and stays `low` below that floor. The reason to use bootstrap
+here is not the grade — it is that the p-value rests on simulation
+rather than on asymptotics that mixeff refuses to certify at the
+boundary.
+
+```{r bootstrap-term}
+term_boot <- test_effect(
+  sfit,
+  "days",
+  method = "bootstrap",
+  bootstrap = bootstrap_control(nsim = 50, seed = 1)
+)
+
+term_boot$table[, c("term", "statistic_name", "p_value", "method",
+                    "status", "reliability", "reliability_reason")]
+```
+
+```{r bootstrap-term-checks, include = FALSE}
+stopifnot(identical(term_boot$table$status, "available"))
+stopifnot(identical(term_boot$table$method, "bootstrap"))
+stopifnot(is.finite(term_boot$table$p_value))
+```
+
+The p-value is returned as part of the labeled result row. It is not
+reconstructed by hand in R.
+
+The result also carries a bootstrap payload in `details`, including the
+requested number of replicates, the number of successful refits, the boundary
+rate among bootstrap refits, and the Monte Carlo standard error.
+
+```{r bootstrap-payload}
+run <- term_boot$table$details[[1]]$bootstrap
+data.frame(
+  requested_replicates = run$requested_replicates,
+  successful_replicates = run$successful_replicates,
+  boundary_rate = round(run$boundary_rate, 3),
+  mcse = round(run$mcse, 4)
+)
+```
+
+The boundary rate is not a failure count. It reports how often the bootstrap
+refits also ended on a covariance boundary. That is useful diagnostic
+information: it tells you that the boundary behavior is not just a one-off
+feature of the observed data set.
+
+With `nsim = 50`, the bootstrap p-value is also necessarily coarse. For example,
+a p-value of about 0.0196 corresponds to the smallest non-zero value possible
+under a common plus-one bootstrap adjustment, `1 / (successful + 1)` — here
+all 50 replicates succeeded, as the accounting above shows, so 1/51. Use more
+replicates when the p-value itself will be reported or compared with a decision
+threshold.
+
+## What about confidence intervals?
+
+For fixed-effect confidence intervals, use `confint(method = "bootstrap")`.
+This bootstrap has a different target from the fixed-effect test above. It
+simulates from the full fitted model and summarizes the resulting estimator
+distribution. That target is appropriate for percentile-style confidence
+intervals and diagnostics, but it is not the same as a null distribution for a
+fixed-effect p-value.
+
+```{r bootstrap-ci}
+ci <- confint(
+  sfit,
+  parm = "days",
+  method = "bootstrap",
+  bootstrap = bootstrap_control(nsim = 50, seed = 2)
+)
+
+ci
+```
+
+```{r bootstrap-ci-checks, include = FALSE}
+stopifnot(all(is.finite(ci)))
+stopifnot(identical(attr(ci, "method"), "bootstrap_full_model_distribution"))
+payload <- attr(ci, "bootstrap")[[1]]
+stopifnot(identical(payload$metadata$target$kind, "full_model_distribution"))
+stopifnot(length(payload$replicate_statistics) >= payload$metadata$successful_replicates,
+          length(payload$replicate_statistics) <= payload$metadata$completed_replicates)
+```
+
+The attached bootstrap payload records what was simulated and why the interval
+should not be reinterpreted as a fixed-effect hypothesis test.
+
+```{r ci-payload}
+payload <- attr(ci, "bootstrap")[[1]]
+payload$metadata$target$kind
+payload$metadata$notes
+```
+
+This distinction is central:
+
+- `test_effect(..., method = "bootstrap")` uses a fixed-effect null target and
+  returns a p-value.
+- `confint(..., method = "bootstrap")` uses a full-model estimator-distribution
+  target and returns an interval.
+- The second result should not be used to reverse-engineer the first.
+
+## Where does cluster bootstrap stand?
+
+Cluster resampling is available as an estimator-distribution target. It
+resamples grouping levels and summarizes how estimates vary across those
+resamples.
+
+In the current schema, that target does not certify fixed-effect p-values.
+Therefore a request for a fixed-effect cluster-bootstrap p-value refuses cleanly
+instead of inventing a null distribution.
+
+```{r cluster-refusal}
+cluster_row <- test_effect(
+  sfit,
+  "days",
+  method = "cluster_bootstrap",
+  group = "subj"
+)
+
+cluster_row$table[, c("term", "method", "status", "p_value", "reason_code")]
+```
+
+```{r cluster-checks, include = FALSE}
+stopifnot(identical(cluster_row$table$status, "not_assessed"))
+stopifnot(is.na(cluster_row$table$p_value))
+stopifnot(identical(cluster_row$table$reason_code,
+                    "bootstrap_cluster_resample_p_value_unavailable"))
+```
+
+That refusal is part of the same inference contract as the available bootstrap
+result. Available numbers are labeled with their method and reliability reason.
+Unavailable numbers are labeled with stable reason codes explaining why they
+are unavailable.
+
+## Variance-component boundary tests
+
+The boundary likelihood-ratio route is for random-effect variance components,
+not ordinary fixed effects.
+
+This is a different testing problem. For a variance component, the null
+hypothesis can put the parameter exactly on the boundary of the parameter space,
+because variances cannot be negative. In the simplest one-component case, the
+*asymptotic* reference distribution is the Self-Liang 50:50 mixture,
+`0.5 * chi-square(0) + 0.5 * chi-square(1)`. In finite samples the true
+null distribution puts more mass at zero than the mixture, so the test
+runs conservative (Crainiceanu and Ruppert 2004); with 18 subjects here,
+read a marginal mixture p-value with that in mind.
+
+Fit a simpler random-intercept model by ML:
+
+```{r boundary-lrt}
+ri_fit <- lmm(
+  rt ~ days + (1 | subj),
+  sleep_like,
+  REML = FALSE,
+  control = mm_control(verbose = -1)
+)
+
+re_lrt <- test_random_effect(ri_fit, "subj", method = "boundary_lrt")
+re_lrt
+```
+
+```{r boundary-lrt-table}
+reporting_table(re_lrt)$table[, c("term", "statistic", "p_value",
+                                  "reference_distribution", "status")]
+```
+
+```{r boundary-lrt-checks, include = FALSE}
+stopifnot(inherits(re_lrt, "mm_random_effect_test"))
+stopifnot(identical(re_lrt$table$status, "available"))
+stopifnot(identical(re_lrt$table$reference_distribution,
+                    "0.5 * chi-square(0) + 0.5 * chi-square(1)"))
+stopifnot(is.finite(re_lrt$table$p_value))
+```
+
+The reporting table keeps the reference distribution attached to the result.
+
+Asking for the same method on a fixed effect returns a typed refusal.
+
+```{r boundary-fixed-refusal}
+fixed_boundary <- test_effect(ri_fit, "days", method = "boundary_lrt")
+fixed_boundary$table[, c("term", "method", "status", "reason_code")]
+```
+
+Boundary likelihood-ratio theory applies to variance-component tests,
+where the null hypothesis places a variance on the edge of the parameter
+space. A fixed-effect null does not put any parameter on a boundary, so
+the mixture distribution has nothing to correct there — which is why the
+route refuses rather than running.
+
+```{r boundary-fixed-checks, include = FALSE}
+stopifnot(identical(fixed_boundary$table$status, "unsupported"))
+stopifnot(identical(fixed_boundary$table$reason_code,
+                    "boundary_lrt_not_applicable_to_fixed_effects"))
+```
+
+## Profile confidence intervals
+
+Profile-likelihood intervals are available for variance parameters
+under both fitting criteria, but fixed-effect (beta) profile intervals
+require an ML fit: under the REML default, the beta rows are recorded
+as unavailable with the reason code
+`profile_beta_unavailable_under_reml`, not silently approximated.
+
+```{r profile-ci}
+prof <- confint(fit, method = "profile")
+prof
+attr(prof, "mm_profile")$table[
+  ,
+  c("parameter", "parameter_kind", "lower", "upper", "reason_code")
+]
+```
+
+```{r profile-checks, include = FALSE}
+ptab <- attr(prof, "mm_profile")$table
+beta_rows <- ptab$parameter_kind == "beta"
+stopifnot(any(beta_rows), any(!beta_rows))
+stopifnot(all(is.na(ptab$lower[beta_rows])))
+stopifnot(all(ptab$reason_code[beta_rows] ==
+                "profile_beta_unavailable_under_reml"))
+stopifnot(all(is.finite(ptab$lower[!beta_rows])),
+          all(is.finite(ptab$upper[!beta_rows])))
+```
+
+Refit with `REML = FALSE` when you want beta profile intervals. On
+boundary fits, profile intervals are refused outright
+(`profile_ci_unavailable_at_boundary`), as the route map above showed.
+
+## GLMM inference: the three-route contract
+
+For generalized linear mixed models the contract is stricter, because
+the default estimator is not certified for Wald inference. `glmm()`'s
+default `method = "pirls_profiled"` is a fast profiled PIRLS fitter: it
+returns point estimates, fitted values, and variance components, but
+**refuses Wald standard errors, z statistics, p-values, and confidence
+intervals on every route**. Its covariance payload is a working Hessian
+the engine does not certify, and the engine's own documentation warns
+that the profiled path is a different statistical approximation than
+`glmer()`'s joint Laplace fit — it can be less accurate for
+overdispersed models and models with observation-level random effects.
+
+Exactly three routes lead to reportable GLMM inference, and every
+refusal names them:
+
+1. **Certified joint Wald.** Refit with `method = "joint_laplace"`;
+   standard errors, z tests, and Wald intervals come from a covariance
+   the engine certifies. `vignette("glmm")` is the operational
+   quickstart for this route, including its parity with `glmer()` and
+   its runtime notice.
+2. **Parametric bootstrap on profiled fits.**
+   `confint(fit, method = "bootstrap")` simulates from the fitted model
+   and refits the same profiled estimator. It works for every supported
+   family, including negative binomial — which has no joint-Laplace
+   route, so the bootstrap is its only interval path — and costs `nsim`
+   refits. On `joint_laplace` fits the bootstrap is refused at this
+   engine pin; those fits have certified Wald intervals instead.
+3. **Working-Hessian approximation, explicit opt-in.** For exploration
+   and screening only. Every unlocked row is labeled
+   `wald_z_working_hessian` with status `available_noninferential` and
+   grade `moderate`; `inference_options(fit)` states the caveat and the
+   invocation, and the aphantasia reproduction article
+   (<https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html>)
+   is the worked example of why this route is opt-in.
+
+The practical rule: explore with the default, report with
+`joint_laplace` or the bootstrap.
+
+Here is the contract on a small simulated binomial GLMM. On the
+default fit, `summary()` prints the estimates and withholds the
+inference columns:
+
+```{r glmm-data, include = FALSE}
+set.seed(7)
+g <- factor(rep(1:12, each = 12))
+x <- rnorm(144)
+eta <- -0.3 + 0.8 * x + rep(rnorm(12, sd = 0.5), each = 12)
+trials <- data.frame(y = rbinom(144, 1, plogis(eta)), x = x, g = g)
+```
+
+```{r glmm-fit}
+gfit <- glmm(
+  y ~ x + (1 | g),
+  trials,
+  family = binomial(),
+  control = mm_control(verbose = -1)
+)
+
+gtab <- summary(gfit, tests = "coefficients")$coefficients
+gtab
+```
+
+A Wald `confint()` on the same fit is a typed refusal, not an error to
+guess about:
+
+```{r glmm-refusal}
+err <- tryCatch(confint(gfit), error = identity)
+class(err)[[1L]]
+writeLines(strwrap(conditionMessage(err), width = 72))
+```
+
+The bootstrap route works on the same fit, and the interval carries its
+accounting: requested, successful, and failed replicate counts,
+replicate-SD standard errors, the Monte Carlo SE, and a reliability
+grade. The replicate floor for a `moderate` grade is the rubric's
+999-successful-replicates convention (see the glossary linked above);
+the small, seeded run below stays `low` by that rubric.
+
+```{r glmm-bootstrap-ci}
+gci <- confint(gfit, method = "bootstrap", nsim = 30, seed = 42)
+gci
+
+acct <- attr(gci, "mm_bootstrap")
+data.frame(
+  requested = acct$requested,
+  successful = acct$successful,
+  failed = acct$failed,
+  mcse = round(acct$mcse, 4),
+  reliability = acct$reliability$reliability
+)
+attr(gci, "mm_method")
+```
+
+```{r glmm-checks, include = FALSE}
+stopifnot(inherits(gfit, "mm_glmm"))
+# Default path: estimates present, inference withheld (all SEs NA).
+stopifnot(!any(is.finite(gtab[, "Std. Error"])))
+# Wald confint refuses with a typed condition naming the alternatives.
+stopifnot(inherits(err, "mm_inference_unavailable"))
+stopifnot(grepl("joint_laplace", conditionMessage(err), fixed = TRUE))
+stopifnot(grepl("bootstrap", conditionMessage(err), fixed = TRUE))
+# Bootstrap interval: finite, ordered, with exact replicate accounting.
+stopifnot(all(is.finite(gci)), all(gci[, 1L] < gci[, 2L]))
+stopifnot(identical(acct$requested, 30L))
+stopifnot(identical(acct$requested, acct$successful + acct$failed))
+stopifnot(is.finite(acct$mcse))
+stopifnot(identical(acct$reliability$reliability, "low"))
+stopifnot(identical(attr(gci, "mm_method"),
+                    "glmm_parametric_bootstrap_percentile"))
+stopifnot(identical(attr(gci, "mm_estimator"), "pirls_profiled"))
+```
+
+The estimator mechanics — how the two estimators differ, the `nAGQ`
+sensitivity check, and the joint-Laplace parity with `glmer()` — are
+covered in `vignette("glmm")`. If a `joint_laplace` request does not
+certify and the engine returns a labelled fallback fit, that
+substitution is a typed record with its own notices; see
+`vignette("convergence")`.
+
+## Estimands: what are you averaging?
+
+A fixed-effect coefficient is not a group mean. For a model with
+multiple predictors and interactions, `fixef(fit)["trtactive"]` is the
+treatment effect *at the reference level of every other predictor* —
+one cell of the design, not a summary over it. Before averaging cells
+into something more interpretable, name the estimand. Four quantities
+are easy to conflate:
+
+1. **A prediction at a covariate cell** — the model's fixed-effect
+   prediction at one row of the reference grid. This is what
+   `mm_predictions()` returns.
+2. **An equal-weight reference-grid average** — the average of cell
+   predictions over the grid, weighting every cell equally regardless
+   of how many observations fall in it. This is what `mm_means()`
+   returns, and what `mm_comparisons()` differences.
+3. **An empirical-distribution average** — the average of predictions
+   over the observed covariate rows, weighted as the data are
+   weighted. `mixeff` has no dedicated verb for this; it is what you
+   get by averaging `predict()` over the model frame.
+4. **A causal average treatment effect** — the expected difference in
+   potential outcomes under treatment versus control. Only this one is
+   a causal quantity, and no mixed-model contrast supplies it by
+   itself: it requires identification assumptions (randomization, or
+   conditional ignorability given the model's covariates) that are
+   properties of the study design, not of the fit.
+
+The first three are model-based summaries that differ only in how they
+weight covariate cells; the marginal verbs below compute (1) and (2)
+with standard errors from the fixed-effect covariance. Whether any of
+them deserves a causal reading is a question about the design, and the
+fitted model does not certify it.
+
+`mixeff` computes these with four functions — `mm_grid()`,
+`mm_predictions()`, `mm_means()`, `mm_comparisons()` — that route all
+inference through the same machinery as `contrast()`. Each row in the
+returned table carries `method`, `status`, `reliability`, and `reason`
+columns naming how it was computed and how far to trust it (the column
+vocabularies are in the glossary linked above).
+
+### The study
+
+A rehabilitation trial assigns patients to coached or usual-care treatment.
+Each patient is assessed before and after the intervention. Patients are
+grouped within clinics.
+
+```{r rehab-data, include = FALSE}
+set.seed(101)
+n_rclinic <- 4L
+n_rsubj   <- 24L
+spc       <- n_rsubj %/% n_rclinic   # subjects per clinic
+
+rclinic <- factor(rep(paste0("C", seq_len(n_rclinic)), each = spc))
+# Deliberately unbalanced assignment: C1 is mostly control, C3 mostly
+# active. The imbalance is the point of this section.
+n_control <- c(5L, 3L, 1L, 3L)
+trt <- factor(
+  unlist(lapply(seq_len(n_rclinic), function(i) {
+    c(rep("control", n_control[[i]]), rep("active", spc - n_control[[i]]))
+  })),
+  levels = c("control", "active")
+)
+rsubj <- factor(paste0("S", seq_len(n_rsubj)))
+
+rehab <- data.frame(
+  subj   = rep(rsubj,   each = 2L),
+  clinic = rep(rclinic, each = 2L),
+  trt    = rep(trt,     each = 2L),
+  time   = factor(rep(c("pre", "post"), times = n_rsubj),
+                  levels = c("pre", "post"))
+)
+
+rclinic_re <- c(-1.2, 0.4, 0.9, -0.1)
+rsubj_re   <- rnorm(n_rsubj, sd = 0.8)
+
+rehab$score <- 52 +
+  -2.1 * (rehab$trt  == "active") +
+  -3.8 * (rehab$time == "post") +
+  -2.9 * (rehab$trt  == "active") * (rehab$time == "post") +
+  rclinic_re[as.integer(rehab$clinic)] +
+  rsubj_re[as.integer(rehab$subj)] +
+  rnorm(nrow(rehab), sd = 0.4)
+```
+
+```{r show-rehab}
+head(rehab)
+```
+
+Clinics are not balanced between treatment arms: clinic C1 has five
+control patients and one active, clinic C3 the reverse. So raw group
+means are confounded with clinic effects — each arm's mean leans on the
+clinics that arm over-samples, and the clinics differ — and a naive
+`tapply(rehab$score, rehab$trt, mean)` will not answer the treatment
+question.
+
+```{r rehab-fit}
+rfit <- lmm(
+  score ~ trt * time + (1 | clinic) + (1 | subj),
+  rehab,
+  control = mm_control(verbose = -1)
+)
+summary(rfit, tests = "coefficients")
+```
+
+The interaction coefficient `trtactive:timepost` tells you the
+*additional* post-treatment change for the active arm relative to
+control — a cell-specific quantity, estimand (1) territory. Summaries
+over cells are the marginal verbs' job.
+
+### Reference grids with `mm_grid()`
+
+`mm_grid()` constructs the cross-product of all fixed-predictor levels. By
+default, factor predictors expand to all their levels; numeric predictors
+collapse to their mean.
+
+```{r grid}
+grd <- mm_grid(rfit, specs = ~ trt * time)
+grd
+```
+
+The grid has four rows — one for each treatment × timepoint cell — and
+retains the model matrix needed for inference.
+
+### Cell predictions with `mm_predictions()`
+
+`mm_predictions()` evaluates the fixed-effect prediction at each grid row,
+with a confidence interval from the certified covariance. These are
+estimand (1): the four population-level cell means.
+
+```{r predictions}
+preds <- mm_predictions(rfit, specs = ~ trt * time)
+preds$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
+```
+
+Each row carries its inference method so the provenance is visible
+without digging into model objects.
+
+### Marginal means with `mm_means()`
+
+Marginal means average the reference grid over dimensions you want to
+collapse — estimand (2), the equal-weight reference-grid average. Here:
+average over timepoints to get a treatment-level summary.
+
+```{r means-trt}
+mt <- mm_means(rfit, specs = ~ trt)
+mt$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
+```
+
+Compare these to the raw means:
+
+```{r raw-means}
+raw_means <- tapply(rehab$score, rehab$trt, mean)
+raw_means
+
+marg_means <- setNames(mt$table$estimate, mt$table$label)
+imbalance_pull <- max(abs(
+  raw_means[c("control", "active")] -
+    marg_means[c("trt=control", "trt=active")]
+))
+round(imbalance_pull, 2)
+```
+
+The clinic imbalance pulls each raw mean `r round(imbalance_pull, 2)`
+points toward the clinics its arm over-samples; the marginal means
+average over the model's fixed-effect grid instead and are free of that
+shift. The size of the gap depends on how unbalanced the design is and
+how large the group effects are.
+
+### Pairwise comparisons with `mm_comparisons()`
+
+`mm_comparisons()` takes all pairwise differences among the marginal means
+and applies the same inference method.
+
+```{r comparisons-trt}
+ctr <- mm_comparisons(rfit, specs = ~ trt)
+ctr$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
+```
+
+The `active - control` row is the equal-weight reference-grid contrast
+— estimand (2) in the list above, averaged over both timepoints —
+tested with a Satterthwaite *t* and graded `moderate` reliability in
+the same row. In a randomized design you may argue it also estimates
+the causal quantity (4); that argument rests on the design's
+identification assumptions, and it is yours to make — the fitted model
+does not certify it.
+
+```{r marginal-checks, include = FALSE}
+stopifnot(inherits(grd, "mm_grid"), nrow(grd$grid) == 4L)
+stopifnot(nrow(preds$table) == 4L)
+stopifnot(all(is.finite(preds$table$estimate)))
+stopifnot(nrow(mt$table) == 2L)
+stopifnot(all(is.finite(mt$table$estimate)))
+stopifnot(is.finite(imbalance_pull), imbalance_pull > 0)
+cmp_row <- ctr$table[ctr$table$label == "trt=active - trt=control", ]
+stopifnot(nrow(cmp_row) == 1L)
+stopifnot(identical(cmp_row$method, "satterthwaite"))
+stopifnot(is.finite(cmp_row$p_value))
+```
+
+### Conditional comparisons with `by =`
+
+The `by` argument splits comparisons within levels of another variable —
+the analogue of simple effects in a factorial design.
+
+```{r comparisons-by-time}
+ctr_by <- mm_comparisons(rfit, specs = ~ trt | time)
+ctr_by$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
+```
+
+Two rows: the treatment difference *at pre-intervention* and the treatment
+difference *at post-intervention*. The post-intervention gap is larger because
+the interaction drives additional improvement in the active arm.
+
+### Constraining the grid with `at =`
+
+`at` pins predictors to chosen values instead of expanding or averaging
+them: a factor to a subset of its levels, a numeric predictor to specific
+points rather than its mean.
+
+```{r at-example}
+mt_time <- mm_means(rfit, specs = ~ time, at = list(trt = "active"))
+mt_time$table[, c("label", "estimate", "conf_low", "conf_high")]
+```
+
+This gives the pre/post means *within the active arm* only, holding `trt`
+constant at `"active"`.
+
+### Custom contrasts with `mm_lincomb()`
+
+For hypotheses that are not pairwise differences of marginal means, build
+the contrast weights directly with `mm_lincomb()`. The interaction effect
+expressed as a contrast: (active post − active pre) − (control post − control pre).
+
+```{r lincomb}
+beta <- fixef(rfit)
+names(beta)
+
+# Interaction row: coefficient named "trtactive:timepost" (lme4-identical)
+w <- setNames(numeric(length(beta)), names(beta))
+w["trtactive:timepost"] <- 1
+
+lc <- mm_lincomb(rfit, weights = w)
+lc[, c("estimate", "lower", "upper", "p_value", "method")]
+```
+
+```{r lincomb-checks, include = FALSE}
+stopifnot(is.finite(lc$estimate), is.finite(lc$p_value))
+stopifnot(nzchar(lc$method))
+```
+
+`mm_lincomb()` applies the same contract-preserving inference as `contrast()`,
+so the method and status fields are populated identically. A row whose
+status is anything other than `"available"` contains `NA` where the
+refused numbers would go, with a stable `reason` code saying why; the
+code vocabulary is in the glossary linked above. For the `emmeans`
+bridge — and the audit columns that do *not* survive the trip through
+`emmeans` — see `vignette("lme4-migration")`.
+
+## The covariance contract
+
+The quantities above all lean on the fixed-effect covariance, and
+`vcov()` is explicit about what it returns. For full-rank fits it is
+the model-based covariance from the engine's
+`fixed_effect_covariance_matrix` payload, with method and status
+attributes attached:
+
+```{r vcov-contract}
+V <- vcov(fit)
+V
+attr(V, "mm_method")
+attr(V, "mm_status")
+```
+
+For rank-deficient or otherwise uncertified fits, `vcov()` returns an
+`NA` matrix carrying an `mm_unavailable_reason` attribute instead of
+fabricated numbers — the same available/unavailable/typed-error
+contract as every other surface in this vignette. Prediction standard
+errors and intervals (population versus conditional, and why the
+conditional SE can be *smaller*) are documented in `vignette("lmm")`.
+
+```{r vcov-checks, include = FALSE}
+stopifnot(all(is.finite(V)))
+stopifnot(isTRUE(all.equal(V, t(V))))
+stopifnot(identical(attr(V, "mm_status"), "available"))
+stopifnot(is.null(attr(V, "mm_unavailable_reason")))
+```
+
+## Summary
+
+On an interior LMM fit, `summary()`, `contrast()`, `test_effect()`,
+`anova()`, and `compare()` return labeled finite-sample inference, with
+`"auto"` resolving to Satterthwaite.
+
+On the boundary fit in this vignette:
+
+- the model converges, but the random-effect covariance is reduced rank
+  (`vignette("convergence")` for what that label establishes);
+- Wald inference is available but labeled as low reliability;
+- Satterthwaite and Kenward–Roger routes are refused by mixeff's
+  validated-support policy: their degrees-of-freedom approximations
+  assume interior variance parameters, which this fit does not have;
+- parametric bootstrap testing is available for the fixed effect;
+- bootstrap confidence intervals are available, but they use a
+  full-model estimator-distribution target, not a fixed-effect null
+  target;
+- cluster bootstrap currently reports estimator distributions, not
+  fixed-effect p-values;
+- boundary LRTs are available for variance-component tests, not
+  fixed-effect tests.
+
+For GLMMs, three routes lead to reportable inference: certified joint
+Wald (`method = "joint_laplace"`), the parametric bootstrap on profiled
+fits, and the labeled working-Hessian opt-in for screening.
+
+Every route either returns a labeled result or refuses with a stable
+reason.
+
+## References
+
+- Crainiceanu, C. M., and Ruppert, D. (2004). Likelihood ratio tests
+  in linear mixed models with one variance component. *Journal of the
+  Royal Statistical Society: Series B*, 66(1), 165–185.
+  <https://doi.org/10.1111/j.1467-9868.2004.00438.x>
+- Halekoh, U., and Højsgaard, S. (2014). A Kenward-Roger approximation
+  and parametric bootstrap methods for tests in linear mixed models —
+  the `R` package `pbkrtest`. *Journal of Statistical Software*,
+  59(9), 1–32. <https://doi.org/10.18637/jss.v059.i09>
+- Kenward, M. G., and Roger, J. H. (1997). Small sample inference for
+  fixed effects from restricted maximum likelihood. *Biometrics*,
+  53(3), 983–997. <https://doi.org/10.2307/2533558>
+- Self, S. G., and Liang, K.-Y. (1987). Asymptotic properties of
+  maximum likelihood estimators and likelihood ratio tests under
+  nonstandard conditions. *Journal of the American Statistical
+  Association*, 82(398), 605–610.
+  <https://doi.org/10.1080/01621459.1987.10478472>
+- Stram, D. O., and Lee, J. W. (1994). Variance components testing in
+  the longitudinal mixed effects model. *Biometrics*, 50(4),
+  1171–1177. <https://doi.org/10.2307/2533455>

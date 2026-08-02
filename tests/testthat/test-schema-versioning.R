@@ -73,7 +73,7 @@ test_that("mm_json_known_schemas returns a data frame with at least 'formula'", 
     ks$version[ks$name == "mixedmodels.random_term_card"], "1"
   )
   expect_identical(
-    ks$version[ks$name == "mixedmodels.fixed_effect_inference_table"], "1.0.0"
+    ks$version[ks$name == "mixedmodels.fixed_effect_inference_table"], "1.1.0"
   )
   expect_identical(
     ks$version[ks$name == "mixedmodels.marginal_quantity_table"], "1.0.0"

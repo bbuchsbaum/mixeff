@@ -102,6 +102,83 @@ test_that("update.mm_glmm with no changes reproduces the fit", {
   expect_equal(unclass(fixef(again)), unclass(fixef(fit)), tolerance = 1e-6)
 })
 
+mm_update_nb_data <- function() {
+  set.seed(303)
+  ng <- 15L
+  per <- 12L
+  g <- factor(rep(seq_len(ng), each = per))
+  n <- ng * per
+  x <- rnorm(n)
+  z <- rnorm(n)
+  re <- rnorm(ng, sd = 0.5)[as.integer(g)]
+  mu <- exp(0.4 + 0.5 * x - 0.3 * z + re)
+  y <- rnbinom(n, size = 2, mu = mu)
+  data.frame(y = y, x = x, z = z, g = g)
+}
+
+test_that("update.mm_glmm reconstructs an estimated-theta NB family", {
+  df <- mm_update_nb_data()
+  fit <- glmm(y ~ x + z + (1 | g), df, family = mm_negative_binomial(),
+              control = mm_control(verbose = -1))
+  fit2 <- update(fit, . ~ . - z)
+
+  expect_s3_class(fit2, "mm_glmm")
+  expect_true("x" %in% names(fixef(fit2)))
+  expect_false("z" %in% names(fixef(fit2)))
+  # family round-trips: still NB with log link, and theta is re-estimated on
+  # the refit (glmer.nb update() semantics), not frozen at the original
+  # fit's estimate.
+  expect_identical(fit2$family$family, "negative_binomial")
+  expect_identical(fit2$family$link, "log")
+  expect_true(isTRUE(fit2$family$nb_theta_estimated))
+  expect_true(is.finite(fit2$family$nb_theta) && fit2$family$nb_theta > 0)
+  expect_identical(fit_status(fit2), "converged_interior")
+})
+
+test_that("update.mm_glmm preserves a fixed NB theta exactly", {
+  df <- mm_update_nb_data()
+  fit <- glmm(y ~ x + z + (1 | g), df,
+              family = mm_negative_binomial(theta = 2.4),
+              control = mm_control(verbose = -1))
+  fit2 <- update(fit, . ~ . - z)
+
+  expect_identical(fit2$family$family, "negative_binomial")
+  expect_false(isTRUE(fit2$family$nb_theta_estimated))
+  # the refit conditions on the SAME theta as the original fit — no silent
+  # fall-back to estimation, no theta loss
+  expect_identical(fit2$family$nb_theta, fit$family$nb_theta)
+  expect_equal(fit2$family$nb_theta, 2.4, tolerance = 1e-12)
+})
+
+test_that("update.mm_glmm explicit family = overrides NB reconstruction", {
+  df <- mm_update_nb_data()
+  fit <- glmm(y ~ x + z + (1 | g), df,
+              family = mm_negative_binomial(theta = 2.4),
+              control = mm_control(verbose = -1))
+  fit2 <- update(fit, . ~ . - z, family = mm_negative_binomial(theta = 5))
+
+  expect_false(isTRUE(fit2$family$nb_theta_estimated))
+  expect_equal(fit2$family$nb_theta, 5, tolerance = 1e-12)
+})
+
+test_that("update.mm_glmm handles legacy NB fits without theta fields", {
+  df <- mm_update_nb_data()
+  fit <- glmm(y ~ x + z + (1 | g), df,
+              family = mm_negative_binomial(theta = 2.4),
+              control = mm_control(verbose = -1))
+  # Simulate a fit saved before family_info carried nb_theta /
+  # nb_theta_estimated: only the family name and link survive. The theta
+  # mode is unrecoverable, so reconstruction falls back to estimate mode
+  # rather than refusing.
+  legacy <- fit
+  legacy$family <- legacy$family[c("family", "link")]
+  fit2 <- update(legacy, . ~ . - z)
+
+  expect_s3_class(fit2, "mm_glmm")
+  expect_identical(fit2$family$family, "negative_binomial")
+  expect_true(isTRUE(fit2$family$nb_theta_estimated))
+})
+
 test_that("update.mm_lmm matches an lme4 update() formula edit", {
   skip_if_not_installed("lme4")
   df <- mm_update_lmm_data()

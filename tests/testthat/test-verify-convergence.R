@@ -66,10 +66,48 @@ test_that("verify_convergence() validates its arguments", {
                class = "mm_arg_error")
 })
 
-test_that("verify_convergence() refuses non-LMM input with a typed error", {
+test_that("verify_convergence() refuses non-mixed-model input with a typed error", {
   expect_error(verify_convergence(list()), class = "mm_schema_error")
   expect_error(verify_convergence(lm(mpg ~ wt, mtcars)),
                class = "mm_schema_error")
+})
+
+mk_verify_glmm <- function(method = "pirls_profiled") {
+  set.seed(7)
+  g <- factor(rep(1:12, each = 10))
+  x <- rnorm(120)
+  eta <- -0.2 + 0.7 * x + rep(rnorm(12, sd = 0.5), each = 10)
+  d <- data.frame(y = rbinom(120, 1, plogis(eta)), x = x, g = g)
+  glmm(y ~ x + (1 | g), d, family = binomial(), method = method,
+       control = mm_control(verbose = -1))
+}
+
+test_that("verify_convergence() runs on a profiled GLMM fit", {
+  fit <- mk_verify_glmm()
+  v <- verify_convergence(fit)
+  expect_s3_class(v, "mm_convergence_verification")
+  expect_true(is.character(v$status) && nzchar(v$status))
+  expect_true(nrow(v$table) >= 1L)
+  # GLMM defaults (engine glmm_defaults): objective 1e-4, beta 1e-3.
+  expect_equal(v$tolerances$objective, 1e-4)
+  expect_equal(v$tolerances$beta, 1e-3)
+})
+
+test_that("verify_convergence() runs on a joint-Laplace GLMM fit", {
+  fit <- mk_verify_glmm(method = "joint_laplace")
+  v <- verify_convergence(fit, jitter_starts = 1L)
+  expect_s3_class(v, "mm_convergence_verification")
+  expect_true(nrow(v$table) >= 1L)
+})
+
+test_that("verify_convergence() GLMM argument validation is typed", {
+  fit <- mk_verify_glmm()
+  expect_error(verify_convergence(fit, consensus = TRUE),
+               class = "mm_arg_error")
+  expect_error(verify_convergence(fit, jitter_starts = -1),
+               class = "mm_arg_error")
+  expect_error(verify_convergence(fit, objective_tolerance = -1),
+               class = "mm_arg_error")
 })
 
 test_that("print.mm_convergence_verification renders status, runs, tolerances", {

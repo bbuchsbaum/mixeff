@@ -18,6 +18,7 @@
 ^src/rust/\.cargo/config\.toml$
 ^src/\.cargo$
 ^vignettes/.*\.html$
+^vignettes/articles$
 ^vignettes/.*_files$
 ^src/rust/vendor$
 ^src/Makevars$
@@ -41,3 +42,6 @@
 ^RELEASE\.md$
 ^\.release-gate$
 ^figure$
+^\.planning$
+^Audit1\.md$
+^release-evidence$

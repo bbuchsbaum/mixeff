@@ -6,7 +6,7 @@
 \alias{emm_basis.mm_lmm}
 \alias{recover_data.mm_glmm}
 \alias{emm_basis.mm_glmm}
-\title{Optional emmeans support for mixeff LMMs}
+\title{Optional emmeans support for mixeff models}
 \usage{
 recover_data.mm_lmm(object, data = NULL, ...)
 
@@ -24,7 +24,7 @@ recover_data.mm_glmm(object, data = NULL, ...)
 emm_basis.mm_glmm(object, trms, xlev, grid, ...)
 }
 \arguments{
-\item{object}{A fitted \code{mm_lmm}.}
+\item{object}{A fitted \code{mm_lmm} or \code{mm_glmm}.}
 
 \item{data}{Optional data override supplied by \code{emmeans}.}
 
@@ -35,16 +35,22 @@ Objects expected by \code{emmeans::recover_data()} and
 \code{emmeans::emm_basis()}.
 }
 \description{
-These methods let \code{emmeans} build reference grids for \code{mm_lmm} objects when
-the optional \code{emmeans} package is installed. They expose the same fixed-effect
-design surface used by \code{\link[=mm_grid]{mm_grid()}} and \code{\link[=mm_means]{mm_means()}}.
+These methods let \code{emmeans} build reference grids for \code{mm_lmm} and
+\code{mm_glmm} objects when the optional \code{emmeans} package is installed. They
+expose the same fixed-effect design surface used by \code{\link[=mm_grid]{mm_grid()}} and
+\code{\link[=mm_means]{mm_means()}}.
 }
 \details{
-The current bridge is intentionally narrow: Gaussian LMMs only and
-population fixed-effect means only. When the fitted artifact carries an
-available \code{mixedmodels.fixed_effect_covariance_matrix} payload, \code{emmeans}
-receives that full fixed-effect covariance matrix. Native \code{\link[=mm_predictions]{mm_predictions()}},
-\code{\link[=mm_means]{mm_means()}}, and \code{\link[=mm_comparisons]{mm_comparisons()}} remain the contract-preserving mixeff
-surface because they preserve row-level status and reason fields.
+The bridge covers population fixed-effect means only. For GLMMs the whole
+emmeans surface is gated by the package's inference-capability contract:
+a default profiled fit refuses with a typed error (refit with
+\code{method = "joint_laplace"} for certified Wald inference, or opt in to the
+labelled working-Hessian approximation at fit time with
+\code{inference = "working_hessian"}). When the fitted artifact carries a
+usable \code{mixedmodels.fixed_effect_covariance_matrix} payload, \code{emmeans}
+receives that full fixed-effect covariance matrix. Native
+\code{\link[=mm_predictions]{mm_predictions()}}, \code{\link[=mm_means]{mm_means()}}, and \code{\link[=mm_comparisons]{mm_comparisons()}} remain the
+contract-preserving mixeff surface for LMMs because they preserve
+row-level status and reason fields.
 }
 \keyword{internal}

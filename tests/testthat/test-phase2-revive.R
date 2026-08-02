@@ -90,7 +90,7 @@ test_that("vcov() exposes the honest fixed-effect covariance surface", {
   expect_equal(dim(V), c(length(fixef(fit)), length(fixef(fit))))
   expect_identical(attr(V, "mm_schema_name"),
                    "mixedmodels.fixed_effect_covariance_matrix")
-  expect_identical(attr(V, "mm_schema_version"), "1.0.0")
+  expect_identical(attr(V, "mm_schema_version"), "1.1.0")
   expect_identical(attr(V, "mm_method"), "model_based")
   expect_identical(attr(V, "mm_status"), "available")
   expect_identical(attr(V, "mm_reliability"), "high")

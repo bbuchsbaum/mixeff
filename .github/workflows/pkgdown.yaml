@@ -30,13 +30,13 @@ jobs:
           r-version: release
           use-public-rspm: true
 
-      # The bundled mixeff-rs snapshot under src/rust/upstream/ is produced by
-      # tools/vendor-rust.R and is gitignored ("regenerated, not committed"),
-      # so a fresh CI checkout has no Rust source to compile. Regenerate it at
-      # the pinned rev (mixeff-rs is public, so no auth is needed) before the
-      # package is built by the local::. install below.
-      - name: Vendor the mixeff-rs Rust crate
-        run: Rscript tools/vendor-rust.R
+      # src/rust/upstream/ and src/rust/vendor.tar.xz ARE committed (see the
+      # notes in .gitignore), so the local::. install below compiles the same
+      # tree R-universe and CRAN build. Verify the committed snapshot matches
+      # the pin without regenerating it; regeneration drift is caught by the
+      # vendor-drift job in R-CMD-check.yaml.
+      - name: Committed vendor snapshot matches the pin
+        run: Rscript tools/check-vendor-drift.R
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:

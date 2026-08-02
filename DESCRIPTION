@@ -1,10 +1,15 @@
 Package: mixeff
 Title: Mixed-Effects Models via the 'mixeff-rs' Rust Crate
 Version: 0.2.0
-Authors@R:
+Authors@R: c(
     person("Brad", "Buchsbaum",
            email = "bbuchsbaum@research.baycrest.org",
-           role = c("aut", "cre"))
+           role = c("aut", "cre", "cph"),
+           comment = "author of mixeff and the bundled 'mixeff-rs' crate"),
+    person("Authors of the dependency Rust crates",
+           role = "ctb",
+           comment = "see inst/AUTHORS for details"))
+Copyright: file inst/COPYRIGHTS
 Description: Fits linear and generalized linear mixed-effects models
     from 'lme4'-style formulas, with optimization by the bundled
     'mixeff-rs' Rust crate. A fitted model stores the compiled model

@@ -1,0 +1,25 @@
+# mixeff release gate -- 0.2.0
+mode: release-candidate
+commit: de7624f994224c46e3efcd91b759516c1c87bb63  [DIRTY WORKING TREE]
+mixeff-rs pin: f82c646e605d3dc6eacdb01a681f663f4160ac4a
+tarball: mixeff_0.2.0.tar.gz (6231890 bytes)
+tarball sha256: 9ff83af438ba597d414ed3f42e40ced815f7c11c879b9c2e6cc7fb48a6acaa79
+src/rust/vendor.tar.xz sha256: 0d4bce87a7b2a7c7c6df69d4fb28666c5b9f493c823b037eb77dc0ff39d50df0
+upstream Cargo.lock sha256: b64cfcb7567e7b552e31637aeabe22a905ba5ed7aea7820d510f55bd4eb27505
+R: R version 4.5.1 (2025-06-13) (aarch64-apple-darwin20)
+rustc: rustc 1.91.1 (ed61e7d7e 2025-11-07) | cargo: cargo 1.91.1 (ea2d97820 2025-10-10)
+elapsed: 2208s | PASS 13  FAIL 0  SKIP 0
+
+- [PASS] vendor: license notice current
+- [PASS] vendor: snapshot drift
+- [PASS] R CMD build (release tarball) -- mixeff_0.2.0.tar.gz
+- [PASS] cran-comments.md tarball size current -- updated 6455191 -> 6231890 bytes
+- [PASS] R CMD check --as-cran (built tarball) -- 0E/0W/1N
+- [PASS] install built tarball
+- [PASS] lint_package == 0 -- 0 lint(s)
+- [PASS] suite green (slow-parity + aphantasia tiers ON) -- 4121 pass / 0 fail / 3 skip in 1211s
+- [PASS] error-UX battery present
+- [PASS] schema/manifest tests present
+- [PASS] release-candidate: skips all allowlisted -- 3 skip(s), 0 outside allowlist
+- [PASS] aphantasia vignette (live) -- reproducing-aphantasia.html
+- [PASS] no-network source install

@@ -265,9 +265,35 @@ print.mm_parametric_bootstrap <- function(x, ...) {
   invisible(x)
 }
 
+#' Analysis of variance for a mixeff LMM
+#'
+#' With no extra models, `anova()` returns a term-level table for `object`.
+#' With further fitted models in `...`, it defers to [compare()] for a
+#' nested model comparison.
+#'
+#' @param object A fitted `mm_lmm`.
+#' @param ... Optional additional fitted models; triggers [compare()].
+#' @param type Term-hypothesis type. `"III"` (default) tests marginal
+#'   Type III hypotheses: a term's own contrast columns plus the
+#'   equally-weighted average over the levels of every term that contains
+#'   it, which makes the test invariant to which factor level is the
+#'   reference and matches SAS / `car` / `lmerTest` Type III. `"II"`
+#'   respects marginality (each term adjusted for all terms that do not
+#'   contain it). `"I"` is sequential in `terms()` order (main effects,
+#'   then two-way interactions, and so on). `"block"` tests the raw
+#'   coefficient block for each term — under treatment coding that is the
+#'   simple effect at the other factors' reference levels, which is a
+#'   legitimate quantity but is *not* Type III on unbalanced designs; it
+#'   is the hypothesis mixeff computed for `"III"` before engine
+#'   `1f3f689`.
+#' @param method Degrees-of-freedom / test method.
+#' @param refit_for_comparison Passed to [compare()] when `...` is used.
+#'
+#' @return An `mm_anova` object.
+#'
 #' @method anova mm_lmm
 #' @export
-anova.mm_lmm <- function(object, ..., type = c("III", "II", "I"),
+anova.mm_lmm <- function(object, ..., type = c("III", "II", "I", "block"),
                          method = c("auto", "satterthwaite", "kenward_roger",
                                     "bootstrap", "asymptotic", "none"),
                          refit_for_comparison = c("auto", "error", "ml")) {

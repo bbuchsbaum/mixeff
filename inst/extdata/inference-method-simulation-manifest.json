@@ -1,0 +1,21 @@
+{
+  "artifact": "inference-method-simulation-summary.csv",
+  "mode": "release",
+  "invocation": "Rscript inst/benchmarks/inference-method-simulation.R --mode=release --reps=2500 --reps-bootstrap=500 --reps-joint=1000 --nsim=199 --seed=2026",
+  "reps_analytic": 2500,
+  "reps_bootstrap": 500,
+  "reps_joint": 1000,
+  "nsim": 199,
+  "seed": 2026,
+  "alt_beta": 0.35,
+  "n_rows": 27,
+  "elapsed_seconds": 4340.1,
+  "generated_at": "2026-08-01 23:00:55 UTC",
+  "package_version": "0.2.0",
+  "package_commit": "596d93934c842bf1059a9b0c6c436e7d4193a47b",
+  "rust_pin": "f82c646e605d3dc6eacdb01a681f663f4160ac4a",
+  "cargo_lock_md5": "d5fe099baa13f701797640fe9bda7811",
+  "vendor_archive_md5": "97cf2b4a70485bb290f214653073c63c",
+  "r_version": "R version 4.5.1 (2025-06-13)",
+  "platform": "aarch64-apple-darwin20"
+}

@@ -16,7 +16,7 @@ glmm(
   contrasts = NULL,
   method = c("pirls_profiled", "joint_laplace"),
   nAGQ = 1L,
-  inference = c("auto", "none", "asymptotic", "bootstrap"),
+  inference = c("auto", "none", "asymptotic", "bootstrap", "working_hessian"),
   control = mm_control(),
   ...
 )
@@ -27,7 +27,7 @@ glmm(
 \item{data}{A \code{data.frame}.}
 
 \item{family}{A supported GLMM family object or family constructor. The
-certified 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or
+supported 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or
 \code{"cloglog"} links; \code{\link[=poisson]{poisson()}} with \code{"log"} or \code{"sqrt"} links;
 \code{\link[=Gamma]{Gamma()}} with \code{"log"} link; and negative binomial (NB2, \code{"log"} link)
 via \code{\link[=mm_negative_binomial]{mm_negative_binomial()}} (theta estimated, like \code{lme4::glmer.nb()})
@@ -57,7 +57,19 @@ to that effect (suppress with \code{mm_control(verbose = -1)}). Use
 Laplace setting. Values above \code{1} are allowed on the profiled path and
 are rejected for \code{method = "joint_laplace"} in the R wrapper.}
 
-\item{inference}{Requested inference method.}
+\item{inference}{Requested inference posture. The default \code{"auto"} keeps
+the certified contract: Wald standard errors, tests, and intervals are
+available only when the engine certifies them (currently
+\code{method = "joint_laplace"}); the default profiled estimator withholds
+them with a typed refusal. \code{"working_hessian"} is an explicit opt-in
+that unlocks the UNCERTIFIED profiled working-Hessian approximation on
+every inference route; each resulting row is labelled
+\code{wald_z_working_hessian} with reliability \code{moderate}. Its standard
+errors ran about 11\% smaller than \code{glmer()}'s on the package's
+reference dataset (anti-conservative), so treat it as an exploration
+and screening tool, not a reporting route; see \code{inference_options()}.
+\code{"none"}, \code{"asymptotic"}, and \code{"bootstrap"} are accepted and recorded
+but currently equivalent to \code{"auto"}.}
 
 \item{control}{A list from \code{\link[=mm_control]{mm_control()}}.}
 
@@ -79,7 +91,8 @@ native dependency-light optimizer in this vendored build.
 Optimization runs inside a single native call with no progress output: the
 pre-fit explanation block (when \code{verbose >= 0}) is the last thing printed
 before the fitted result returns, and the call cannot be interrupted from
-R. Every optimizer budget is bounded, so fits always terminate; runtime on
+R. Evaluation budgets are bounded (a bounded budget caps optimizer
+iterations; it does not prove every native evaluation terminates); runtime on
 large problems is governed by \code{mm_control(max_feval = )}.
 }
 \examples{

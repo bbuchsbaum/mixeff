@@ -30,7 +30,7 @@ drift, but small enough to ship as package test data.
 ```{r load-fixture}
 fixture_candidates <- c(
   system.file("extdata", "aphantasia", package = "mixeff"),
-  file.path("..", "inst", "extdata", "aphantasia"),
+  file.path("..", "..", "inst", "extdata", "aphantasia"),
   file.path("inst", "extdata", "aphantasia")
 )
 fixture_dir <- fixture_candidates[
@@ -91,11 +91,17 @@ reproduction runs under `MIXEFF_RUN_APHANTASIA=true`, and the slower S1
 random-effects stability variants run under `MIXEFF_RUN_APHANTASIA_STRESS=true`.
 
 ```{r primary-fit, eval = run_live}
+# inference = "working_hessian": this vignette DELIBERATELY opts in to the
+# uncertified working-Hessian approximation, because its purpose below is to
+# measure that approximation against the frozen glmer reference (the ~11%
+# anti-conservatism behind the opt-in's documented caveat). A default fit
+# refuses Wald inference on every route.
 primary_fit <- glmm(
   correct ~ group * mask * soa_s + block +
     (1 + mask + soa_s || participant) + (1 | item),
   primary_dat,
   family = binomial(),
+  inference = "working_hessian",
   control = mm_control(verbose = -1)
 )
 
@@ -202,23 +208,30 @@ below run only when live fitting is enabled
 (`MIXEFF_RUN_APHANTASIA_VIGNETTE=true`); otherwise the same calls
 remain valid against any locally-built fit.
 
-`summary(fit, tests = "coefficients")` returns a Wald-z fixed-effect
-table built from the PIRLS/Laplace working-Hessian covariance:
+This section is the worked example behind the package's working-Hessian
+caveat. The fit above passes `inference = "working_hessian"` — the explicit
+opt-in that unlocks the UNCERTIFIED profiled working-Hessian approximation.
+Without it, a default profiled fit withholds standard errors, tests, and
+intervals on every route (refit with `method = "joint_laplace"` for
+certified Wald inference, or use `confint(fit, method = "bootstrap")`).
+With the opt-in, `summary(fit, tests = "coefficients")` returns a Wald-z
+table in which every row is labelled `wald_z_working_hessian`:
 
 ```{r primary-summary, eval = run_live}
 sm <- summary(primary_fit, tests = "coefficients")
-round(sm$coefficients, 3)
+round(sm$coefficients[, c("Estimate", "Std. Error", "z value", "Pr(>|z|)")], 3)
 sm$vcov_status
 ```
 
-The status block flags `reliability = "moderate"`: the working-Hessian
-covariance is not the same estimator as `lme4::vcov(glmer_fit)`. On this
-dataset its Wald standard errors for the difference-in-differences
-contrasts run about 11% *smaller* than glmer's — anti-conservative, so
-p-values lean optimistic — which the package's parity ledger classifies
-as an expected mismatch with a 15% bound. The manuscript's qualitative
-conclusions do not flip, but a reader re-using these SEs should know
-which way they err.
+The rows carry `reliability = "moderate"` and status
+`available_noninferential`: the working-Hessian covariance is not the same
+estimator as `lme4::vcov(glmer_fit)`. On this dataset its Wald standard
+errors for the difference-in-differences contrasts run about 11% *smaller*
+than glmer's — anti-conservative, so p-values lean optimistic — which the
+package's parity ledger classifies as an expected mismatch with a 15%
+bound. That measured gap is exactly why the approximation is opt-in rather
+than default: the manuscript's qualitative conclusions do not flip here,
+but a reader re-using these SEs should know which way they err.
 
 The manuscript's primary estimand --- the difference-in-differences
 contrast at the centered SOA and at the focal 25 ms SOA --- is a
@@ -293,19 +306,25 @@ two are heavy opt-in jobs, and `mixeff` is not a Bayesian engine.
 
 ## Caveats
 
-* GLMM Wald inference in `mixeff` uses the PIRLS/Laplace working-Hessian
-  covariance, graded `reliability = "moderate"`. Its SEs run about 11%
-  smaller than `lme4::vcov()` on this dataset (anti-conservative; ledger
-  bound 15%). A controlled decomposition attributes roughly 73% of the
+* The Wald numbers in this article come from the PIRLS/Laplace
+  working-Hessian covariance via the explicit `inference =
+  "working_hessian"` opt-in (default fits refuse Wald inference; certified
+  routes are `method = "joint_laplace"` and the parametric bootstrap).
+  The approximation is graded `reliability = "moderate"`, and its SEs run
+  about 11% smaller than `lme4::vcov()` on this dataset
+  (anti-conservative; ledger bound 15%). A hold-the-point decomposition,
+  measured once at engine pin `6731062`, attributes roughly 73% of the
   gap to the native `||` random-effect family, 26% to a uniform
   working-Hessian scale factor (tracked upstream), and 1% to optimizer
-  drift.
+  drift; the measurement is recorded in the package's parity ledger
+  (`inst/extdata/expected-mismatches.json`, case `aphantasia_primary`,
+  field `inference.primary_dd.SE`).
 * Population-level GLMM prediction (`re.form = NA`, `type = "link"` or
   `"response"`) is supported and matches `predict(glmer, re.form = NA)`
   on joint-Laplace fits; `emmeans(..., type = "response")` remains the
   route for averaged marginal probabilities.
-* Coefficient names are lme4-identical since 0.2.0 (`"groupaphant"`),
-  so hand-written lincombs copy straight across from `lme4` code.
+* Coefficient names are lme4-identical since 0.2.0; see
+  `vignette("lme4-migration")`.
 
 ## Citation
 

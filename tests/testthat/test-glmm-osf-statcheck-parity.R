@@ -11,10 +11,14 @@
 #       the same well-conditioned models;
 #   (3) the remaining known raw-Year gap stays documented, not silently
 #       regressed:
-#         E = raw-Year joint_laplace converges to a sub-optimal point and
-#             reports converged_interior with a non-finite objective
-#             (upstream bd-01KT3Z64AY45NHA5144G2ZBMSY); the offset-invariance
-#             test is skip()ped pending that fix and will flip green when fixed.
+#         E = on the ill-scaled raw-Year design the joint route does not
+#             certify and returns a labelled fast-PIRLS fallback whose typed
+#             estimator_substitution record is asserted below. The historical
+#             non-finite-objective-as-converged bug (bd-01KT3Z64AY45NHA5144G2ZBMSY)
+#             is FIXED at the pinned engine and guarded by a live finiteness
+#             assertion. Offset invariance is gated on the substitution record
+#             (evidence-gated skip, not unconditional) and flips on when the
+#             joint frontier work lands (bd-01KX66CNV2QJ5SKPXMTX1BW8SQ).
 
 osf_statcheck_data <- function() {
   f <- system.file("extdata", "osf-statcheck-t2.csv", package = "mixeff")
@@ -88,19 +92,67 @@ test_that("GLMM Wald standard errors match glmer on OSF statcheck", {
   expect_lt(max(abs(unname(ct[[p_col]]) - unname(gt[, "Pr(>|z|)"]))), 5e-3)
 })
 
-test_that("raw-Year joint_laplace is offset-invariant (pending upstream fix E)", {
-  skip_on_cran() # parked on an upstream engine bug; nothing to run anywhere yet
-  skip(paste0(
-    "upstream bd-01KT3Z64AY45NHA5144G2ZBMSY: raw-Year joint_laplace converges sub-optimally ",
-    "(interaction 0.7959 vs offset-invariant MLE ~0.853) and reports converged_interior ",
-    "with a non-finite objective. Re-enable when fixed. The body below is ",
-    "the reproducer to re-enable, kept compiling on purpose."
-  ))
+# One raw-Year joint fit shared by the two tests below (it costs ~a minute;
+# the second test must not pay for it twice).
+osf_raw_joint_fit <- local({
+  cache <- NULL
+  function(d) {
+    if (is.null(cache)) {
+      cache <<- glmm(Error ~ OpenPractice * Year + (1 | Source), data = d,
+                     family = binomial("logit"), method = "joint_laplace",
+                     control = mm_jl())
+    }
+    cache
+  }
+})
+
+test_that("raw-Year joint_laplace substitution is typed, finite, and visible", {
+  skip_on_cran() # minute-class real-data fit
   d <- osf_statcheck_data()
-  mr <- glmm(Error ~ OpenPractice * Year  + (1 | Source), data = d,
-             family = binomial("logit"), method = "joint_laplace", control = mm_jl())
+  mr <- osf_raw_joint_fit(d)
+
+  # The historical bug (upstream bd-01KT3Z64AY45NHA5144G2ZBMSY, fixed at
+  # engine 9b3b4ad, vendored since pin 4a2abb3): this fit reported
+  # converged_interior with a NON-FINITE objective. The finiteness half is
+  # asserted live; a regression here is a stop-ship convergence-honesty bug.
+  expect_true(is.finite(as.numeric(logLik(mr))))
+
+  # What remains on the current pin: the joint route does not certify on
+  # this ill-scaled design and returns a labelled fast-PIRLS fallback
+  # (upstream bd-01KYW1VTQ3YR16SQP29J092QKG, fixed at engine f82c646 by the
+  # typed record asserted here). The substitution must be machine-readable
+  # on the public certificate surface and visible in summary() despite the
+  # fallback's converged_* status -- no silent surgery.
+  sub <- optimizer_certificate(mr)$raw$estimator_substitution
+  expect_false(is.null(sub))
+  expect_identical(as.character(sub$requested_method), "joint_laplace")
+  expect_identical(as.character(sub$effective_method), "fast_pirls_profiled")
+  expect_true(nzchar(as.character(sub$requested_fit_status %||% "")))
+
+  out <- capture.output(print(summary(mr)))
+  expect_true(any(grepl("estimator substitution", out, fixed = TRUE)))
+})
+
+test_that("raw-Year joint_laplace is offset-invariant once the joint route certifies", {
+  skip_on_cran() # minute-class real-data fits
+  d <- osf_statcheck_data()
+  mr <- osf_raw_joint_fit(d)
+  # Typed, evidence-gated skip (NOT unconditional): while the engine still
+  # substitutes fast-PIRLS on this design, the fallback optimum is known to
+  # sit off the offset-invariant MLE (interaction 0.7959 vs ~0.8538; ledger
+  # case osf_statcheck_t2_error_openpractice_year_raw). The moment the joint
+  # route certifies this fit (upstream frontier bead
+  # bd-01KX66CNV2QJ5SKPXMTX1BW8SQ: autoscaling/multi-start), the skip
+  # predicate flips off and the invariance assertions run unedited.
+  skip_if(
+    !is.null(optimizer_certificate(mr)$raw$estimator_substitution),
+    paste0(
+      "joint route substitutes fast-PIRLS on the raw-Year design; offset ",
+      "invariance is asserted only for a certified joint fit (upstream ",
+      "frontier bead bd-01KX66CNV2QJ5SKPXMTX1BW8SQ)."
+    )
+  )
   mc <- glmm(Error ~ OpenPractice * cYear + (1 | Source), data = d,
              family = binomial("logit"), method = "joint_laplace", control = mm_jl())
   expect_equal(ix(fixef(mr)), ix(fixef(mc)), tolerance = 5e-3)
-  expect_true(is.finite(as.numeric(logLik(mr))))
 })

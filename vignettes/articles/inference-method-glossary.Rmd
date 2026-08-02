@@ -47,7 +47,7 @@ the two route-map entries marked *(route map)* below.
 | `not_available` | No additional reliability reason is attached to the row; inspect `status` and `reason_code` for the decision. | A refused cluster-bootstrap p-value row uses a specific `reason_code` while reliability itself is not available. |
 | `asymptotic_wald_z_fallback` | A t reference distribution was the target, degrees of freedom could not be computed, and a standard normal was substituted; the row is graded `low`. | `inference_table()` and `summary()` on a boundary fit report their Wald rows with this reason. This is the reason code most users meet first. |
 | `asymptotic_wald_z_at_boundary` *(route map)* | Wald z can run, but boundary or reduced-rank fits can make asymptotic uncertainty too optimistic. | Defined for the `inference_options()` route map; in practice the engine's observed `asymptotic_wald_z_fallback` takes precedence. |
-| `interior_converged_well_specified` *(route map)* | The fit is interior and the fast Wald route has no boundary caveat from the route map. | Defined for the route map; superseded by the observed reason in current output. |
+| `interior_converged` *(route map)* | The fit is interior and the fast Wald route has no boundary caveat from the route map. An interior optimum says nothing about model specification, so the value deliberately does not claim it (the pre-0.2.0 spelling `interior_converged_well_specified` overclaimed and is retired). | Defined for the route map; superseded by the observed reason in current output. |
 | `satterthwaite_unavailable_at_boundary` | Satterthwaite degrees of freedom are not certified when variance parameters are on the boundary. | `test_effect(fit, term, method = "satterthwaite")` refuses on a singular fit. |
 | `kenward_roger_unavailable_at_boundary` | Kenward-Roger degrees of freedom and covariance adjustment are not certified when variance parameters are on the boundary. | `test_effect(fit, term, method = "kenward_roger")` refuses on a singular fit. |
 | `satterthwaite_finite_difference_approximation` | The route uses a finite-difference Satterthwaite degrees-of-freedom approximation. | The standard reason on Satterthwaite rows for interior fits. |
@@ -68,6 +68,53 @@ The `method` column has one value worth listing here as well:
 `not_computed`, which appears on GLMM rows fitted by the default
 `pirls_profiled` estimator, whose standard errors and p-values are
 withheld (see `vignette("glmm")`).
+
+## `reliability` — the grade rubric
+
+`reliability` is a closed four-value scale: `"high"`, `"moderate"`,
+`"low"`, or `"not_available"`. This section is the rubric (rubric version
+1, mixeff 0.2.0): the exact mapping the code implements from observable
+facts to a grade. The grade is a summary of *which method produced the
+number and what is known about that method's approximation* — nothing
+more.
+
+| Grade | Earned by | Where you see it |
+|---|---|---|
+| `high` | A model-based covariance route with no approximation beyond the model itself (the LMM `model_based` fixed-effect covariance). | LMM Wald/Satterthwaite covariance status. |
+| `moderate` | A named, documented approximation within the validated envelope: finite-difference Satterthwaite df; the joint-Laplace active-Hessian GLMM covariance; the working-Hessian approximation under its explicit opt-in; a certified bootstrap with at least 999 successful replicates and a finite Monte Carlo SE. | Most certified inference rows. |
+| `low` | The route ran but with a known weakening: a t target that fell back to standard-normal z (degenerate df), or a bootstrap below the 999-replicate floor. | Boundary-fit Wald rows; small-`nsim` bootstrap results. |
+| `not_available` | No graded quantity: the row is a refusal, or reliability is not defined for the target. | Withheld GLMM rows; refusal rows. |
+
+The 999-replicate bootstrap floor is a grading convention, documented
+rather than asserted: at `B = 999` bootstrap p-values resolve on an exact
+1/(B+1) = 0.001 grid, and the Monte Carlo SE of a rate near 0.05 is about
+0.0069. `B = 998` does not differ materially from `B = 999` — which is
+why the replicate accounting (successful count, Monte Carlo SE) ships
+alongside the grade, so you can judge the evidence directly instead of
+trusting the label.
+
+What a grade does **not** mean: no grade asserts that the model is
+correctly specified, that the estimate is unbiased, or that a p-value is
+exactly calibrated. Those are properties of the model and the data;
+mixeff's measured calibration evidence for its routes lives in the
+benchmarking article's simulation study, with Wilson intervals and
+replicate accounting.
+
+## What "certified" means
+
+Several surfaces use the word *certified*. It has one definition:
+
+> The engine's inference contract marks this estimator/target combination
+> available: the required numerical invariants passed, the value was
+> produced by the named method, and that method is inside the package's
+> validated support envelope.
+
+"Certified" does **not** mean statistically guaranteed correct, and it
+does not mean the model is well specified. An absent certificate is never
+treated as a certificate: surfaces that cannot see a certified inference
+table withhold rather than assume. The uncertified alternatives are
+always explicitly labelled (for example `wald_z_working_hessian` rows
+under the `inference = "working_hessian"` opt-in).
 
 ## `reason_code`
 

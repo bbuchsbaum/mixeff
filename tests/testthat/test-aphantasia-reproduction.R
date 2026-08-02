@@ -252,7 +252,10 @@ aphantasia_expect_fit_matches_reference <- function(fit, ref, id) {
 
 aphantasia_has_glmm_full_vcov <- function(fit) {
   V <- stats::vcov(fit)
-  identical(attr(V, "mm_status"), "available") &&
+  # Profiled fits carry `available_noninferential` since covariance schema
+  # 1.1.0 (engine f82c646): geometry decodes, Wald certification stays with
+  # the inference table. Joint-Laplace fits still say `available`.
+  attr(V, "mm_status") %in% c("available", "available_noninferential") &&
     is.matrix(V) &&
     all(is.finite(V))
 }
@@ -455,10 +458,16 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
   ref <- aphantasia_reference()
   data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
   primary_ref <- ref$models$primary
+  # inference = "working_hessian": this block DELIBERATELY exercises the
+  # labelled working-Hessian approximation -- its point is to pin how far
+  # the profiled DiD SEs sit from glmer on real data (the evidence behind
+  # the opt-in's documented anti-conservatism caveat). Under the strict
+  # contract (WI-2.2) the default fit refuses mm_lincomb() outright.
   fit <- mixeff::glmm(
     stats::as.formula(primary_ref$formula),
     data_sets$primary,
     family = stats::binomial(),
+    inference = "working_hessian",
     control = mixeff::mm_control(verbose = -1)
   )
   # Assert, don't skip: the payload is available on the current pin, and a

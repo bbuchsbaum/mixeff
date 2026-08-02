@@ -78,6 +78,92 @@ inference_options.mm_lmm <- function(fit, term = NULL, nsim = 1000L, ...) {
   obj
 }
 
+#' @rdname inference_options
+#' @export
+inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
+  # The GLMM route menu (Audit1 DEC-1 tier 2): this table is where the
+  # working-Hessian approximation is DISCOVERED -- refusal messages name only
+  # the certified paths plus a pointer here, so the caveat and the invocation
+  # syntax travel together with the option.
+  cap <- mm_glmm_inference_capability(fit)
+  certified <- isTRUE(cap$wald) &&
+    identical(cap$source, "certified_inference_table")
+  opted_in <- identical(as.character(fit$inference_request %||% "auto"),
+                        "working_hessian")
+
+  is_nb <- identical(as.character(fit$family$family %||% ""),
+                     "negative_binomial")
+  rows <- list(
+    list(
+      method = "asymptotic_wald_z",
+      expected_status = if (certified) "available" else "not_assessed",
+      expected_reliability_reason = if (certified) {
+        "glmm_certified_wald"
+      } else if (is_nb) {
+        "nb_joint_laplace_unavailable"
+      } else {
+        "glmm_wald_uncertified_for_profiled_estimator"
+      },
+      r_verb = if (certified) {
+        "summary(fit)"
+      } else if (is_nb) {
+        # The joint route refuses NB, so advising it here would be a dead
+        # end; the bootstrap row below is NB's interval path.
+        "confint(fit, method = \"bootstrap\")"
+      } else {
+        "glmm(..., method = \"joint_laplace\")"
+      },
+      approx_cost = if (certified) "immediate" else "one refit (slower estimator)",
+      notes = if (certified) {
+        "certified Wald z from the engine inference table"
+      } else if (is_nb) {
+        "certified Wald is unavailable for negative binomial (no joint route); use the bootstrap"
+      } else {
+        "the default profiled estimator withholds Wald inference; the joint route certifies it"
+      }
+    ),
+    list(
+      method = "glmm_parametric_bootstrap",
+      expected_status = "available",
+      expected_reliability_reason = "bootstrap_monte_carlo_replicates",
+      r_verb = "confint(fit, method = \"bootstrap\", nsim = 999)",
+      approx_cost = "nsim model refits",
+      notes = paste0(
+        "percentile intervals from simulate-and-refit replicates of the ",
+        "effective estimator; every supported family incl. negative ",
+        "binomial; fixed-theta NB conditions replicates on that theta, ",
+        "accounting and MCSE attached to the result"
+      )
+    ),
+    list(
+      method = "wald_z_working_hessian",
+      expected_status = if (opted_in) "available" else "opt_in",
+      expected_reliability_reason = "working_hessian_uncertified_approximation",
+      r_verb = "glmm(..., inference = \"working_hessian\")",
+      approx_cost = "immediate",
+      notes = paste0(
+        "UNCERTIFIED approximation, reliability moderate; SEs ran ~11% ",
+        "smaller than glmer on the package's reference data ",
+        "(anti-conservative). Exploration and screening, not reporting."
+      )
+    )
+  )
+  tab <- do.call(rbind, lapply(rows, as.data.frame, stringsAsFactors = FALSE))
+  tab$current <- tab$method == cap$method
+  tab <- mm_inference_options_add_display(tab)
+  rownames(tab) <- NULL
+
+  obj <- list(
+    table = tab,
+    fit_status = fit$fit_status %||% "unknown",
+    is_reml = FALSE,
+    n_groups_max = mm_inference_options_n_groups_max(fit),
+    term = term
+  )
+  class(obj) <- "mm_inference_options"
+  obj
+}
+
 #' @method print mm_inference_options
 #' @export
 print.mm_inference_options <- function(x, ...) {
@@ -104,7 +190,7 @@ mm_inference_options_row_wald <- function(fit, current_inf, is_boundary) {
   predicted <- if (is_boundary)
     "asymptotic_wald_z_at_boundary"
   else
-    "interior_converged_well_specified"
+    "interior_converged"
   observed <- if (nrow(current_inf) &&
                   identical(current_inf$method[[1L]], "asymptotic_wald_z") &&
                   !is.na(current_inf$reliability_reason[[1L]])) {
@@ -196,7 +282,8 @@ mm_inference_options_row_bootstrap_lrt <- function(fit, is_reml, nsim) {
 }
 
 mm_inference_options_bootstrap_lrt_reliability_reason <- function(nsim) {
-  if (is.numeric(nsim) && length(nsim) == 1L && !is.na(nsim) && nsim >= 999L) {
+  if (is.numeric(nsim) && length(nsim) == 1L && !is.na(nsim) &&
+      nsim >= mm_bootstrap_moderate_min()) {
     "bootstrap_monte_carlo_replicates"
   } else {
     "bootstrap_insufficient_replicates"
@@ -212,7 +299,9 @@ mm_inference_options_row_cluster_bootstrap <- function(n_groups_max, nsim) {
     r_verb = "test_effect(fit, term, method = 'cluster_bootstrap', group = '<group>')",
     approx_cost = "-",
     notes = if (too_few)
-      sprintf("only %d grouping levels; cluster bootstrap is coarse below ~10",
+      sprintf(paste0("heuristic (rule of thumb, not a validated threshold): ",
+                     "resampling only %d clusters gives the cluster ",
+                     "bootstrap little granularity"),
               n_groups_max)
     else
       "cluster_resample is an estimator-distribution target; fixed-effect p-values are not certified"
@@ -274,6 +363,7 @@ mm_inference_options_display_status <- function(status) {
     available = "runs now",
     not_assessed = "refused on this fit",
     not_yet_wired = "available upstream; R bridge pending",
+    opt_in = "opt-in (uncertified)",
     "check route status"
   )
 }
@@ -286,7 +376,7 @@ mm_inference_options_display_reason <- function(reason, status, method) {
     reason,
     asymptotic_wald_z_at_boundary =
       "Wald route runs, but boundary fits can understate uncertainty",
-    interior_converged_well_specified =
+    interior_converged =
       "interior fit; default fast route",
     satterthwaite_unavailable_at_boundary =
       "variance-parameter derivative undefined at boundary",
@@ -339,17 +429,12 @@ mm_inference_options_next_step <- function(method, status, reason, r_verb) {
 }
 
 mm_inference_options_format_cost <- function(fit, nsim, factor = 1) {
-  # Order-of-magnitude only. Per-replicate fit cost scales roughly with n_obs
-  # and theta complexity; a calibrated estimate is out of scope. We give the
-  # user a sense of "seconds vs minutes" so they can pick nsim deliberately.
-  n <- nrow(fit$model_frame %||% data.frame()) %||% NA
-  per_replicate_seconds <- if (is.na(n) || n < 200) 0.02 else 0.05
-  total <- nsim * per_replicate_seconds * factor
-  if (total < 5) {
-    sprintf("~%.0fs @ nsim=%d", total, nsim)
-  } else if (total < 60) {
-    sprintf("~%.0fs @ nsim=%d", total, nsim)
-  } else {
-    sprintf("~%.1fmin @ nsim=%d", total / 60, nsim)
-  }
+  # Report WORKLOAD, not invented seconds: per-replicate cost depends on the
+  # model, the machine, and the build, and a two-branch constant dressed as
+  # a runtime reads far more precise than it is (Audit1 WI-5.3). One
+  # bootstrap replicate costs one model refit; the bootstrap LRT refits the
+  # reduced and alternative models per replicate.
+  refits <- as.integer(round(nsim * factor))
+  sprintf("%s model refits (nsim = %d)",
+          format(refits, big.mark = ","), as.integer(nsim))
 }

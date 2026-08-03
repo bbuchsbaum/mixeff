@@ -21,7 +21,7 @@ on:
           valgrind, no-Suggests, unusual numeric builds, and native-code checks.
           Full list: https://r-hub.github.io/containers/
         type: string
-        default: 'ubuntu-gcc16,ubuntu-clang,windows,macos,macos-arm64,m1-san,gcc16,clang-asan,clang-ubsan,gcc-asan,valgrind,nosuggests,nold,lto,mkl,atlas,donttest,rchk'
+        default: 'ubuntu-gcc12,ubuntu-clang,windows,macos,macos-arm64,m1-san,gcc16,clang-asan,clang-ubsan,gcc-asan,valgrind,nosuggests,nold,lto,mkl,atlas,donttest,rchk'
       name:
         description: 'Run name. You can leave this empty.'
         type: string

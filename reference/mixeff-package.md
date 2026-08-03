@@ -26,9 +26,8 @@ Useful links:
 
 ## Author
 
-**Maintainer**: Brad Buchsbaum <bbuchsbaum@research.baycrest.org>
-(author of mixeff and the bundled 'mixeff-rs' crate) \[copyright
-holder\]
+**Maintainer**: Brad Buchsbaum <brad.buchsbaum@gmail.com> (author of
+mixeff and the bundled 'mixeff-rs' crate) \[copyright holder\]
 
 Other contributors:
 

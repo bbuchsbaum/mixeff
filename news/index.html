@@ -264,7 +264,7 @@
 <code>mm_thresholds()</code> — design/identifiability thresholds (byte-equivalent to the upstream <code>compiler_contract_v0_prd.md</code> §8).</li>
 <li>Parity ledger (<code>inst/extdata/expected-mismatches.json</code>) — every divergence from <code>lme4</code> is classified (<code>expected_mismatch</code> / <code>upstream_bug</code> / <code>unsupported</code>) with bounds enforced by <code>tests/testthat/helper-parity-scoreboard.R</code>.</li>
 <li>Parity scoreboard (<code>test-parity-scoreboard.R</code>) — emits a structured artifact recording observed differences against tolerances on the classic <code>lme4</code> parity baseline.</li>
-<li>Speedup vs <code>lme4</code> on the included scaling benchmark (<a href="benchmarks/lme4-scaling/"><code>benchmarks/lme4-scaling/</code></a>) ranges from ~2× (small balanced LMMs) to ~5× (correlated random slopes on ≥30 grouping levels).</li>
+<li>Speedup vs <code>lme4</code> on the included scaling benchmark (<code>benchmarks/lme4-scaling/</code>) ranges from ~2× (small balanced LMMs) to ~5× (correlated random slopes on ≥30 grouping levels).</li>
 </ul></div>
 <div class="section level3">
 <h3 id="non-goals-preserved-0-1-0">Non-goals (preserved)<a class="anchor" aria-label="anchor" href="#non-goals-preserved-0-1-0"></a></h3>

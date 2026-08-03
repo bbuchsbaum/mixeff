@@ -53,6 +53,14 @@ validate_against_random_term_card_schema <- function(card_json) {
 }
 
 test_that("random_term_card JSON validates against the v1 schema for the §9.5.7 patterns", {
+  # jsonvalidate embeds the V8 JavaScript engine, which aborts the R process
+  # with an internal stack-guard assertion under AddressSanitizer (observed
+  # on R-hub clang-asan: "Check failed: ... real_jslimit()", no mixeff frame
+  # in the trace). A fatal abort inside a dependency cannot be caught, so the
+  # schema contract is verified where we control the toolchain -- the release
+  # gate runs the full suite with NOT_CRAN=true -- rather than on CRAN's
+  # sanitizer machines.
+  skip_on_cran()
   skip_if_not_installed("jsonvalidate")
 
   patterns <- list(

@@ -27,7 +27,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Brad Buchsbaum \email{bbuchsbaum@research.baycrest.org} (author of mixeff and the bundled 'mixeff-rs' crate) [copyright holder]
+\strong{Maintainer}: Brad Buchsbaum \email{brad.buchsbaum@gmail.com} (author of mixeff and the bundled 'mixeff-rs' crate) [copyright holder]
 
 Other contributors:
 \itemize{

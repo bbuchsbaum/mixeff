@@ -440,7 +440,7 @@ tracked separately and ships as 0.2.0.
   artifact recording observed differences against tolerances on the
   classic `lme4` parity baseline.
 * Speedup vs `lme4` on the included scaling benchmark
-  ([`benchmarks/lme4-scaling/`](benchmarks/lme4-scaling/)) ranges from
+  (`benchmarks/lme4-scaling/`) ranges from
   ~2× (small balanced LMMs) to ~5× (correlated random slopes on
   ≥30 grouping levels).
 

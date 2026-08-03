@@ -38,9 +38,14 @@ $(STATLIB):
 	export PATH="$(PATH):$(HOME)/.cargo/bin" && \
 	@PANIC_EXPORTS@RUSTFLAGS="$(RUSTFLAGS) --print=native-static-libs" cargo build @CRAN_FLAGS@ --lib @PROFILE@ --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) @TARGET@
 
-	export CARGO_HOME=$(CARGOTMP) && \
-	export PATH="$(PATH):$(HOME)/.cargo/bin" && \
-	cargo run @CRAN_FLAGS@ --bin document --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) @TARGET@
+	# NOTE: the wrapper-generation step (`cargo run --bin document`) is
+	# deliberately NOT part of installation. Installing must not regenerate
+	# R/extendr-wrappers.R -- the committed wrappers ship in the tarball, the
+	# package source may be read-only at install time, and `cargo run` has to
+	# EXECUTE a freshly built binary, which fails outright when host and
+	# --target differ (win-builder R-devel: "%1 is not a valid Win32
+	# application", os error 193, after a clean library build). Regenerate
+	# during development with `Rscript tools/document-rust.R`.
 
 	# Always clean up CARGOTMP
 	rm -Rf $(CARGOTMP);

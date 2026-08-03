@@ -3,7 +3,7 @@ Title: Mixed-Effects Models via the 'mixeff-rs' Rust Crate
 Version: 0.2.0
 Authors@R: c(
     person("Brad", "Buchsbaum",
-           email = "bbuchsbaum@research.baycrest.org",
+           email = "brad.buchsbaum@gmail.com",
            role = c("aut", "cre", "cph"),
            comment = "author of mixeff and the bundled 'mixeff-rs' crate"),
     person("Authors of the dependency Rust crates",

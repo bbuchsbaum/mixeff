@@ -90,7 +90,26 @@ evidence.
   same condition reproduced locally with `_R_CHECK_DEPENDS_ONLY_=true`
   gives Status OK.
 
-- **`rchk`** — RCHK_RESULT_PLACEHOLDER
+- **`rchk`** — the same root cause as the win-builder installation
+  failure, surfacing differently. The library built cleanly
+  (`Finished release profile ... in 1m 15s`); the failure was the
+  install-time `cargo run --bin document` step that followed, which
+  links an *executable* against that container's **static** `libR.a`
+  and so needs GNU readline symbols that are not on the link line:
+
+  ```
+  error: linking with `cc` failed: exit status: 1
+  rust-lld: error: undefined symbol: tilde_expand_word
+    >>> referenced by sys-std.c:505 ... in archive libR.a
+  rust-lld: error: undefined symbol: rl_readline_name, add_history, ...
+  ```
+
+  Every undefined symbol belongs to readline and is referenced by R's own
+  `sys-std.c`, not by mixeff. That step has been removed: installation no
+  longer regenerates the extendr wrappers (they are committed and ship in
+  the tarball), which also fixed the win-builder ERROR. rchk's actual
+  PROTECT analysis never ran because the build stopped here.
+
 
 ## Downstream dependencies
 

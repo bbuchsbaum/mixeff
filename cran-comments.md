@@ -59,57 +59,56 @@ reproduction tiers against it.
    `nosuggests` containers), and the Windows UCRT CI leg. The adjacent
    `checking Rust compilation` is OK on win-builder.
 
-## R-hub court: the four non-green platforms
+## R-hub court results
 
-None of these is a defect in the package; each is itemized with its
-evidence.
+The court was run twice: once on the pre-fix tree, which surfaced four
+non-green platforms, and once after the fixes below, which reproduces
+**16 of 18 platforms green**. Green includes R-devel on three compilers
+(`ubuntu-gcc12`, `ubuntu-clang`, `gcc16`), Windows and both macOS
+R-devel builds, the sanitizers `clang-asan`, `clang-ubsan` and `m1-san`,
+plus `rchk`, `nosuggests`, `lto`, `mkl`, `atlas`, `nold` and `donttest`.
 
-- **`valgrind`** — failed in `r-hub/actions/setup-deps`, before the
-  check ran. No check log was produced; nothing was executed against
-  the package.
+Three of the original four were real and are fixed:
+
+- **`rchk`** and the **win-builder installation ERROR** shared one root
+  cause: an install-time `cargo run --bin document` step that
+  regenerated the extendr wrappers. It failed two different ways — on
+  Windows `cargo run` with a `--target` must execute a cross-compiled
+  binary ("%1 is not a valid Win32 application", os error 193), and in
+  the rchk container linking an *executable* against a **static**
+  `libR.a` needs GNU readline symbols that are not on the link line
+  (every undefined symbol referenced by R's own `sys-std.c`, none by
+  mixeff). Installing a package must not rewrite its own R sources in
+  any case; the wrappers are committed and ship in the tarball, and the
+  step is gone. Both platforms now pass, and a guard test keeps the
+  committed wrappers in step with the `#[extendr]` surface.
 
 - **`clang-asan`** — the R process was aborted by the V8 JavaScript
-  engine, reached through the `jsonvalidate` Suggests dependency used
-  by one schema-validation test:
-
-  ```
-  # Fatal error in , line 0
-  # Check failed: static_cast<uintptr_t>(caller_frame_top_) ... real_jslimit()
-  ...V8.so(v8::internal::Deoptimizer::DoComputeOutputFrames()+0x620)
-  ```
-
-  No mixeff frame appears in the trace. Because a fatal abort inside a
-  dependency cannot be trapped, that test is now `skip_on_cran()`; the
-  schema contract is still verified in the release gate, which runs the
-  suite with `NOT_CRAN=true`. `clang-ubsan` and `m1-san` pass.
+  engine, reached through the `jsonvalidate` Suggests dependency used by
+  one schema-validation test; no mixeff frame appeared in the trace.
+  Because a fatal abort inside a dependency cannot be trapped, that test
+  is now `skip_on_cran()`; the schema contract is still verified in the
+  release gate, which runs the suite with `NOT_CRAN=true`. `clang-asan`
+  now passes.
 
 - **`nosuggests`** — vignette re-building needed `rmarkdown`, which that
-  container omits. `rmarkdown` is genuinely required to build these
-  vignettes (`rmarkdown::html_vignette`), so it is now declared in
-  `VignetteBuilder:` alongside `knitr` (both are in `Suggests`). The
-  same condition reproduced locally with `_R_CHECK_DEPENDS_ONLY_=true`
-  gives Status OK.
+  container omits. `rmarkdown` genuinely is required to build these
+  vignettes (`rmarkdown::html_vignette`), so it is declared in
+  `VignetteBuilder:` alongside `knitr`; both are in `Suggests`. It now
+  passes, and the same condition reproduced locally with
+  `_R_CHECK_DEPENDS_ONLY_=true` gives Status OK.
 
-- **`rchk`** — the same root cause as the win-builder installation
-  failure, surfacing differently. The library built cleanly
-  (`Finished release profile ... in 1m 15s`); the failure was the
-  install-time `cargo run --bin document` step that followed, which
-  links an *executable* against that container's **static** `libR.a`
-  and so needs GNU readline symbols that are not on the link line:
+The two platforms that are still not green never executed a check
+against the package:
 
-  ```
-  error: linking with `cc` failed: exit status: 1
-  rust-lld: error: undefined symbol: tilde_expand_word
-    >>> referenced by sys-std.c:505 ... in archive libR.a
-  rust-lld: error: undefined symbol: rl_readline_name, add_history, ...
-  ```
+- **`valgrind`** — failed in `r-hub/actions/setup-deps` on both runs, at
+  the same step, before the check started. No check log is produced.
 
-  Every undefined symbol belongs to readline and is referenced by R's own
-  `sys-std.c`, not by mixeff. That step has been removed: installation no
-  longer regenerates the extendr wrappers (they are committed and ship in
-  the tarball), which also fixed the win-builder ERROR. rchk's actual
-  PROTECT analysis never ran because the build stopped here.
-
+- **`gcc-asan`** — hit the GitHub Actions six-hour job limit on both
+  runs (22:05:14 to 04:05:20 UTC, `run-check` still in progress when the
+  runner terminated it). AddressSanitizer plus a from-source Rust build
+  and the full test suite does not fit the runner budget. Sanitizer
+  coverage is provided by `clang-asan` and `m1-san`, which pass.
 
 ## Downstream dependencies
 

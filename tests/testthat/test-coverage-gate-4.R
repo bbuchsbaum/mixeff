@@ -526,14 +526,16 @@ test_that("predict conditional interval NA reason and fixed-only errors", {
   )
   expect_true(is.matrix(out_pi) && anyNA(out_pi))
 
-  # mm_predict_fixed_only / mm_engine_fixed_matrix failure paths.
+  # mm_engine_fixed_matrix aborts when beta names cannot be reconstructed.
+  fit_bad <- fit
+  names(fit_bad$beta) <- paste0("missing_", seq_along(fit_bad$beta))
   expect_error(
-    mixeff:::mm_predict_fixed_only(fit, data.frame(not_x = 1)),
-    class = "mm_data_error"
+    mixeff:::mm_engine_fixed_matrix(fit_bad, fit$model_frame),
+    class = "mm_inference_unavailable"
   )
   expect_error(
-    mixeff:::mm_engine_fixed_matrix(fit, data.frame(not_x = 1)),
-    class = "mm_data_error"
+    mixeff:::mm_predict_fixed_only(fit_bad, fit$model_frame),
+    class = "mm_inference_unavailable"
   )
 })
 
@@ -622,7 +624,8 @@ test_that("diagnostics helpers empty table and artifact guards", {
   expect_equal(nrow(rows), 1L)
 
   # Unknown diagnostic code warns once and tags the table.
-  mixeff:::mm_unknown_diag_state$seen <- character()
+  diag_state <- getFromNamespace("mm_unknown_diag_state", "mixeff")
+  diag_state$seen <- character()
   expect_warning(
     guarded <- mixeff:::mm_diagnostics_guard(
       data.frame(code = "totally_unknown_diag_code_xyz", stringsAsFactors = FALSE)

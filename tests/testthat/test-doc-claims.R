@@ -8,8 +8,13 @@
 
 mm_doc_files <- function() {
   root <- test_path("../..")
-  skip_if_not(file.exists(file.path(root, "DESCRIPTION")),
-              "package source is not available")
+  # Installed packages also ship DESCRIPTION, so require a vignette source
+  # sentinel (absent from the library install that covr / R CMD check use).
+  skip_if_not(
+    file.exists(file.path(root, "DESCRIPTION")) &&
+      file.exists(file.path(root, "vignettes", "mixeff.Rmd")),
+    "package source is not available"
+  )
   c(
     list.files(file.path(root, "vignettes"), pattern = "\\.Rmd$",
                recursive = TRUE, full.names = TRUE),
@@ -101,8 +106,14 @@ test_that("Ctrl-C interruptibility is not claimed in current docs", {
 
 test_that("the six-vignette surface is exactly the declared set", {
   root <- test_path("../..")
-  skip_if_not(file.exists(file.path(root, "DESCRIPTION")),
-              "package source is not available")
+  # Same sentinel as mm_doc_files(): DESCRIPTION alone is not enough under
+  # covr's install_path layout, which looks like a package root without
+  # vignette sources.
+  skip_if_not(
+    file.exists(file.path(root, "DESCRIPTION")) &&
+      file.exists(file.path(root, "vignettes", "mixeff.Rmd")),
+    "package source is not available"
+  )
   cran_vignettes <- sort(basename(list.files(
     file.path(root, "vignettes"), pattern = "\\.Rmd$", full.names = FALSE,
     recursive = FALSE

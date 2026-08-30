@@ -1,5 +1,11 @@
 # mixeff
 
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/bbuchsbaum/mixeff/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bbuchsbaum/mixeff/actions/workflows/R-CMD-check.yaml)
+[![test-coverage](https://github.com/bbuchsbaum/mixeff/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/bbuchsbaum/mixeff/actions/workflows/test-coverage.yaml)
+[![Codecov test coverage](https://codecov.io/gh/bbuchsbaum/mixeff/branch/main/graph/badge.svg)](https://app.codecov.io/gh/bbuchsbaum/mixeff?branch=main)
+<!-- badges: end -->
+
 > Mixed-effects models in R, with lme4-style formulas and a Rust engine.
 
 `mixeff` fits linear and generalized linear mixed-effects models through the

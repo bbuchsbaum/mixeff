@@ -2,6 +2,14 @@
 
 ## mixeff 0.2.0
 
+### Compatibility
+
+- Fit-summary parsing accepts the additive `mixedmodels.fit_summary`
+  1.1.0 schema emitted by mixeff-rs 1.0.0-rc.4, while retaining 1.0.0
+  support. Covariance provenance is preserved in the stored payload.
+  Unknown schema versions and malformed payloads remain errors. The
+  bundled engine pin is unchanged.
+
 ### Breaking: API-shape stabilization
 
 - [`audit()`](https://bbuchsbaum.github.io/mixeff/reference/audit.md) is

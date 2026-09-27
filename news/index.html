@@ -52,6 +52,10 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="mixeff-020">mixeff 0.2.0<a class="anchor" aria-label="anchor" href="#mixeff-020"></a></h2>
 <div class="section level3">
+<h3 id="compatibility-0-2-0">Compatibility<a class="anchor" aria-label="anchor" href="#compatibility-0-2-0"></a></h3>
+<ul><li>Fit-summary parsing accepts the additive <code>mixedmodels.fit_summary</code> 1.1.0 schema emitted by mixeff-rs 1.0.0-rc.4, while retaining 1.0.0 support. Covariance provenance is preserved in the stored payload. Unknown schema versions and malformed payloads remain errors. The bundled engine pin is unchanged.</li>
+</ul></div>
+<div class="section level3">
 <h3 id="breaking-api-shape-stabilization-0-2-0">Breaking: API-shape stabilization<a class="anchor" aria-label="anchor" href="#breaking-api-shape-stabilization-0-2-0"></a></h3>
 <ul><li>
 <code><a href="../reference/audit.html">audit()</a></code> is now the single audit verb, dispatching on both compiled specs and fits; <code><a href="../reference/audit_design.html">audit_design()</a></code> forwards with a deprecation warning and will be removed later.</li>

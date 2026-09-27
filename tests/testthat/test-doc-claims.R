@@ -8,8 +8,15 @@
 
 mm_doc_files <- function() {
   root <- test_path("../..")
-  skip_if_not(file.exists(file.path(root, "DESCRIPTION")),
-              "package source is not available")
+  # Installed packages also ship DESCRIPTION (and often README.md), so require
+  # a source-only sentinel independent of the expected vignette set.
+  # .Rbuildignore is present in source checkouts and absent from the library
+  # install that covr / R CMD check use.
+  skip_if_not(
+    file.exists(file.path(root, "DESCRIPTION")) &&
+      file.exists(file.path(root, ".Rbuildignore")),
+    "package source is not available"
+  )
   c(
     list.files(file.path(root, "vignettes"), pattern = "\\.Rmd$",
                recursive = TRUE, full.names = TRUE),
@@ -101,8 +108,13 @@ test_that("Ctrl-C interruptibility is not claimed in current docs", {
 
 test_that("the six-vignette surface is exactly the declared set", {
   root <- test_path("../..")
-  skip_if_not(file.exists(file.path(root, "DESCRIPTION")),
-              "package source is not available")
+  # Same sentinel as mm_doc_files(): independent of the expected vignette set
+  # so a missing mixeff.Rmd fails this assertion instead of skipping it.
+  skip_if_not(
+    file.exists(file.path(root, "DESCRIPTION")) &&
+      file.exists(file.path(root, ".Rbuildignore")),
+    "package source is not available"
+  )
   cran_vignettes <- sort(basename(list.files(
     file.path(root, "vignettes"), pattern = "\\.Rmd$", full.names = FALSE,
     recursive = FALSE

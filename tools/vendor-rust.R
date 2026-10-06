@@ -53,7 +53,7 @@ options(error = function() {
 # This constant is the committed source of truth for which `mixeff-rs` ships.
 # It must be a full 40-char commit SHA reachable from origin/main of
 # bbuchsbaum/mixeff-rs (or a tag, once the crate starts tagging releases).
-PINNED_REV <- "897dd2584b15e0af63ad4190e8d1773671e0edf9"
+PINNED_REV <- "977ef11217d8042ed75f7ce755fd8604f8e35498"
 
 rev <- Sys.getenv("MIXEFF_RS_REV", unset = PINNED_REV)
 url <- Sys.getenv(

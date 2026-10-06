@@ -55,8 +55,8 @@ name the reporting routes and point to the full menu:
 1. **Certified Wald** — refit with `method = "joint_laplace"` for standard
    errors, z tests, and Wald intervals from an engine-certified covariance.
 2. **Parametric bootstrap** — `confint(fit, method = "bootstrap")` on
-   profiled-estimator fits, including negative binomial (which has no
-   joint-Laplace route).
+   profiled or joint-Laplace fits. Replicates preserve the fitted estimator;
+   failed refits are counted. Negative binomial uses the profiled route.
 3. **Working-Hessian approximation (opt-in)** — `inference_options(fit)`
    shows the invocation and its caveat.
 

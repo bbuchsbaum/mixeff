@@ -59,12 +59,12 @@ fit <- lmm(
 fit_status(fit)
 ```
 
-`converged_interior` means the optimizer returned a finite interior
-solution that passed mixeff's declared numerical checks, with every
-variance component away from zero. It does not establish global
-optimality, correct model specification, or that the data carry enough
-information — no numerical status can — but it is the status every
-other block of a `summary()` assumes.
+`converged_interior` means the engine accepted a finite interior
+solution under its convergence rules, with every variance component
+away from zero. Individual derivative checks can still be unavailable;
+the certificate below records which checks completed. The status does
+not establish global optimality, correct model specification, or that
+the data carry enough information.
 
 The status changes when something needs your attention. The vocabulary
 has three values you will meet in practice:
@@ -90,6 +90,12 @@ facts the status label summarizes:
 ```{r interior-certificate}
 optimizer_certificate(fit)
 ```
+
+For GLMMs, optimizer evidence and inference covariance are separate records.
+The optimizer's Hessian check can be unavailable even when the later
+joint-Laplace covariance calculation succeeds. Read the inference row's
+status and reliability to assess a standard error or interval; the
+convergence label alone does not establish its availability.
 
 ```{r interior-checks, include = FALSE}
 stopifnot(inherits(fit, "mm_lmm"))

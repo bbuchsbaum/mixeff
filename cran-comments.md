@@ -11,11 +11,17 @@ the declared Rust toolchain requirements only.
 
 ## Test environments
 
-For engine pin `977ef11`, use the local evidence recorded by
-`tools/release-gate.R --release-candidate` in its generated
-`release-gate-report.txt`. The platform results below belong to the earlier
-submission candidate; they have not been rerun for this engine pin.
-No new hosted check or submission is implied.
+For engine pin `977ef11`, the local release-candidate gate passed all 13
+stages at R commit `faabf58` on macOS arm64, R 4.5.1. The built tarball passed
+`R CMD check --as-cran --no-manual` with 0 errors, 0 warnings and the expected
+new-submission NOTE. Its installed-package suite passed 4,305 checks with
+0 failures and 3 allowlisted skips, with slow parity and core aphantasia enabled.
+The live aphantasia render and offline source install also passed. Exact
+artifact identity and results are in `release-gate-report.txt`.
+
+The platform results below belong to the earlier submission candidate; they
+have not been rerun for this engine pin. No new hosted check or submission
+is implied.
 
 Checked as the built source tarball throughout (never the source
 directory); the acceptance run is `tools/release-gate.R
@@ -50,7 +56,7 @@ reproduction tiers against it.
    the tarball size on some machines. The Rust sources are vendored so
    the package builds fully offline, which accounts for the size.
 
-   Size of tarball: 6478974 bytes
+   Size of tarball: 6478929 bytes
 
    The release gate refreshes this line from the artifact it builds.
 
@@ -143,8 +149,8 @@ None.
   benchmarks, examples, datasets, and CI configuration from the
   vendored crates before they are committed; upstream LICENSE / NOTICE
   files are preserved in `inst/LICENSE.note`.
-- **Installed size**: about 8.6 MB, dominated by the Rust-compiled
-  library.
+- **Installed size**: 11.1 MB in the local `977ef11` candidate check,
+  including 8.9 MB in `libs`.
 - **Cross-platform**: macOS arm64 + x86_64, Ubuntu LTS, Windows UCRT
   (Rtools43+ MinGW, `x86_64-pc-windows-gnu`). Windows i386 is not
   supported.

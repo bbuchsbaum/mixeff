@@ -11,12 +11,20 @@ the declared Rust toolchain requirements only.
 
 ## Test environments
 
+For engine pin `977ef11`, use the local evidence recorded by
+`tools/release-gate.R --release-candidate` in its generated
+`release-gate-report.txt`. The platform results below belong to the earlier
+submission candidate; they have not been rerun for this engine pin.
+No new hosted check or submission is implied.
+
 Checked as the built source tarball throughout (never the source
 directory); the acceptance run is `tools/release-gate.R
 --release-candidate`, which builds one tarball, records its SHA-256,
 checks that artifact with `--as-cran`, installs that same artifact, and
 runs the full test suite plus the slow parity and real-data
 reproduction tiers against it.
+
+### Historical platform results
 
 - macOS arm64, R 4.5.1 — `--as-cran` on the built tarball with
   vignettes rebuilt: 0 errors, 0 warnings, 1 NOTE (below).
@@ -41,6 +49,11 @@ reproduction tiers against it.
 1. **CRAN incoming feasibility** (all platforms) — "New submission", plus
    the tarball size on some machines. The Rust sources are vendored so
    the package builds fully offline, which accounts for the size.
+
+   Size of tarball: 6478966 bytes
+
+   The release gate refreshes this line from the artifact it builds;
+   the initial value records the 2026-10-06 local build at R `706f651`.
 
 2. **`checking compiled code`, win-builder only** — this check does not
    run there:
@@ -116,8 +129,8 @@ None.
 
 ## CRAN policy notes
 
-- **System requirements**: `Cargo` (Rust's package manager, >= 1.78.0),
-  `rustc` (>= 1.78.0), `GNU make`. Documented in `SystemRequirements:`.
+- **System requirements**: `Cargo` (Rust's package manager, >= 1.85.0),
+  `rustc` (>= 1.85.0), `GNU make`. Documented in `SystemRequirements:`.
 - **Vendoring**: The upstream `mixeff-rs` Rust crate is vendored under
   `src/rust/upstream/`, and its transitive Cargo registry dependencies
   ship as `src/rust/vendor.tar.xz` (about 4 MB, the largest single item

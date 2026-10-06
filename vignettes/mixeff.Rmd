@@ -21,7 +21,8 @@ library(mixeff)
 ```
 
 If you fit mixed-effects models in R, you most likely use
-`lme4::lmer()`. `mixeff::lmm()` speaks the same formula language, and
+`lme4::lmer()`. `mixeff::lmm()` supports familiar mixed-model formulas within its documented
+envelope, and
 the extractors — `fixef()`, `ranef()`, `VarCorr()`, `predict()`,
 `simulate()`, `anova()`, `summary()`, `update()` — do what you expect.
 On the package's supported envelope, statistical answers agree with
@@ -250,13 +251,18 @@ coefficients.
 A mixed-model fit often outlives the R session that produced it: you
 fit a model today, save it with the analysis, hand the script to a
 collaborator, and reopen the fit six months later for a contrast, a
-revision, or a referee response. `mixeff` stores the fitted values,
-the random-effects design, the convergence record, and the inference
-labels inside the R object, so each of those tasks works after
-`readRDS()` without recomputing the fit.
+revision, or a referee response. Stored coefficients, fitted values,
+variance components, and audit records survive `readRDS()` without a Rust
+handle. The examples above check those stored values.
 
-The round trip above used the singular fit; the same guarantees hold
-for an ordinary interior fit.
+Some post-fit operations currently reconstruct and optimize a model from the
+saved formula and data: new LMM contrasts and term tests, conditional random-
+effect variances, engine-backed new-data prediction, and prediction uncertainty.
+They can therefore incur fitting cost and depend on the installed engine.
+`revive()` resets the R cache; it does not restore a fitted Rust model.
+A successful round trip of extractors is not a guarantee that every later
+query uses the original numerical solution. Retain the package and engine
+versions with the saved fit when reproducing an analysis.
 
 ```{r persist-data, include = FALSE}
 set.seed(42)
@@ -291,8 +297,9 @@ restored <- revive(restored)
 `revive()` resets the object's process-local cache. It is cheap and
 safe to call after every `readRDS()`, but the extractors and
 inference functions shown below also work on the plain `readRDS()`
-result — the durable values live in the object itself, and the Rust
-handle is deliberately absent after reload.
+result. Stored extractors read durable values; operations requiring a native
+model use the reconstruction described above. The Rust handle is absent after
+reload.
 
 ```{r persist-extractors}
 fixef(restored)
@@ -307,9 +314,9 @@ stopifnot(identical(reporting_table(restored, "fixed_effects"),
                     reporting_table(fit2, "fixed_effects")))
 ```
 
-Conditional variances for random effects also survive the round trip.
-With `condVar = TRUE`, each grouping table carries a finite `postVar`
-array.
+Conditional variances for random effects can also be requested after reload.
+This currently refits from the saved data. With `condVar = TRUE`, each grouping
+table in this example carries a finite `postVar` array.
 
 ```{r persist-condvar}
 re <- ranef(restored, condVar = TRUE)
@@ -386,5 +393,5 @@ the object.
   the
   [inference-method glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html),
   [reporting workflows](https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.html),
-  and a
-  [full published-study reproduction](https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html).
+  and
+  [selected analyses from a submitted manuscript](https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html).

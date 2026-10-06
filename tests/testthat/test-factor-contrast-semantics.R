@@ -13,11 +13,6 @@ factor_contrast_design <- function(seed = 8L) {
   dat$y <- 1.8 + 0.7 * x +
     ifelse(dat$f == "a", b_a[as.integer(dat$g)], b_b[as.integer(dat$g)]) +
     rnorm(nrow(dat), sd = 0.2)
-  contrasts(dat$f) <- matrix(
-    c(-0.5, 0.5),
-    ncol = 1L,
-    dimnames = list(c("a", "b"), "half")
-  )
   dat
 }
 
@@ -31,8 +26,6 @@ test_that("no-intercept factor random slopes use cell-means coding", {
   # lme4-concatenated names (mm_apply_lme4_coef_naming strips the separator).
   expect_true(all(c("f: a", "f: b") %in% vc_names))
   expect_true(all(c("fa", "fb") %in% re_names))
-  expect_false(any(grepl("half", vc_names, fixed = TRUE)))
-  expect_false(any(grepl("half", re_names, fixed = TRUE)))
 
   if (requireNamespace("lme4", quietly = TRUE)) {
     ref <- suppressMessages(suppressWarnings(

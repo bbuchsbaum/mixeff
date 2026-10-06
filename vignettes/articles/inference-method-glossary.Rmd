@@ -23,13 +23,25 @@ machine-readable contract for tests, reports, and downstream tooling.
 ## `expected_status`
 
 `expected_status` is used by `inference_options()` to say whether a route is
-usable on the current fit.
+expected to be usable on the current fit. This is advice before execution;
+the returned result's `status` is the authority after the call runs.
 
 | Value | Definition |
 |---|---|
 | `available` | The method can run on this fit and produce the requested quantity. |
 | `not_assessed` | The method is known but refused for this fit, with the reason named in `expected_reliability_reason` or `reason_code`. |
+| `opt_in` | A supported but uncertified approximation requires an explicit request; it is not enabled by default. |
 | `not_yet_wired` | The method is part of the inference contract but is not exposed through the current R bridge. |
+
+## Actual result `status`
+
+Read this separately from the route map and from `reliability`:
+
+| Value | Meaning |
+|---|---|
+| `available` | The requested quantity was computed under the named method's contract. It is not a guarantee of calibration for your data. |
+| `available_noninferential` | Numeric output is present but is not certified for inference. The working-Hessian opt-in retains this status even when it supplies Wald columns. |
+| `not_assessed`, `unavailable`, `unsupported` | The quantity was not supplied; inspect the row's reason. The exact enum depends on the payload type. |
 
 ## `expected_reliability_reason` and `reliability_reason`
 
@@ -81,7 +93,7 @@ more.
 | Grade | Earned by | Where you see it |
 |---|---|---|
 | `high` | A model-based covariance route with no approximation beyond the model itself (the LMM `model_based` fixed-effect covariance). | LMM Wald/Satterthwaite covariance status. |
-| `moderate` | A named, documented approximation within the validated envelope: finite-difference Satterthwaite df; the joint-Laplace active-Hessian GLMM covariance; the working-Hessian approximation under its explicit opt-in; a certified bootstrap with at least 999 successful replicates and a finite Monte Carlo SE. | Most certified inference rows. |
+| `moderate` | A rubric label for a named approximation, including both certified and uncertified routes: finite-difference Satterthwaite df; the joint-Laplace active-Hessian GLMM covariance; the working-Hessian approximation under its explicit opt-in; a certified bootstrap with at least 999 successful replicates and a finite Monte Carlo SE. | Certified inference rows and opted-in, noninferential working-Hessian rows; inspect `status` and `method` to distinguish them. |
 | `low` | The route ran but with a known weakening: a t target that fell back to standard-normal z (degenerate df), or a bootstrap below the 999-replicate floor. | Boundary-fit Wald rows; small-`nsim` bootstrap results. |
 | `not_available` | No graded quantity: the row is a refusal, or reliability is not defined for the target. | Withheld GLMM rows; refusal rows. |
 

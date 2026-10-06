@@ -165,6 +165,32 @@ stopifnot(all(c("method", "status", "reliability") %in% names(fixed_report)))
 stopifnot(all(fixed_audit$source == "fixed_effect_inference_table"))
 ```
 
+## Turning the tables into methods and results prose
+
+For this simulated example, the following prose uses the evaluated fit and
+coefficient table. An applied report would also describe recruitment, exclusions,
+and the study design; those facts cannot be inferred from a model object.
+
+```{r report-prose-values, include = FALSE}
+week_row <- summary(fit, method = "auto")$inference$table
+week_row <- week_row[week_row$term == "week", , drop = FALSE]
+stopifnot(nrow(week_row) == 1L, week_row$status == "available")
+fmt <- function(x) formatC(x, format = "f", digits = 3)
+```
+
+> We fitted a Gaussian linear mixed model by restricted maximum likelihood to
+> `r nobs(fit)` observations from `r nlevels(clinic_visits$clinic)` clinics.
+> The model included fixed effects of week and treatment and a random intercept
+> for clinic. Fixed-effect tests used the `r week_row$method` method. The
+> optimizer reported an interior solution (`r fit_status(fit)`).
+>
+> Adjusting for treatment, the estimated weekly change in score was
+> `r fmt(week_row$estimate)` points (SE `r fmt(week_row$std_error)`;
+> p `r if (week_row$p_value < .001) "< .001" else paste("=", fmt(week_row$p_value))`).
+> This estimate describes the common weekly slope assumed by the model.
+> The simulated example does not establish a treatment effect in a clinical
+> population.
+
 ## How are random effects reported?
 
 The random-effect table reports variance components on the fitted scale. In

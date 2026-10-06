@@ -26,8 +26,13 @@ library(mixeff)
 cat("The executable cbpp examples in this vignette require the `lme4` package.\n")
 ```
 
-`glmm()` fits generalized linear mixed models by one of two estimators, and
-the difference between them decides what inference you get:
+`glmm()` fits mixed models for binary or grouped-binomial outcomes and for
+counts with Poisson or negative-binomial families, and positive continuous
+outcomes with a Gamma family. Choose the family and link
+for the response, then inspect the estimator and inference contract.
+
+Two estimators are available for binomial, Poisson, and Gamma models. The requested
+estimator affects what inference may be available:
 
 - **`method = "pirls_profiled"` (the default)** is a fast profiled PIRLS
   fitter. It returns point estimates, fitted values, and variance
@@ -37,11 +42,15 @@ the difference between them decides what inference you get:
   accuracy caveats for the profiled approximation, is stated in
   `vignette("inference", package = "mixeff")`).
 - **`method = "joint_laplace"`** maximizes the same joint Laplace objective
-  as `lme4::glmer()` (at `nAGQ = 1`). It is slower, and it returns the full
-  inference table — standard errors, z tests, and Wald confidence
-  intervals — from a covariance the engine certifies.
+  as `lme4::glmer()` (at `nAGQ = 1`). When it succeeds and the covariance is
+  certified, it supplies standard errors, z tests, and Wald intervals.
+  If that fit fails, the engine can return a profiled estimate and record an
+  estimator substitution. Inspect the effective estimator and row statuses;
+  a joint request alone does not certify the result. Negative binomial uses
+  the profiled route.
 
-Three inference routes exist, and every refusal message names them:
+There are two reporting routes and an exploratory opt-in. Refusal messages
+name the reporting routes and point to the full menu:
 
 1. **Certified Wald** — refit with `method = "joint_laplace"` for standard
    errors, z tests, and Wald intervals from an engine-certified covariance.

@@ -398,9 +398,8 @@ mm_grid.mm_glmm <- function(fit, specs, ...) {
 ## template's fitted theta. Failed replicates are counted, never silently
 ## dropped. Deterministic given `seed`; when `seed` is NULL one is drawn
 ## from R's RNG so set.seed() governs reproducibility.
-mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
-                                                 nsim = 999L, seed = NULL) {
-  if (identical(mm_glmm_effective_method(object), "joint_laplace")) {
+mm_glmm_bootstrap_capability <- function(fit) {
+  if (identical(mm_glmm_effective_method(fit), "joint_laplace")) {
     # Engine limitation at pin f82c646: GeneralizedLinearMixedModel::refit
     # hardcodes the fast path (generalized/optimizer.rs:19-23) and the
     # dependency-light build then refuses the joint optimizer left in
@@ -408,18 +407,27 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
     # deterministically. Refuse up front with the honest reason instead of
     # burning nsim doomed refits (upstream bead filed; certified Wald is
     # available on joint fits anyway).
-    mm_abort(
-      message = paste0(
+    return(list(
+      available = FALSE,
+      reason_code = "glmm_bootstrap_joint_laplace_unavailable",
+      reason = paste0(
         "The parametric bootstrap is not available for joint_laplace fits ",
         "at this engine pin: replicate refits cannot re-run the joint ",
-        "estimator. Use the certified Wald intervals ",
+        "estimator. Use certified Wald intervals when available ",
         "(confint(fit, method = \"asymptotic\")), or bootstrap the profiled ",
         "estimator by refitting with the default method."
-      ),
-      class = "mm_inference_unavailable",
-      reason_code = "glmm_bootstrap_joint_laplace_unavailable",
-      input = object$method
-    )
+      )
+    ))
+  }
+  list(available = TRUE, reason_code = NA_character_, reason = NA_character_)
+}
+
+mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
+                                                 nsim = 999L, seed = NULL) {
+  capability <- mm_glmm_bootstrap_capability(object)
+  if (!capability$available) {
+    mm_abort(message = capability$reason, class = "mm_inference_unavailable",
+             reason_code = capability$reason_code, input = object$method)
   }
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) ||
       nsim < 2 || nsim != as.integer(nsim)) {

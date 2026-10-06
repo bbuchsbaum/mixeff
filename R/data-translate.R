@@ -113,6 +113,51 @@ mm_translate_data <- function(data) {
   )
 }
 
+# Check contrast intent at the formula boundary, before passing columns to
+# Rust. Grouping-only factors and the response are labels, not design contrasts.
+# Do not repeat this global-option check on post-fit translation: prediction
+# and inference must retain the training basis when session options change.
+mm_assert_unordered_contrast_policy <- function(formula, data) {
+  predictor_vars <- function(expr) {
+    if (!is.call(expr)) return(all.vars(expr))
+    if (as.character(expr[[1L]]) %in% c("|", "||")) {
+      return(predictor_vars(expr[[2L]]))
+    }
+    unique(unlist(lapply(as.list(expr)[-1L], predictor_vars), use.names = FALSE))
+  }
+  vars <- intersect(predictor_vars(formula[[3L]]), names(data))
+  for (nm in vars) {
+    col <- data[[nm]]
+    if (!is.factor(col) || is.ordered(col)) next
+    requested <- attr(col, "contrasts")
+    source <- "contrasts attribute"
+    if (is.null(requested)) {
+      opt <- getOption("contrasts")
+      requested <- if (length(opt)) unname(opt[[1L]]) else NA_character_
+      source <- "unordered-factor options(contrasts=) setting"
+    }
+    # Accept the exact canonical treatment basis as well as its name.
+    # Different column labels are part of the caller's coefficient contract.
+    supported <- identical(requested, "contr.treatment") ||
+      (nlevels(col) > 1L &&
+         identical(requested, stats::contr.treatment(levels(col))))
+    if (!supported) {
+      mm_abort(
+        message = sprintf(paste0(
+          "Factor `%s` has an unsupported %s. mixeff uses treatment ",
+          "contrasts with the first level as reference. Supply that coding ",
+          "explicitly, reset the contrast setting, or construct numeric ",
+          "predictors for a different coding."), nm, source),
+        class = "mm_arg_error",
+        reason_code = "unsupported_factor_contrasts",
+        column = nm,
+        input = requested
+      )
+    }
+  }
+  invisible(TRUE)
+}
+
 #' Refuse ordered factors whose contrast policy mixeff cannot honour
 #'
 #' Ordered factors are coded with `contr.poly` to match lme4/R's default. That

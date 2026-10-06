@@ -26,7 +26,9 @@ bootstrap means roughly 1,000 refits, plus the original fit and
 summary work. The same logic applies to cluster bootstrap,
 simulation studies, multi-seed reanalysis, and anything whose inner
 loop is "fit the same model again with new data". A per-refit
-speedup multiplies by the replicate count.
+time saving accumulates across replicates. If each refit is twice as fast,
+the repeated fitting remains about twice as fast; the absolute seconds saved
+grow with the number of refits.
 
 On the LMM scaling benchmark shipped with the package, `mixeff` ran
 2.0 to 3.5 times faster than `lme4` at the largest tested scale of
@@ -264,7 +266,9 @@ calibration evidence: how often a method rejects under a null, how often it
 detects a small alternative, and whether interval routes cover that small
 alternative.
 
-The shipped artifact is produced by the simulation study's **release mode**:
+The shipped artifact is a historical run of the simulation study's **release
+mode**, at the engine pin printed below. It is not a fresh qualification of
+the currently bundled engine:
 2,500 replications per analytic route (Monte Carlo SE at a true 0.05 rate:
 about 0.0044), 500 per bootstrap route (about 0.0097), and 1,000 for the
 certified joint-Laplace GLMM route. Every rate below carries a Wilson 95%
@@ -317,6 +321,13 @@ stopifnot(nrow(ran) > 0L)
 stopifnot(all(ran$n_evaluated_null + ran$n_refused_null +
                 ran$n_failed_null + ran$n_fit_failed_null == ran$n_requested))
 ```
+
+These results include departures from nominal performance: for example, the
+interior LMM Wald test rejects about 8% of null replications at a nominal 5%
+level. A completed study does not certify every route. Read each estimate
+with its interval and refusal/failure counts; the historical evidence needs
+a new run at a frozen candidate before making current-version calibration
+claims.
 
 The plot shows each route's empirical rates with their Wilson intervals.
 P-value routes contribute Type I error and power; interval routes contribute

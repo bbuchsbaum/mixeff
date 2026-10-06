@@ -78,7 +78,12 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       input = formula
     )
   }
-  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
+  if (!is.null(contrasts)) {
+    mm_reject_nontreatment_contrasts(contrasts, data)
+    # Explicit supported coding takes precedence over attributes and options,
+    # and travels with the model frame for later reconstruction.
+    for (nm in names(contrasts)) attr(data[[nm]], "contrasts") <- contrasts[[nm]]
+  }
   weights <- mm_lmm_weights(substitute(weights), data, parent.frame())
   if (!is.logical(REML) || length(REML) != 1L || is.na(REML)) {
     mm_abort(
@@ -475,11 +480,12 @@ mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
     character(0)
   }
   entry_ok <- function(nm, x) {
+    if (!is.data.frame(data) || !is.factor(data[[nm]])) return(FALSE)
     if (!is.character(x) || length(x) != 1L) return(FALSE)
     if (nm %in% ordered_cols) {
       identical(x, "contr.poly")
     } else {
-      x %in% c("contr.treatment", "contr.SAS")
+      identical(x, "contr.treatment")
     }
   }
   nms <- names(contrasts)
@@ -490,7 +496,7 @@ mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
     mm_abort(
       message = paste(
         "Custom `contrasts` are only honored when they match the engine's",
-        "coding: `contr.treatment`/`contr.SAS` for unordered factors and",
+        "coding: `contr.treatment` for unordered factors and",
         "`contr.poly` for ordered factors. Recode the factor (e.g. relevel(),",
         "toggle ordering, or construct numeric columns) for a different coding."
       ),

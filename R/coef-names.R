@@ -58,9 +58,9 @@ mm_coef_name_map <- function(fit, engine_names = names(fit$beta)) {
   rhs <- stats::delete.response(stats::terms(mm_fixed_formula(fit)))
   # Forcing the fit-time per-factor coding over a factor that carries an
   # attached contrast matrix makes model.frame warn "contrasts dropped"; the
-  # engine ignores attached matrices on unordered factors by documented
-  # design (ordered ones are guarded at translate time), so the drop is
-  # intentional here, not information loss.
+  # compiler has already checked that predictor attributes request the
+  # supported basis. Post-fit reconstruction keeps that training basis even
+  # if the session's global contrast option has changed.
   muffle_contrasts_dropped <- function(w) {
     if (grepl("contrasts dropped from factor", conditionMessage(w), fixed = TRUE)) {
       invokeRestart("muffleWarning")

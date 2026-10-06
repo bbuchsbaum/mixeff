@@ -133,8 +133,15 @@ sdamr_group_key <- function(x) {
 sdamr_fit_pair <- function(case) {
   mm_skip_if_no_lme4()
   dat <- case$data()
+  # The tutorial uses centered contrasts. These parity assertions explicitly
+  # transform lme4's coefficients/covariance into the engine treatment basis;
+  # request that basis rather than relying on ignored contrast attributes.
+  engine_contrasts <- if (identical(case$fixed_basis, "anchor_treatment")) {
+    list(anchor = "contr.treatment")
+  } else NULL
   list(
     mixeff = mixeff::lmm(case$formula, dat, REML = case$REML,
+                         contrasts = engine_contrasts,
                          control = mixeff::mm_control(verbose = -1)),
     lme4 = suppressMessages(suppressWarnings(
       lme4::lmer(case$formula, data = dat, REML = case$REML)
@@ -338,6 +345,7 @@ test_that("sdamr companion random-slope LRT agrees with lme4", {
     (1 | referrer) + (0 + anchor_contrast | referrer)
 
   mm_correlated <- mixeff::lmm(correlated, dat, REML = FALSE,
+                               contrasts = list(anchor = "contr.treatment"),
                                control = mixeff::mm_control(verbose = -1))
   mm_uncorrelated <- mixeff::lmm(uncorrelated, dat, REML = FALSE,
                                  control = mixeff::mm_control(verbose = -1))

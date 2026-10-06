@@ -366,9 +366,9 @@ mm_glmm_working_hessian_note <- function(x) {
   paste0(
     "Wald columns use the UNCERTIFIED working-Hessian approximation ",
     "(requested via inference = \"working_hessian\"; reliability moderate). ",
-    "Its standard errors ran ~11% smaller than glmer's on the package's ",
-    "reference data (anti-conservative). For reporting, refit with ",
-    "method = \"joint_laplace\"."
+    "The grade does not establish calibrated uncertainty. Use for ",
+    "exploration and screening; for reporting, use a supported bootstrap ",
+    "or a certified joint-Laplace fit."
   )
 }
 

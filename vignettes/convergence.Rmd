@@ -207,8 +207,10 @@ status.
 
 It is tempting to generalize this to "a zero θ entry means the
 covariance is reduced-rank". That reading is wrong. A zero
-**off-diagonal** entry of Λ only says the corresponding covariance is
-zero; the covariance matrix can keep full rank. Singularity is a
+**off-diagonal** entry of Λ does not by itself imply reduced rank. In the
+two-dimensional example below, it also makes the covariance zero. In larger
+blocks, covariance entries are sums of products of factor entries, so one zero
+off-diagonal factor entry need not make the corresponding covariance zero. Singularity is a
 property of the covariance matrix's rank — equivalently its
 eigenstructure — and in this parameterization the rank collapses
 exactly when a **diagonal** entry of Λ is zero. A two-by-two example
@@ -265,6 +267,12 @@ fitted optimum, one or more jittered restarts, and (LMM-only, opt-in)
 an alternate-optimizer consensus pass. The engine judges agreement
 against explicit tolerances on the objective, θ, and the fixed
 effects, and owns the verdict; R only formats it.
+
+The current R bridge first reconstructs and refits the model before invoking
+that workflow. Its reference optimum is therefore the reconstructed fit, not
+the original stored solution. This limits what the check establishes after
+reload or a change of engine version; exact restoration of the recorded state
+is still pending.
 
 ```{r verify-lmm}
 vc <- verify_convergence(fit)

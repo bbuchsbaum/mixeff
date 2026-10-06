@@ -185,7 +185,10 @@ reduced <- lmm(
 compare(reduced, fit)
 ```
 
-`compare()` records that likelihood-ratio p-values are asymptotic. If you want
+By default, `compare()` reports an asymptotic likelihood-ratio test. When
+fixed-effect models fitted by REML are compared, it refits them by ML and
+records that change; it does not apply Satterthwaite degrees of freedom.
+If you want
 a simulation-based check for a small example, use the bootstrap path. The
 bootstrap p-value is `(b + 1) / (successful + 1)`, where `b` counts
 replicates at or above the observed statistic and `successful` counts the
@@ -617,8 +620,9 @@ that the profiled path is a different statistical approximation than
 `glmer()`'s joint Laplace fit — it can be less accurate for
 overdispersed models and models with observation-level random effects.
 
-Exactly three routes lead to reportable GLMM inference, and every
-refusal names them:
+Two routes support reporting; a third exposes an uncertified approximation
+for exploration. Refusal messages name the reporting routes and point to
+`inference_options()` for the complete menu:
 
 1. **Certified joint Wald.** Refit with `method = "joint_laplace"`;
    standard errors, z tests, and Wald intervals come from a covariance
@@ -886,11 +890,12 @@ imbalance_pull <- max(abs(
 round(imbalance_pull, 2)
 ```
 
-The clinic imbalance pulls each raw mean `r round(imbalance_pull, 2)`
-points toward the clinics its arm over-samples; the marginal means
-average over the model's fixed-effect grid instead and are free of that
-shift. The size of the gap depends on how unbalanced the design is and
-how large the group effects are.
+The largest absolute discrepancy between a raw treatment mean and its
+model-adjusted mean is `r round(imbalance_pull, 2)` points. The adjusted means
+average fixed-effect predictions over the reference grid, rather than over
+each arm's observed clinic composition. This changes the weighting and uses
+the model's assumptions about clinic effects; it does not guarantee removal
+of bias from imbalance or model misspecification.
 
 ### Pairwise comparisons with `mm_comparisons()`
 
@@ -905,10 +910,11 @@ ctr$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")
 The `active - control` row is the equal-weight reference-grid contrast
 — estimand (2) in the list above, averaged over both timepoints —
 tested with a Satterthwaite *t* and graded `moderate` reliability in
-the same row. In a randomized design you may argue it also estimates
-the causal quantity (4); that argument rests on the design's
-identification assumptions, and it is yours to make — the fitted model
-does not certify it.
+the same row. Because it averages pre- and post-treatment outcomes, it is
+neither the post-treatment contrast nor the treatment-by-time contrast. Choose
+that time-specific estimand explicitly when it is the scientific target. A
+causal interpretation also requires assumptions about treatment assignment
+and outcome measurement that the fitted model cannot certify.
 
 ```{r marginal-checks, include = FALSE}
 stopifnot(inherits(grd, "mm_grid"), nrow(grd$grid) == 4L)
@@ -1014,8 +1020,9 @@ stopifnot(is.null(attr(V, "mm_unavailable_reason")))
 ## Summary
 
 On an interior LMM fit, `summary()`, `contrast()`, `test_effect()`,
-`anova()`, and `compare()` return labeled finite-sample inference, with
-`"auto"` resolving to Satterthwaite.
+and single-model `anova()` return labeled finite-sample inference, with
+`"auto"` resolving to Satterthwaite. `compare()` defaults to an asymptotic
+likelihood-ratio test and can refit REML models by ML.
 
 On the boundary fit in this vignette:
 
@@ -1034,9 +1041,10 @@ On the boundary fit in this vignette:
 - boundary LRTs are available for variance-component tests, not
   fixed-effect tests.
 
-For GLMMs, three routes lead to reportable inference: certified joint
-Wald (`method = "joint_laplace"`), the parametric bootstrap on profiled
-fits, and the labeled working-Hessian opt-in for screening.
+For GLMM reporting, use certified joint Wald (`method = "joint_laplace"`)
+or the parametric bootstrap on profiled fits. The labeled working-Hessian
+opt-in is for exploration and screening; its `moderate` grade does not
+make it certified inference.
 
 Every route either returns a labeled result or refuses with a stable
 reason.

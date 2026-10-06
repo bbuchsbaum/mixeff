@@ -21,7 +21,7 @@
 #'
 #' `tidy()` returns one row per model term. `effects = "fixed"` yields the
 #' fixed-effect coefficients (`estimate`, `std.error`, `statistic`, and, for
-#' GLMMs, a Wald `p.value`); `effects = "ran_pars"` yields the variance-
+#' GLMMs, a Wald `p.value` plus `method`, `status`, `reliability`, and `reason`); `effects = "ran_pars"` yields the variance-
 #' component standard deviations (`sd__<term>`), correlations
 #' (`cor__<a>.<b>`), and the residual SD (`sd__Observation`); `effects =
 #' "ran_vals"` yields the conditional modes. `glance()` returns a one-row
@@ -111,6 +111,10 @@ mm_tidy_fixed <- function(x, conf.int, conf.level, glmm) {
   if (glmm) {
     # GLMM fixed effects use an asymptotic Wald z-test (matching glmer's tidy).
     out$p.value <- 2 * stats::pnorm(-abs(statistic))
+    out$method <- cap$method
+    out$status <- cap$status
+    out$reliability <- cap$reliability
+    out$reason <- cap$reason
   }
   if (isTRUE(conf.int)) {
     z <- stats::qnorm(1 - (1 - conf.level) / 2)

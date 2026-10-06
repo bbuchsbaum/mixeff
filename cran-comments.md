@@ -50,10 +50,9 @@ reproduction tiers against it.
    the tarball size on some machines. The Rust sources are vendored so
    the package builds fully offline, which accounts for the size.
 
-   Size of tarball: 6478966 bytes
+   Size of tarball: 6478974 bytes
 
-   The release gate refreshes this line from the artifact it builds;
-   the initial value records the 2026-10-06 local build at R `706f651`.
+   The release gate refreshes this line from the artifact it builds.
 
 2. **`checking compiled code`, win-builder only** — this check does not
    run there:

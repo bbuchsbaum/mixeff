@@ -116,18 +116,8 @@ brown_cases <- function() {
   )
 }
 
-# Gate status (2026-07-09 baseline at engine pin 3b6ec69): wall time is no
-# longer the reason for this gate — the rt_interaction fit runs in ~2.5s
-# (lme4 ~4.7s). What still fails opt-in is ACCURACY on `rt_interaction`: the
-# default trust_bq cold start lands in a reduced-rank basin +108 REML-dev
-# units above lme4's optimum (both stim components collapse to sd 0);
-# warm-start/cobyla/pattern_search recover lme4's optimum exactly and
-# verify_convergence() flags the fit unstable. Filed upstream as mixeff-rs
-# bd-01KX33Z3NAB2EVE94CBWR3NXX3; reproducer in
-# planning/probes/MINIMAL_case1_brown_rt_interaction.R. Ungate when it lands.
-brown_run_slow_rt_parity <- function() {
-  mm_run_slow_parity()
-}
+# Former engine-defect gates were removed after unchanged parity checks
+# passed at engine pin 977ef11 (2026-10-06).
 
 brown_fit_pair <- function(case) {
   mm_skip_if_no_lme4()
@@ -261,12 +251,8 @@ test_that("Brown 2021 LMM tutorial examples match core lme4 outputs", {
   }
 })
 
-test_that("Brown 2021 large RT tutorial examples match lme4 when slow parity is enabled", {
+test_that("Brown 2021 large RT tutorial examples match lme4", {
   mm_skip_if_no_lme4()
-  testthat::skip_if_not(
-    brown_run_slow_rt_parity(),
-    "Set MIXEFF_RUN_SLOW_PARITY=true to run large Brown 2021 RT mixed-model parity cases."
-  )
 
   for (label in names(brown_cases())) {
     case <- brown_cases()[[label]]
@@ -308,10 +294,6 @@ test_that("Brown 2021 large RT tutorial examples match lme4 when slow parity is 
 
 test_that("Brown 2021 RT likelihood-ratio example agrees with lme4", {
   mm_skip_if_no_lme4()
-  testthat::skip_if_not(
-    brown_run_slow_rt_parity(),
-    "Set MIXEFF_RUN_SLOW_PARITY=true to run the large Brown 2021 RT likelihood-ratio case."
-  )
   dat <- brown_rt_data()
   full <- RT ~ 1 + modality + (1 + modality | PID) + (1 + modality | stim)
   reduced <- RT ~ 1 + (1 + modality | stim) + (1 + modality | PID)

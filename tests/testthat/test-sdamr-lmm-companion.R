@@ -96,10 +96,6 @@ sdamr_cases <- function() {
   )
 }
 
-sdamr_run_slow_parity <- function() {
-  mm_run_slow_parity()
-}
-
 sdamr_fixef_key <- function(x) {
   x <- as.character(x)
   x <- gsub(": ", "", x, fixed = TRUE)
@@ -291,12 +287,8 @@ test_that("sdamr companion lme4 examples match core lme4 outputs", {
   }
 })
 
-test_that("slow sdamr speeddate crossed models match lme4 when enabled", {
+test_that("sdamr speeddate crossed models match lme4", {
   mm_skip_if_no_lme4()
-  testthat::skip_if_not(
-    sdamr_run_slow_parity(),
-    "Set MIXEFF_RUN_SLOW_PARITY=true to run slow SDAMR speeddate crossed-model parity cases."
-  )
 
   for (label in names(sdamr_cases())) {
     case <- sdamr_cases()[[label]]

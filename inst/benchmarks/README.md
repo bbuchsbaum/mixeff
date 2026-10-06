@@ -73,7 +73,7 @@ small alternative, interval coverage), with Wilson 95% intervals and full
 replicate accounting (requested / evaluated / refused / failed / boundary —
 nothing silently dropped). Covers four Gaussian LMM regimes (interior,
 boundary, reduced-rank, small-group) across the analytic and bootstrap
-routes, plus a binomial GLMM fixture with the certified joint-Laplace Wald
+routes, plus a binomial GLMM fixture with the joint-Laplace Wald
 route, the opt-in working-Hessian approximation, and the GLMM parametric
 bootstrap.
 
@@ -96,5 +96,20 @@ The script writes:
 - `inst/extdata/inference-method-simulation-summary.csv`
 - `inst/extdata/inference-method-simulation-manifest.json` — provenance
   (package commit, engine pin, lockfile checksum, seed, exact invocation,
-  elapsed time); the vignette displays it next to the results, and the
-  invocation recorded there reproduces the CSV bit-for-bit.
+  elapsed time); the vignette displays it next to the results. Reuse the
+  recorded revisions, settings and environment when reproducing the numerical
+  results.
+
+An evaluated replicate means the public inference route returned a usable
+result. The study does not separately tabulate every optimizer certificate.
+Boundary counts identify fits labelled `converged_boundary` or
+`converged_reduced_rank`; they are not disjoint from the evaluation counts.
+For the LMM `bootstrap` row, rejection rates use bootstrap p-values, while
+coverage uses the original model-based Wald interval: the contrast retains
+the model-based standard error. This is not percentile-bootstrap interval
+coverage. The GLMM `glmm_parametric_bootstrap` row does evaluate percentile
+intervals from `confint()`.
+Read conditional rates alongside refusals and failures. The unconditional
+Type I error and power columns use all requested replications as the
+denominator. Pointwise Wilson intervals help identify departures from nominal
+rates; they do not provide a familywise guarantee or certify untested designs.

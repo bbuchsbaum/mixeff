@@ -266,16 +266,15 @@ calibration evidence: how often a method rejects under a null, how often it
 detects a small alternative, and whether interval routes cover that small
 alternative.
 
-The shipped artifact is a historical run of the simulation study's **release
-mode**, at the engine pin printed below. It is not a fresh qualification of
-the currently bundled engine:
+The shipped artifact was regenerated in **release mode** at R candidate
+`00297b3` and engine pin `977ef11`, with:
 2,500 replications per analytic route (Monte Carlo SE at a true 0.05 rate:
 about 0.0044), 500 per bootstrap route (about 0.0097), and 1,000 for the
-certified joint-Laplace GLMM route. Every rate below carries a Wilson 95%
+joint-Laplace GLMM route. Every rate below carries a Wilson 95%
 interval, and every cell records requested, evaluated, refused, failed, and
 boundary replicate counts — nothing is silently dropped. The study covers
 four Gaussian LMM regimes (interior, boundary, reduced-rank, small-group)
-and one binomial GLMM fixture with three routes (certified joint Wald, the
+and one binomial GLMM fixture with three routes (joint Wald, the
 opt-in working-Hessian approximation, and the parametric bootstrap). That is
 the scope of the claim: calibration evidence **for these regimes**, not a
 general guarantee — a broader condition matrix (crossed effects, rare
@@ -322,22 +321,50 @@ stopifnot(all(ran$n_evaluated_null + ran$n_refused_null +
                 ran$n_failed_null + ran$n_fit_failed_null == ran$n_requested))
 ```
 
-These results include departures from nominal performance: for example, the
-interior LMM Wald test rejects about 8% of null replications at a nominal 5%
-level. A completed study does not certify every route. Read each estimate
-with its interval and refusal/failure counts; the historical evidence needs
-a new run at a frozen candidate before making current-version calibration
-claims.
+The run completed all 27 cells with no outer fitting or evaluation errors, but
+several routes departed from nominal performance:
+
+* Interior LMM Wald tests rejected 7.96% of null replications (95% Wilson
+  interval 6.96–9.09%) at a nominal 5% level. Their interval coverage was
+  92.72% (91.63–93.67%) at a nominal 95% level. Small-group Wald results
+  showed a similar shortfall.
+* Kenward–Roger was conservative among evaluated interior fits: 2.88%
+  rejection (2.24–3.69%). Boundary and reduced-rank Satterthwaite and
+  Kenward–Roger cells also had low conditional rejection rates and many
+  refusals. Availability matters: interior profile intervals were returned
+  for only 1,053 of 2,500 null replications.
+* The LMM bootstrap row's derived intervals covered 91.8% of interior
+  alternatives (89.1–93.9%) and 91.2% of small-group alternatives
+  (88.4–93.4%). These intervals use the contrast estimate plus or minus a
+  normal quantile times the original model-based standard error. Only that
+  row's p-value comes from the bootstrap. Its coverage does not measure the
+  percentile intervals returned by `confint(method = "bootstrap")`.
+* On this binomial fixture, joint Wald rejection was 5.2% (3.99–6.76%) and
+  coverage was 94.6% (93.02–95.84%). GLMM percentile-bootstrap rejection was
+  6.8% (4.91–9.35%) and coverage was 93.4% (90.88–95.26%). These intervals
+  include the respective nominal rates; they do not establish calibration
+  for other GLMM designs.
+
+These are pointwise intervals across multiple cells, not a familywise test
+or a universal qualification rule. A completed study does not certify every
+route. The working-Hessian approximation remains exploratory even where its
+rates look favorable in this fixture.
 
 The plot shows each route's empirical rates with their Wilson intervals.
 P-value routes contribute Type I error and power; interval routes contribute
 coverage. Rates are conditional on a successful evaluation; the CSV also
-carries unconditional versions (refusals and failures counted against the
-route) and the full replicate accounting. Routes that did not run carry an
+carries unconditional Type I error and power, using all requested
+replications as the denominator, and the full replicate accounting. A low
+unconditional rejection rate can reflect refusals; it does not establish
+good inference. An evaluated replicate means the public route returned a
+usable result; optimizer certification rates and the inner bootstrap-refit
+accounting are not separately tabulated in this summary.
+Boundary counts identify the recorded boundary/reduced-rank fit statuses
+and overlap the evaluation counts. Routes that did not run carry an
 explicit `reason` — "excluded in this mode" is machine-distinguishable from
 "not wired".
 
-```{r inference-simulation-plot, eval = requireNamespace("ggplot2", quietly = TRUE), fig.width = 8, fig.height = 6, fig.alt = "Inference calibration: Type I error, power, and coverage with Wilson intervals, by method and fixture."}
+```{r inference-simulation-plot, eval = requireNamespace("ggplot2", quietly = TRUE), fig.width = 9, fig.height = 7.5, fig.alt = "Inference calibration: Type I error, power, and coverage in separate columns with distinct scales and Wilson intervals; fixtures form rows."}
 library(ggplot2)
 
 metric_frame <- function(d, value, lower, upper, label) {
@@ -360,20 +387,33 @@ simulation_long$metric <- factor(
   levels = c("Type I error", "Power at small alternative",
              "Coverage at small alternative")
 )
+simulation_long$fixture <- factor(simulation_long$fixture,
+                                  levels = unique(ran$fixture))
+simulation_long$method <- factor(simulation_long$method,
+                                 levels = rev(unique(ran$method)))
 nominal <- data.frame(
   metric = factor(c("Type I error", "Coverage at small alternative"),
                   levels = levels(simulation_long$metric)),
   y = c(0.05, 0.95)
 )
 
-ggplot(simulation_long, aes(method, value)) +
-  geom_hline(data = nominal, aes(yintercept = y), linetype = 2,
+ggplot(simulation_long, aes(value, method)) +
+  geom_vline(data = nominal, aes(xintercept = y), linetype = 2,
              linewidth = 0.3, colour = "grey40") +
-  geom_pointrange(aes(ymin = lower, ymax = upper), linewidth = 0.4,
-                  fatten = 1.5) +
-  facet_grid(metric ~ fixture) +
-  coord_flip(ylim = c(0, 1)) +
-  labs(x = NULL, y = "empirical proportion (Wilson 95% interval)") +
+  geom_pointrange(aes(xmin = lower, xmax = upper), linewidth = 0.4,
+                  fatten = 1.5, orientation = "y") +
+  facet_grid(fixture ~ metric, scales = "free", space = "free_y") +
+  scale_x_continuous(labels = function(x) paste0(format(100 * x, trim = TRUE), "%")) +
+  scale_y_discrete(labels = c(
+    asymptotic_wald_z = "Wald z", satterthwaite = "Satterthwaite",
+    kenward_roger = "Kenward–Roger", profile = "Profile",
+    bootstrap = "Bootstrap test*", bootstrap_lrt = "Bootstrap LRT",
+    glmm_wald_joint_laplace = "Joint Wald",
+    wald_z_working_hessian = "Working Hessian",
+    glmm_parametric_bootstrap = "Percentile bootstrap"
+  )) +
+  labs(x = "empirical proportion (Wilson 95% interval)", y = NULL,
+       caption = "* Coverage uses model-based Wald intervals; rejection uses bootstrap p-values. Scales differ by metric.") +
   theme_minimal(base_size = 10) +
   theme(panel.grid.minor = element_blank())
 ```

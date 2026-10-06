@@ -131,7 +131,9 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
       expected_status = if (bootstrap$available) "available" else "not_assessed",
       expected_reliability_reason = if (bootstrap$available) {
         "bootstrap_monte_carlo_replicates"
-      } else bootstrap$reason_code,
+      } else {
+        bootstrap$reason_code
+      },
       r_verb = "confint(fit, method = \"bootstrap\", nsim = 999)",
       approx_cost = "nsim model refits",
       notes = if (!bootstrap$available) bootstrap$reason else paste0(
@@ -143,15 +145,23 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
     ),
     list(
       method = "wald_z_working_hessian",
-      expected_status = if (working) "available" else if (working_possible) {
+      expected_status = if (working) {
+        "available"
+      } else if (working_possible) {
         "opt_in"
-      } else "not_assessed",
+      } else {
+        "not_assessed"
+      },
       expected_reliability_reason = if (certified) {
         "certified_wald_takes_precedence"
       } else if (!working_possible) {
         "working_hessian_covariance_unavailable"
-      } else "working_hessian_uncertified_approximation",
-      r_verb = if (working || certified) "summary(fit)" else {
+      } else {
+        "working_hessian_uncertified_approximation"
+      },
+      r_verb = if (working || certified) {
+        "summary(fit)"
+      } else {
         "glmm(..., inference = \"working_hessian\")"
       },
       approx_cost = "immediate",
@@ -407,8 +417,6 @@ mm_inference_options_display_reason <- function(reason, status, method) {
       "increase nsim for a moderate reliability grade",
     bootstrap_lrt_requires_ml =
       "requires an ML fit; refit with REML = FALSE",
-    glmm_bootstrap_joint_laplace_unavailable =
-      "replicate refits cannot preserve the joint-Laplace estimator at this engine pin",
     bootstrap_cluster_resample_p_value_unavailable =
       "cluster resampling reports estimator distributions, not fixed-effect p-values",
     profile_likelihood_ci =
@@ -433,9 +441,6 @@ mm_inference_options_next_step <- function(method, status, reason, r_verb) {
   }
   if (identical(reason, "bootstrap_lrt_requires_ml")) {
     return(sprintf("Refit with lmm(..., REML = FALSE), then run %s", r_verb))
-  }
-  if (identical(reason, "glmm_bootstrap_joint_laplace_unavailable")) {
-    return("Use confint(fit, method = 'asymptotic') if certified Wald is available; otherwise refit with the profiled estimator before bootstrapping")
   }
   if (reason %in% c("satterthwaite_unavailable_at_boundary",
                     "kenward_roger_unavailable_at_boundary",

@@ -181,11 +181,12 @@ rbind(
 ```
 
 The RT sensitivity is a Gaussian LMM over correct trials with finite positive
-reaction times.
+reaction times. Re-standardize log SOA within that subset, as in the manuscript.
 
 ```{r rt-lmm, eval = run_live}
 rt_dat <- subset(primary_dat, correct == 1 & is.finite(rt) & rt > 0)
 rt_dat$log_rt <- log(rt_dat$rt)
+rt_dat$soa_s <- as.numeric(scale(rt_dat$soa_log))
 
 rt_fit <- lmm(
   log_rt ~ group * mask * soa_s + block +
@@ -217,9 +218,10 @@ the working Hessian requires an explicitly aligned family and estimator.
 This section illustrates the working-Hessian opt-in in that broader workflow.
 The fit above passes `inference = "working_hessian"` — the explicit
 opt-in that unlocks the UNCERTIFIED profiled working-Hessian approximation.
-Without it, a default profiled fit withholds standard errors, tests, and
-intervals on every route (refit with `method = "joint_laplace"` for
-certified Wald inference, or use `confint(fit, method = "bootstrap")`).
+Without it, a default profiled fit withholds Wald standard errors, tests, and
+intervals. Request `method = "joint_laplace"` and inspect its covariance and
+convergence evidence before using Wald inference, or use
+`confint(fit, method = "bootstrap")` for refit-based intervals.
 With the opt-in, `summary(fit, tests = "coefficients")` returns a Wald-z
 table in which every row is labelled `wald_z_working_hessian`:
 
@@ -234,9 +236,41 @@ The rows carry `reliability = "moderate"` and status
 calibrated inference. The parity ledger records SEs about 11% smaller than
 the reference in a historical run, with a 15% tolerance. That is a difference
 between complete workflows, not evidence that the working-Hessian
-approximation alone causes an 11% shortfall. The decomposition and its engine
-pin are described in the caveats below; a current, aligned comparison is
-still needed.
+approximation alone causes an 11% shortfall. The historical decomposition and
+its engine pin are described in the caveats below.
+
+A separate comparison at engine pin `977ef11` aligned all 17,280 primary rows,
+Bernoulli/logit likelihood, `nAGQ = 1`, factor coding, and the explicit six-theta
+random-effect family in both packages:
+
+```{r aligned-family, eval = FALSE}
+correct ~ group * mask * soa_s + block +
+  (1 | participant) + (0 + mask | participant) +
+  (0 + soa_s | participant) + (1 | item)
+```
+
+With `method = "joint_laplace"`, the largest fixed-effect difference from a
+fresh `lme4::glmer()` fit was 0.000055; the relative log-likelihood difference
+was 0.000000080. Both used 15 model parameters. These are point-estimate
+comparisons: the `mixeff` result was `not_optimized`, with stationarity residual
+1.083 against a tolerance of 0.02. Wald SEs and tests were withheld. This
+expanded formula also contains a covariance redundancy: its two mask dummy
+columns already span the participant intercept. Their unrestricted covariance
+and a separate intercept variance cannot be uniquely separated. A full
+positive-definite Hessian is therefore not a suitable expectation for this
+parameterization; this run cannot isolate a Hessian-computation defect.
+
+A second comparison replaced only the random mask term with
+`(0 + mask_masked | participant)`, where
+`mask_masked <- as.numeric(mask == "masked")`. This gives both packages the
+identifiable four-variance family used by the native diagonal model. The
+largest coefficient difference was 0.000058. Across the nine coefficients,
+joint-Laplace SEs differed from `glmer` by at most 1.06%, and the profiled
+working-Hessian SEs by at most 0.13%. The joint covariance passed its own
+positive-definiteness check, but optimization was still `not_optimized`
+(stationarity residual 0.119 against 0.02). These comparisons separate model
+families and expose the remaining diagnostic limits; they do not establish
+calibration or recompute the historical SE decomposition.
 
 The manuscript's primary estimand --- the difference-in-differences
 contrast at the centered SOA and at the focal 25 ms SOA --- is a
@@ -313,8 +347,9 @@ two are heavy opt-in jobs, and `mixeff` is not a Bayesian engine.
 
 * The Wald numbers in this article come from the PIRLS/Laplace
   working-Hessian covariance via the explicit `inference =
-  "working_hessian"` opt-in (default fits refuse Wald inference; certified
-  routes are `method = "joint_laplace"` and the parametric bootstrap).
+  "working_hessian"` opt-in. Default profiled fits refuse Wald inference;
+  joint Laplace assesses covariance separately, and parametric bootstrap
+  produces intervals by simulation and refitting.
   The historical SE gap is about 11% (ledger tolerance 15%). A
   hold-the-point decomposition at engine pin `6731062` attributed roughly
   73% of that gap to the random-effect family, 26% to working-Hessian scaling,

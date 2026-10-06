@@ -4,7 +4,9 @@
 #' `saveRDS()` / `readRDS()` or a worker restart. The fitted artifact and flat
 #' extractor values are the durable source of truth; the Rust handle is only a
 #' cache and may be absent. In the current bridge, revival recreates the lazy
-#' R-side cache and explicitly leaves `rust_handle = NULL`.
+#' R-side cache and explicitly leaves `rust_handle = NULL`. Native queries restore
+#' the stored engine snapshot without optimization. Missing or incompatible
+#' snapshots are refused for native queries; stored extractors remain readable.
 #'
 #' @param fit A fitted `mm_fit` object.
 #' @param ... Reserved for future methods.

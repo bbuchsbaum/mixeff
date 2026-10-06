@@ -268,11 +268,11 @@ an alternate-optimizer consensus pass. The engine judges agreement
 against explicit tolerances on the objective, θ, and the fixed
 effects, and owns the verdict; R only formats it.
 
-The current R bridge first reconstructs and refits the model before invoking
-that workflow. Its reference optimum is therefore the reconstructed fit, not
-the original stored solution. This limits what the check establishes after
-reload or a change of engine version; exact restoration of the recorded state
-is still pending.
+The R bridge restores the original fitted snapshot before invoking that
+workflow. Verification compares its deliberate searches against the recorded
+solution, including after reload. If the installed engine cannot restore the
+snapshot, verification refuses explicitly; it does not optimize a replacement
+baseline.
 
 ```{r verify-lmm}
 vc <- verify_convergence(fit)
@@ -366,9 +366,9 @@ the package's no-silent-surgery contract:
   the fact that a different estimator than requested produced the
   numbers.
 - **The checking verb.** `verify_convergence()` on a substituted fit
-  re-requests the joint route; when the verification refit falls back
-  the same way — the expected case — every run verifies the profiled
-  objective the fitted numbers actually came from.
+  restores the recorded effective estimator and certificate before
+  checking the solution. Its reference is the fit whose numbers were
+  returned, including any labelled substitution.
 
 On an ordinary fit the record is absent, and its absence is meaningful
 (no substitution happened):

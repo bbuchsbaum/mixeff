@@ -189,20 +189,19 @@ test_that("an empty verify payload list is contained", {
 test_that("malformed verification options JSON is contained", {
   fit <- mm_ffi_lmm_fit()
   payload <- mixeff:::mm_rust_fit_bridge_payload(fit)
-  payload$REML <- isTRUE(fit$REML)
   expect_error(
     mixeff:::mm_verify_convergence_json(payload, "{ nope"),
     regexp = "^mm_arg_error:"
   )
 })
 
-test_that("a negative n_agq smuggled into the GLMM verify payload is contained", {
+test_that("a malformed fitted state in the GLMM verify payload is contained", {
   fit <- mm_ffi_glmm_fit()
-  payload <- mixeff:::mm_rust_glmm_refit_payload(fit, "joint_laplace")
-  payload$n_agq <- -1
+  payload <- mixeff:::mm_rust_fit_bridge_payload(fit)
+  payload$fitted_state <- "{ malformed snapshot"
   expect_error(
     mixeff:::mm_verify_convergence_glmm_json(payload, "{}"),
-    regexp = "^mm_schema_error:"
+    regexp = "^mm_inference_unavailable:"
   )
 })
 
@@ -210,7 +209,7 @@ test_that("a negative n_agq smuggled into the GLMM verify payload is contained",
 
 test_that("nsim = 0 in the GLMM parametric-bootstrap options is contained", {
   fit <- mm_ffi_glmm_fit()
-  payload <- mixeff:::mm_rust_glmm_refit_payload(fit, "pirls_profiled")
+  payload <- mixeff:::mm_rust_fit_bridge_payload(fit)
   expect_error(
     mixeff:::mm_glmm_parametric_bootstrap_json(payload, '{"nsim":0,"seed":42}'),
     regexp = "^mm_arg_error:"
@@ -222,10 +221,7 @@ test_that("malformed bootstrap options JSON in the contrast bootstrap is contain
   b <- mixeff:::mm_rust_fit_bridge_payload(fit)
   expect_error(
     mixeff:::mm_fixed_effect_bootstrap_contrast_json(
-      b$formula_string, FALSE, b$spec_data$column_order,
-      b$spec_data$numeric_columns, b$spec_data$categorical_values,
-      b$spec_data$categorical_levels, b$spec_data$categorical_ordered,
-      b$weights, b$control_json,
+      b$fitted_state,
       c(0, 1), 1L, 2L, "r1", 0, "{ definitely not json"
     ),
     regexp = "^mm_inference_unavailable:"
@@ -240,10 +236,7 @@ test_that("an inconsistent contrast-matrix payload is contained", {
   # 3 values declared as a 2x2 matrix.
   expect_error(
     mixeff:::mm_fixed_effect_contrast_json(
-      b$formula_string, TRUE, b$spec_data$column_order,
-      b$spec_data$numeric_columns, b$spec_data$categorical_values,
-      b$spec_data$categorical_levels, b$spec_data$categorical_ordered,
-      b$weights, b$control_json,
+      b$fitted_state,
       c(0, 1, 1), 2L, 2L, c("r1", "r2"), c(0, 0), "satterthwaite"
     ),
     regexp = "^mm_inference_unavailable:"
@@ -253,14 +246,12 @@ test_that("an inconsistent contrast-matrix payload is contained", {
 ## predict surfaces ------------------------------------------------------------
 
 test_that("wrong-type Robj arguments to predict_new are contained", {
-  # A list where the formula string is expected: extendr coercion refuses
+  # A list where the fitted-state string is expected: extendr coercion refuses
   # ("Expected Scalar, got List") before Rust logic runs. That R-side refusal
   # is containment.
   expect_error(
     mixeff:::mm_lmm_predict_new_json(
-      list(1, 2), TRUE, "y", list(y = 1), list(), list(), character(0),
-      numeric(), "{}", "y", list(y = 1), list(), list(), character(0),
-      "error"
+      list(1, 2), "y", list(y = 1), list(), list(), character(0), "error"
     )
   )
 })

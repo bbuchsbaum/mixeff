@@ -469,8 +469,8 @@ fn mm_fit_lmm_json(
     let mut model = LinearMixedModel::new(parsed, &df, weights.as_deref())
         .map_err(|e| format!("mm_fit_error: failed to construct LMM: {}", e))?;
     // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval);
-    // default keeps the driver's automatic selection. Applied here and in the
-    // recompute helper so refits (predict/inference) reproduce the same fit.
+    // default keeps the driver's automatic selection. Post-fit queries restore
+    // this fitted state; they do not apply fit options again.
     let optimizer_control = parse_optimizer_control(&_control)?;
     let fit_options = if reml {
         FitOptions::reml()
@@ -517,12 +517,18 @@ fn mm_fit_lmm_json(
                 e
             )
         })?;
+    let (fitted_state, restoration_error) = match model.snapshot_json() {
+        Ok(snapshot) => (Some(snapshot), None),
+        Err(error) => (None, Some(error.to_string())),
+    };
     let payload = json!({
         "schema": {
             "schema_name": "mixeff.lmm_fit_result",
             "schema_version": 1
         },
         "artifact_json": artifact_json,
+        "fitted_state": fitted_state,
+        "restoration_error": restoration_error,
         "formula": model.formula().to_string(),
         "reml": reml,
         "beta": beta.iter().copied().collect::<Vec<_>>(),
@@ -660,12 +666,18 @@ fn mm_fit_glmm_json(
             )
         })?;
 
+    let (fitted_state, restoration_error) = match model.snapshot_json() {
+        Ok(snapshot) => (Some(snapshot), None),
+        Err(error) => (None, Some(error.to_string())),
+    };
     let payload = json!({
         "schema": {
             "schema_name": "mixeff.glmm_fit_result",
             "schema_version": 1
         },
         "artifact_json": artifact_json,
+        "fitted_state": fitted_state,
+        "restoration_error": restoration_error,
         "formula": model.formula_label().unwrap_or_else(|| formula.to_string()),
         "family": glmm_family_label(family),
         "link": glmm_link_label(link),
@@ -716,15 +728,7 @@ fn mm_fit_glmm_json(
 /// @noRd
 #[extendr]
 fn mm_fixed_effect_contrast_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     l_values: Doubles,
     nrow: i32,
     ncol: i32,
@@ -732,17 +736,7 @@ fn mm_fixed_effect_contrast_json(
     rhs: Doubles,
     method: &str,
 ) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let model = restore_lmm(fitted_state)?;
     let hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
     let method = fixed_effect_test_method(method)?;
 
@@ -755,15 +749,7 @@ fn mm_fixed_effect_contrast_json(
 /// @noRd
 #[extendr]
 fn mm_fixed_effect_bootstrap_contrast_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     l_values: Doubles,
     nrow: i32,
     ncol: i32,
@@ -771,17 +757,7 @@ fn mm_fixed_effect_bootstrap_contrast_json(
     rhs: Doubles,
     bootstrap_options_json: &str,
 ) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let model = restore_lmm(fitted_state)?;
     let hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
     let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
 
@@ -802,15 +778,7 @@ fn mm_fixed_effect_bootstrap_contrast_json(
 /// @noRd
 #[extendr]
 fn mm_full_model_bootstrap_contrast_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     l_values: Doubles,
     nrow: i32,
     ncol: i32,
@@ -819,17 +787,7 @@ fn mm_full_model_bootstrap_contrast_json(
     bootstrap_options_json: &str,
     levels: Doubles,
 ) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let model = restore_lmm(fitted_state)?;
     let mut hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
     if hypotheses.len() != 1 {
         return Err(
@@ -945,15 +903,7 @@ fn mm_full_model_bootstrap_contrast_json(
 /// @noRd
 #[extendr]
 fn mm_fixed_effect_bootstrap_term_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     l_values: Doubles,
     nrow: i32,
     ncol: i32,
@@ -961,17 +911,7 @@ fn mm_fixed_effect_bootstrap_term_json(
     rhs: Doubles,
     bootstrap_options_json: &str,
 ) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let model = restore_lmm(fitted_state)?;
     let nrow_us = usize::try_from(nrow)
         .map_err(|_| "mm_inference_unavailable: contrast row count must be non-negative")?;
     let ncol_us = usize::try_from(ncol)
@@ -1025,29 +965,11 @@ fn mm_fixed_effect_bootstrap_term_json(
 /// @noRd
 #[extendr]
 fn mm_fixed_effect_term_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     method: &str,
     term_test_type: &str,
 ) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let model = restore_lmm(fitted_state)?;
     let method = fixed_effect_test_method(method)?;
     let term_test_type = fixed_effect_term_test_type(term_test_type)?;
 
@@ -1062,39 +984,18 @@ fn mm_fixed_effect_term_json(
 /// @noRd
 #[extendr]
 fn mm_bootstrap_lrt_json(
-    reduced_formula: &str,
-    alternative_formula: &str,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    reduced_snapshot: &str,
+    alternative_snapshot: &str,
     bootstrap_options_json: &str,
 ) -> std::result::Result<String, String> {
-    let reduced = fit_lmm_from_bridge_data(
-        reduced_formula,
-        false,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let alternative = fit_lmm_from_bridge_data(
-        alternative_formula,
-        false,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let reduced = restore_lmm(reduced_snapshot)?;
+    let alternative = restore_lmm(alternative_snapshot)?;
+    if reduced.opt_summary().reml || alternative.opt_summary().reml {
+        return Err(
+            "mm_inference_unavailable: bootstrap likelihood-ratio test requires ML fits"
+                .to_string(),
+        );
+    }
     let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
 
     let observed_logl_red = reduced.loglikelihood();
@@ -1205,8 +1106,7 @@ fn mm_bootstrap_lrt_json(
 
 /// Build an upstream model-comparison table for fitted LMM payloads.
 ///
-/// Each list element is the R-side bridge payload for one fitted model
-/// (`formula_string`, `REML`, `spec_data`, `weights`, and `control_json`).
+/// Each list element carries the engine-owned fitted-state snapshot for one model.
 /// Returning the upstream `ModelComparisonTable` keeps nestedness, ML-refit,
 /// information-criteria, and reason-code rules owned by the Rust contract.
 ///
@@ -1227,7 +1127,7 @@ fn mm_compare_models_json(
     let refit_policy = model_comparison_refit_policy(refit_policy)?;
     let mut models: Vec<LinearMixedModel> = Vec::with_capacity(model_payloads.len());
     for (idx, payload) in model_payloads.values().enumerate() {
-        models.push(fit_lmm_from_bridge_payload_robj(&payload, idx + 1)?);
+        models.push(restore_lmm_from_bridge_payload_robj(&payload, idx + 1)?);
     }
     let model_refs = models
         .iter()
@@ -1272,7 +1172,7 @@ fn mm_boundary_lrt_json(
     full_payload: Robj,
     reduced_formula: &str,
 ) -> std::result::Result<String, String> {
-    let full = fit_lmm_from_bridge_payload_robj(&full_payload, 2)?;
+    let full = restore_lmm_from_bridge_payload_robj(&full_payload, 2)?;
     let result = if reduced_payload.is_null() {
         let reduced = LinearModelFit::fit(
             full.response().clone(),
@@ -1282,7 +1182,7 @@ fn mm_boundary_lrt_json(
         .map_err(|e| format!("mm_inference_unavailable: boundary LRT reduced LM failed: {e}"))?;
         BoundaryLikelihoodRatioTest::variance_component(&reduced, &full)
     } else {
-        let reduced = fit_lmm_from_bridge_payload_robj(&reduced_payload, 1)?;
+        let reduced = restore_lmm_from_bridge_payload_robj(&reduced_payload, 1)?;
         BoundaryLikelihoodRatioTest::variance_component(&reduced, &full)
     };
 
@@ -1292,13 +1192,8 @@ fn mm_boundary_lrt_json(
 
 /// Bounded convergence verification for a fitted LMM.
 ///
-/// Rebuilds and refits the model from the R-side bridge payload (the same
-/// payload `mm_compare_models_json` / `mm_boundary_lrt_json` use), then runs
-/// the engine's verification workflow: restart from the optimum, jittered
-/// restarts, and (optionally) an alternate-optimizer consensus pass. The
-/// verifier re-runs its own fits internally, so no optimizer state has to
-/// cross the boundary. `options_json` carries R-side overrides; absent
-/// fields keep the engine defaults.
+/// Restores the recorded fit, then runs the engine's intentional verification
+/// searches against that original baseline. `options_json` carries overrides.
 ///
 /// @noRd
 #[extendr]
@@ -1344,7 +1239,7 @@ fn mm_verify_convergence_json(
         options.beta_tolerance = v;
     }
 
-    let mut model = fit_lmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let mut model = restore_lmm_from_bridge_payload_robj(&fit_payload, 1)?;
     let verification = model
         .verify_convergence_with_options(options)
         .map_err(|e| {
@@ -1365,13 +1260,8 @@ fn mm_verify_convergence_json(
 /// GLMM convergence verification through
 /// `GeneralizedLinearMixedModel::verify_convergence_with_options`.
 ///
-/// Refits the model from the bridge payload with the requested estimator and
-/// runs the engine-owned verification (restart from optimum plus jittered
-/// refits). When the refit of a substituted (fallback) fit falls back the
-/// same way, every run verifies the profiled objective the fitted numbers
-/// came from, with ordinary objective deltas; the engine reports a
-/// substitution run (no delta) only when the reference refit certifies the
-/// joint route but an individual run falls back.
+/// Restores the recorded fitted solution and certificate, including any labelled
+/// estimator substitution, before running the engine-owned verification searches.
 /// Options start from `ConvergenceVerificationOptions::glmm_defaults()`
 /// (no consensus pass; objective tolerance sized to the inner-PIRLS noise
 /// floor; beta tolerance sized to the joint path's derivative-free search);
@@ -1421,7 +1311,7 @@ fn mm_verify_convergence_glmm_json(
         options.beta_tolerance = v;
     }
 
-    let mut model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let mut model = restore_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
     let verification = model
         .verify_convergence_with_options(options)
         .map_err(|e| {
@@ -1442,7 +1332,7 @@ fn mm_verify_convergence_glmm_json(
 /// GLMM parametric bootstrap through
 /// `mixeff_rs::stats::bootstrap::parametricbootstrap_glmm`.
 ///
-/// Refits the template model from the bridge payload, then for each
+/// Restores the recorded template model, then for each
 /// replicate simulates a response under fresh random-effect draws and
 /// refits a clone, recording objective, dispersion, beta, descriptive
 /// replicate SEs, and theta. Failed refits are recorded as NaN replicates
@@ -1470,7 +1360,7 @@ fn mm_glmm_parametric_bootstrap_json(
         .and_then(Value::as_u64)
         .ok_or_else(|| "mm_arg_error: bootstrap seed must be a non-negative integer".to_string())?;
 
-    let model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
+    let model = restore_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
     let beta_names = model.coef_names();
     let mut rng = StdRng::seed_from_u64(seed);
     let boot = mixeff_rs::stats::bootstrap::parametricbootstrap_glmm(&mut rng, nsim, &model)
@@ -1492,6 +1382,9 @@ fn mm_glmm_parametric_bootstrap_json(
         "requested": nsim,
         "seed": seed,
         "bootstrap": boot_json,
+        "template": model.compiler_artifact().glmm_fit_metadata,
+        "template_objective": model.objective(),
+        "replicate_estimator_policy": "preserve_effective_or_fail",
     }))
     .map_err(|e| {
         format!(
@@ -1501,131 +1394,39 @@ fn mm_glmm_parametric_bootstrap_json(
     })
 }
 
-fn fit_glmm_from_bridge_payload_robj(
+fn restore_glmm_from_bridge_payload_robj(
     payload: &Robj,
     index: usize,
 ) -> std::result::Result<GeneralizedLinearMixedModel, String> {
-    let payload_list = List::try_from(payload).map_err(|e| {
-        format!("mm_schema_error: GLMM bridge payload {index} must be a list: {e:?}")
-    })?;
-    let payload_map = list_to_map(&payload_list, &format!("GLMM bridge payload {index}"))?;
-    let spec_data = required_list(&payload_map, "spec_data", index)?;
-    let spec_map = list_to_map(
-        &spec_data,
-        &format!("GLMM bridge payload {index} spec_data"),
-    )?;
-
-    let formula = required_string(&payload_map, "formula_string", index)?;
-    let family = required_string(&payload_map, "family", index)?;
-    let link = required_string(&payload_map, "link", index)?;
-    let method = required_string(&payload_map, "method", index)?;
-    let n_agq_values = required_doubles(&payload_map, "n_agq", index)?;
-    let n_agq = n_agq_values
-        .iter()
-        .next()
-        .map(|v| v.0)
-        .filter(|v| v.is_finite() && *v >= 1.0)
-        .ok_or_else(|| {
-            format!("mm_schema_error: GLMM bridge payload {index} n_agq must be a positive number")
-        })? as i32;
-    let column_order = required_strings(&spec_map, "column_order", index)?;
-    let numeric_columns = required_list(&spec_map, "numeric_columns", index)?;
-    let categorical_values = required_list(&spec_map, "categorical_values", index)?;
-    let categorical_levels = required_list(&spec_map, "categorical_levels", index)?;
-    let categorical_ordered = required_strings(&spec_map, "categorical_ordered", index)?;
-    let weights = required_doubles(&payload_map, "weights", index)?;
-    let offset = required_doubles(&payload_map, "offset", index)?;
-    let control_json = required_string(&payload_map, "control_json", index)?;
-
-    fit_glmm_from_bridge_data(
-        &formula,
-        &family,
-        &link,
-        &method,
-        n_agq,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        &offset,
-        &control_json,
-    )
+    restore_glmm(&snapshot_from_bridge_payload(payload, index)?)
 }
 
-fn fit_lmm_from_bridge_data(
-    formula: &str,
-    reml: bool,
-    column_order: &Strings,
-    numeric_columns: &List,
-    categorical_values: &List,
-    categorical_levels: &List,
-    categorical_ordered: &Strings,
-    weights: &Doubles,
-    control_json: &str,
-) -> std::result::Result<LinearMixedModel, String> {
-    let _control: Value = serde_json::from_str(control_json)
-        .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
-    let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
-    let df = data::build_dataframe(
-        numeric_columns,
-        categorical_values,
-        categorical_levels,
-        categorical_ordered,
-        column_order,
-    )?;
-    let weights = optional_case_weights(weights, df.nrow())?;
-    let mut model = LinearMixedModel::new(parsed, &df, weights.as_deref())
-        .map_err(|e| format!("mm_fit_error: failed to construct LMM: {}", e))?;
-    // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval);
-    // default keeps the driver's automatic selection. Applied here and in the
-    // recompute helper so refits (predict/inference) reproduce the same fit.
-    let optimizer_control = parse_optimizer_control(&_control)?;
-    let fit_options = if reml {
-        FitOptions::reml()
-    } else {
-        FitOptions::ml()
-    }
-    .with_optimizer_control(optimizer_control);
-    model
-        .fit_with_options(fit_options)
-        .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
-    Ok(model)
-}
-
-fn fit_lmm_from_bridge_payload_robj(
+fn restore_lmm_from_bridge_payload_robj(
     payload: &Robj,
     index: usize,
 ) -> std::result::Result<LinearMixedModel, String> {
-    let payload_list = List::try_from(payload).map_err(|e| {
-        format!("mm_schema_error: comparison payload {index} must be a list: {e:?}")
+    restore_lmm(&snapshot_from_bridge_payload(payload, index)?)
+}
+
+fn snapshot_from_bridge_payload(
+    payload: &Robj,
+    index: usize,
+) -> std::result::Result<String, String> {
+    let list = List::try_from(payload).map_err(|e| {
+        format!("mm_schema_error: fitted-state payload {index} must be a list: {e:?}")
     })?;
-    let payload_map = list_to_map(&payload_list, &format!("comparison payload {index}"))?;
-    let spec_data = required_list(&payload_map, "spec_data", index)?;
-    let spec_map = list_to_map(&spec_data, &format!("comparison payload {index} spec_data"))?;
+    let map = list_to_map(&list, &format!("fitted-state payload {index}"))?;
+    required_string(&map, "fitted_state", index)
+}
 
-    let formula = required_string(&payload_map, "formula_string", index)?;
-    let reml = required_bool(&payload_map, "REML", index)?;
-    let column_order = required_strings(&spec_map, "column_order", index)?;
-    let numeric_columns = required_list(&spec_map, "numeric_columns", index)?;
-    let categorical_values = required_list(&spec_map, "categorical_values", index)?;
-    let categorical_levels = required_list(&spec_map, "categorical_levels", index)?;
-    let categorical_ordered = required_strings(&spec_map, "categorical_ordered", index)?;
-    let weights = required_doubles(&payload_map, "weights", index)?;
-    let control_json = required_string(&payload_map, "control_json", index)?;
+fn restore_lmm(snapshot: &str) -> std::result::Result<LinearMixedModel, String> {
+    LinearMixedModel::restore_json(snapshot)
+        .map_err(|e| format!("mm_inference_unavailable: fitted-state restoration unavailable: {e}"))
+}
 
-    fit_lmm_from_bridge_data(
-        &formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        &control_json,
-    )
+fn restore_glmm(snapshot: &str) -> std::result::Result<GeneralizedLinearMixedModel, String> {
+    GeneralizedLinearMixedModel::restore_json(snapshot)
+        .map_err(|e| format!("mm_inference_unavailable: fitted-state restoration unavailable: {e}"))
 }
 
 /// Parsed family spec: (family, NB theta, NB theta is estimated).
@@ -1778,52 +1579,6 @@ fn required_string(
         format!(
             "mm_schema_error: comparison payload {index} field `{field}` must be a string: {e:?}"
         )
-    })
-}
-
-fn required_bool(
-    map: &HashMap<String, Robj>,
-    field: &str,
-    index: usize,
-) -> std::result::Result<bool, String> {
-    let robj = required_robj(map, field, index)?;
-    bool::try_from(&robj).map_err(|e| {
-        format!(
-            "mm_schema_error: comparison payload {index} field `{field}` must be TRUE/FALSE: {e:?}"
-        )
-    })
-}
-
-fn required_list(
-    map: &HashMap<String, Robj>,
-    field: &str,
-    index: usize,
-) -> std::result::Result<List, String> {
-    let robj = required_robj(map, field, index)?;
-    List::try_from(&robj).map_err(|e| {
-        format!("mm_schema_error: comparison payload {index} field `{field}` must be a list: {e:?}")
-    })
-}
-
-fn required_strings(
-    map: &HashMap<String, Robj>,
-    field: &str,
-    index: usize,
-) -> std::result::Result<Strings, String> {
-    let robj = required_robj(map, field, index)?;
-    Strings::try_from(&robj).map_err(|e| {
-        format!("mm_schema_error: comparison payload {index} field `{field}` must be a character vector: {e:?}")
-    })
-}
-
-fn required_doubles(
-    map: &HashMap<String, Robj>,
-    field: &str,
-    index: usize,
-) -> std::result::Result<Doubles, String> {
-    let robj = required_robj(map, field, index)?;
-    Doubles::try_from(&robj).map_err(|e| {
-        format!("mm_schema_error: comparison payload {index} field `{field}` must be a numeric vector: {e:?}")
     })
 }
 
@@ -2182,28 +1937,8 @@ fn mm_interrupt_demo(iters: i32) -> i32 {
 ///
 /// @noRd
 #[extendr]
-fn mm_lmm_cond_var_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+fn mm_lmm_cond_var_json(fitted_state: &str) -> std::result::Result<String, String> {
+    let model = restore_lmm(fitted_state)?;
     let condvar = model.cond_var();
     let terms: Vec<Value> = model
         .reterms()
@@ -2264,15 +1999,7 @@ fn mm_lmm_cond_var_json(
 #[extendr]
 #[allow(clippy::too_many_arguments)]
 fn mm_lmm_predict_new_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     new_column_order: Strings,
     new_numeric_columns: List,
     new_categorical_values: List,
@@ -2280,17 +2007,7 @@ fn mm_lmm_predict_new_json(
     new_categorical_ordered: Strings,
     allow_new_levels_policy: &str,
 ) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let model = restore_lmm(fitted_state)?;
     let newdf = data::build_dataframe(
         &new_numeric_columns,
         &new_categorical_values,
@@ -2353,15 +2070,7 @@ fn mm_lmm_predict_new_json(
 #[extendr]
 #[allow(clippy::too_many_arguments)]
 fn mm_lmm_predict_new_variance_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     new_column_order: Strings,
     new_numeric_columns: List,
     new_categorical_values: List,
@@ -2370,17 +2079,7 @@ fn mm_lmm_predict_new_variance_json(
     allow_new_levels_policy: &str,
     level: f64,
 ) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let model = restore_lmm(fitted_state)?;
     let newdf = data::build_dataframe(
         &new_numeric_columns,
         &new_categorical_values,
@@ -2415,59 +2114,6 @@ fn mm_lmm_predict_new_variance_json(
     })
 }
 
-/// Reconstruct and fit a `GeneralizedLinearMixedModel` from R-side bridge data.
-/// Mirrors the construction/fit in `mm_fit_glmm_json` so post-fit queries
-/// (e.g. prediction variance) reproduce the same fit. Kept separate from the
-/// fit-result bridge so the latter's serialization path is left untouched.
-#[allow(clippy::too_many_arguments)]
-fn fit_glmm_from_bridge_data(
-    formula: &str,
-    family: &str,
-    link: &str,
-    method: &str,
-    n_agq: i32,
-    column_order: &Strings,
-    numeric_columns: &List,
-    categorical_values: &List,
-    categorical_levels: &List,
-    categorical_ordered: &Strings,
-    weights: &Doubles,
-    offset: &Doubles,
-    control_json: &str,
-) -> std::result::Result<GeneralizedLinearMixedModel, String> {
-    let _control: Value = serde_json::from_str(control_json)
-        .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
-    let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
-    let df = data::build_dataframe(
-        numeric_columns,
-        categorical_values,
-        categorical_levels,
-        categorical_ordered,
-        column_order,
-    )?;
-    let family_spec = glmm_family(family)?;
-    let link = glmm_link(link)?;
-    let (fast, _method_label) = glmm_method(method, n_agq)?;
-    let n_agq = usize::try_from(n_agq)
-        .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
-    let weights = optional_case_weights(weights, df.nrow())?;
-    let offset = optional_offset(offset, df.nrow())?;
-    let mut model = build_glmm_model(parsed, &df, family_spec, link, weights, offset)?;
-    let optimizer_control = parse_optimizer_control(&_control)?;
-    let glmm_options = if fast {
-        GlmmFitOptions::fast_laplace()
-    } else {
-        GlmmFitOptions::joint_laplace()
-    }
-    .with_n_agq(n_agq)
-    .with_verbose(false)
-    .with_optimizer_control(optimizer_control);
-    model
-        .fit_with_glmm_options(glmm_options)
-        .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
-    Ok(model)
-}
-
 /// New-data prediction VARIANCE / intervals for a GLMM through
 /// `GeneralizedLinearMixedModel::predict_new_variance_with_level`.
 ///
@@ -2481,19 +2127,7 @@ fn fit_glmm_from_bridge_data(
 #[extendr]
 #[allow(clippy::too_many_arguments)]
 fn mm_glmm_predict_new_variance_json(
-    formula: &str,
-    family: &str,
-    link: &str,
-    method: &str,
-    n_agq: i32,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    offset: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     new_column_order: Strings,
     new_numeric_columns: List,
     new_categorical_values: List,
@@ -2503,21 +2137,7 @@ fn mm_glmm_predict_new_variance_json(
     allow_new_levels_policy: &str,
     level: f64,
 ) -> std::result::Result<String, String> {
-    let model = fit_glmm_from_bridge_data(
-        formula,
-        family,
-        link,
-        method,
-        n_agq,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        &offset,
-        control_json,
-    )?;
+    let model = restore_glmm(fitted_state)?;
     let newdf = data::build_dataframe(
         &new_numeric_columns,
         &new_categorical_values,
@@ -2574,15 +2194,7 @@ fn mm_glmm_predict_new_variance_json(
 /// @noRd
 #[extendr]
 fn mm_lmm_profile_confint_json(
-    formula: &str,
-    reml: bool,
-    column_order: Strings,
-    numeric_columns: List,
-    categorical_values: List,
-    categorical_levels: List,
-    categorical_ordered: Strings,
-    weights: Doubles,
-    control_json: &str,
+    fitted_state: &str,
     level: f64,
 ) -> std::result::Result<String, String> {
     if !(level > 0.0 && level < 1.0) {
@@ -2591,17 +2203,7 @@ fn mm_lmm_profile_confint_json(
             level
         ));
     }
-    let mut model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
+    let mut model = restore_lmm(fitted_state)?;
     let payload = profile_confint_payload(&mut model, level).map_err(|e| {
         format!(
             "mm_inference_unavailable: profile_confint_payload failed: {}",

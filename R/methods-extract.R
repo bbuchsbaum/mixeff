@@ -191,29 +191,17 @@ mm_attach_ranef_postvars <- function(ranef_list, postvars) {
 # Round-trip a cond_var FFI call for `fit` and return a named list keyed by
 # grouping factor; each element is a `p × p × n` PSD array (dimnames =
 # slope-names × slope-names × levels). Cached on fit$lazy_cache so repeated
-# ranef(condVar=TRUE) calls do not pay the ~refit cost again.
+# ranef(condVar=TRUE) calls reuse the restored query result.
 mm_cond_var_postvars <- function(fit) {
   .mm_lazy(fit, "cond_var", mm_compute_cond_var_postvars)
 }
 
 mm_compute_cond_var_postvars <- function(fit) {
-  spec_data <- mm_translate_data(fit$model_frame)
-  formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
 
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_cond_var_json,
-      formula_string,
-      isTRUE(fit$REML),
-      spec_data$column_order,
-      spec_data$numeric_columns,
-      spec_data$categorical_values,
-      spec_data$categorical_levels,
-      spec_data$categorical_ordered,
-      mm_bridge_weights(fit$weights),
-      as.character(control_json)
+      mm_fitted_state(fit)
     ),
     error = function(cnd) cnd
   )

@@ -279,7 +279,8 @@ Wald `confint()` on the default fit raises `mm_inference_unavailable` (the
 working-Hessian payload is not certified for Wald intervals); the same
 request on the joint-Laplace fit succeeds, as shown above. The bootstrap
 route complements it from the other side: `confint(glmm_fit, method =
-"bootstrap")` succeeds on this default fit (route 2 above). `simulate()`
+"bootstrap")` works on profiled and joint-Laplace fits, preserving the
+effective estimator and counting failed replicates (route 2 above). `simulate()`
 and `refit()` are not implemented for GLMM fits.
 
 ```{r checks, include = FALSE}

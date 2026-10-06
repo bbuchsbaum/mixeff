@@ -164,7 +164,7 @@ test_that("random-effect report consumes Rust fit-summary VarCorr payload", {
   unavailable <- model_report(fit)$unavailable
 
   expect_identical(fit$fit_summary$schema_name, "mixedmodels.fit_summary")
-  expect_identical(fit$fit_summary$schema_version, "1.0.0")
+  expect_identical(fit$fit_summary$schema_version, "1.1.0")
   expect_true(any(random_effects$kind == "variance"))
   expect_true(any(random_effects$group == "Residual"))
   expect_true(all(random_effects$status == "available"))

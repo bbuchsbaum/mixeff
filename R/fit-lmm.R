@@ -571,7 +571,7 @@ mm_json_parse_fit_summary <- function(fit_summary) {
     )
   }
   if (!identical(as.character(fit_summary$schema_name), "mixedmodels.fit_summary") ||
-      !identical(as.character(fit_summary$schema_version), "1.0.0")) {
+      !isTRUE(as.character(fit_summary$schema_version) %in% c("1.0.0", "1.1.0"))) {
     mm_abort(
       message = "LMM fit JSON has an unknown fit-summary schema.",
       class = "mm_schema_error",
@@ -598,6 +598,7 @@ mm_named_numeric <- function(values, names) {
 }
 
 mm_abort_from_bridge <- function(cnd, ...) {
+  if (inherits(cnd, "mm_condition")) stop(cnd)
   parts <- mm_split_tagged_error(conditionMessage(cnd))
   cls <- if (!is.na(parts$tag)) parts$tag else "mm_bridge_error"
   msg <- if (!is.na(parts$tag)) parts$message else conditionMessage(cnd)

@@ -247,3 +247,16 @@ test_that("serialized fits restart in a fresh R process", {
   expect_equal(attr(out, "status") %||% 0L, 0L, info = paste(out, collapse = "\n"))
   expect_true(any(grepl("cross-session OK", out, fixed = TRUE)))
 })
+
+
+test_that("fit-summary schema 1.1 preserves additive covariance provenance", {
+  summary <- mk_phase2_fit()$fit$fit_summary
+  expect_identical(summary$schema_version, "1.1.0")
+  expect_identical(mm_json_parse_fit_summary(summary), summary)
+  legacy <- summary
+  legacy$schema_version <- "1.0.0"
+  expect_identical(mm_json_parse_fit_summary(legacy), legacy)
+  unknown <- summary
+  unknown$schema_version <- "2.0.0"
+  expect_error(mm_json_parse_fit_summary(unknown), class = "mm_schema_error")
+})

@@ -528,29 +528,16 @@ mm_predict_newdata <- function(fit, newdata, target, allow_new_levels) {
 }
 
 # Conditional newdata prediction via the Rust `predict_new` FFI. The Rust
-# contract refits the model from formula + training data, so the call is
-# self-contained.
+# contract restores the recorded fitted snapshot without optimization.
 mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
 
-  spec_data <- mm_translate_data(fit$model_frame)
-  formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
   new_data <- mm_translate_data(newdata)
 
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_predict_new_json,
-      formula_string,
-      isTRUE(fit$REML),
-      spec_data$column_order,
-      spec_data$numeric_columns,
-      spec_data$categorical_values,
-      spec_data$categorical_levels,
-      spec_data$categorical_ordered,
-      mm_bridge_weights(fit$weights),
-      as.character(control_json),
+      mm_fitted_state(fit),
       new_data$column_order,
       new_data$numeric_columns,
       new_data$categorical_values,
@@ -559,7 +546,7 @@ mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
       # re-derives newdata contrasts from the fitted training snapshot
       # (align_newdata_to_training), so flagging ordered columns here is a
       # no-op that could only spuriously error on an ordered newdata column
-      # observed at <2 levels. Training flags (above) drive the coding.
+      # observed at <2 levels. The fitted snapshot retains the training coding.
       character(0),
       policy
     ),
@@ -678,28 +665,17 @@ mm_parse_prediction_variance <- function(json, n) {
 }
 
 # Conditional prediction variance for an LMM via the engine
-# `predict_new_variance_with_level` FFI. The engine refits from the stored
-# training frame and computes per-row se_fit / confidence / prediction bounds
+# `predict_new_variance_with_level` FFI. The engine restores the fitted snapshot
+# and computes per-row se_fit / confidence / prediction bounds
 # including the random-effect contribution. `se_data` is the frame to predict on
 # (the training model frame for in-sample, or user `newdata`).
 mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
-  spec_data <- mm_translate_data(fit$model_frame)
   new_data <- mm_translate_data(se_data)
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_predict_new_variance_json,
-      mm_coerce_formula_string(fit$formula),
-      isTRUE(fit$REML),
-      spec_data$column_order,
-      spec_data$numeric_columns,
-      spec_data$categorical_values,
-      spec_data$categorical_levels,
-      spec_data$categorical_ordered,
-      mm_bridge_weights(fit$weights),
-      as.character(control_json),
+      mm_fitted_state(fit),
       new_data$column_order,
       new_data$numeric_columns,
       new_data$categorical_values,
@@ -708,7 +684,7 @@ mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
       # re-derives newdata contrasts from the fitted training snapshot
       # (align_newdata_to_training), so flagging ordered columns here is a
       # no-op that could only spuriously error on an ordered newdata column
-      # observed at <2 levels. Training flags (above) drive the coding.
+      # observed at <2 levels. The fitted snapshot retains the training coding.
       character(0),
       policy,
       as.numeric(level)
@@ -741,26 +717,11 @@ mm_glmm_engine_family <- function(fit) {
 # new-level rows come back with se_fit = NA and a reason.
 mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, level) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
-  spec_data <- mm_translate_data(fit$model_frame)
   new_data <- mm_translate_data(se_data)
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
   json <- tryCatch(
     .Call(
       wrap__mm_glmm_predict_new_variance_json,
-      mm_coerce_formula_string(fit$formula),
-      mm_glmm_engine_family(fit),
-      fit$family$link,
-      fit$method,
-      as.integer(fit$nAGQ),
-      spec_data$column_order,
-      spec_data$numeric_columns,
-      spec_data$categorical_values,
-      spec_data$categorical_levels,
-      spec_data$categorical_ordered,
-      mm_bridge_weights(fit$weights),
-      mm_bridge_weights(fit$offset),
-      as.character(control_json),
+      mm_fitted_state(fit),
       new_data$column_order,
       new_data$numeric_columns,
       new_data$categorical_values,
@@ -769,7 +730,7 @@ mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, l
       # re-derives newdata contrasts from the fitted training snapshot
       # (align_newdata_to_training), so flagging ordered columns here is a
       # no-op that could only spuriously error on an ordered newdata column
-      # observed at <2 levels. Training flags (above) drive the coding.
+      # observed at <2 levels. The fitted snapshot retains the training coding.
       character(0),
       scale,
       policy,

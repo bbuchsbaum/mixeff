@@ -1,7 +1,7 @@
 //! Mixed-model summary tables used by MIME-style renderers.
 
 use serde::{Deserialize, Serialize};
-use statrs::distribution::{ChiSquared, ContinuousCDF};
+use statrs::distribution::{ContinuousCDF, Normal};
 use std::collections::BTreeMap;
 
 use crate::compiler::GlmmFitMetadata;
@@ -10,12 +10,12 @@ use crate::compiler::{
 };
 use crate::model::traits::MixedModelFit;
 use crate::model::{GeneralizedLinearMixedModel, LinearMixedModel};
-use crate::stats::{CoefTable, VarCorr};
+use crate::stats::{CoefTable, InferenceCovarianceMethod, VarCorr};
 
 /// Stable schema name for serialized post-fit summaries.
 pub const FIT_SUMMARY_SCHEMA: &str = "mixedmodels.fit_summary";
 /// Stable schema version for serialized post-fit summaries.
-pub const FIT_SUMMARY_SCHEMA_VERSION: &str = "1.0.0";
+pub const FIT_SUMMARY_SCHEMA_VERSION: &str = "1.1.0";
 
 /// Versioned, downstream-friendly fit-summary payload.
 ///
@@ -101,6 +101,9 @@ pub struct ModelSummaryRow {
     pub estimate: Option<f64>,
     /// Standard error shown in the fixed-effect columns, when applicable.
     pub std_error: Option<f64>,
+    /// Actual covariance used for fixed-effect inference, preserved on export.
+    #[serde(default)]
+    pub covariance_method: InferenceCovarianceMethod,
     /// Wald statistic shown in the fixed-effect columns, when available.
     pub z_stat: Option<f64>,
     /// P-value shown in the fixed-effect columns, when available.
@@ -125,7 +128,7 @@ impl ModelSummary {
         let sigma = model.sigma();
         let varcorr = VarCorr::from_reterms(&model.reterms, sigma, Some(sigma));
         let coeftable = model.coeftable();
-        summary_from_parts_with_pvalues(
+        let mut summary = summary_from_parts_with_pvalues(
             &coeftable.names,
             &coeftable.estimates,
             &coeftable.std_errors,
@@ -133,7 +136,11 @@ impl ModelSummary {
             &varcorr,
             Some("Residual"),
             Some(sigma),
-        )
+        );
+        for (index, row) in summary.rows.iter_mut().take(coeftable.len()).enumerate() {
+            row.covariance_method = coeftable.covariance_method(index);
+        }
+        summary
     }
 
     /// Construct a summary from a generalized linear mixed model.
@@ -183,6 +190,7 @@ impl ModelSummary {
             ));
             out.push('\n');
         }
+        out.push_str(&format!("\nCovariance: {}\n", self.covariance_label()));
         out
     }
 
@@ -204,6 +212,10 @@ impl ModelSummary {
             out.push_str("</tr>");
         }
         out.push_str("</table>\n");
+        out.push_str(&format!(
+            "<p>Covariance: {}</p>\n",
+            html_escape(&self.covariance_label())
+        ));
         out
     }
 
@@ -223,7 +235,34 @@ impl ModelSummary {
             out.push_str(" \\\\\n");
         }
         out.push_str("\\end{tabular}\n");
+        out.push_str(&format!(
+            "\nCovariance: {}\n",
+            latex_escape(&self.covariance_label())
+        ));
         out
+    }
+
+    fn covariance_label(&self) -> String {
+        let rows = self
+            .rows
+            .iter()
+            .filter(|row| row.covariance_method != InferenceCovarianceMethod::NotApplicable)
+            .collect::<Vec<_>>();
+        if let Some(first) = rows.first() {
+            if rows
+                .iter()
+                .all(|row| row.covariance_method == first.covariance_method)
+            {
+                return first.covariance_method.as_str().to_string();
+            }
+        }
+        if rows.is_empty() {
+            return "not_applicable".to_string();
+        }
+        rows.iter()
+            .map(|row| format!("{}={}", row.label, row.covariance_method.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     fn header_row(&self) -> Vec<String> {
@@ -486,7 +525,7 @@ fn generalized_coeftable(model: &GeneralizedLinearMixedModel) -> CoefTable {
                 .first()
                 .map(|row| fixed_effect_inference_method_label(row.method))
                 .unwrap_or("not-computed");
-            return CoefTable::from_df_inference(
+            let mut coefficients = CoefTable::from_df_inference(
                 names,
                 estimates,
                 std_errors,
@@ -497,6 +536,9 @@ fn generalized_coeftable(model: &GeneralizedLinearMixedModel) -> CoefTable {
                 statistic_name,
                 method,
             );
+            coefficients.covariance_methods =
+                rows.iter().map(|row| row.covariance_method).collect();
+            return coefficients;
         }
     }
 
@@ -505,6 +547,7 @@ fn generalized_coeftable(model: &GeneralizedLinearMixedModel) -> CoefTable {
         model.coef().as_slice().to_vec(),
         model.stderror().as_slice().to_vec(),
     )
+    .with_covariance_method(InferenceCovarianceMethod::Unavailable)
 }
 
 fn summary_from_coeftable(
@@ -534,6 +577,7 @@ fn summary_from_coeftable(
     for index in 0..coeftable.names.len() {
         let label = &coeftable.names[index];
         rows.push(ModelSummaryRow {
+            covariance_method: coeftable.covariance_method(index),
             label: label.clone(),
             estimate: coeftable
                 .estimates
@@ -569,6 +613,7 @@ fn summary_from_coeftable(
                 continue;
             }
             rows.push(ModelSummaryRow {
+                covariance_method: InferenceCovarianceMethod::NotApplicable,
                 label: name.clone(),
                 estimate: None,
                 std_error: None,
@@ -585,6 +630,7 @@ fn summary_from_coeftable(
 
     if let (Some(label), Some(value)) = (residual_label, residual_value) {
         rows.push(ModelSummaryRow {
+            covariance_method: InferenceCovarianceMethod::NotApplicable,
             label: label.to_string(),
             estimate: Some(value),
             std_error: None,
@@ -626,7 +672,7 @@ fn summary_from_parts_with_pvalues(
         })
         .collect::<Vec<_>>();
 
-    let chisq1 = ChiSquared::new(1.0).unwrap();
+    let normal = Normal::new(0.0, 1.0).unwrap();
     let mut rows = Vec::new();
 
     for (index, ((label, est), se)) in coef_names
@@ -646,10 +692,11 @@ fn summary_from_parts_with_pvalues(
             .or_else(|| {
                 pvalues
                     .is_none()
-                    .then(|| z.map(|zv| 1.0 - chisq1.cdf(zv * zv)))
+                    .then(|| z.map(|zv| 2.0 * normal.sf(zv.abs())))
                     .flatten()
             });
         rows.push(ModelSummaryRow {
+            covariance_method: InferenceCovarianceMethod::NotRecorded,
             label: label.clone(),
             estimate: Some(*est),
             std_error: Some(*se),
@@ -669,6 +716,7 @@ fn summary_from_parts_with_pvalues(
                 continue;
             }
             rows.push(ModelSummaryRow {
+                covariance_method: InferenceCovarianceMethod::NotApplicable,
                 label: name.clone(),
                 estimate: None,
                 std_error: None,
@@ -685,6 +733,7 @@ fn summary_from_parts_with_pvalues(
 
     if let (Some(label), Some(value)) = (residual_label, residual_value) {
         rows.push(ModelSummaryRow {
+            covariance_method: InferenceCovarianceMethod::NotApplicable,
             label: label.to_string(),
             estimate: Some(value),
             std_error: None,
@@ -841,6 +890,11 @@ mod tests {
         sigma_values: &[Option<f64>],
     ) -> ModelSummaryRow {
         ModelSummaryRow {
+            covariance_method: if std_error.is_some() {
+                InferenceCovarianceMethod::NotRecorded
+            } else {
+                InferenceCovarianceMethod::NotApplicable
+            },
             label: label.to_string(),
             estimate,
             std_error,
@@ -848,6 +902,64 @@ mod tests {
             pvalue,
             sigma_values: sigma_values.to_vec(),
         }
+    }
+
+    #[test]
+    fn fallback_wald_p_values_preserve_representable_normal_tails() {
+        // R oracle: 2 * pnorm(abs(z), lower.tail = FALSE).
+        let cases = [
+            (0.0, 1.0),
+            (8.0, 1.244_192_114_854_357e-15),
+            (-8.0, 1.244_192_114_854_357e-15),
+            (10.727_955_489_07, 7.524_247_963_015_023e-27),
+            (-10.727_955_489_07, 7.524_247_963_015_023e-27),
+            (16.1155, 1.985_514_938_996_619e-58),
+            (-16.1155, 1.985_514_938_996_619e-58),
+            (40.0, 0.0),
+        ];
+        let summary = summary_from_parts_with_pvalues(
+            &(0..cases.len())
+                .map(|index| format!("z_{index}"))
+                .collect::<Vec<_>>(),
+            &cases.iter().map(|(z, _)| *z).collect::<Vec<_>>(),
+            &vec![1.0; cases.len()],
+            None,
+            &VarCorr {
+                components: Vec::new(),
+                residual_sd: None,
+                residual_source: crate::model::summary_estimates::ResidualSource::EstimatedSigma,
+            },
+            None,
+            None,
+        );
+
+        for (row, (z, expected)) in summary.rows.iter().zip(cases) {
+            let actual = row.pvalue.unwrap();
+            if expected == 0.0 {
+                assert_eq!(actual, 0.0, "z={z}");
+            } else {
+                assert!(actual > 0.0, "z={z} must not lose a representable tail");
+                assert!(
+                    (actual - expected).abs() / expected < 1e-9,
+                    "z={z}: expected {expected:e}, got {actual:e}"
+                );
+            }
+        }
+
+        let unavailable = summary_from_parts_with_pvalues(
+            &["bad_se".to_string()],
+            &[1.0],
+            &[0.0],
+            None,
+            &VarCorr {
+                components: Vec::new(),
+                residual_sd: None,
+                residual_source: crate::model::summary_estimates::ResidualSource::EstimatedSigma,
+            },
+            None,
+            None,
+        );
+        assert_eq!(unavailable.rows[0].pvalue, None);
     }
 
     #[test]
@@ -882,7 +994,8 @@ mod tests {
                 "|:----------- | --------:| ------:| -----:| ------:| -------:|\n",
                 "| (Intercept) | 251.4051 | 6.6323 | 37.91 | <1e-99 | 23.7805 |\n",
                 "| days        |  10.4673 | 1.5022 |  6.97 | <1e-11 |  5.7168 |\n",
-                "| Residual    |  25.5918 |        |       |        |         |\n"
+                "| Residual    |  25.5918 |        |       |        |         |\n",
+                "\nCovariance: not_recorded\n"
             )
         );
     }
@@ -916,7 +1029,8 @@ mod tests {
                 "| spkr: new   |           |         |       |        | 258.9242 |          |\n",
                 "| spkr: old   |           |         |       |        | 377.3837 |          |\n",
                 "| load: yes   |           |         |       |        |          | 142.5331 |\n",
-                "| Residual    |  800.3224 |         |       |        |          |          |\n"
+                "| Residual    |  800.3224 |         |       |        |          |          |\n",
+                "\nCovariance: not_recorded\n"
             )
         );
     }
@@ -987,7 +1101,8 @@ mod tests {
                 "| gender: M    |  0.3208 | 0.1913 |  1.68 | 0.0935 |        |        |\n",
                 "| btype: scold | -1.0583 | 0.2568 | -4.12 | <1e-04 |        |        |\n",
                 "| btype: shout | -2.1048 | 0.2585 | -8.14 | <1e-15 |        |        |\n",
-                "| situ: self   | -1.0550 | 0.2103 | -5.02 | <1e-06 |        |        |\n"
+                "| situ: self   | -1.0550 | 0.2103 | -5.02 | <1e-06 |        |        |\n",
+                "\nCovariance: not_recorded\n"
             )
         );
     }

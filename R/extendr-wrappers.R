@@ -84,12 +84,12 @@ mm_fit_glmm_json <- function(formula, family, link, method, n_agq, column_order,
 #' Evaluate fixed-effect contrast rows through the Rust inference contract.
 #'
 #' @noRd
-mm_fixed_effect_contrast_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method) .Call(wrap__mm_fixed_effect_contrast_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method)
+mm_fixed_effect_contrast_json <- function(fitted_state, l_values, nrow, ncol, labels, rhs, method) .Call(wrap__mm_fixed_effect_contrast_json, fitted_state, l_values, nrow, ncol, labels, rhs, method)
 
 #' Evaluate fixed-effect-null bootstrap contrast rows through Rust.
 #'
 #' @noRd
-mm_fixed_effect_bootstrap_contrast_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, bootstrap_options_json) .Call(wrap__mm_fixed_effect_bootstrap_contrast_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, bootstrap_options_json)
+mm_fixed_effect_bootstrap_contrast_json <- function(fitted_state, l_values, nrow, ncol, labels, rhs, bootstrap_options_json) .Call(wrap__mm_fixed_effect_bootstrap_contrast_json, fitted_state, l_values, nrow, ncol, labels, rhs, bootstrap_options_json)
 
 #' Evaluate a full-model bootstrap contrast payload for fixed-effect
 #' confidence intervals. This target simulates from the fitted model and
@@ -97,7 +97,7 @@ mm_fixed_effect_bootstrap_contrast_json <- function(formula, reml, column_order,
 #' fixed-effect hypothesis-test p-values.
 #'
 #' @noRd
-mm_full_model_bootstrap_contrast_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, bootstrap_options_json, levels) .Call(wrap__mm_full_model_bootstrap_contrast_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, bootstrap_options_json, levels)
+mm_full_model_bootstrap_contrast_json <- function(fitted_state, l_values, nrow, ncol, labels, rhs, bootstrap_options_json, levels) .Call(wrap__mm_full_model_bootstrap_contrast_json, fitted_state, l_values, nrow, ncol, labels, rhs, bootstrap_options_json, levels)
 
 #' Evaluate a fixed-effect-null bootstrap *term* row (joint Wald/F over an
 #' arbitrary L matrix) through Rust. Single-df hypotheses produce a t-form
@@ -107,24 +107,23 @@ mm_full_model_bootstrap_contrast_json <- function(formula, reml, column_order, n
 #' `kind = Term`.
 #'
 #' @noRd
-mm_fixed_effect_bootstrap_term_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, label, rhs, bootstrap_options_json) .Call(wrap__mm_fixed_effect_bootstrap_term_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, label, rhs, bootstrap_options_json)
+mm_fixed_effect_bootstrap_term_json <- function(fitted_state, l_values, nrow, ncol, label, rhs, bootstrap_options_json) .Call(wrap__mm_fixed_effect_bootstrap_term_json, fitted_state, l_values, nrow, ncol, label, rhs, bootstrap_options_json)
 
 #' Evaluate fixed-effect term rows through Rust-owned term hypotheses.
 #'
 #' @noRd
-mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, method, term_test_type) .Call(wrap__mm_fixed_effect_term_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, method, term_test_type)
+mm_fixed_effect_term_json <- function(fitted_state, method, term_test_type) .Call(wrap__mm_fixed_effect_term_json, fitted_state, method, term_test_type)
 
 #' Run a parametric bootstrap likelihood-ratio test between two LMMs fitted
 #' to the same data. Both models must be ML (the upstream engine refuses
 #' REML). Returns a serialised `BootstrapLikelihoodRatioTest`.
 #'
 #' @noRd
-mm_bootstrap_lrt_json <- function(reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json) .Call(wrap__mm_bootstrap_lrt_json, reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json)
+mm_bootstrap_lrt_json <- function(reduced_snapshot, alternative_snapshot, bootstrap_options_json) .Call(wrap__mm_bootstrap_lrt_json, reduced_snapshot, alternative_snapshot, bootstrap_options_json)
 
 #' Build an upstream model-comparison table for fitted LMM payloads.
 #'
-#' Each list element is the R-side bridge payload for one fitted model
-#' (`formula_string`, `REML`, `spec_data`, `weights`, and `control_json`).
+#' Each list element carries the engine-owned fitted-state snapshot for one model.
 #' Returning the upstream `ModelComparisonTable` keeps nestedness, ML-refit,
 #' information-criteria, and reason-code rules owned by the Rust contract.
 #'
@@ -143,13 +142,8 @@ mm_boundary_lrt_json <- function(reduced_payload, full_payload, reduced_formula)
 
 #' Bounded convergence verification for a fitted LMM.
 #'
-#' Rebuilds and refits the model from the R-side bridge payload (the same
-#' payload `mm_compare_models_json` / `mm_boundary_lrt_json` use), then runs
-#' the engine's verification workflow: restart from the optimum, jittered
-#' restarts, and (optionally) an alternate-optimizer consensus pass. The
-#' verifier re-runs its own fits internally, so no optimizer state has to
-#' cross the boundary. `options_json` carries R-side overrides; absent
-#' fields keep the engine defaults.
+#' Restores the recorded fit, then runs the engine's intentional verification
+#' searches against that original baseline. `options_json` carries overrides.
 #'
 #' @noRd
 mm_verify_convergence_json <- function(fit_payload, options_json) .Call(wrap__mm_verify_convergence_json, fit_payload, options_json)
@@ -157,13 +151,8 @@ mm_verify_convergence_json <- function(fit_payload, options_json) .Call(wrap__mm
 #' GLMM convergence verification through
 #' `GeneralizedLinearMixedModel::verify_convergence_with_options`.
 #'
-#' Refits the model from the bridge payload with the requested estimator and
-#' runs the engine-owned verification (restart from optimum plus jittered
-#' refits). When the refit of a substituted (fallback) fit falls back the
-#' same way, every run verifies the profiled objective the fitted numbers
-#' came from, with ordinary objective deltas; the engine reports a
-#' substitution run (no delta) only when the reference refit certifies the
-#' joint route but an individual run falls back.
+#' Restores the recorded fitted solution and certificate, including any labelled
+#' estimator substitution, before running the engine-owned verification searches.
 #' Options start from `ConvergenceVerificationOptions::glmm_defaults()`
 #' (no consensus pass; objective tolerance sized to the inner-PIRLS noise
 #' floor; beta tolerance sized to the joint path's derivative-free search);
@@ -175,7 +164,7 @@ mm_verify_convergence_glmm_json <- function(fit_payload, options_json) .Call(wra
 #' GLMM parametric bootstrap through
 #' `mixeff_rs::stats::bootstrap::parametricbootstrap_glmm`.
 #'
-#' Refits the template model from the bridge payload, then for each
+#' Restores the recorded template model, then for each
 #' replicate simulates a response under fresh random-effect draws and
 #' refits a clone, recording objective, dispersion, beta, descriptive
 #' replicate SEs, and theta. Failed refits are recorded as NaN replicates
@@ -229,7 +218,7 @@ mm_audit_report_json <- function(artifact_json) .Call(wrap__mm_audit_report_json
 #' names per term) and `levels` indexes the trailing dimension.
 #'
 #' @noRd
-mm_lmm_cond_var_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json) .Call(wrap__mm_lmm_cond_var_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json)
+mm_lmm_cond_var_json <- function(fitted_state) .Call(wrap__mm_lmm_cond_var_json, fitted_state)
 
 #' New-data predictions through `LinearMixedModel::predict_new`.
 #'
@@ -244,7 +233,7 @@ mm_lmm_cond_var_json <- function(formula, reml, column_order, numeric_columns, c
 #' translates to `NA_real_`.
 #'
 #' @noRd
-mm_lmm_predict_new_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy) .Call(wrap__mm_lmm_predict_new_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy)
+mm_lmm_predict_new_json <- function(fitted_state, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy) .Call(wrap__mm_lmm_predict_new_json, fitted_state, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy)
 
 #' New-data prediction VARIANCE / intervals through
 #' `LinearMixedModel::predict_new_variance_with_level`.
@@ -260,8 +249,12 @@ mm_lmm_predict_new_json <- function(formula, reml, column_order, numeric_columns
 #' ("error" | "population" | "missing").
 #'
 #' @noRd
-mm_lmm_predict_new_variance_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy, level) .Call(wrap__mm_lmm_predict_new_variance_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy, level)
+mm_lmm_predict_new_variance_json <- function(fitted_state, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy, level) .Call(wrap__mm_lmm_predict_new_variance_json, fitted_state, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, allow_new_levels_policy, level)
 
+#' Reconstruct and fit a `GeneralizedLinearMixedModel` from R-side bridge data.
+#' Mirrors the construction/fit in `mm_fit_glmm_json` so post-fit queries
+#' (e.g. prediction variance) reproduce the same fit. Kept separate from the
+#' fit-result bridge so the latter's serialization path is left untouched.
 #' New-data prediction VARIANCE / intervals for a GLMM through
 #' `GeneralizedLinearMixedModel::predict_new_variance_with_level`.
 #'
@@ -272,7 +265,7 @@ mm_lmm_predict_new_variance_json <- function(formula, reml, column_order, numeri
 #' degraded / unavailable with a row-level reason.
 #'
 #' @noRd
-mm_glmm_predict_new_variance_json <- function(formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, offset, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, scale, allow_new_levels_policy, level) .Call(wrap__mm_glmm_predict_new_variance_json, formula, family, link, method, n_agq, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, offset, control_json, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, scale, allow_new_levels_policy, level)
+mm_glmm_predict_new_variance_json <- function(fitted_state, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, scale, allow_new_levels_policy, level) .Call(wrap__mm_glmm_predict_new_variance_json, fitted_state, new_column_order, new_numeric_columns, new_categorical_values, new_categorical_levels, new_categorical_ordered, scale, allow_new_levels_policy, level)
 
 #' Profile-likelihood confidence intervals through
 #' `mixeff_rs::stats::profile_confint_payload`.
@@ -284,7 +277,7 @@ mm_glmm_predict_new_variance_json <- function(formula, family, link, method, n_a
 #' reason rather than fabricating beta CIs.
 #'
 #' @noRd
-mm_lmm_profile_confint_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level) .Call(wrap__mm_lmm_profile_confint_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level)
+mm_lmm_profile_confint_json <- function(fitted_state, level) .Call(wrap__mm_lmm_profile_confint_json, fitted_state, level)
 
 #' Demo of the interrupt bridge — a no-op loop that yields to R between
 #' iterations so Ctrl-C can terminate it. Returns `iters` on clean

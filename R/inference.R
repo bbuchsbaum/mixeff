@@ -1162,15 +1162,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
     )
     json <- tryCatch(
       mm_fixed_effect_bootstrap_contrast_json(
-        bridge$formula_string,
-        isTRUE(fit$REML),
-        bridge$spec_data$column_order,
-        bridge$spec_data$numeric_columns,
-        bridge$spec_data$categorical_values,
-        bridge$spec_data$categorical_levels,
-        bridge$spec_data$categorical_ordered,
-        bridge$weights,
-        bridge$control_json,
+        bridge$fitted_state,
         as.numeric(t(mm_coef_l_to_engine(L, fit))),
         as.integer(nrow(L)),
         as.integer(ncol(L)),
@@ -1183,15 +1175,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
   } else {
     json <- tryCatch(
       mm_fixed_effect_contrast_json(
-        bridge$formula_string,
-        isTRUE(fit$REML),
-        bridge$spec_data$column_order,
-        bridge$spec_data$numeric_columns,
-        bridge$spec_data$categorical_values,
-        bridge$spec_data$categorical_levels,
-        bridge$spec_data$categorical_ordered,
-        bridge$weights,
-        bridge$control_json,
+        bridge$fitted_state,
         as.numeric(t(mm_coef_l_to_engine(L, fit))),
         as.integer(nrow(L)),
         as.integer(ncol(L)),
@@ -1224,15 +1208,7 @@ mm_rust_term_table <- function(fit, method, type = "III") {
   bridge <- mm_rust_fit_bridge_payload(fit)
   json <- tryCatch(
     mm_fixed_effect_term_json(
-      bridge$formula_string,
-      isTRUE(fit$REML),
-      bridge$spec_data$column_order,
-      bridge$spec_data$numeric_columns,
-      bridge$spec_data$categorical_values,
-      bridge$spec_data$categorical_levels,
-      bridge$spec_data$categorical_ordered,
-      bridge$weights,
-      bridge$control_json,
+      bridge$fitted_state,
       method,
       mm_fixed_effect_term_type_label(type)
     ),
@@ -1281,20 +1257,23 @@ mm_fixed_effect_term_type_label <- function(type) {
   )
 }
 
+mm_fitted_state <- function(fit) {
+  snapshot <- fit$fit$fitted_state
+  if (!is.character(snapshot) || length(snapshot) != 1L ||
+      is.na(snapshot) || !nzchar(snapshot)) {
+    reason <- fit$fit$restoration_error %||% "This object predates fitted-state snapshots."
+    mm_abort(
+      message = paste("Native fitted-state restoration is unavailable.", reason,
+                      "Stored extractors remain readable; explicitly refit to create a new fitted state."),
+      class = "mm_inference_unavailable",
+      reason_code = "fitted_state_unavailable"
+    )
+  }
+  snapshot
+}
+
 mm_rust_fit_bridge_payload <- function(fit) {
-  spec_data <- mm_translate_data(fit$model_frame)
-  formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- jsonlite::toJSON(
-    unclass(fit$control %||% mm_control()),
-    auto_unbox = TRUE,
-    null = "null"
-  )
-  list(
-    spec_data = spec_data,
-    formula_string = formula_string,
-    weights = mm_bridge_weights(fit$weights),
-    control_json = as.character(control_json)
-  )
+  list(fitted_state = mm_fitted_state(fit))
 }
 
 mm_unavailable_effect_table <- function(term, method) {
@@ -1550,15 +1529,7 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
   )
   json <- tryCatch(
     mm_full_model_bootstrap_contrast_json(
-      bridge$formula_string,
-      isTRUE(fit$REML),
-      bridge$spec_data$column_order,
-      bridge$spec_data$numeric_columns,
-      bridge$spec_data$categorical_values,
-      bridge$spec_data$categorical_levels,
-      bridge$spec_data$categorical_ordered,
-      bridge$weights,
-      bridge$control_json,
+      bridge$fitted_state,
       as.numeric(t(mm_coef_l_to_engine(L, fit))),
       as.integer(nrow(L)),
       as.integer(ncol(L)),
@@ -1663,15 +1634,7 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
   )
   json <- tryCatch(
     mm_fixed_effect_bootstrap_term_json(
-      bridge$formula_string,
-      isTRUE(fit$REML),
-      bridge$spec_data$column_order,
-      bridge$spec_data$numeric_columns,
-      bridge$spec_data$categorical_values,
-      bridge$spec_data$categorical_levels,
-      bridge$spec_data$categorical_ordered,
-      bridge$weights,
-      bridge$control_json,
+      bridge$fitted_state,
       as.numeric(t(mm_coef_l_to_engine(L, fit))),
       as.integer(nrow(L)),
       as.integer(ncol(L)),
@@ -1732,15 +1695,9 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
   )
   json <- tryCatch(
     mm_bootstrap_lrt_json(
-      deparse1(reduced_formula),
-      bridge$formula_string,
-      bridge$spec_data$column_order,
-      bridge$spec_data$numeric_columns,
-      bridge$spec_data$categorical_values,
-      bridge$spec_data$categorical_levels,
-      bridge$spec_data$categorical_ordered,
-      bridge$weights,
-      bridge$control_json,
+      mm_fitted_state(lmm(reduced_formula, fit$model_frame, REML = FALSE,
+                          weights = fit$weights, control = fit$control)),
+      bridge$fitted_state,
       as.character(bootstrap_json)
     ),
     error = function(cnd) cnd
@@ -1793,7 +1750,7 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
         seed = payload$metadata$seed_record$seed %||% NA_integer_
       ),
       reduced_formula = deparse1(reduced_formula),
-      alternative_formula = bridge$formula_string
+      alternative_formula = deparse1(fit$formula)
     ))),
     notes = I(list(as.character(unlist(parsed$notes %||% list(),
                                        use.names = FALSE)))),
@@ -2022,15 +1979,7 @@ mm_profile_confint_payload <- function(fit, level) {
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_profile_confint_json,
-      bridge$formula_string,
-      isTRUE(fit$REML),
-      bridge$spec_data$column_order,
-      bridge$spec_data$numeric_columns,
-      bridge$spec_data$categorical_values,
-      bridge$spec_data$categorical_levels,
-      bridge$spec_data$categorical_ordered,
-      bridge$weights,
-      bridge$control_json,
+      bridge$fitted_state,
       as.numeric(level)
     ),
     error = function(cnd) cnd

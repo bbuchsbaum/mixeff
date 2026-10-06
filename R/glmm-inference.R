@@ -399,25 +399,10 @@ mm_grid.mm_glmm <- function(fit, specs, ...) {
 ## dropped. Deterministic given `seed`; when `seed` is NULL one is drawn
 ## from R's RNG so set.seed() governs reproducibility.
 mm_glmm_bootstrap_capability <- function(fit) {
-  if (identical(mm_glmm_effective_method(fit), "joint_laplace")) {
-    # Engine limitation at pin f82c646: GeneralizedLinearMixedModel::refit
-    # hardcodes the fast path (generalized/optimizer.rs:19-23) and the
-    # dependency-light build then refuses the joint optimizer left in
-    # optsum, so every replicate refit of a joint template fails
-    # deterministically. Refuse up front with the honest reason instead of
-    # burning nsim doomed refits (upstream bead filed; certified Wald is
-    # available on joint fits anyway).
-    return(list(
-      available = FALSE,
-      reason_code = "glmm_bootstrap_joint_laplace_unavailable",
-      reason = paste0(
-        "The parametric bootstrap is not available for joint_laplace fits ",
-        "at this engine pin: replicate refits cannot re-run the joint ",
-        "estimator. Use certified Wald intervals when available ",
-        "(confint(fit, method = \"asymptotic\")), or bootstrap the profiled ",
-        "estimator by refitting with the default method."
-      )
-    ))
+  state <- tryCatch(mm_fitted_state(fit), mm_inference_unavailable = identity)
+  if (inherits(state, "condition")) {
+    return(list(available = FALSE, reason_code = "fitted_state_unavailable",
+                reason = conditionMessage(state)))
   }
   list(available = TRUE, reason_code = NA_character_, reason = NA_character_)
 }
@@ -448,7 +433,7 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
     )
   }
 
-  payload <- mm_rust_glmm_refit_payload(object, mm_glmm_effective_method(object))
+  payload <- mm_rust_fit_bridge_payload(object)
   options_json <- jsonlite::toJSON(
     list(nsim = as.integer(nsim), seed = as.numeric(seed)),
     auto_unbox = TRUE
@@ -509,12 +494,17 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
   mcse <- max(se / sqrt(successful))
 
   attr(ci, "mm_method") <- "glmm_parametric_bootstrap_percentile"
-  attr(ci, "mm_estimator") <- mm_glmm_effective_method(object)
+  estimator <- parsed$template$effective_method %||% parsed$template$estimation_method
+  if (identical(estimator, "fast_pirls_profiled")) estimator <- "pirls_profiled"
+  attr(ci, "mm_estimator") <- estimator
   attr(ci, "mm_bootstrap") <- list(
     requested = length(reps),
     successful = successful,
     failed = failed,
     seed = as.numeric(seed),
+    template = parsed$template,
+    template_objective = parsed$template_objective,
+    replicate_estimator_policy = parsed$replicate_estimator_policy,
     std_errors = se,
     mcse = mcse,
     reliability = mm_bootstrap_reliability(TRUE, successful, mcse)

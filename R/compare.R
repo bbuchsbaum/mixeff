@@ -182,15 +182,8 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
   )
   json <- tryCatch(
     mm_bootstrap_lrt_json(
-      deparse1(null$formula),
-      bridge$formula_string,
-      bridge$spec_data$column_order,
-      bridge$spec_data$numeric_columns,
-      bridge$spec_data$categorical_values,
-      bridge$spec_data$categorical_levels,
-      bridge$spec_data$categorical_ordered,
-      bridge$weights,
-      bridge$control_json,
+      mm_fitted_state(null),
+      bridge$fitted_state,
       as.character(bootstrap_json)
     ),
     error = function(cnd) cnd
@@ -227,7 +220,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
     },
     notes = as.character(unlist(parsed$notes %||% list(), use.names = FALSE)),
     reduced_formula = deparse1(null$formula),
-    alternative_formula = bridge$formula_string
+    alternative_formula = deparse1(alternative$formula)
   )
   class(out) <- "mm_parametric_bootstrap"
   out

@@ -6,18 +6,20 @@ route_glmm_data <- function() {
   data.frame(y = rbinom(144, 1, plogis(eta)), x = x, g = g)
 }
 
-test_that("joint-fit bootstrap refusal agrees with the discovery map", {
+test_that("joint-fit bootstrap execution agrees with the discovery map", {
   fit <- glmm(y ~ x + (1 | g), route_glmm_data(), family = binomial(),
                method = "joint_laplace", control = mm_control(verbose = -1))
   expect_identical(mixeff:::mm_glmm_effective_method(fit), "joint_laplace")
   route <- subset(inference_options(fit)$table, method == "glmm_parametric_bootstrap")
-  expect_identical(route$expected_status, "not_assessed")
-  err <- tryCatch(confint(fit, method = "bootstrap", nsim = 2L, seed = 1L),
-                   error = identity)
-  expect_s3_class(err, "mm_inference_unavailable")
-  expect_identical(route$expected_reliability_reason, err$reason_code)
-  expect_match(route$what_to_do_next, "asymptotic", fixed = TRUE)
-  expect_true(all(is.finite(confint(fit, method = "asymptotic"))))
+  expect_identical(route$expected_status, "available")
+  ci <- confint(fit, method = "bootstrap", nsim = 12L, seed = 42L)
+  expect_true(all(is.finite(ci)))
+  expect_identical(attr(ci, "mm_estimator"), "joint_laplace")
+  account <- attr(ci, "mm_bootstrap")
+  expect_identical(account$requested, account$successful + account$failed)
+  expect_identical(account$replicate_estimator_policy, "preserve_effective_or_fail")
+  expect_equal(account$template$n_agq, fit$nAGQ)
+  expect_equal(account$template_objective, fit$fit$optimizer$objective)
 })
 
 test_that("profiled and opted-in GLMM bootstrap routes execute as advertised", {

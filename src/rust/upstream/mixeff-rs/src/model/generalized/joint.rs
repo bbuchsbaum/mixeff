@@ -5,6 +5,11 @@
 //! (bd-01KWHYQSTWK60P6HA4S4B2K99P). No logic changes.
 
 use super::*;
+use crate::optimizer::trust_bq::TrustBqResult;
+
+fn normal_wald_two_sided_p_value(normal: &Normal, z: f64) -> f64 {
+    2.0 * normal.sf(z.abs())
+}
 
 impl GeneralizedLinearMixedModel {
     /// Labelled joint GLMM Laplace fit.
@@ -31,6 +36,7 @@ impl GeneralizedLinearMixedModel {
         n_agq: usize,
         verbose: bool,
     ) -> Result<&mut Self> {
+        crate::model::snapshot::record_optimizer_entry();
         if self.lmm.optsum.feval > 0 {
             return Err(MixedModelError::AlreadyFitted);
         }
@@ -47,9 +53,10 @@ impl GeneralizedLinearMixedModel {
         // Use the supported fast path as the deterministic start. This keeps
         // the joint optimizer focused on whether [β; θ] can improve the same
         // included-constants objective for the requested approximation.
-        if self.lmm.optsum.caller_selected_optimizer().is_some() {
-            self.configure_profile_start_optimizer();
-        }
+        // Every conditional fit needs a fast-compatible prefit, including
+        // later estimated-NB iterations that still record the auto-selected
+        // joint backend from their previous iteration.
+        self.configure_profile_start_optimizer();
         self.fit_with_options_impl(n_agq, verbose)?;
         let fallback_fast_pirls = self.clone();
         let start_beta = self.beta.as_slice().to_vec();
@@ -91,7 +98,7 @@ impl GeneralizedLinearMixedModel {
             });
         self.lmm.optsum.optimizer = optimizer;
         self.lmm.optsum.backend = optimizer.canonical_backend();
-        match optimizer {
+        let fitted = match optimizer {
             Optimizer::TrustBq => self.fit_joint_glmm_from_start_trust_bq(
                 start_beta,
                 start_theta,
@@ -131,7 +138,13 @@ impl GeneralizedLinearMixedModel {
             optimizer => Err(MixedModelError::Unsupported(format!(
                 "Optimizer::{optimizer:?} is not wired for joint GLMM fits; pick TrustBq or NloptBobyqa where available"
             ))),
-        }
+        };
+        // Evaluations after the optimizer (polish, certification probes) hold
+        // a host interrupt on the model rather than failing; return it.
+        let me = fitted?;
+        me.take_pending_interrupt()?;
+        me.seal_fitted_state();
+        Ok(me)
     }
 
     #[cfg(feature = "nlopt")]
@@ -155,29 +168,30 @@ impl GeneralizedLinearMixedModel {
 
         let mut lower_bounds = vec![f64::NEG_INFINITY; n_beta];
         lower_bounds.extend(self.lmm.lower_bounds());
+        self.pending_progress_error = None;
         self.lmm.optsum.optimizer = Optimizer::NloptBobyqa;
         self.lmm.optsum.backend = Optimizer::NloptBobyqa.canonical_backend();
         self.lmm.optsum.finitial = profiled_start_objective;
-        let ftol_rel = if self.lmm.optsum.caller_set_field("ftol_rel") {
-            self.lmm.optsum.ftol_rel
-        } else {
-            1e-10
-        };
-        let ftol_abs = if self.lmm.optsum.caller_set_field("ftol_abs") {
-            self.lmm.optsum.ftol_abs
-        } else {
-            1e-7
-        };
+        // Stopping tolerances follow MixedModels.jl's `OptSummary` defaults
+        // for the fast = false joint fit (ftol_rel 1e-12, ftol_abs 1e-8; no
+        // xtol_abs, which Julia only applies when its length matches θ).
+        let (ftol_abs, ftol_rel) = self.joint_ftol();
         let xtol_rel = self
             .lmm
             .optsum
             .caller_set_field("xtol_rel")
             .then_some(self.lmm.optsum.xtol_rel);
-        let mut initial_step = vec![0.1; n_beta];
+        // NLopt's BOBYQA rescales the parameters so the initial steps are
+        // equal, so the β steps set the conditioning of the β block. One
+        // profiled (fast-PIRLS) standard error per coefficient makes that
+        // block roughly a correlation matrix; a flat 0.1 step leaves it as
+        // ill-conditioned as the covariates' scales (contraception's `age`
+        // coefficient has ~1/19 the SE of the intercept).
+        let mut initial_step = self.joint_beta_initial_steps();
         if self.lmm.optsum.caller_set_field("initial_step") {
             initial_step.extend(self.lmm.optsum.initial_step.clone());
         } else {
-            initial_step.extend(vec![0.5; n_theta]);
+            initial_step.extend(vec![JOINT_THETA_STEP; n_theta]);
         }
 
         let feval_count = std::cell::Cell::new(0i64);
@@ -194,26 +208,131 @@ impl GeneralizedLinearMixedModel {
             });
             objective
         };
+        let run_bobyqa = |params: &mut Vec<f64>, steps: &[f64], budget: u32| {
+            let mut optimizer = Nlopt::new(
+                NloptAlgorithm::Bobyqa,
+                n_params,
+                &obj_fn,
+                NloptTarget::Minimize,
+                (),
+            );
+            optimizer.set_lower_bounds(&lower_bounds).ok();
+            optimizer.set_ftol_rel(ftol_rel).ok();
+            optimizer.set_ftol_abs(ftol_abs).ok();
+            if let Some(xtol_rel) = xtol_rel {
+                optimizer.set_xtol_rel(xtol_rel).ok();
+            }
+            optimizer.set_maxeval(budget.max(1)).ok();
+            optimizer.set_initial_step(steps).ok();
+            optimizer.optimize(params)
+        };
 
-        let mut optimizer = Nlopt::new(
-            NloptAlgorithm::Bobyqa,
-            n_params,
-            obj_fn,
-            NloptTarget::Minimize,
-            (),
-        );
-        optimizer.set_lower_bounds(&lower_bounds).ok();
-        optimizer.set_ftol_rel(ftol_rel).ok();
-        optimizer.set_ftol_abs(ftol_abs).ok();
-        if let Some(xtol_rel) = xtol_rel {
-            optimizer.set_xtol_rel(xtol_rel).ok();
-        }
-        optimizer.set_maxeval(maxeval).ok();
-        optimizer.set_initial_step(&initial_step).ok();
-
+        // A host interrupt raised inside an evaluation's PIRLS is held on the
+        // model (see `joint_glmm_deviance_at_params`); NLopt cannot be
+        // stopped from the objective, so it is returned after each run.
+        let take_interrupt = || model.borrow_mut().pending_progress_error.take();
         let mut params = initial;
-        let nlopt_result = optimizer.optimize(&mut params);
-        drop(optimizer);
+        let mut nlopt_result = run_bobyqa(&mut params, &initial_step, maxeval);
+        if let Some(message) = take_interrupt() {
+            return Err(MixedModelError::Interrupted(message));
+        }
+        // NLopt's BOBYQA declares FTOL_REACHED on the first accepted step
+        // whose improvement is below the tolerance, whatever the trust-region
+        // radius; it is not a contraction test (the analogue of TrustBQ's
+        // `ftol_requires_local_radius`). A step that happens to gain little
+        // on a still-large radius therefore stops the fit well short of the
+        // optimum, and which step does so is decided by last-bit rounding
+        // (contraception stopped 9.2e-5 above the optimum on Linux, 1e-6 on
+        // macOS). Confirm every FTOL stop by restarting from the incumbent
+        // with a fresh, 10x smaller interpolation set: the stop stands only
+        // once a restart gains no more than the tolerance.
+        //
+        // A restart needs 2n + 1 evaluations just to build its interpolation
+        // model, and a confirming restart then takes a few trust-region steps
+        // at the reduced radius; one launched with less than twice the model
+        // size cannot finish either, so it is not started and the stop is
+        // recorded as unconfirmed.
+        let min_restart_budget = 2 * (2 * n_params as u32 + 1);
+        let mut confirmation = JointFtolConfirmation::NotNeeded;
+        let mut restarts = 0usize;
+        while matches!(nlopt_result, Ok((nlopt::SuccessState::FtolReached, _))) {
+            let incumbent = match &nlopt_result {
+                Ok((_, fmin)) | Err((_, fmin)) => *fmin,
+            };
+            if restarts == JOINT_MAX_CONFIRMATION_RESTARTS {
+                confirmation = JointFtolConfirmation::Unconfirmed {
+                    reason: "restart_cap_reached",
+                    restarts,
+                    last_gain: None,
+                };
+                break;
+            }
+            let used = u32::try_from(feval_count.get()).unwrap_or(u32::MAX);
+            let remaining = maxeval.saturating_sub(used);
+            if remaining < min_restart_budget {
+                confirmation = JointFtolConfirmation::Unconfirmed {
+                    reason: "insufficient_evaluation_budget",
+                    restarts,
+                    last_gain: None,
+                };
+                break;
+            }
+            let steps = joint_restart_steps(&initial_step, &params, &lower_bounds);
+            let mut candidate = params.clone();
+            let result = run_bobyqa(&mut candidate, &steps, remaining);
+            if let Some(message) = take_interrupt() {
+                return Err(MixedModelError::Interrupted(message));
+            }
+            restarts += 1;
+            let (restart_ok, best) = match &result {
+                Ok((_, fmin)) => (true, *fmin),
+                Err((_, fmin)) => (false, *fmin),
+            };
+            // The restart starts at the incumbent (its steps keep NLopt from
+            // shifting it off a bound), so a best value above the incumbent
+            // means the incumbent was not reproduced.
+            if !best.is_finite()
+                || best > incumbent
+                || !candidate.iter().all(|value| value.is_finite())
+            {
+                confirmation = JointFtolConfirmation::Unconfirmed {
+                    reason: "restart_did_not_reproduce_incumbent",
+                    restarts,
+                    last_gain: None,
+                };
+                break;
+            }
+            let gain = incumbent - best;
+            params = candidate;
+            if gain <= ftol_abs.max(ftol_rel * incumbent.abs()) {
+                // Confirmed: the stop stands with its FTOL label whatever
+                // code the confirming restart itself returned (a budget or
+                // roundoff stop after gaining nothing does not unconfirm it).
+                nlopt_result = Ok((nlopt::SuccessState::FtolReached, best));
+                confirmation = JointFtolConfirmation::Confirmed;
+                break;
+            }
+            if !restart_ok {
+                // Keep the better point, but a restart that failed after a
+                // material gain confirms nothing; the label stays the first
+                // pass's FTOL stop and the gap is recorded.
+                nlopt_result = Ok((nlopt::SuccessState::FtolReached, best));
+                confirmation = JointFtolConfirmation::Unconfirmed {
+                    reason: "restart_failed_after_material_gain",
+                    restarts,
+                    last_gain: Some(gain),
+                };
+                break;
+            }
+            // A material gain: the restart's own stop is the new incumbent
+            // status (FTOL loops to be confirmed again; XTOL/SUCCESS are
+            // BOBYQA's native radius convergence; MAXEVAL is an honest
+            // budget stop).
+            nlopt_result = result;
+            if !matches!(nlopt_result, Ok((nlopt::SuccessState::FtolReached, _))) {
+                confirmation = JointFtolConfirmation::NotNeeded;
+            }
+        }
 
         let me = model.into_inner();
         let final_objective = me.joint_glmm_deviance_at_params(&params, n_beta, n_agq);
@@ -248,7 +367,7 @@ impl GeneralizedLinearMixedModel {
             &lower_bounds,
             Some(me.lmm.dims.n),
         );
-        let certification_gradient = me.joint_laplace_certification_gradient(
+        let mut certification_gradient = me.joint_laplace_certification_gradient(
             &me.lmm.optsum.final_params.clone(),
             n_beta,
             n_agq,
@@ -258,11 +377,21 @@ impl GeneralizedLinearMixedModel {
         certificate.apply_derivative_evidence(
             OptimizerDerivativeEvidence {
                 method: EvidenceMethod::FiniteDifference,
+                hessian_method: EvidenceMethod::FiniteDifference,
                 gradient: certification_gradient.gradient.clone(),
                 hessian: None,
             },
             2.0e-2,
             1.0e-6,
+        );
+        let beta_hessian = me.joint_working_beta_hessian();
+        me.confirm_decrement_curvature(
+            &mut certification_gradient,
+            &me.lmm.optsum.final_params.clone(),
+            n_beta,
+            n_agq,
+            &lower_bounds,
+            beta_hessian.as_ref(),
         );
         annotate_glmm_covariance_status(
             &mut certificate,
@@ -271,7 +400,10 @@ impl GeneralizedLinearMixedModel {
             &lower_bounds,
             &certification_gradient,
             2.0e-2,
+            beta_hessian.as_ref(),
         );
+        record_joint_ftol_confirmation(&mut certificate, &confirmation, "NLopt BOBYQA");
+        me.take_pending_interrupt()?;
         if joint_certificate_requires_fallback(&certificate)
             && joint_candidate_materially_improves_profiled_start(&me.lmm.optsum)
         {
@@ -317,14 +449,51 @@ impl GeneralizedLinearMixedModel {
         let mut lower_bounds = vec![f64::NEG_INFINITY; n_beta];
         lower_bounds.extend(self.lmm.lower_bounds());
         let upper_bounds = vec![f64::INFINITY; n_params];
+        self.pending_progress_error = None;
         self.lmm.optsum.optimizer = Optimizer::TrustBq;
         self.lmm.optsum.backend = Optimizer::TrustBq.canonical_backend();
         self.lmm.optsum.finitial = profiled_start_objective;
         self.lmm.optsum.max_feval = maxeval as i64;
-        let ftol_abs = self.lmm.optsum.ftol_abs.max(1.0e-7);
-        let ftol_rel = self.lmm.optsum.ftol_rel.max(1.0e-10);
-        let initial_radius = joint_glmm_trust_bq_initial_radius(&initial, n_beta);
-        let compact_joint_space = (5..=8).contains(&n_params);
+        // MixedModels.jl's joint-fit tolerances. The former floors (ftol_abs
+        // 1e-7, ftol_rel 1e-10: 3.4e-7 per accepted step at contraception's
+        // deviance) let the local-radius FTOL stop land several 1e-7 high.
+        let (ftol_abs, ftol_rel) = self.joint_ftol();
+        // Up to twelve parameters the model carries every cross term (at most
+        // 66 extra samples, a 90-sample model against a default budget of at
+        // least 1460), the stall stop uses the FTOL band with stable
+        // parameters, and the stop is polished. These once applied only to
+        // five to eight parameters; with a diagonal model and a 1e-6
+        // statistical stall band the three-parameter rare-event Bernoulli
+        // AGQ5 fit stopped 5.4e-7, and the nine-parameter contraception
+        // random-slope fit 1.9e-6, above the optimum.
+        let compact_joint_space = n_params <= 12;
+
+        // TrustBQ's trust region is a Euclidean ball and its interpolation
+        // stencil samples every axis at the radius, so it works in
+        // transformed coordinates `x = x0 + T z` (see
+        // `joint_trust_bq_transform`): a unit radius is one profiled standard
+        // error along every fixed-effect direction, the scaling NLopt's
+        // BOBYQA gets from its initial steps, plus decorrelation. In raw
+        // coordinates a radius that is local for the intercept
+        // (contraception SE 0.149) is 2.6 standard errors of `age` (SE
+        // 0.0079); the axis stencil's truncation error there hid an `age`
+        // gradient of 2.6 and the local-radius FTOL stop fired 1.05e-4 above
+        // the optimum. The reported final trust radius is in `z` units.
+        let transform = self.joint_trust_bq_transform(n_theta);
+        let to_x = |z: &[f64]| {
+            let offset = &transform * DVector::from_column_slice(z);
+            initial
+                .iter()
+                .zip(offset.iter())
+                .map(|(start, delta)| start + delta)
+                .collect::<Vec<_>>()
+        };
+        let initial_z = vec![0.0; n_params];
+        // The transform is block diagonal with a diagonal θ block, so each
+        // bounded coordinate keeps a per-coordinate bound.
+        let lower_bounds_z = (0..n_params)
+            .map(|index| (lower_bounds[index] - initial[index]) / transform[(index, index)])
+            .collect::<Vec<_>>();
 
         let invalid_objective = profiled_start_objective.abs().max(1.0)
             + 1.0e6 * (1.0 + profiled_start_objective.abs());
@@ -334,10 +503,19 @@ impl GeneralizedLinearMixedModel {
 
         let progress_callback = self.lmm.progress_callback.clone();
         let model = std::cell::RefCell::new(self);
-        let mut objective_fn = |params: &[f64]| -> Result<f64> {
+        // Objective evaluations across all passes, including a restart that
+        // fails part-way (its own count is lost with its error).
+        let evaluations = Cell::new(0usize);
+        let mut objective_fn = |z: &[f64]| -> Result<f64> {
+            evaluations.set(evaluations.get() + 1);
+            let params = to_x(z);
+            let params = params.as_slice();
             let raw_objective = model
                 .borrow_mut()
                 .joint_glmm_deviance_at_params(params, n_beta, n_agq);
+            if let Some(message) = model.borrow_mut().pending_progress_error.take() {
+                return Err(MixedModelError::Interrupted(message));
+            }
             let objective = if raw_objective.is_finite() {
                 raw_objective
             } else {
@@ -354,26 +532,25 @@ impl GeneralizedLinearMixedModel {
             Ok(objective)
         };
         let mut last_progress = 0usize;
+        // Evaluations spent by earlier TrustBQ passes, so progress reports
+        // count the whole fit across confirmation restarts.
+        let spent_before_pass = Cell::new(0usize);
         let mut progress_fn = |progress: &TrustBqProgress<'_>| -> Result<bool> {
             if let Some(callback) = &progress_callback {
                 callback.report_if_due(
                     FitProgressPhase::JointGlmmOptimizer,
-                    progress.fevals,
+                    spent_before_pass.get() + progress.fevals,
                     Some(maxeval.max(1) as usize),
                     &mut last_progress,
                 )?;
             }
             Ok(false)
         };
-
-        let result = minimize_trust_bq_with_progress(
-            &initial,
-            &lower_bounds,
-            &upper_bounds,
-            TrustBqOptions {
+        let pass_options =
+            |initial_radius: f64, final_radius: f64, max_evaluations: usize| TrustBqOptions {
                 initial_radius,
-                final_radius: 1.0e-5,
-                max_evaluations: maxeval.max(1) as usize,
+                final_radius,
+                max_evaluations: max_evaluations.max(1),
                 ftol_abs,
                 ftol_rel,
                 ftol_requires_local_radius: true,
@@ -384,9 +561,51 @@ impl GeneralizedLinearMixedModel {
                 stall_requires_stable_x: compact_joint_space,
                 reuse_samples: true,
                 ..TrustBqOptions::default()
-            },
+            };
+
+        let result = minimize_trust_bq_with_progress(
+            &initial_z,
+            &lower_bounds_z,
+            &upper_bounds,
+            pass_options(
+                JOINT_TRUST_BQ_INITIAL_RADIUS,
+                JOINT_TRUST_BQ_FINAL_RADIUS,
+                maxeval as usize,
+            ),
             &mut objective_fn,
             &mut progress_fn,
+        )?;
+        // An objective-tolerance or stagnation stop rests on one small
+        // accepted step (or a few stalled iterations) of one interpolation
+        // model, which a poorly resolved direction can fake even at a
+        // contracted radius. As for NLopt BOBYQA, confirm it by restarting
+        // from the incumbent with a fresh model at a tenth of the initial
+        // radius (see `confirm_joint_trust_bq_stop`).
+        let model_size = 2 * n_params
+            + if compact_joint_space {
+                n_params * n_params.saturating_sub(1) / 2
+            } else {
+                0
+            };
+        let plan =
+            JointRestartPlan::for_model_size(model_size, maxeval as usize, ftol_abs, ftol_rel);
+        let restart_radius = JOINT_RESTART_STEP_FACTOR * JOINT_TRUST_BQ_INITIAL_RADIUS;
+        let (result, fevals, confirmation) = confirm_joint_trust_bq_stop(
+            result,
+            evaluations.get(),
+            &plan,
+            |start, budget, spent| {
+                spent_before_pass.set(spent);
+                let restart = minimize_trust_bq_with_progress(
+                    start,
+                    &lower_bounds_z,
+                    &upper_bounds,
+                    pass_options(restart_radius, JOINT_TRUST_BQ_FINAL_RADIUS, budget),
+                    &mut objective_fn,
+                    &mut progress_fn,
+                );
+                (restart, evaluations.get())
+            },
         )?;
 
         let logged_best_params = best_params.into_inner();
@@ -395,7 +614,7 @@ impl GeneralizedLinearMixedModel {
             if logged_best_fmin.is_finite() && logged_best_fmin <= result.fmin {
                 (logged_best_params, logged_best_fmin)
             } else {
-                (result.x, result.fmin)
+                (to_x(&result.x), result.fmin)
             };
         let me = model.into_inner();
         let status_prefix = joint_glmm_status_prefix(n_agq);
@@ -404,7 +623,7 @@ impl GeneralizedLinearMixedModel {
             trust_bq_status_label(result.stop_reason)
         );
         me.lmm.optsum.n_agq = n_agq;
-        me.lmm.optsum.feval = result.fevals as i64;
+        me.lmm.optsum.feval = fevals as i64;
         me.lmm.optsum.max_feval = maxeval as i64;
         me.lmm.optsum.fit_log = rc_refcell_into_inner_or_clone(fit_log);
         me.lmm.optsum.fmin = candidate_objective;
@@ -476,6 +695,9 @@ impl GeneralizedLinearMixedModel {
             &lower_bounds,
             2.0e-2,
         );
+        // Read at the certified point: the probes' last evaluation restores
+        // it, and a rejected polish below would leave the state elsewhere.
+        let mut beta_hessian = me.joint_working_beta_hessian();
         // trust_bq's derivative-free ftol stop can rest a steep, narrow
         // valley's width (~1e-3 deviance) short of the stationary point, where
         // the *assessed* gradient is genuinely above tolerance even though the
@@ -515,17 +737,27 @@ impl GeneralizedLinearMixedModel {
                         &lower_bounds,
                         2.0e-2,
                     );
+                    beta_hessian = me.joint_working_beta_hessian();
                 }
             }
         }
         certificate.apply_derivative_evidence(
             OptimizerDerivativeEvidence {
                 method: EvidenceMethod::FiniteDifference,
+                hessian_method: EvidenceMethod::FiniteDifference,
                 gradient: certification_gradient.gradient.clone(),
                 hessian: None,
             },
             2.0e-2,
             1.0e-6,
+        );
+        me.confirm_decrement_curvature(
+            &mut certification_gradient,
+            &me.lmm.optsum.final_params.clone(),
+            n_beta,
+            n_agq,
+            &lower_bounds,
+            beta_hessian.as_ref(),
         );
         annotate_glmm_covariance_status(
             &mut certificate,
@@ -534,7 +766,10 @@ impl GeneralizedLinearMixedModel {
             &lower_bounds,
             &certification_gradient,
             2.0e-2,
+            beta_hessian.as_ref(),
         );
+        record_joint_ftol_confirmation(&mut certificate, &confirmation, "TrustBQ");
+        me.take_pending_interrupt()?;
         if joint_certificate_requires_fallback(&certificate)
             && joint_candidate_materially_improves_profiled_start(&me.lmm.optsum)
         {
@@ -560,13 +795,135 @@ impl GeneralizedLinearMixedModel {
         Ok(me)
     }
 
+    /// Initial steps (NLopt BOBYQA) and coordinate scales (TrustBQ) for the
+    /// joint β block: one profiled (fast-PIRLS) standard error per
+    /// coefficient where that covariance is available and finite, else a flat
+    /// default step.
+    ///
+    /// Each step is capped at `max(1, |β_j|)`. An SE above that means the
+    /// profiled Hessian is nearly singular in that coordinate (typically
+    /// near-separation in a binomial model, SE 1e2–1e4); a step that size
+    /// would put BOBYQA's first interpolation points deep in a saturated
+    /// logistic tail where the deviance is flat and carries no curvature
+    /// information. `|β_j|` is NLopt's own default step (what MixedModels.jl
+    /// uses), and the floor of 1 keeps near-zero coefficients movable.
+    fn joint_beta_initial_steps(&self) -> Vec<f64> {
+        let n_beta = self.beta.len();
+        let mut steps = vec![JOINT_DEFAULT_BETA_STEP; n_beta];
+        // The profiled covariance is in the unpivoted coefficient order;
+        // active coefficient `i` is full coefficient `piv[i]`.
+        let piv = &self.lmm.feterm.piv;
+        if let Some(covariance) = self.profiled_glmm_fixed_effect_covariance() {
+            for (index, (step, &full)) in steps.iter_mut().zip(piv).enumerate() {
+                if full < covariance.nrows() && full < covariance.ncols() {
+                    let se = covariance[(full, full)].sqrt();
+                    if se.is_finite() && se > 0.0 {
+                        *step = se.min(self.beta[index].abs().max(1.0));
+                    }
+                }
+            }
+        }
+        steps
+    }
+
+    /// Joint-fit `(ftol_abs, ftol_rel)`: the caller's values where set, else
+    /// MixedModels.jl's `OptSummary` defaults.
+    fn joint_ftol(&self) -> (f64, f64) {
+        let optsum = &self.lmm.optsum;
+        let ftol_abs = if optsum.caller_set_field("ftol_abs") {
+            optsum.ftol_abs
+        } else {
+            JOINT_FTOL_ABS
+        };
+        let ftol_rel = if optsum.caller_set_field("ftol_rel") {
+            optsum.ftol_rel
+        } else {
+            JOINT_FTOL_REL
+        };
+        (ftol_abs, ftol_rel)
+    }
+
+    /// Coordinate transform for the TrustBQ joint driver, `x = x0 + T z`.
+    /// The β block is `D L`, for `D` the joint β steps and `L` the Cholesky
+    /// factor of the profiled fixed-effect correlation matrix, so that
+    /// `T Tᵀ` is the profiled covariance wherever no step is capped: a unit
+    /// ball in `z` is the profiled confidence ellipsoid and the working β
+    /// Hessian is near `2 I`. Without a usable covariance, or when the
+    /// correlation is nearly singular (see
+    /// [`well_conditioned_correlation_factor`]), the block is `D`. Each
+    /// covariance parameter is scaled by the caller's `initial_step` where
+    /// one of the right length is set (as for NLopt), else by
+    /// [`JOINT_THETA_STEP`].
+    pub(super) fn joint_trust_bq_transform(&self, n_theta: usize) -> DMatrix<f64> {
+        let steps = self.joint_beta_initial_steps();
+        let n_beta = steps.len();
+        let n = n_beta + n_theta;
+        let mut transform = DMatrix::zeros(n, n);
+        let beta_block = self
+            .joint_beta_correlation_factor()
+            .and_then(well_conditioned_correlation_factor)
+            .unwrap_or_else(|| DMatrix::identity(n_beta, n_beta));
+        for i in 0..n_beta {
+            for j in 0..=i {
+                transform[(i, j)] = steps[i] * beta_block[(i, j)];
+            }
+        }
+        let caller_theta_steps = self
+            .lmm
+            .optsum
+            .caller_set_field("initial_step")
+            .then_some(&self.lmm.optsum.initial_step)
+            .filter(|steps| {
+                steps.len() == n_theta && steps.iter().all(|step| step.is_finite() && *step > 0.0)
+            });
+        for (offset, index) in (n_beta..n).enumerate() {
+            transform[(index, index)] =
+                caller_theta_steps.map_or(JOINT_THETA_STEP, |steps| steps[offset]);
+        }
+        transform
+    }
+
+    /// Lower Cholesky factor of the profiled fixed-effect correlation matrix
+    /// in the optimizer's β order, or `None` when it is unavailable.
+    pub(super) fn joint_beta_correlation_factor(&self) -> Option<DMatrix<f64>> {
+        let covariance = self.profiled_glmm_fixed_effect_covariance()?;
+        let piv = &self.lmm.feterm.piv;
+        let p = self.beta.len();
+        if piv.len() < p {
+            return None;
+        }
+        let mut correlation = DMatrix::zeros(p, p);
+        for i in 0..p {
+            for j in 0..p {
+                let cij = *covariance.get((piv[i], piv[j]))?;
+                let cii = *covariance.get((piv[i], piv[i]))?;
+                let cjj = *covariance.get((piv[j], piv[j]))?;
+                if !(cii > 0.0 && cjj > 0.0) {
+                    return None;
+                }
+                correlation[(i, j)] = cij / (cii * cjj).sqrt();
+            }
+        }
+        let factor = correlation.cholesky()?.l();
+        matrix_is_finite_local(&factor).then_some(factor)
+    }
+
+    /// Returns a host interrupt held by `joint_glmm_deviance_at_params`.
+    fn take_pending_interrupt(&mut self) -> Result<()> {
+        match self.pending_progress_error.take() {
+            Some(message) => Err(MixedModelError::Interrupted(message)),
+            None => Ok(()),
+        }
+    }
+
     pub(super) fn joint_glmm_deviance_at_params(
         &mut self,
         params: &[f64],
         n_beta: usize,
         n_agq: usize,
     ) -> f64 {
-        if params.len() != n_beta + self.theta.len()
+        if self.pending_progress_error.is_some()
+            || params.len() != n_beta + self.theta.len()
             || !params.iter().all(|value| value.is_finite())
         {
             return f64::INFINITY;
@@ -581,6 +938,13 @@ impl GeneralizedLinearMixedModel {
                 } else {
                     f64::INFINITY
                 }
+            }
+            // A host interrupt raised by the inner PIRLS progress report is
+            // held for the joint driver to return; later evaluations
+            // short-circuit.
+            Err(MixedModelError::Interrupted(message)) => {
+                self.pending_progress_error = Some(message);
+                f64::INFINITY
             }
             Err(_) => f64::INFINITY,
         }
@@ -617,31 +981,32 @@ impl GeneralizedLinearMixedModel {
         }
     }
 
-    fn joint_laplace_finite_difference_gradient(
+    /// Default-step central-difference probes of every coordinate, plus the
+    /// objective at `params` itself (evaluated last, which also restores the
+    /// fitted PIRLS state). The base value is what turns each central pair
+    /// into a diagonal curvature reading at no extra cost.
+    fn joint_laplace_finite_difference_probes(
         &mut self,
         params: &[f64],
         n_beta: usize,
         n_agq: usize,
         lower_bounds: &[f64],
-    ) -> Vec<f64> {
-        let gradient = (0..params.len())
+    ) -> (Vec<JointFdProbe>, f64) {
+        let probes = (0..params.len())
             .map(|index| {
                 let h = JOINT_LAPLACE_FD_RELATIVE_STEP * params[index].abs().max(1.0);
-                self.joint_laplace_fd_gradient_component(
-                    params,
-                    index,
-                    h,
-                    n_beta,
-                    n_agq,
-                    lower_bounds,
-                )
+                self.joint_laplace_fd_probe(params, index, h, n_beta, n_agq, lower_bounds)
             })
             .collect();
-        let _ = self.joint_glmm_deviance_at_params(params, n_beta, n_agq);
-        gradient
+        let base = self.joint_glmm_deviance_at_params(params, n_beta, n_agq);
+        (probes, base)
     }
 
-    fn joint_laplace_fd_gradient_component(
+    /// One finite-difference probe of coordinate `index` at step `h`:
+    /// central when `value - h` stays above the lower bound, forward
+    /// otherwise. A forward probe needs the objective at `params` and
+    /// evaluates it; a central probe does not.
+    fn joint_laplace_fd_probe(
         &mut self,
         params: &[f64],
         index: usize,
@@ -649,7 +1014,7 @@ impl GeneralizedLinearMixedModel {
         n_beta: usize,
         n_agq: usize,
         lower_bounds: &[f64],
-    ) -> f64 {
+    ) -> JointFdProbe {
         let value = params[index];
         let lower = lower_bounds
             .get(index)
@@ -657,15 +1022,15 @@ impl GeneralizedLinearMixedModel {
             .unwrap_or(f64::NEG_INFINITY);
         let mut plus = params.to_vec();
         plus[index] = value + h;
-        let fp = self.joint_glmm_deviance_at_params(&plus, n_beta, n_agq);
+        let f_plus = self.joint_glmm_deviance_at_params(&plus, n_beta, n_agq);
         if value - h > lower {
             let mut minus = params.to_vec();
             minus[index] = value - h;
-            let fm = self.joint_glmm_deviance_at_params(&minus, n_beta, n_agq);
-            (fp - fm) / (2.0 * h)
+            let f_minus = self.joint_glmm_deviance_at_params(&minus, n_beta, n_agq);
+            JointFdProbe::central(h, f_plus, f_minus)
         } else {
             let base = self.joint_glmm_deviance_at_params(params, n_beta, n_agq);
-            (fp - base) / h
+            JointFdProbe::forward(h, f_plus, base)
         }
     }
 
@@ -683,7 +1048,11 @@ impl GeneralizedLinearMixedModel {
     /// (which may still fail the tolerance — a genuine non-stationarity). If
     /// they disagree, the component cannot be assessed at any trusted step and
     /// is reported as such rather than as a failure.
-    fn joint_laplace_certification_gradient(
+    ///
+    /// The central probes also carry diagonal curvature readings, from which
+    /// the result's [`JointLaplaceCertificationGradient::newton_decrement`]
+    /// estimates the objective gap without further evaluations.
+    pub(super) fn joint_laplace_certification_gradient(
         &mut self,
         params: &[f64],
         n_beta: usize,
@@ -691,9 +1060,14 @@ impl GeneralizedLinearMixedModel {
         lower_bounds: &[f64],
         gradient_tolerance: f64,
     ) -> JointLaplaceCertificationGradient {
-        let probe_gradient =
-            self.joint_laplace_finite_difference_gradient(params, n_beta, n_agq, lower_bounds);
+        let (probes, base_objective) =
+            self.joint_laplace_finite_difference_probes(params, n_beta, n_agq, lower_bounds);
+        let probe_gradient = probes
+            .iter()
+            .map(|probe| probe.gradient)
+            .collect::<Vec<_>>();
         let mut gradient = probe_gradient.clone();
+        let mut curvature_probes = probes.iter().map(|probe| vec![*probe]).collect::<Vec<_>>();
         let mut escalated_indices = Vec::new();
         let mut unassessable_indices = Vec::new();
         for (index, &value) in params.iter().enumerate() {
@@ -703,7 +1077,7 @@ impl GeneralizedLinearMixedModel {
             }
             let scale = value.abs().max(1.0);
             let estimates = JOINT_LAPLACE_CERT_FD_ESCALATED_RELATIVE_STEPS.map(|step| {
-                self.joint_laplace_fd_gradient_component(
+                self.joint_laplace_fd_probe(
                     params,
                     index,
                     step * scale,
@@ -712,10 +1086,13 @@ impl GeneralizedLinearMixedModel {
                     lower_bounds,
                 )
             });
-            let consistent = estimates.iter().all(|estimate| estimate.is_finite())
-                && (estimates[0] - estimates[1]).abs() <= gradient_tolerance;
+            curvature_probes[index].extend(estimates);
+            let consistent = estimates
+                .iter()
+                .all(|estimate| estimate.gradient.is_finite())
+                && (estimates[0].gradient - estimates[1].gradient).abs() <= gradient_tolerance;
             if consistent {
-                gradient[index] = estimates[1];
+                gradient[index] = estimates[1].gradient;
                 escalated_indices.push(index);
             } else {
                 unassessable_indices.push(index);
@@ -729,7 +1106,123 @@ impl GeneralizedLinearMixedModel {
             probe_gradient,
             escalated_indices,
             unassessable_indices,
+            base_objective,
+            curvature_probes,
         }
+    }
+
+    /// Before a decrement above tolerance can demote a stop, confirm the
+    /// curvature of every interior covariance parameter read from a single
+    /// default-step probe: its second difference `(f+ + f- - 2 f0) / h^2`
+    /// divides PIRLS stopping noise by `h^2 = 1e-10`, so a spuriously small
+    /// positive reading would inflate `g^2 / H`. The escalated probes are
+    /// added to `curvature_probes` only (the reported gradient and its
+    /// escalation record are untouched), so [`decrement_reading`] then needs
+    /// agreeing escalated curvatures and a gap-unit-consistent gradient.
+    /// Fixed effects need no confirmation: the β-block estimate takes their
+    /// curvature from the working Hessian after checking it against the
+    /// probes. Costs four evaluations per such parameter, only on stops the
+    /// eager estimate would reject; fitted state is restored.
+    fn confirm_decrement_curvature(
+        &mut self,
+        certification: &mut JointLaplaceCertificationGradient,
+        params: &[f64],
+        n_beta: usize,
+        n_agq: usize,
+        lower_bounds: &[f64],
+        beta_hessian: Option<&DMatrix<f64>>,
+    ) {
+        let preliminary = joint_newton_decrement(
+            certification,
+            params,
+            lower_bounds,
+            n_beta,
+            beta_hessian,
+            JOINT_STATIONARITY_GAP_TOLERANCE,
+        );
+        if preliminary.eager.verdict != crate::compiler::NewtonDecrementVerdict::ExceedsTolerance {
+            return;
+        }
+        let mut probed = false;
+        for &index in &preliminary.parameter_indices {
+            if index < n_beta || certification.curvature_probes[index].len() != 1 {
+                continue;
+            }
+            let scale = params[index].abs().max(1.0);
+            let probes = JOINT_LAPLACE_CERT_FD_ESCALATED_RELATIVE_STEPS.map(|step| {
+                self.joint_laplace_fd_probe(
+                    params,
+                    index,
+                    step * scale,
+                    n_beta,
+                    n_agq,
+                    lower_bounds,
+                )
+            });
+            certification.curvature_probes[index].extend(probes);
+            probed = true;
+        }
+        if probed {
+            let _ = self.joint_glmm_deviance_at_params(params, n_beta, n_agq);
+        }
+    }
+
+    /// Record the full Newton decrement `gᵀH⁻¹g` on the optimizer
+    /// certificate's stationarity evidence once the joint Hessian exists
+    /// (or why it could not be formed). Evidence only: the fit status stays
+    /// the one the eager decrement decided at fit time, so it cannot depend
+    /// on whether or when inference was inspected.
+    fn record_full_newton_decrement(
+        &mut self,
+        hessian: std::result::Result<&DMatrix<f64>, &String>,
+        active_indices: &[usize],
+    ) {
+        let Some(evidence) = self
+            .lmm
+            .compiler_artifact
+            .optimizer_certificate
+            .as_mut()
+            .and_then(|certificate| certificate.stationarity_decrement.as_mut())
+        else {
+            return;
+        };
+        evidence.full = Some(match hessian {
+            Ok(hessian) => full_newton_decrement_estimate(evidence, hessian, active_indices),
+            Err(reason) => crate::compiler::NewtonDecrementEstimate {
+                variant: crate::compiler::NewtonDecrementVariant::Full,
+                verdict: crate::compiler::NewtonDecrementVerdict::NotAssessed,
+                objective_gap: None,
+                reason: Some(format!("joint Hessian unavailable: {reason}")),
+            },
+        });
+    }
+
+    /// Fixed-effect block of the working penalized-least-squares Hessian of
+    /// the deviance at the current PIRLS state, in the optimizer's β order:
+    /// `2 Cov⁻¹` for the working fixed-effect covariance (the deviance is
+    /// `-2 log L`). It is the β-β curvature of the Laplace deviance up to the
+    /// β-dependence of the log-determinant term, and costs no objective
+    /// evaluations. PIRLS weights are the expected (Fisher) weights, so for a
+    /// non-canonical link this is the expected rather than the observed
+    /// curvature, and for `n_agq > 1` it is the Laplace rather than the AGQ
+    /// curvature; the decrement uses it only when its diagonal agrees with
+    /// the probed curvature within a factor of two. `None` when the
+    /// covariance is unavailable or singular.
+    pub(super) fn joint_working_beta_hessian(&self) -> Option<DMatrix<f64>> {
+        let covariance = self.profiled_glmm_fixed_effect_covariance()?;
+        let piv = &self.lmm.feterm.piv;
+        let p = self.beta.len();
+        if piv.len() < p {
+            return None;
+        }
+        let mut active = DMatrix::zeros(p, p);
+        for i in 0..p {
+            for j in 0..p {
+                active[(i, j)] = *covariance.get((piv[i], piv[j]))?;
+            }
+        }
+        let inverse = active.cholesky()?.inverse();
+        matrix_is_finite_local(&inverse).then(|| 2.0 * inverse)
     }
 
     pub(super) fn glmm_joint_laplace_fixed_effect_inference_artifacts(
@@ -773,7 +1266,9 @@ impl GeneralizedLinearMixedModel {
             &lower_bounds,
             &active_indices,
             true,
-        )?;
+        );
+        self.record_full_newton_decrement(hessian.as_ref(), &active_indices);
+        let hessian = hessian?;
         let certification = certify_glmm_joint_hessian(&hessian, "joint-laplace GLMM Hessian")?;
         let beta_covariance = 2.0 * certification.inverse.view((0, 0), (p, p)).into_owned();
         if !matrix_is_finite_local(&beta_covariance) {
@@ -828,8 +1323,10 @@ impl GeneralizedLinearMixedModel {
                     .copied()
                     .filter(|value| value.is_finite() && *value > 0.0);
                 let statistic = estimate.zip(std_error).map(|(estimate, se)| estimate / se);
-                let p_value = statistic.map(|z| 2.0 * (1.0 - normal.cdf(z.abs())));
+                let p_value = statistic.map(|z| normal_wald_two_sided_p_value(&normal, z));
                 FixedEffectInferenceRow {
+                    covariance_method:
+                        crate::stats::InferenceCovarianceMethod::JointLaplaceActiveHessian,
                     label: label.clone(),
                     kind: FixedEffectInferenceRowKind::Coefficient,
                     estimate,
@@ -861,7 +1358,7 @@ impl GeneralizedLinearMixedModel {
         })
     }
 
-    fn finite_difference_joint_laplace_hessian(
+    pub(super) fn finite_difference_joint_laplace_hessian(
         &mut self,
         params: &[f64],
         lower_bounds: &[f64],
@@ -1020,7 +1517,7 @@ impl GeneralizedLinearMixedModel {
         Ok(hessian)
     }
 
-    fn polish_joint_laplace_stationarity(
+    pub(super) fn polish_joint_laplace_stationarity(
         &mut self,
         params: &[f64],
         lower_bounds: &[f64],
@@ -1034,6 +1531,7 @@ impl GeneralizedLinearMixedModel {
         if !current_objective.is_finite() {
             return None;
         }
+        let (ftol_abs, ftol_rel) = self.joint_ftol();
 
         for _ in 0..max_iterations {
             let certification = self.joint_laplace_certification_gradient(
@@ -1047,6 +1545,21 @@ impl GeneralizedLinearMixedModel {
             // noise-aware probe could not assess carry no usable descent
             // direction, and Newton steps on probe noise just burn a full
             // finite-difference Hessian before the line search rejects them.
+            let objective_tolerance = ftol_abs.max(ftol_rel * current_objective.abs());
+            // A small raw gradient can still leave a resolvable objective
+            // gap along a flat direction. Use the same scale-aware evidence
+            // as certification to decide whether a Newton step is useful,
+            // at the optimizer's tighter accuracy target.
+            let decrement = joint_newton_decrement(
+                &certification,
+                &current,
+                lower_bounds,
+                p,
+                self.joint_working_beta_hessian().as_ref(),
+                objective_tolerance,
+            );
+            let gap_exceeds_tolerance = decrement.eager.verdict
+                == crate::compiler::NewtonDecrementVerdict::ExceedsTolerance;
             let mut gradient = certification.gradient;
             for &index in &certification.unassessable_indices {
                 gradient[index] = 0.0;
@@ -1055,7 +1568,9 @@ impl GeneralizedLinearMixedModel {
                 .iter()
                 .map(|value| value.abs())
                 .fold(0.0_f64, f64::max);
-            if !free_gradient_norm.is_finite() || free_gradient_norm <= gradient_tolerance {
+            if !free_gradient_norm.is_finite()
+                || (free_gradient_norm <= gradient_tolerance && !gap_exceeds_tolerance)
+            {
                 break;
             }
 
@@ -1091,9 +1606,10 @@ impl GeneralizedLinearMixedModel {
                 }
                 let trial_objective = self.joint_glmm_deviance_at_params(&trial, p, n_agq);
                 if trial_objective.is_finite()
-                    && trial_objective
-                        < current_objective
-                            - (1.0e-9 * current_objective.abs().max(1.0)).max(1.0e-9)
+                    // The former 1e-9 relative floor rejected improvements
+                    // of 2.4e-6 on contraception, above both the residual
+                    // gap and the joint optimizer's 1e-8 absolute tolerance.
+                    && trial_objective < current_objective - objective_tolerance
                 {
                     accepted = Some((trial, trial_objective));
                     break;
@@ -1113,8 +1629,7 @@ impl GeneralizedLinearMixedModel {
 
     pub(super) fn certified_joint_laplace_fixed_covariance(&self) -> Option<DMatrix<f64>> {
         let covariance = self
-            .lmm
-            .compiler_artifact
+            .inference_artifact()
             .fixed_effect_covariance_matrix
             .as_ref()?;
         if covariance.status != FixedEffectCovarianceStatus::Available
@@ -1135,6 +1650,267 @@ impl GeneralizedLinearMixedModel {
         matrix_is_finite_local(&dense).then_some(dense)
     }
 }
+
+/// MixedModels.jl `OptSummary` default `ftol_rel`, used by its joint
+/// (`fast = false`) GLMM fit.
+const JOINT_FTOL_REL: f64 = 1.0e-12;
+/// MixedModels.jl `OptSummary` default `ftol_abs`.
+const JOINT_FTOL_ABS: f64 = 1.0e-8;
+/// Initial-step (NLopt BOBYQA) or initial-radius (TrustBQ) factor for the
+/// restarts that confirm an FTOL stop, relative to the first pass's.
+const JOINT_RESTART_STEP_FACTOR: f64 = 0.1;
+/// Cap on FTOL-confirmation restarts; each is also bounded by the remaining
+/// evaluation budget.
+const JOINT_MAX_CONFIRMATION_RESTARTS: usize = 20;
+/// Outcome of confirming a joint optimizer's FTOL stop by restarting.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum JointFtolConfirmation {
+    /// The final stop was not an FTOL stop (native radius convergence, a
+    /// budget stop, or a failure), so there was nothing to confirm.
+    NotNeeded,
+    /// A restart from the incumbent gained no more than the tolerance.
+    Confirmed,
+    /// Confirmation could not be completed; the fit keeps its best point and
+    /// FTOL label, and this is recorded on the certificate.
+    Unconfirmed {
+        reason: &'static str,
+        restarts: usize,
+        last_gain: Option<f64>,
+    },
+}
+
+/// Budget and tolerance rules for confirming a TrustBQ joint FTOL stop.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct JointRestartPlan {
+    /// The fit's total evaluation budget.
+    pub(super) maxeval: usize,
+    /// A restart is launched only with at least this many evaluations left.
+    pub(super) min_restart_budget: usize,
+    /// Evaluation allowance of one restart.
+    pub(super) restart_budget: usize,
+    pub(super) max_restarts: usize,
+    pub(super) ftol_abs: f64,
+    pub(super) ftol_rel: f64,
+}
+
+impl JointRestartPlan {
+    /// A restart needs one model to take a step and a second to stop, so one
+    /// that cannot afford two models is not launched. At an optimum no
+    /// restart step is accepted, so neither the FTOL nor the stagnation stop
+    /// can fire (stagnation needs a descent first) and a restart would
+    /// contract to the final radius, a fresh model per halving: four fresh
+    /// models (the halvings that make a radius local) settle whether anything
+    /// material is left, and a restart that gains is itself confirmed by the
+    /// next one.
+    pub(super) fn for_model_size(
+        model_size: usize,
+        maxeval: usize,
+        ftol_abs: f64,
+        ftol_rel: f64,
+    ) -> Self {
+        Self {
+            maxeval,
+            min_restart_budget: 2 * (model_size + 1),
+            restart_budget: 4 * (model_size + 1),
+            max_restarts: JOINT_MAX_CONFIRMATION_RESTARTS,
+            ftol_abs,
+            ftol_rel,
+        }
+    }
+}
+
+/// Confirms a TrustBQ joint FTOL or stagnation stop by restarts from the
+/// incumbent: the stop stands once a restart gains no more than the
+/// tolerance, keeping its label whatever the confirming restart returned.
+/// A material gain moves the incumbent, which is then confirmed in turn,
+/// unless the fit's budget is spent (then an honest `MaxEvaluations` stop).
+/// A restart that exhausted only its own allowance is not a stop. The stop is
+/// recorded as unconfirmed when the restart cap is reached, when fewer than
+/// `min_restart_budget` evaluations remain, or when a restart fails; a host
+/// interrupt is propagated. Radius and step stops are TrustBQ's native
+/// convergence and need no confirmation.
+///
+/// `run_restart(start, budget, spent)` runs one restart from `start` with
+/// `budget` evaluations, `spent` having been used so far, and returns its
+/// result with the total evaluations spent afterwards (counted even when it
+/// fails). Returns the final result, total evaluations and the outcome.
+pub(super) fn confirm_joint_trust_bq_stop<R>(
+    mut result: TrustBqResult,
+    mut fevals: usize,
+    plan: &JointRestartPlan,
+    mut run_restart: R,
+) -> Result<(TrustBqResult, usize, JointFtolConfirmation)>
+where
+    R: FnMut(&[f64], usize, usize) -> (Result<TrustBqResult>, usize),
+{
+    let mut confirmation = JointFtolConfirmation::NotNeeded;
+    let mut restarts = 0usize;
+    let confirmed_stop_reason = result.stop_reason;
+    while matches!(
+        result.stop_reason,
+        TrustBqStopReason::ObjectiveTolerance | TrustBqStopReason::ObjectiveStagnation
+    ) {
+        let incumbent = result.fmin;
+        if restarts == plan.max_restarts {
+            confirmation = JointFtolConfirmation::Unconfirmed {
+                reason: "restart_cap_reached",
+                restarts,
+                last_gain: None,
+            };
+            break;
+        }
+        let remaining = plan.maxeval.saturating_sub(fevals);
+        if remaining < plan.min_restart_budget {
+            confirmation = JointFtolConfirmation::Unconfirmed {
+                reason: "insufficient_evaluation_budget",
+                restarts,
+                last_gain: None,
+            };
+            break;
+        }
+        let (restart, spent) = run_restart(&result.x, remaining.min(plan.restart_budget), fevals);
+        restarts += 1;
+        fevals = spent;
+        let restart = match restart {
+            Ok(restart) => restart,
+            // A host interrupt stops the fit, as it does in the first pass;
+            // only a genuine optimizer failure leaves the stop unconfirmed.
+            Err(error @ MixedModelError::Interrupted(_)) => return Err(error),
+            Err(_) => {
+                confirmation = JointFtolConfirmation::Unconfirmed {
+                    reason: "restart_failed",
+                    restarts,
+                    last_gain: None,
+                };
+                break;
+            }
+        };
+        // The restart starts at the incumbent and reports its best point, so
+        // it can only match or improve on it.
+        let gain = incumbent - restart.fmin;
+        result = restart;
+        if gain <= plan.ftol_abs.max(plan.ftol_rel * incumbent.abs()) {
+            result.stop_reason = confirmed_stop_reason;
+            confirmation = JointFtolConfirmation::Confirmed;
+            break;
+        }
+        confirmation = JointFtolConfirmation::NotNeeded;
+        if fevals >= plan.maxeval {
+            result.stop_reason = TrustBqStopReason::MaxEvaluations;
+            break;
+        }
+        if result.stop_reason == TrustBqStopReason::MaxEvaluations {
+            result.stop_reason = confirmed_stop_reason;
+        }
+    }
+    Ok((result, fevals, confirmation))
+}
+
+/// Initial steps for a confirming restart: the first pass's steps scaled by
+/// [`JOINT_RESTART_STEP_FACTOR`], shrunk for any component that
+/// lies strictly inside its lower bound by less than the step. NLopt's
+/// BOBYQA moves such a start to `lb + step` (bobyqa.c, "components of X
+/// that become within distance RHOBEG from their bounds"), which would start
+/// the restart away from the incumbent it is meant to confirm; half the
+/// distance to the bound keeps the start in place. A component exactly on
+/// its bound is left on it by BOBYQA and keeps the scaled step.
+#[cfg(feature = "nlopt")]
+fn joint_restart_steps(initial_step: &[f64], params: &[f64], lower_bounds: &[f64]) -> Vec<f64> {
+    initial_step
+        .iter()
+        .zip(params)
+        .zip(lower_bounds)
+        .map(|((&step, &value), &lower)| {
+            let step = step * JOINT_RESTART_STEP_FACTOR;
+            let gap = value - lower;
+            if lower.is_finite() && gap > 0.0 && gap <= step && 0.5 * gap > 0.0 {
+                0.5 * gap
+            } else {
+                step
+            }
+        })
+        .collect()
+}
+
+/// Records an FTOL stop whose confirmation could not be completed, so the
+/// certificate never implies a confirmation that did not happen.
+fn record_joint_ftol_confirmation(
+    certificate: &mut OptimizerCertificate,
+    confirmation: &JointFtolConfirmation,
+    optimizer: &str,
+) {
+    let JointFtolConfirmation::Unconfirmed {
+        reason,
+        restarts,
+        last_gain,
+    } = confirmation
+    else {
+        return;
+    };
+    let mut diagnostic = Diagnostic::new(
+        DiagnosticCode::OptimizerRecovery,
+        DiagnosticSeverity::Warning,
+        DiagnosticStage::Certification,
+        format!(
+            "joint GLMM {optimizer} FTOL stop could not be confirmed by a restart from the incumbent; the reported optimum may be short of the true optimum"
+        ),
+    )
+    .with_suggested_actions(vec![
+        "raise max_feval (or leave it at the default) so the FTOL stop can be confirmed".to_string(),
+    ]);
+    diagnostic
+        .payload
+        .insert("fit_mode".to_string(), serde_json::json!("joint_glmm"));
+    diagnostic.payload.insert(
+        "ftol_confirmation".to_string(),
+        serde_json::json!("unconfirmed"),
+    );
+    diagnostic
+        .payload
+        .insert("reason".to_string(), serde_json::json!(reason));
+    diagnostic
+        .payload
+        .insert("restarts".to_string(), serde_json::json!(restarts));
+    if let Some(gain) = last_gain {
+        diagnostic
+            .payload
+            .insert("last_restart_gain".to_string(), serde_json::json!(gain));
+    }
+    certificate.diagnostics.push(diagnostic);
+}
+
+/// Smallest diagonal entry of the Cholesky factor of the profiled β
+/// correlation matrix for which the TrustBQ joint transform decorrelates.
+/// `L_kk² = 1 − R²_k`, the unexplained fraction of coefficient `k`'s
+/// variance given the coefficients before it, so the bound is a variance
+/// inflation factor of 1e6 (R² = 1 − 1e-6). Beyond it the working covariance
+/// is near-singular (collinear covariates, or quasi-separation where the SEs
+/// are also capped), its thin directions are set by rounding in the working
+/// Hessian rather than by the likelihood, and the unit ball in `z` would be a
+/// 1e-3-thin sliver along them. The SE scaling alone is kept instead.
+const JOINT_MIN_CORRELATION_FACTOR_DIAGONAL: f64 = 1.0e-3;
+
+/// `factor` when its smallest diagonal entry is at least
+/// [`JOINT_MIN_CORRELATION_FACTOR_DIAGONAL`], else `None`.
+pub(super) fn well_conditioned_correlation_factor(factor: DMatrix<f64>) -> Option<DMatrix<f64>> {
+    let min_diagonal = factor
+        .diagonal()
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    (min_diagonal >= JOINT_MIN_CORRELATION_FACTOR_DIAGONAL).then_some(factor)
+}
+
+/// β initial step when no profiled standard error is available.
+const JOINT_DEFAULT_BETA_STEP: f64 = 0.1;
+/// Initial step (NLopt BOBYQA) and coordinate scale (TrustBQ) for each
+/// covariance parameter of the joint fit.
+const JOINT_THETA_STEP: f64 = 0.5;
+/// TrustBQ joint initial radius in scaled coordinates: one scale unit, i.e.
+/// the NLopt BOBYQA initial steps.
+const JOINT_TRUST_BQ_INITIAL_RADIUS: f64 = 1.0;
+/// TrustBQ joint final radius in scaled coordinates.
+const JOINT_TRUST_BQ_FINAL_RADIUS: f64 = 1.0e-5;
 
 pub(crate) fn default_joint_glmm_optimizer() -> Optimizer {
     #[cfg(feature = "nlopt")]
@@ -1157,8 +1933,12 @@ pub(crate) fn trust_bq_joint_glmm_default_maxeval(n_params: usize) -> u32 {
 
 pub(crate) fn joint_glmm_default_maxeval_for(optimizer: Optimizer, n_params: usize) -> u32 {
     match optimizer {
-        Optimizer::TrustBq => trust_bq_joint_glmm_default_maxeval(n_params),
-        Optimizer::NloptBobyqa => 200,
+        // MixedModels.jl runs its joint fit without an evaluation cap; NLopt
+        // BOBYQA's FTOL-confirmation restarts need the same room as TrustBQ
+        // rather than a single-pass budget.
+        Optimizer::TrustBq | Optimizer::NloptBobyqa => {
+            trust_bq_joint_glmm_default_maxeval(n_params)
+        }
         _ => trust_bq_joint_glmm_default_maxeval(n_params),
     }
 }
@@ -1197,18 +1977,6 @@ pub(crate) fn validate_joint_glmm_optimizer(optimizer: Optimizer) -> Result<()> 
     }
 }
 
-pub(crate) fn joint_glmm_trust_bq_initial_radius(initial: &[f64], n_beta: usize) -> f64 {
-    let beta_scale = initial
-        .iter()
-        .take(n_beta)
-        .map(|value| value.abs())
-        .fold(0.0_f64, f64::max)
-        .max(1.0);
-    // Keep beta moves large enough to repair high-baseline intercept starts,
-    // but do not let one large coefficient make theta probes excessive.
-    (0.25 * beta_scale).clamp(0.25, 1.0)
-}
-
 pub(crate) fn trust_bq_status_label(status: TrustBqStopReason) -> &'static str {
     match status {
         TrustBqStopReason::RadiusBelowTolerance => "RADIUS_REACHED",
@@ -1217,6 +1985,7 @@ pub(crate) fn trust_bq_status_label(status: TrustBqStopReason) -> &'static str {
         TrustBqStopReason::StepBelowTolerance => "XTOL_REACHED",
         TrustBqStopReason::ObjectiveStagnation => "FTOL_REACHED",
         TrustBqStopReason::CertifiedConvergence => "FTOL_REACHED",
+        TrustBqStopReason::GradientBelowTolerance => "GTOL_REACHED",
     }
 }
 
@@ -1245,5 +2014,39 @@ pub(crate) fn solve_dense_upper_from_lower_transpose_against_rhs(
             sum -= l[(j, i)] * rhs[j];
         }
         rhs[i] = sum / l[(i, i)];
+    }
+}
+
+#[cfg(test)]
+mod wald_tail_tests {
+    use super::*;
+
+    #[test]
+    fn joint_wald_p_values_preserve_representable_normal_tails() {
+        // R oracle: 2 * pnorm(abs(z), lower.tail = FALSE).
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let cases = [
+            (0.0, 1.0),
+            (8.0, 1.244_192_114_854_357e-15),
+            (-8.0, 1.244_192_114_854_357e-15),
+            (10.727_955_489_07, 7.524_247_963_015_023e-27),
+            (-10.727_955_489_07, 7.524_247_963_015_023e-27),
+            (16.1155, 1.985_514_938_996_619e-58),
+            (-16.1155, 1.985_514_938_996_619e-58),
+            (40.0, 0.0),
+        ];
+
+        for (z, expected) in cases {
+            let actual = normal_wald_two_sided_p_value(&normal, z);
+            if expected == 0.0 {
+                assert_eq!(actual, 0.0, "z={z}");
+            } else {
+                assert!(actual > 0.0, "z={z} must not lose a representable tail");
+                assert!(
+                    (actual - expected).abs() / expected < 1e-9,
+                    "z={z}: expected {expected:e}, got {actual:e}"
+                );
+            }
+        }
     }
 }

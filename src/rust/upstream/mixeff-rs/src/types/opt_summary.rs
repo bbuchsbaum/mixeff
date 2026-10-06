@@ -5,10 +5,13 @@
 //! model-fitting options (REML, adaptive Gauss-Hermite quadrature,
 //! known σ).
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
+mod extended_float;
+
 /// Choice of optimizer algorithm.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum Optimizer {
     /// COBYLA — Constrained Optimization By Linear Approximations.
@@ -41,7 +44,7 @@ pub enum Optimizer {
 /// backend for any `Optimizer::Nlopt*` variant. `Prima` is reserved for the
 /// PRIMA derivative-free family; `Optimizer::PrimaBobyqa` is wired for LMMs
 /// when the non-default `prima` Cargo feature is enabled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum OptimizerBackend {
     /// In-tree Rust optimizers and native fallback crates.
@@ -53,7 +56,7 @@ pub enum OptimizerBackend {
 }
 
 /// Source of the optimizer algorithm recorded in an [`OptSummary`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum OptimizerSource {
     /// The fit driver selected the optimizer automatically.
@@ -109,11 +112,12 @@ impl OptimizerBackend {
 
 /// One entry in the fit log, recording the parameter vector and the
 /// objective value at a particular evaluation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FitLogEntry {
     /// Parameter vector (θ) at this evaluation.
     pub theta: Vec<f64>,
     /// Objective function value (deviance or REML criterion).
+    #[serde(with = "extended_float")]
     pub objective: f64,
 }
 
@@ -127,12 +131,13 @@ pub struct FitLogEntry {
 /// budget-truncated (non-optimal) fit as if it were good. This enum is the
 /// single typed contract; prefer [`OptSummary::converged`] /
 /// [`OptSummary::convergence_status`] over inspecting the string.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ConvergenceStatus {
     /// Stopped at a genuine convergence criterion (objective/parameter
-    /// tolerance, trust radius, or target value reached). The returned
-    /// parameters are a verified local optimum to the requested tolerance.
+    /// tolerance, trust radius, or target value reached). This classifies
+    /// optimizer termination only; stationarity, curvature, numerical stability,
+    /// and scientific adequacy require their own evidence.
     Converged,
     /// An evaluation/time/iteration budget was hit before a convergence
     /// criterion. The returned parameters are the best seen so far but are
@@ -155,7 +160,7 @@ pub enum ConvergenceStatus {
 /// Stores initial and final parameter values, convergence information,
 /// tolerances, and a log of all function evaluations. The defaults
 /// match those in Julia's MixedModels.jl.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OptSummary {
     // ---- Parameter values ----
@@ -163,6 +168,7 @@ pub struct OptSummary {
     pub initial: Vec<f64>,
 
     /// Objective value at the initial parameters.
+    #[serde(with = "extended_float")]
     pub finitial: f64,
 
     /// Final (optimised) parameter vector.
@@ -335,7 +341,9 @@ impl OptSummary {
         match status {
             // Clean convergence criteria across all backends.
             "SUCCESS" | "STOPVAL_REACHED" | "FTOL_REACHED" | "XTOL_REACHED" | "RADIUS_REACHED"
-            | "SMALL_TR_RADIUS" | "FTARGET_ACHIEVED" => ConvergenceStatus::Converged,
+            | "GTOL_REACHED" | "SMALL_TR_RADIUS" | "FTARGET_ACHIEVED" => {
+                ConvergenceStatus::Converged
+            }
             // Budget/iteration limits — best-effort, NOT a verified optimum.
             "MAXEVAL_REACHED" | "MAXTIME_REACHED" | "MAXFUN_REACHED" | "MAXTR_REACHED"
             | "CALLBACK_TERMINATE" => ConvergenceStatus::BudgetExhausted,
@@ -489,7 +497,7 @@ impl OptSummary {
                 "|                          |                   |\n",
                 "|:------------------------ |:----------------- |\n",
                 "| **Initialization**       |                   |\n",
-                "| Initial parameter vector | {} |\n",
+                "| Initial parameter vector | {:?} |\n",
                 "| Initial objective value  | {} |\n",
                 "| **Optimizer settings**   |                   |\n",
                 "| Optimizer                | `{}` |\n",
@@ -499,11 +507,11 @@ impl OptSummary {
                 "| ftol_zero_abs            | {} |\n",
                 "| **Result**               |                   |\n",
                 "| Function evaluations     | {} |\n",
-                "| Final parameter vector   | {} |\n",
+                "| Final parameter vector   | {:?} |\n",
                 "| Final objective value    | {} |\n",
                 "| Return code              | `{}` |\n"
             ),
-            format!("{:?}", self.initial),
+            self.initial,
             self.finitial,
             self.optimizer_code(),
             self.backend_name(),
@@ -511,7 +519,7 @@ impl OptSummary {
             self.xtol_zero_abs,
             self.ftol_zero_abs,
             self.feval,
-            format!("{:?}", self.final_params),
+            self.final_params,
             self.fmin,
             self.return_value
         )
@@ -597,14 +605,19 @@ impl OptSummary {
 /// certificate describe the same returned fit.
 pub(crate) fn optimizer_final_status_code(mut status: &str) -> &str {
     loop {
-        let stripped = ["KKT_BOUNDARY_RESTART", "START_LADDER", "ACTIVE_FACE"]
-            .iter()
-            .find_map(|prefix| {
-                status
-                    .strip_prefix(prefix)
-                    .and_then(|rest| rest.split_once(": "))
-                    .map(|(_, inner)| inner.trim())
-            });
+        let stripped = [
+            "KKT_BOUNDARY_RESTART",
+            "START_LADDER",
+            "ACTIVE_FACE",
+            "GRADIENT_ORACLE",
+        ]
+        .iter()
+        .find_map(|prefix| {
+            status
+                .strip_prefix(prefix)
+                .and_then(|rest| rest.split_once(": "))
+                .map(|(_, inner)| inner.trim())
+        });
         match stripped {
             Some(inner) => status = inner,
             None => break,
@@ -831,6 +844,7 @@ mod tests {
             "FTOL_REACHED",
             "XTOL_REACHED",
             "RADIUS_REACHED",
+            "GTOL_REACHED",
             "SMALL_TR_RADIUS",
             "FTARGET_ACHIEVED",
         ] {
@@ -890,6 +904,25 @@ mod tests {
         );
         assert_eq!(
             status_of(10, "KKT_BOUNDARY_RESTART(1): MAXEVAL_REACHED"),
+            ConvergenceStatus::BudgetExhausted
+        );
+    }
+
+    #[test]
+    fn convergence_status_unwraps_gradient_oracle_prefix() {
+        assert_eq!(
+            status_of(10, "GRADIENT_ORACLE: GTOL_REACHED"),
+            ConvergenceStatus::Converged
+        );
+        assert_eq!(
+            status_of(
+                10,
+                "START_LADDER(diagonal_first:12 evals): GRADIENT_ORACLE: FTOL_REACHED"
+            ),
+            ConvergenceStatus::Converged
+        );
+        assert_eq!(
+            status_of(10, "GRADIENT_ORACLE: MAXEVAL_REACHED"),
             ConvergenceStatus::BudgetExhausted
         );
     }

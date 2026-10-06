@@ -320,14 +320,14 @@ fn simulate_large_theta_crossed(seed: u64) -> DataFrame {
     let mut item_labels = Vec::with_capacity(total_n);
     let mut site_labels = Vec::with_capacity(total_n);
 
-    for s in 0..n_subjects {
-        for i in 0..n_items {
+    for (s, subject_effect) in subj_effects.iter().enumerate() {
+        for (i, item_effect) in item_effects.iter().enumerate() {
             for r in 0..n_rep {
                 let site = (s * 5 + i * 3 + r) % n_sites;
                 let x = r as f64 + (i % 4) as f64 * 0.35;
                 let mut mu = beta[0] + beta[1] * x;
-                mu += subj_effects[s][0] + subj_effects[s][1] * x;
-                mu += item_effects[i][0] + item_effects[i][1] * x;
+                mu += subject_effect[0] + subject_effect[1] * x;
+                mu += item_effect[0] + item_effect[1] * x;
                 mu += site_effects[site][0] + site_effects[site][1] * x;
                 let y = mu + sigma * normal.sample(&mut rng);
 
@@ -1223,6 +1223,88 @@ fn test_trust_bq_certificate_stop_accepts_scalar_interior() {
 }
 
 #[test]
+fn deferred_certificate_evidence_matches_eager_completion() {
+    let data = shared_julia_parity_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (1 + days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+
+    // The stored certificate defers its finite-difference evidence...
+    assert!(model.derivative_evidence_pending);
+    let stored = model
+        .compiler_artifact
+        .optimizer_certificate
+        .as_ref()
+        .unwrap();
+    assert!(LinearMixedModel::certificate_derivatives_deferred(stored));
+    assert!(stored.free_gradient_norm.is_none());
+
+    // ...but every inspection reports the completed evidence.
+    let inspected = model.optimizer_certificate().unwrap().clone();
+    assert!(!LinearMixedModel::certificate_derivatives_deferred(
+        &inspected
+    ));
+    assert!(inspected.free_gradient_norm.is_some());
+    assert!(inspected.hessian_eigen_min.is_some());
+    assert_eq!(inspected.status, stored.status);
+
+    // Completing in place yields exactly the same certificate and report.
+    let mut eager = model.clone();
+    eager.ensure_derivative_evidence();
+    assert!(!eager.derivative_evidence_pending);
+    assert_eq!(
+        eager
+            .compiler_artifact
+            .optimizer_certificate
+            .as_ref()
+            .unwrap(),
+        &inspected
+    );
+    assert_eq!(
+        eager.audit_report().to_text(),
+        model.audit_report().to_text()
+    );
+    assert_eq!(eager.compiler_artifact(), model.compiler_artifact());
+}
+
+#[test]
+fn refit_resets_the_inspected_certificate() {
+    let data = shared_julia_parity_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (1 + days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+    let before = model.optimizer_certificate().unwrap().objective_value;
+
+    let scaled: Vec<f64> = model.y().iter().map(|value| value * 1.25).collect();
+    model.refit(&scaled).unwrap();
+    assert!(model.derivative_evidence_pending);
+    let after = model.optimizer_certificate().unwrap();
+    assert_eq!(after.objective_value, Some(model.optsum().fmin));
+    assert_ne!(after.objective_value, before);
+    assert!(!LinearMixedModel::certificate_derivatives_deferred(after));
+}
+
+#[test]
+fn verify_convergence_completes_deferred_evidence_first() {
+    let data = shared_julia_parity_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (1 | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+    assert!(model.derivative_evidence_pending);
+
+    model.verify_convergence().unwrap();
+    assert!(!model.derivative_evidence_pending);
+    let stored = model
+        .compiler_artifact
+        .optimizer_certificate
+        .as_ref()
+        .unwrap();
+    assert!(!LinearMixedModel::certificate_derivatives_deferred(stored));
+    assert!(stored.free_gradient_norm.is_some());
+    assert!(stored.verification.is_some());
+}
+
+#[test]
 fn test_trust_bq_certificate_stop_accepts_scalar_valid_boundary() {
     let data = singular_re_fixture();
     let formula = parse_formula("yield ~ 1 + (1 | batch)").unwrap();
@@ -1452,6 +1534,10 @@ fn test_trust_bq_sample_reuse_override_changes_optimizer_trace() {
                 FitOptions::reml().with_optimizer_control(
                     OptimizerControl::auto()
                         .with_optimizer(Optimizer::TrustBq)
+                        // Sample reuse is a property of the finite-difference
+                        // interpolation loop; the analytic-gradient oracle
+                        // (the family default) never re-samples a point.
+                        .with_trust_bq_gradient_oracle(TrustBqGradientOracle::Disabled)
                         .with_trust_bq_sample_reuse(reuse),
                 ),
             )
@@ -1619,9 +1705,12 @@ fn test_active_face_refit_noop_on_full_rank_fit() {
 }
 
 // The maximal over-specified singular row (36 theta for a ~rank-4 block) is
-// where the primary optimizer exhausts its budget far from the lme4
-// optimum; the assertions pin the recovery contract on the default (NLopt)
-// release path.
+// where the primary optimizer exhausts its budget. With NEWUOA the plain fit
+// stopped far from the optimum and the active-face refit recovered more than
+// ten deviance units; the gradient-driven TrustBQ path (Phase 5 S5.3) reaches
+// the refit's certified face on its own within the same budget, so the
+// contract is now: the refit stays audit-visible, never lands above the
+// plain fit, and both sit well below NEWUOA's budget-bound objective.
 #[cfg(feature = "nlopt")]
 #[test]
 fn test_active_face_refit_improves_maximal_singular_fit() {
@@ -1657,16 +1746,26 @@ fn test_active_face_refit_improves_maximal_singular_fit() {
         faced.optsum.return_value
     );
     assert!(
-        faced.objective() < baseline.objective() - 10.0,
-        "active-face refit must materially improve the budget-bound objective: {} vs {}",
+        faced.objective() <= baseline.objective() + 1e-6,
+        "active-face refit must not land above the plain fit: {} vs {}",
         faced.objective(),
         baseline.objective()
     );
-    // lme4 converges this row to 766.554 (comparison/lme4_results.json); the
-    // face refit must land in that neighborhood, not merely improve.
+    // NEWUOA's budget-bound plain fit on this row sat above 790 (and the
+    // finite-difference TrustBQ model stopped at 798); the gradient path
+    // passes 770 in under a hundred evaluations.
     assert!(
-        (faced.objective() - 766.554).abs() < 5.0,
-        "active-face objective {} is far from the lme4 reference 766.554",
+        baseline.objective() < 770.0,
+        "plain gradient-driven fit should pass the old budget-bound level: {}",
+        baseline.objective()
+    );
+    // lme4 reports 766.554 for this row (comparison/lme4_results.json); the
+    // face refit must not land materially above it. The gradient-driven
+    // path keeps descending along the rank-deficient valley past that value
+    // (760.0 within the 475-evaluation budget), so the band is one-sided.
+    assert!(
+        faced.objective() < 766.554 + 5.0,
+        "active-face objective {} is materially above the lme4 reference 766.554",
         faced.objective()
     );
     // The refit's evaluations are accounted for.
@@ -3200,9 +3299,11 @@ fn test_vector_fit_uses_bobyqa_with_bounded_evaluations() {
     );
 }
 
+/// Large-θ automatic dispatch (Phase 5 S5.3): the native TrustBQ path
+/// driven by the analytic gradient, not NEWUOA.
 #[cfg(feature = "nlopt")]
 #[test]
-fn test_large_theta_fit_uses_nlopt_newuoa() {
+fn test_large_theta_fit_uses_trust_bq_gradient_oracle() {
     let data = simulate_large_theta_crossed(123);
     let formula = parse_formula(
         "reaction ~ 1 + days + (1 + days | subj) + (1 + days | item) + (1 + days | site)",
@@ -3214,14 +3315,19 @@ fn test_large_theta_fit_uses_nlopt_newuoa() {
     model.fit(true).unwrap();
 
     assert_eq!(model.n_theta(), 9);
-    assert_eq!(model.optsum.optimizer, Optimizer::NloptNewuoa);
+    assert_eq!(model.optsum.optimizer, Optimizer::TrustBq);
+    assert!(
+        model.optsum.return_value.starts_with("GRADIENT_ORACLE:"),
+        "{}",
+        model.optsum.return_value
+    );
     assert!(model.objective_value().is_finite());
     assert!(model.sigma().is_finite());
 }
 
 #[cfg(feature = "nlopt")]
 #[test]
-fn test_large_theta_nlopt_matches_or_beats_cobyla_baseline() {
+fn test_large_theta_auto_fit_matches_or_beats_cobyla_baseline() {
     let data = simulate_large_theta_crossed(123);
     let formula = parse_formula(
         "reaction ~ 1 + days + (1 + days | subj) + (1 + days | item) + (1 + days | site)",
@@ -3597,8 +3703,11 @@ fn test_large_theta_fit_records_maxeval_status() {
 
     model.fit(true).unwrap();
 
-    assert_eq!(model.optsum.optimizer, Optimizer::NloptNewuoa);
-    assert_eq!(model.optsum.return_value, "MAXEVAL_REACHED");
+    assert_eq!(model.optsum.optimizer, Optimizer::TrustBq);
+    assert_eq!(
+        model.optsum.return_value,
+        "GRADIENT_ORACLE: MAXEVAL_REACHED"
+    );
     assert_eq!(model.optsum.feval, 1);
     assert!(model.objective_value().is_finite());
 }
@@ -3606,6 +3715,7 @@ fn test_large_theta_fit_records_maxeval_status() {
 #[cfg(feature = "nlopt")]
 #[test]
 fn test_large_theta_fit_records_maxtime_status() {
+    // A wall-clock budget keeps the NLopt NEWUOA path, which honors it.
     let data = simulate_large_theta_crossed(123);
     let formula = parse_formula(
         "reaction ~ 1 + days + (1 + days | subj) + (1 + days | item) + (1 + days | site)",
@@ -3719,7 +3829,8 @@ fn test_crossed_fit_matches_julia_on_shared_fixture() {
 
     model.fit(true).unwrap();
 
-    assert_eq!(model.optsum.optimizer, Optimizer::NloptNewuoa);
+    // Large-theta automatic dispatch: TrustBQ on the analytic gradient.
+    assert_eq!(model.optsum.optimizer, Optimizer::TrustBq);
     // A fitted optimizer path is allowed codegen-level drift within the
     // documented VERSIONING.md numerical parity band.
     assert_relative_eq!(
@@ -5333,19 +5444,19 @@ fn manual_one_term_ranef_u_via_block_solver(model: &LinearMixedModel) -> DMatrix
     let wtxy = &model.xy_mat.wtxy;
 
     let mut wr = vec![0.0f64; n];
-    for obs in 0..n {
+    for (obs, wr_obs) in wr.iter_mut().enumerate() {
         let mut val = wtxy[(obs, p)];
         for q in 0..p {
             val -= wtxy[(obs, q)] * beta[q];
         }
-        wr[obs] = val;
+        *wr_obs = val;
     }
 
     let mut c = vec![0.0f64; nranef];
-    for obs in 0..n {
+    for (obs, &wr_obs) in wr.iter().enumerate() {
         let r = re.refs[obs] as usize;
         for s in 0..vs {
-            c[r * vs + s] += re.wtz[(s, obs)] * wr[obs];
+            c[r * vs + s] += re.wtz[(s, obs)] * wr_obs;
         }
     }
 
@@ -7032,4 +7143,77 @@ fn type_i_sequences_terms_by_interaction_order() {
             }
         }
     }
+}
+
+#[test]
+fn inference_covariance_provenance_survives_tables_and_legacy_json() {
+    use crate::stats::InferenceCovarianceMethod as Cov;
+    let data = sleepstudy_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+    let hypothesis = FixedEffectHypothesis::single_coefficient("days", 1, 2).unwrap();
+    let ordinary = model.fixed_effect_contrast_inference_table(
+        vec![hypothesis.clone()],
+        FixedEffectTestMethod::Satterthwaite,
+    );
+    assert_eq!(ordinary.rows[0].covariance_method, Cov::ModelBased);
+    let kr = model.fixed_effect_contrast_inference_table(
+        vec![hypothesis.clone()],
+        FixedEffectTestMethod::KenwardRoger,
+    );
+    assert_eq!(
+        kr.rows[0].status,
+        crate::compiler::FixedEffectInferenceStatus::Available
+    );
+    assert_eq!(kr.rows[0].covariance_method, Cov::KenwardRogerAdjusted);
+    let adjusted = model.kenward_roger_adjusted_vcov().unwrap();
+    assert_relative_eq!(
+        kr.rows[0].std_error.unwrap().powi(2),
+        adjusted.adjusted_vcov[(1, 1)],
+        epsilon = 1e-9
+    );
+    let terms = model.fixed_effect_term_inference_table(FixedEffectTestMethod::KenwardRoger);
+    assert!(terms
+        .rows
+        .iter()
+        .all(|row| row.covariance_method == Cov::KenwardRogerAdjusted));
+    let coefficients = model.coeftable_with_method(FixedEffectTestMethod::KenwardRoger);
+    assert!(coefficients
+        .covariance_methods
+        .iter()
+        .all(|method| *method == Cov::KenwardRogerAdjusted));
+    assert!(coefficients.to_string().contains("kenward_roger_adjusted"));
+    assert!(crate::stats::coeftable_to_markdown(&coefficients).contains("kenward_roger_adjusted"));
+    let mut legacy = serde_json::to_value(&ordinary).unwrap();
+    legacy["schema_version"] = serde_json::json!("1.1.0");
+    legacy["rows"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("covariance_method");
+    let decoded: crate::compiler::FixedEffectInferenceTable =
+        serde_json::from_value(legacy).unwrap();
+    assert_eq!(decoded.rows[0].covariance_method, Cov::NotRecorded);
+    let summary = crate::stats::FitSummaryPayload::from_linear_model(&model);
+    assert_eq!(summary.coefficients.covariance_method(0), Cov::ModelBased);
+    assert_eq!(summary.summary.rows[0].covariance_method, Cov::ModelBased);
+    assert!(summary
+        .summary
+        .to_markdown()
+        .contains("Covariance: model_based"));
+
+    // A rejected KR request retains ordinary SEs: do not label them adjusted.
+    let formula = parse_formula("reaction ~ 1 + days + (days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(false).unwrap();
+    let refused = model.fixed_effect_contrast_inference_table(
+        vec![hypothesis],
+        FixedEffectTestMethod::KenwardRoger,
+    );
+    assert_eq!(
+        refused.rows[0].status,
+        crate::compiler::FixedEffectInferenceStatus::NotAssessed
+    );
+    assert_eq!(refused.rows[0].covariance_method, Cov::ModelBased);
+    assert!(refused.rows[0].std_error.is_some());
 }

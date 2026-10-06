@@ -53,7 +53,7 @@ options(error = function() {
 # This constant is the committed source of truth for which `mixeff-rs` ships.
 # It must be a full 40-char commit SHA reachable from origin/main of
 # bbuchsbaum/mixeff-rs (or a tag, once the crate starts tagging releases).
-PINNED_REV <- "1f3f6892226e65dc96fb540e6b3806db0105389e"
+PINNED_REV <- "897dd2584b15e0af63ad4190e8d1773671e0edf9"
 
 rev <- Sys.getenv("MIXEFF_RS_REV", unset = PINNED_REV)
 url <- Sys.getenv(
@@ -165,9 +165,8 @@ dir.create(dest_upstream, recursive = TRUE, showWarnings = FALSE)
 # Whitelist: compile-time inputs only. Everything else upstream ships
 # (tests/, benches/, examples/, comparison/, datasets/, scripts/,
 # .github/, CHANGELOG, etc.) is excluded from the bundle. `build.rs` is
-# REQUIRED: Cargo auto-detects and runs it even though it only emits a link
-# directive under the (unused) `prima` feature; omitting it breaks the
-# offline build. `LICENSE` is bundled so transitive license audits resolve.
+# REQUIRED: it records the engine identity used for fitted-state compatibility
+# and emits feature-specific linkage; omitting it breaks the offline build. `LICENSE` is bundled so transitive license audits resolve.
 # `docs/guide/` is REQUIRED: src/guide/mod.rs uses `include_str!` to embed
 # its tutorial pages at compile time, so the .md files must be on disk.
 tree_entries <- run_git(

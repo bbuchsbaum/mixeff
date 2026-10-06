@@ -101,3 +101,31 @@ test_that("bootstrap argument validation is typed", {
   expect_error(confint(fit, method = "bootstrap", nsim = 20L, seed = -1),
                class = "mm_arg_error")
 })
+
+test_that("joint bootstrap restores its exact template across RDS reloads", {
+  set.seed(813)
+  d <- data.frame(g = factor(rep(seq_len(12), each = 10)), x = rnorm(120))
+  eta <- 0.3 + 0.4 * d$x + rep(rnorm(12, sd = 0.7), each = 10)
+  d$y <- rpois(120, exp(eta))
+  fit <- glmm(y ~ x + (1 | g), d, family = poisson(), method = "joint_laplace",
+              nAGQ = 1L, control = mm_control(verbose = -1))
+  expect_identical(mm_glmm_effective_method(fit), "joint_laplace")
+  snapshot <- fit$fit$fitted_state
+  ci <- confint(fit, method = "bootstrap", nsim = 12L, seed = 42L)
+  account <- attr(ci, "mm_bootstrap")
+  expect_identical(account$requested, 12L)
+  expect_identical(account$requested, account$successful + account$failed)
+  expect_gte(account$successful, 2L)
+  expect_equal(account$template$n_agq, 1)
+  expect_equal(account$template_objective, fit$fit$optimizer$objective)
+  expect_identical(attr(ci, "mm_estimator"), "joint_laplace")
+  expect_identical(account$replicate_estimator_policy, "preserve_effective_or_fail")
+  path <- tempfile(fileext = ".rds")
+  on.exit(unlink(path), add = TRUE)
+  saveRDS(fit, path)
+  restored <- revive(readRDS(path))
+  restored$model_frame$y <- 0
+  restored$control$optimizer <- "not_an_optimizer"
+  expect_equal(confint(restored, method = "bootstrap", nsim = 12L, seed = 42L), ci)
+  expect_identical(fit$fit$fitted_state, snapshot)
+})

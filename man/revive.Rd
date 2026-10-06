@@ -22,5 +22,7 @@ A revived \code{mm_fit} object.
 \code{saveRDS()} / \code{readRDS()} or a worker restart. The fitted artifact and flat
 extractor values are the durable source of truth; the Rust handle is only a
 cache and may be absent. In the current bridge, revival recreates the lazy
-R-side cache and explicitly leaves \code{rust_handle = NULL}.
+R-side cache and explicitly leaves \code{rust_handle = NULL}. Native queries restore
+the stored engine snapshot without optimization. Missing or incompatible
+snapshots are refused for native queries; stored extractors remain readable.
 }

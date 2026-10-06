@@ -629,13 +629,14 @@ for exploration. Refusal messages name the reporting routes and point to
    the engine certifies. `vignette("glmm")` is the operational
    quickstart for this route, including its parity with `glmer()` and
    its runtime notice.
-2. **Parametric bootstrap on profiled fits.**
-   `confint(fit, method = "bootstrap")` simulates from the fitted model
-   and refits the same profiled estimator. It works for every supported
-   family, including negative binomial — which has no joint-Laplace
-   route, so the bootstrap is its only interval path — and costs `nsim`
-   refits. On `joint_laplace` fits the bootstrap is refused at this
-   engine pin; those fits have certified Wald intervals instead.
+2. **Parametric bootstrap.** `confint(fit, method = "bootstrap")`
+   restores the fitted template, simulates responses and refits the same
+   effective estimator. Both profiled and joint-Laplace fits are supported.
+   A joint replicate that cannot retain its estimator is counted as failed.
+   The route works for every supported family, including negative binomial,
+   and costs `nsim` refits. Inspect the successful/failed counts and Monte
+   Carlo error attached to the result; a finite interval alone does not
+   establish calibration.
 3. **Working-Hessian approximation, explicit opt-in.** For exploration
    and screening only. Every unlocked row is labeled
    `wald_z_working_hessian` with status `available_noninferential` and
@@ -1042,7 +1043,7 @@ On the boundary fit in this vignette:
   fixed-effect tests.
 
 For GLMM reporting, use certified joint Wald (`method = "joint_laplace"`)
-or the parametric bootstrap on profiled fits. The labeled working-Hessian
+or the parametric bootstrap of the effective estimator. The labeled working-Hessian
 opt-in is for exploration and screening; its `moderate` grade does not
 make it certified inference.
 

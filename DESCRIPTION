@@ -38,6 +38,7 @@ Imports:
     rlang,
     stats
 Suggests:
+    albersdown (>= 2.1.0),
     broom,
     broom.mixed,
     generics,

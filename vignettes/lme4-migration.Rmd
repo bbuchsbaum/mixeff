@@ -1,6 +1,6 @@
 ---
 title: Migrating from lme4
-output: rmarkdown::html_vignette
+output: albersdown::albers_vignette
 vignette: >
   %\VignetteIndexEntry{Migrating from lme4}
   %\VignetteEngine{knitr::rmarkdown}

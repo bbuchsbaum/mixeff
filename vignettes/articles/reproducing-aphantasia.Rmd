@@ -1,6 +1,6 @@
 ---
 title: "Reproducing the Loo Aphantasia GLMMs"
-output: rmarkdown::html_vignette
+output: albersdown::albers_vignette
 vignette: >
   %\VignetteIndexEntry{Reproducing the Loo Aphantasia GLMMs}
   %\VignetteEngine{knitr::rmarkdown}

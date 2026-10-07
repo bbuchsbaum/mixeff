@@ -1,6 +1,6 @@
 ---
 title: Inference Method Glossary
-output: rmarkdown::html_vignette
+output: albersdown::albers_vignette
 vignette: >
   %\VignetteIndexEntry{Inference Method Glossary}
   %\VignetteEngine{knitr::rmarkdown}

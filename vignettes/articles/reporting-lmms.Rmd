@@ -1,6 +1,6 @@
 ---
 title: Reporting Linear Mixed Models
-output: rmarkdown::html_vignette
+output: albersdown::albers_vignette
 vignette: >
   %\VignetteIndexEntry{Reporting Linear Mixed Models}
   %\VignetteEngine{knitr::rmarkdown}

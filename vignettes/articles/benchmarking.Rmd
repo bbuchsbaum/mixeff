@@ -1,6 +1,8 @@
 ---
 title: Benchmarking mixeff
-output: rmarkdown::html_vignette
+output:
+  albersdown::albers_vignette:
+    phone_figures: false  # Keep dense facet layouts intact; tap a figure to enlarge it.
 vignette: >
   %\VignetteIndexEntry{Benchmarking mixeff}
   %\VignetteEngine{knitr::rmarkdown}
@@ -121,8 +123,8 @@ ggplot(benchmark,
     y = "median fit time (ms, log scale)",
     colour = NULL
   ) +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "top",
+  theme(text = element_text(size = 11),
+        legend.position = "top",
         panel.grid.minor = element_blank())
 ```
 
@@ -146,8 +148,8 @@ ggplot(mixeff_rows,
     y = "speedup over lme4 (×)",
     colour = NULL
   ) +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "bottom",
+  theme(text = element_text(size = 11),
+        legend.position = "bottom",
         legend.direction = "vertical",
         panel.grid.minor = element_blank()) +
   guides(colour = guide_legend(ncol = 1))
@@ -414,8 +416,8 @@ ggplot(simulation_long, aes(value, method)) +
   )) +
   labs(x = "empirical proportion (Wilson 95% interval)", y = NULL,
        caption = "* Coverage uses model-based Wald intervals; rejection uses bootstrap p-values. Scales differ by metric.") +
-  theme_minimal(base_size = 10) +
-  theme(panel.grid.minor = element_blank())
+  theme(text = element_text(size = 10),
+        panel.grid.minor = element_blank())
 ```
 
 ## How do you read the result?

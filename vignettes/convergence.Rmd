@@ -1,6 +1,6 @@
 ---
 title: "Convergence, Boundaries, and Singularity"
-output: rmarkdown::html_vignette
+output: albersdown::albers_vignette
 vignette: >
   %\VignetteIndexEntry{Convergence, Boundaries, and Singularity}
   %\VignetteEngine{knitr::rmarkdown}

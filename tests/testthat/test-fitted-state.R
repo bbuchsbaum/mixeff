@@ -95,12 +95,18 @@ test_that("RDS queries survive a fresh process with cold and warm caches", {
   input <- tempfile(fileext = ".rds")
   output <- tempfile(fileext = ".rds")
   script <- tempfile(fileext = ".R")
-  saveRDS(list(fit = fit, fast = fast, joint = joint, nd = nd,
-               lib_paths = .libPaths()), input)
+  saveRDS(list(fit = fit, fast = fast, joint = joint, nd = nd), input)
+  # Serialized formula environments can load a namespace during readRDS().
+  # Select the child installation before reading any fitted objects.
+  child_package <- find.package("mixeff", lib.loc = .libPaths())
   query_lines <- deparse(snapshot_lmm_queries)
   writeLines(c(
-    "args <- commandArgs(TRUE)", "saved <- readRDS(args[[1]])",
-    ".libPaths(saved$lib_paths)", "library(mixeff)",
+    "args <- commandArgs(TRUE)",
+    ".libPaths(args[-seq_len(3L)])",
+    "library(mixeff)",
+    "stopifnot(identical(normalizePath(getNamespaceInfo('mixeff', 'path')),",
+    "                    normalizePath(args[[3]])))",
+    "saved <- readRDS(args[[1]])",
     paste0("snapshot_lmm_queries <- ", query_lines[1]), query_lines[-1],
     "results <- lapply(c(FALSE, TRUE), function(cold) {",
     "  f <- saved$fit; fast <- saved$fast; joint <- saved$joint",
@@ -112,7 +118,8 @@ test_that("RDS queries survive a fresh process with cold and warm caches", {
   ), script)
   on.exit(unlink(c(input, output, script)), add = TRUE)
   out <- system2(file.path(R.home("bin"), "Rscript"),
-                 c("--vanilla", shQuote(script), shQuote(input), shQuote(output)),
+                 c("--vanilla", shQuote(script), shQuote(input), shQuote(output),
+                   shQuote(child_package), shQuote(.libPaths())),
                  stdout = TRUE, stderr = TRUE)
   expect_equal(attr(out, "status") %||% 0L, 0L, info = paste(out, collapse = "\n"))
   if (file.exists(output)) {

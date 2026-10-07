@@ -11,6 +11,15 @@ the declared Rust toolchain requirements only.
 
 ## Test environments
 
+The current vendored dependency is published `mixeff-rs 1.0.0-rc.5`, commit
+`696e5e7`. Its engine build inputs and vendored dependency contents are identical
+to `977ef11`; the release commit changes upstream documentation only. The pin
+adoption passed a fresh offline native build and the ordinary installed-package
+suite (4,240 checks, 0 failures, 8 optional skips; 99 existing documentation-test
+warnings). A test child now selects its intended library before deserialization,
+preventing an older installed package from loading through saved environments.
+The full release-gate results below remain tied to their original tarball.
+
 For engine pin `977ef11`, the local release-candidate gate passed all 13
 stages at R commit `faabf58` on macOS arm64, R 4.5.1. The built tarball passed
 `R CMD check --as-cran --no-manual` with 0 errors, 0 warnings and the expected

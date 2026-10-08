@@ -148,9 +148,8 @@ getME.mm_lmm <- function(object, name, ...) {
 
 #' @export
 getME.default <- function(object, name, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::getME(object, name, ...))
-  }
+  fwd <- mm_forward_foreign_generic("getME", object, name, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`getME()` expects a fitted mixeff LMM.",
     class = "mm_arg_error",

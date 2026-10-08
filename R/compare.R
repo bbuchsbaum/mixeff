@@ -413,9 +413,9 @@ drop1.mm_lmm <- function(object,
   rows <- lapply(terms, function(term) {
     reduced_formula <- mm_drop_fixed_term_formula(full, term)
     reduced <- tryCatch(
-      lmm(reduced_formula, full$model_frame, REML = isTRUE(full$REML),
-          weights = full$weights,
-          control = mm_control(verbose = -1)),
+      mm_internal_lmm(reduced_formula, full$model_frame,
+                      REML = isTRUE(full$REML), weights = full$weights,
+                      control = mm_internal_control(full, keep_start = FALSE)),
       error = function(cnd) cnd
     )
     if (inherits(reduced, "condition")) {
@@ -581,9 +581,11 @@ mm_prepare_comparison_fits <- function(fits, refit_for_comparison) {
     }
     fits <- lapply(fits, function(fit) {
       if (!isTRUE(fit$REML)) return(fit)
-      lmm(fit$formula, fit$model_frame, REML = FALSE,
-          weights = fit$weights,
-          control = mm_control(verbose = -1))
+      # Same model, ML criterion: keep the user's mm_control() (optimizer,
+      # tolerances, start), silenced.
+      mm_internal_lmm(fit$formula, fit$model_frame, REML = FALSE,
+                      weights = fit$weights,
+                      control = mm_internal_control(fit))
     })
     refit <- has_reml
   }

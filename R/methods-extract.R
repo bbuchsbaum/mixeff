@@ -42,16 +42,41 @@ fixef <- function(object, ...) {
   UseMethod("fixef")
 }
 
-# mixeff exports its own generics for the lme4 verb set, so when mixeff is
-# attached after lme4 these mask lme4's. Each default delegates foreign fits
-# back through lme4's generic (whose dispatch table holds the merMod
-# methods), so attach order does not break lme4's own objects.
+# mixeff exports its own generics for the lme4/nlme verb set, so when mixeff
+# is attached after lme4 or nlme these mask theirs. Each default delegates
+# foreign fits back through the owning package's generic (whose dispatch
+# table holds the merMod / lme / lmList / gls methods), so attach order does
+# not break lme4's or nlme's own objects.
+mm_foreign_owner <- c(merMod = "lme4", lmList4 = "lme4", lme = "nlme",
+                      lmList = "nlme", nlme = "nlme", gls = "nlme",
+                      nlsList = "nlme", gnls = "nlme")
+
+# Returns list(value = ) when a loaded lme4/nlme generic has a method for
+# `object`, else NULL.
+mm_forward_foreign_generic <- function(generic, object, ...) {
+  # S4 fits (lme4's lmerMod) dispatch S3 methods on their superclasses too.
+  classes <- if (isS4(object)) methods::is(object) else class(object)
+  owners <- unique(stats::na.omit(mm_foreign_owner[classes]))
+  for (pkg in owners) requireNamespace(pkg, quietly = TRUE)
+  for (pkg in unique(c(owners, "lme4", "nlme"))) {
+    if (!isNamespaceLoaded(pkg)) next
+    ns <- asNamespace(pkg)
+    # lme4 re-uses nlme's fixef/ranef/VarCorr generics via imports.
+    if (!exists(generic, envir = ns)) next
+    fun <- get(generic, envir = ns)
+    if (!is.function(fun)) next
+    has_method <- any(vapply(classes, function(cl) {
+      !is.null(utils::getS3method(generic, cl, optional = TRUE, envir = ns))
+    }, logical(1)))
+    if (has_method) return(list(value = fun(object, ...)))
+  }
+  NULL
+}
 #' @rdname mm_lmm-methods
 #' @export
 fixef.default <- function(object, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::fixef(object, ...))
-  }
+  fwd <- mm_forward_foreign_generic("fixef", object, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`fixef()` has no method for this object.",
     class = "mm_arg_error",
@@ -78,9 +103,8 @@ ranef <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ranef.default <- function(object, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::ranef(object, ...))
-  }
+  fwd <- mm_forward_foreign_generic("ranef", object, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`ranef()` has no method for this object.",
     class = "mm_arg_error",
@@ -326,9 +350,8 @@ VarCorr <- function(x, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 VarCorr.default <- function(x, ...) {
-  if (inherits(x, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::VarCorr(x, ...))
-  }
+  fwd <- mm_forward_foreign_generic("VarCorr", x, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`VarCorr()` has no method for this object.",
     class = "mm_arg_error",
@@ -563,9 +586,8 @@ ngrps <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ngrps.default <- function(object, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::ngrps(object, ...))
-  }
+  fwd <- mm_forward_foreign_generic("ngrps", object, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`ngrps()` has no method for this object.",
     class = "mm_arg_error",

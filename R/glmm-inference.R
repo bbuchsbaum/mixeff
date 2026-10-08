@@ -194,10 +194,12 @@ drop1.mm_glmm <- function(object, scope = NULL, test = c("none", "Chisq"),
   family <- mm_glmm_family_from_info(object$family)
   rows <- lapply(terms, function(term) {
     reduced_formula <- mm_drop_fixed_term_formula(object, term)
-    reduced <- glmm(reduced_formula, object$model_frame, family = family,
-                    weights = object$weights, offset = object$offset,
-                    method = object$method, nAGQ = object$nAGQ,
-                    control = mm_control(verbose = -1))
+    reduced <- mm_internal_glmm(reduced_formula, object$model_frame,
+                                family = family, weights = object$weights,
+                                offset = object$offset, method = object$method,
+                                nAGQ = object$nAGQ,
+                                control = mm_internal_control(object,
+                                                              keep_start = FALSE))
     stat <- mm_lrt_stat(reduced, object)
     df <- object$dof - reduced$dof
     data.frame(

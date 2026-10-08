@@ -30,6 +30,24 @@
   `nAGQ > 1`, and `inference = "working_hessian"` use the profiled path with
   an `mm_estimator_notice`; explicit `method = "joint_laplace"` requests for
   them are refused.
+* LMM bootstraps (`bootstrap_control(seed = NULL)`, the default) now draw
+  their engine seed from R's RNG, so `set.seed()` makes them reproducible.
+* `simulate.mm_lmm()`'s `"seed"` attribute follows `stats::simulate` (the
+  prior `.Random.seed`, or the seed with its RNG `kind`).
+* `drop1()`, random-term LRTs, and random-structure candidates keep a
+  no-intercept model no-intercept instead of re-adding the intercept.
+* `refit()` on a transformed response (`log(y) ~ ...`) refits to the new
+  response (previously it returned the original fit); it keeps the fit's
+  `mm_control()`.
+* Internal refits no longer resolve `weights` through the data mask (a data
+  column named `fit`, `full`, or `object` broke them), and REML-to-ML refits
+  in `compare()`/`anova()` keep the user's `mm_control()`.
+* `fixef()`, `ranef()`, `VarCorr()`, `ngrps()`, `getME()` and `refit()`
+  forward nlme (`lme`, `lmList`, `gls`) and lme4 objects to the owning
+  package's generic, so attaching mixeff no longer breaks nlme fits.
+* `summary()`/`inference_table(method = )` compute all coefficient rows in
+  one engine call, and engine refits of the same model warm-start from the
+  fitted theta.
 
 ## Compatibility
 

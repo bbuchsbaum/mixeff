@@ -35,6 +35,7 @@ Depends:
 Imports:
     jsonlite,
     Matrix,
+    methods,
     rlang,
     stats
 Suggests:
@@ -49,6 +50,7 @@ Suggests:
     lme4,
     lmerTest,
     MASS,
+    nlme,
     pbkrtest,
     rextendr,
     rmarkdown,

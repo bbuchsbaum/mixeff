@@ -18,7 +18,8 @@ refit(object, newresp, ...)
 \arguments{
 \item{object}{A fitted \code{mm_lmm}.}
 
-\item{newresp}{Numeric response for \code{refit()}.}
+\item{newresp}{Numeric response for \code{refit()}, on the model's response
+scale.}
 
 \item{...}{Reserved for future methods.}
 }
@@ -27,7 +28,10 @@ A new \code{mm_lmm}.
 }
 \description{
 \code{refit()} fits the same model formula to a new response by calling \code{\link[=lmm]{lmm()}}
-with the stored model frame and \code{REML} setting. Refitting is implemented
+with the stored model frame, \code{REML} setting, weights, and \code{\link[=mm_control]{mm_control()}}
+(silenced). As in lme4, \code{newresp} is on the scale of the model's response:
+for a transformed response such as \code{log(y) ~ ...} it replaces \code{log(y)},
+and the refit's formula names it \code{.mm_refit_response}. Refitting is implemented
 for linear mixed models only; calling \code{refit()} on a GLMM fit signals a
 typed \code{mm_inference_unavailable} error.
 }

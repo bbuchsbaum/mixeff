@@ -123,3 +123,70 @@ test_that("bridge refits warm start from the fitted theta and keep control", {
   user <- jsonlite::fromJSON(mixeff:::mm_refit_control_json(fit, warm_start = TRUE))
   expect_equal(user$start, c(1, 0, 1))
 })
+
+test_that("refit() with a transformed response refits to the new response", {
+  fit <- mm_cif_fit(log(Reaction) ~ Days + (1 | Subject))
+  set.seed(1)
+  nr <- log(mm_cif_sleep()$Reaction) + rnorm(180, sd = 0.3)
+  r <- refit(fit, nr)
+  expect_false(isTRUE(all.equal(fixef(r), fixef(fit))))
+  skip_if_not_installed("lme4")
+  ref <- lme4::refit(lme4::lmer(log(Reaction) ~ Days + (1 | Subject),
+                                mm_cif_sleep()), nr)
+  expect_equal(unname(fixef(r)), unname(lme4::fixef(ref)), tolerance = 1e-5)
+  expect_equal(as.numeric(logLik(r)), as.numeric(logLik(ref)), tolerance = 1e-6)
+  # A plain response keeps its name.
+  fit2 <- mm_cif_fit()
+  r2 <- refit(fit2, mm_cif_sleep()$Reaction * 2)
+  expect_equal(unname(fixef(r2)), 2 * unname(fixef(fit2)), tolerance = 1e-5)
+  expect_identical(deparse1(r2$formula), deparse1(fit2$formula))
+})
+
+test_that("internal refits are not hijacked by data columns named fit/full/object", {
+  d <- mm_cif_sleep()
+  set.seed(2)
+  w <- runif(nrow(d), 0.5, 2)
+  d$wt <- w
+  d$fit <- 1; d$full <- 1; d$object <- 1
+  m <- mm_cif_fit(Reaction ~ Days + (1 | Subject), d, weights = wt)
+  # compare() refits REML -> ML; drop1 refits reduced models.
+  ml <- mm_cif_fit(Reaction ~ Days + (1 | Subject), d, weights = wt,
+                   REML = FALSE)
+  prep <- mixeff:::mm_prepare_comparison_fits(list(m), "auto")
+  expect_equal(prep$fits[[1]]$weights, w)
+  expect_equal(as.numeric(logLik(prep$fits[[1]])), as.numeric(logLik(ml)),
+               tolerance = 1e-6)
+  dt <- suppressMessages(drop1(ml))
+  row <- dt$table %||% dt
+  red <- mm_cif_fit(Reaction ~ 1 + (1 | Subject), d, weights = wt, REML = FALSE)
+  expect_equal(row$logLik[row$dropped == "Days"], as.numeric(logLik(red)),
+               tolerance = 1e-6)
+  r <- refit(m, d$Reaction)
+  expect_equal(r$weights, w)
+})
+
+test_that("REML -> ML comparison refits keep the user's mm_control()", {
+  d <- mm_cif_sleep()
+  m <- lmm(Reaction ~ Days + (Days | Subject), d,
+           control = mm_control(verbose = -1, optimizer = "pattern_search"))
+  prep <- mixeff:::mm_prepare_comparison_fits(list(m), "auto")
+  ctl <- prep$fits[[1]]$control
+  expect_identical(ctl$optimizer, "pattern_search")
+  expect_identical(ctl$verbose, -1L)
+  q <- mixeff:::mm_internal_control(m, keep_start = FALSE)
+  expect_null(q$start)
+})
+
+test_that("fixef/ranef/VarCorr defaults forward nlme and lme4 objects", {
+  skip_if_not_installed("nlme")
+  fm <- nlme::lme(distance ~ age, data = nlme::Orthodont, random = ~ 1 | Subject)
+  expect_equal(mixeff::fixef(fm), nlme::fixef(fm))
+  expect_equal(mixeff::ranef(fm), nlme::ranef(fm))
+  expect_equal(mixeff::VarCorr(fm), nlme::VarCorr(fm))
+  skip_if_not_installed("lme4")
+  lm4 <- lme4::lmer(Reaction ~ Days + (1 | Subject), mm_cif_sleep())
+  expect_equal(mixeff::fixef(lm4), lme4::fixef(lm4))
+  expect_equal(mixeff::ngrps(lm4), lme4::ngrps(lm4))
+  expect_equal(mixeff::getME(lm4, "theta"), lme4::getME(lm4, "theta"))
+  expect_error(mixeff::fixef(1), class = "mm_arg_error")
+})

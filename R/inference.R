@@ -328,8 +328,9 @@ test_random_effect.mm_lmm <- function(fit, term,
   reduced <- NULL
   reduced_payload <- NULL
   if (remaining > 0L) {
-    reduced <- lmm(reduced_formula, full$model_frame, REML = FALSE,
-                   weights = full$weights, control = mm_control(verbose = -1))
+    reduced <- mm_internal_lmm(reduced_formula, full$model_frame, REML = FALSE,
+                               weights = full$weights,
+                               control = mm_internal_control(full, keep_start = FALSE))
     reduced_payload <- mm_boundary_lrt_bridge_payload(reduced)
   }
 
@@ -397,8 +398,8 @@ mm_boundary_lrt_ml_fit <- function(fit, refit_for_comparison) {
       input = list(REML = TRUE)
     )
   }
-  lmm(fit$formula, fit$model_frame, REML = FALSE, weights = fit$weights,
-      control = mm_control(verbose = -1))
+  mm_internal_lmm(fit$formula, fit$model_frame, REML = FALSE,
+                  weights = fit$weights, control = mm_internal_control(fit))
 }
 
 mm_boundary_lrt_bridge_payload <- function(fit) {

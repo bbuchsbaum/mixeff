@@ -1,12 +1,16 @@
 #' Refit a mixeff LMM with a new response
 #'
 #' `refit()` fits the same model formula to a new response by calling [lmm()]
-#' with the stored model frame and `REML` setting. Refitting is implemented
+#' with the stored model frame, `REML` setting, weights, and [mm_control()]
+#' (silenced). As in lme4, `newresp` is on the scale of the model's response:
+#' for a transformed response such as `log(y) ~ ...` it replaces `log(y)`,
+#' and the refit's formula names it `.mm_refit_response`. Refitting is implemented
 #' for linear mixed models only; calling `refit()` on a GLMM fit signals a
 #' typed `mm_inference_unavailable` error.
 #'
 #' @param object A fitted `mm_lmm`.
-#' @param newresp Numeric response for `refit()`.
+#' @param newresp Numeric response for `refit()`, on the model's response
+#'   scale.
 #' @param ... Reserved for future methods.
 #'
 #' @return A new `mm_lmm`.
@@ -19,12 +23,12 @@ refit <- function(object, newresp, ...) {
 #' @rdname refit
 #' @export
 refit.default <- function(object, newresp, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    if (missing(newresp)) {
-      return(lme4::refit(object, ...))
-    }
-    return(lme4::refit(object, newresp, ...))
+  fwd <- if (missing(newresp)) {
+    mm_forward_foreign_generic("refit", object, ...)
+  } else {
+    mm_forward_foreign_generic("refit", object, newresp, ...)
   }
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`refit()` has no method for this object.",
     class = "mm_arg_error",
@@ -63,10 +67,23 @@ refit.mm_lmm <- function(object, newresp, ...) {
     )
   }
   data <- object$model_frame
-  data[[mm_response_name(object)]] <- as.numeric(newresp)
-  control <- list(...)$control %||% mm_control(verbose = -1)
-  fit <- lmm(object$formula, data, REML = isTRUE(object$REML),
-             weights = object$weights, control = control)
+  formula <- object$formula
+  lhs <- formula[[2L]]
+  newresp <- as.numeric(newresp)
+  if (is.name(lhs)) {
+    data[[as.character(lhs)]] <- newresp
+  } else {
+    # A transformed response (`log(y) ~ ...`): as in lme4, `newresp` is the
+    # response on the model's (transformed) scale. Writing it into the raw
+    # column would be re-transformed, and writing it under the label
+    # "log(y)" would be ignored (the original fit came back unchanged), so
+    # the refit uses a dedicated response column instead.
+    data[[".mm_refit_response"]] <- newresp
+    formula[[2L]] <- as.name(".mm_refit_response")
+  }
+  control <- list(...)$control %||% mm_internal_control(object)
+  fit <- mm_internal_lmm(formula, data, REML = isTRUE(object$REML),
+                         weights = object$weights, control = control)
   fit$refit <- list(
     source = "refit",
     original_fit_status = fit_status(object)

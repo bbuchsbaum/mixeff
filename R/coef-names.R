@@ -28,12 +28,22 @@
 # "varTRUE"); numeric components pass through. `factor_vars` must be sorted
 # longest-first so a factor whose name prefixes another ("rec" vs "recipe")
 # matches greedily.
-mm_engine_encode_names <- function(r_names, factor_vars, logical_vars = character(0)) {
+#
+# `factor_suffixes` (optional) maps each factor to the column suffixes
+# model.matrix() can append to its name (its levels and contrast column
+# names). A component is only treated as a factor column when the remainder
+# is one of them, so a numeric `group_size` next to a factor `group` is left
+# alone instead of being mangled into "group: _size".
+mm_engine_encode_names <- function(r_names, factor_vars, logical_vars = character(0),
+                                   factor_suffixes = NULL) {
   translate_component <- function(comp) {
     for (v in factor_vars) {
       if (startsWith(comp, v)) {
         lev <- substring(comp, nchar(v) + 1L)
-        if (nzchar(lev)) return(paste0(v, ": ", lev))
+        if (!nzchar(lev)) next
+        allowed <- factor_suffixes[[v]]
+        if (!is.null(allowed) && !(lev %in% allowed)) next
+        return(paste0(v, ": ", lev))
       }
     }
     for (v in logical_vars) {
@@ -86,7 +96,11 @@ mm_coef_name_map <- function(fit, engine_names = names(fit$beta)) {
   is_lgl <- vapply(fit$model_frame, is.logical, logical(1))
   logical_vars <- intersect(names(is_lgl)[is_lgl], fe_vars)
 
-  encoded <- mm_engine_encode_names(r_names, factor_vars, logical_vars)
+  factor_suffixes <- lapply(stats::setNames(nm = factor_vars), function(v) {
+    mm_factor_column_suffixes(fit$model_frame[[v]])
+  })
+  encoded <- mm_engine_encode_names(r_names, factor_vars, logical_vars,
+                                    factor_suffixes)
 
   # The engine pivots rank-deficient columns out of the fit (like lme4's
   # rank-deficiency drop), so engine_names may be a subset of R's columns.
@@ -238,4 +252,14 @@ mm_aliased_coefficients <- function(fit) {
   )
   if (!length(cols)) return(character())
   mm_coef_engine_to_lme4(as.character(cols), fit$coef_map)
+}
+
+# Column suffixes model.matrix() may append to a factor's name: its levels
+# (treatment / full indicator coding) and the column names of its contrast
+# matrix (e.g. ".L", ".Q" for contr.poly, or a user matrix's colnames).
+mm_factor_column_suffixes <- function(col) {
+  lev <- levels(col)
+  ctr <- tryCatch(colnames(stats::contrasts(col)), error = function(e) NULL)
+  poly <- if (length(lev) > 1L) colnames(stats::contr.poly(length(lev))) else NULL
+  unique(c(lev, ctr, poly, as.character(seq_along(lev))))
 }

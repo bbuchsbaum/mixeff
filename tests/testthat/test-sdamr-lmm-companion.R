@@ -130,11 +130,22 @@ sdamr_group_key <- function(x) {
   sub("\\.[0-9]+$", "", mm_lme4_group_key(x))
 }
 
+sdamr_strip_contrasts <- function(dat) {
+  for (nm in names(dat)) {
+    if (is.factor(dat[[nm]])) attr(dat[[nm]], "contrasts") <- NULL
+  }
+  dat
+}
+
 sdamr_fit_pair <- function(case) {
   mm_skip_if_no_lme4()
   dat <- case$data()
+  # lme4 honours the effect-coded `anchor` contrast; mixeff refuses attached
+  # unordered contrasts, so it fits the treatment basis and the comparison
+  # maps lme4's estimates onto it (`fixed_basis` / `varcorr_basis`).
+  mm_dat <- sdamr_strip_contrasts(dat)
   list(
-    mixeff = mixeff::lmm(case$formula, dat, REML = case$REML,
+    mixeff = mixeff::lmm(case$formula, mm_dat, REML = case$REML,
                          control = mixeff::mm_control(verbose = -1)),
     lme4 = suppressMessages(suppressWarnings(
       lme4::lmer(case$formula, data = dat, REML = case$REML)
@@ -337,9 +348,12 @@ test_that("sdamr companion random-slope LRT agrees with lme4", {
   uncorrelated <- everest_feet ~ anchor_contrast +
     (1 | referrer) + (0 + anchor_contrast | referrer)
 
-  mm_correlated <- mixeff::lmm(correlated, dat, REML = FALSE,
+  # Likelihoods are invariant to the anchor coding mixeff refuses to honour.
+  mm_correlated <- mixeff::lmm(correlated, sdamr_strip_contrasts(dat),
+                               REML = FALSE,
                                control = mixeff::mm_control(verbose = -1))
-  mm_uncorrelated <- mixeff::lmm(uncorrelated, dat, REML = FALSE,
+  mm_uncorrelated <- mixeff::lmm(uncorrelated, sdamr_strip_contrasts(dat),
+                                 REML = FALSE,
                                  control = mixeff::mm_control(verbose = -1))
   lme4_correlated <- suppressMessages(suppressWarnings(
     lme4::lmer(correlated, data = dat, REML = FALSE)

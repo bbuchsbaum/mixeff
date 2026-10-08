@@ -103,7 +103,7 @@ compile_model <- function(formula, data) {
 
   mm_check_no_na(data, vars)
 
-  narrowed <- data[, vars, drop = FALSE]
+  narrowed <- mm_factor_character_columns(data[, vars, drop = FALSE])
   spec_data <- mm_translate_data(narrowed)
   formula_string <- mm_coerce_formula_string(formula)
 
@@ -162,4 +162,18 @@ print.mm_spec <- function(x, ...) {
               as.character(x$artifact$schema$schema_version)))
   cat("Use audit(spec) to view the structured design audit.\n")
   invisible(x)
+}
+
+# Character model variables become factors with sorted levels, exactly as
+# lme4's model.frame()/factor() treats them. Keeping them character would
+# send first-appearance level order to the engine (a different reference
+# level than lme4) and leave the R-side coefficient-name map unable to
+# recognise them as categorical.
+mm_factor_character_columns <- function(data) {
+  for (nm in names(data)) {
+    if (is.character(data[[nm]])) {
+      data[[nm]] <- factor(data[[nm]])
+    }
+  }
+  data
 }

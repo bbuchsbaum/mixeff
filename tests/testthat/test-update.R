@@ -194,3 +194,27 @@ test_that("update.mm_lmm matches an lme4 update() formula edit", {
                unname(lme4::fixef(l2)),
                tolerance = 1e-3)
 })
+
+test_that("update() adding a variable re-evaluates the original data (lme4 semantics)", {
+  set.seed(77)
+  upd_df <- data.frame(
+    y = rnorm(80), x = rnorm(80), z = rnorm(80),
+    g = factor(rep(seq_len(10), each = 8))
+  )
+  fit <- lmm(y ~ x + (1 | g), upd_df, control = mm_control(verbose = -1))
+  expect_false("z" %in% names(model.frame(fit)))
+  bigger <- update(fit, . ~ . + z)
+  direct <- lmm(y ~ x + z + (1 | g), upd_df, control = mm_control(verbose = -1))
+  expect_equal(fixef(bigger), fixef(direct), tolerance = 1e-8)
+})
+
+test_that("update() refuses arguments it cannot carry over instead of dropping them", {
+  set.seed(78)
+  upd_df <- data.frame(
+    y = rnorm(80), x = rnorm(80),
+    g = factor(rep(seq_len(10), each = 8))
+  )
+  fit <- lmm(y ~ x + (1 | g), upd_df, control = mm_control(verbose = -1))
+  expect_error(update(fit, subset = x > 0), class = "mm_arg_error")
+  expect_error(update(fit, na.action = na.omit), class = "mm_arg_error")
+})

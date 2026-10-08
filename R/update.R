@@ -59,9 +59,12 @@ update.mm_lmm <- function(object, formula., ..., evaluate = TRUE) {
   } else {
     stats::update.formula(stats::formula(object), formula.)
   }
+  mm_check_update_overrides(overrides, c("data", "REML", "weights", "control"),
+                            "lmm")
   args <- list(
     formula = new_formula,
-    data    = mm_update_arg(overrides, "data", stats::model.frame(object)),
+    data    = mm_update_arg(overrides, "data",
+                            mm_update_data(object, new_formula, parent.frame())),
     REML    = mm_update_arg(overrides, "REML", isTRUE(object$REML)),
     weights = mm_update_arg(overrides, "weights", object$weights),
     control = mm_update_arg(overrides, "control",
@@ -80,9 +83,13 @@ update.mm_glmm <- function(object, formula., ..., evaluate = TRUE) {
   } else {
     stats::update.formula(stats::formula(object), formula.)
   }
+  mm_check_update_overrides(overrides, c("data", "family", "weights", "offset",
+                                         "method", "nAGQ", "inference",
+                                         "control"), "glmm")
   args <- list(
     formula   = new_formula,
-    data      = mm_update_arg(overrides, "data", stats::model.frame(object)),
+    data      = mm_update_arg(overrides, "data",
+                              mm_update_data(object, new_formula, parent.frame())),
     family    = mm_update_arg(overrides, "family",
                               mm_glmm_family_from_info(object$family)),
     weights   = mm_update_arg(overrides, "weights", object$weights),
@@ -101,6 +108,64 @@ update.mm_glmm <- function(object, formula., ..., evaluate = TRUE) {
 # not mentioned" (keep stored weights).
 mm_update_arg <- function(overrides, name, default) {
   if (name %in% names(overrides)) overrides[[name]] else default
+}
+
+# update() must not silently drop an argument it does not carry over (e.g.
+# `subset`, `na.action`, `contrasts`): the refit would differ from what the
+# caller asked for without any sign of it.
+mm_check_update_overrides <- function(overrides, supported, fitter) {
+  nms <- names(overrides)
+  if (length(overrides) && (is.null(nms) || any(!nzchar(nms)))) {
+    mm_abort(
+      message = "Arguments to update() other than the formula must be named.",
+      class = "mm_arg_error"
+    )
+  }
+  unknown <- setdiff(nms, supported)
+  if (length(unknown)) {
+    mm_abort(
+      message = sprintf(
+        paste0("update() cannot carry over %s for a %s() fit; supported ",
+               "arguments are %s. Call %s() directly for other options."),
+        paste(sprintf("`%s`", unknown), collapse = ", "), fitter,
+        paste(sprintf("`%s`", supported), collapse = ", "), fitter
+      ),
+      class = "mm_arg_error",
+      input = unknown
+    )
+  }
+  invisible(TRUE)
+}
+
+# The stored model frame holds only the variables of the original formula.
+# When the updated formula needs other columns, re-evaluate the original
+# `data` argument the way lme4's update() does (via the stored call).
+mm_update_data <- function(object, new_formula, env) {
+  frame <- stats::model.frame(object)
+  needed <- all.vars(new_formula)
+  if (all(needed %in% names(frame))) {
+    return(frame)
+  }
+  data_expr <- object$call$data
+  data <- if (!is.null(data_expr)) {
+    tryCatch(eval(data_expr, env), error = function(e) NULL)
+  }
+  if (!is.data.frame(data) || !all(needed %in% names(data)) ||
+      nrow(data) != nrow(frame)) {
+    missing <- setdiff(needed, names(frame))
+    mm_abort(
+      message = sprintf(
+        paste0("The updated formula uses %s, which the fit's stored model ",
+               "frame does not contain, and the original `data` could not be ",
+               "re-evaluated here to the same rows (e.g. the fit used `subset` ",
+               "or dropped NA rows). Pass it explicitly: update(fit, ..., data = d)."),
+        paste(sprintf("`%s`", missing), collapse = ", ")
+      ),
+      class = "mm_arg_error",
+      input = missing
+    )
+  }
+  data
 }
 
 # Reconstruct an R family object from the stored engine family info so a GLMM

@@ -16,9 +16,12 @@
 #'   via [mm_negative_binomial()] (theta estimated, like `lme4::glmer.nb()`)
 #'   or `MASS::negative.binomial(theta)` (fixed theta).
 #' @param random Reserved for the native random-effect constructor path.
-#' @param weights Optional prior weights. For binomial models these are trial
-#'   counts for proportion responses; weights must be positive and finite.
-#' @param offset Optional fixed linear-predictor offset; values must be finite.
+#' @param weights Optional prior weights: a column of `data` (as in lme4,
+#'   `weights = trials`) or a numeric vector. For binomial models these are
+#'   trial counts for proportion responses; weights must be positive and
+#'   finite.
+#' @param offset Optional fixed linear-predictor offset: a column of `data` or
+#'   a numeric vector; values must be finite.
 #' @param subset,na.action,contrasts Reserved for future parity with [lmm()].
 #' @param method GLMM estimation method. `"pirls_profiled"` is the default
 #'   fast-PIRLS profiled path. `"joint_laplace"` requests the labeled joint
@@ -94,6 +97,10 @@ glmm <- function(formula,
                  control = mm_control(),
                  ...) {
   call <- match.call()
+  # lme4 semantics: `weights` and `offset` may name columns of `data`
+  # (`weights = trials`), falling back to the calling environment.
+  weights <- eval(substitute(weights), data, parent.frame())
+  offset <- eval(substitute(offset), data, parent.frame())
   method_explicit <- !missing(method)
   method <- match.arg(method)
   inference <- match.arg(inference)
@@ -118,7 +125,7 @@ glmm <- function(formula,
     )
   }
 
-  if (!is.null(random) || !is.null(subset) ||
+  if (!is.null(random) || !is.null(substitute(subset)) ||
       !identical(na.action, na.omit) || !is.null(contrasts)) {
     mm_abort(
       message = "`random`, `subset`, custom `na.action`, and `contrasts` are reserved for the fitted GLMM bridge.",

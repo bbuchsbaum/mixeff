@@ -114,7 +114,7 @@ glmm_fit_w <- glmm(
   weight_formula,
   cbpp,
   family = cbpp_family,
-  weights = cbpp$size,
+  weights = size,
   control = mm_control(verbose = -1)
 )
 all.equal(fixef(glmm_fit), fixef(glmm_fit_w))

@@ -55,7 +55,7 @@ install.packages(
 )
 ```
 
-From GitHub (requires Rust 1.78 or newer):
+From GitHub (requires Rust 1.85 or newer):
 
 ```r
 remotes::install_github("bbuchsbaum/mixeff")

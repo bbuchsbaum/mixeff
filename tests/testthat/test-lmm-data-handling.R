@@ -65,3 +65,73 @@ test_that("contrasts refuses non-treatment coding but accepts treatment", {
         control = mm_control(verbose = -1))
   )
 })
+
+test_that("character fixed-effect predictors fit like factors with sorted levels (lme4)", {
+  df <- mm_dh_data()
+  # First-appearance order differs from sorted order, so a first-appearance
+  # reference level would give different coefficients than lme4.
+  df$fc <- c("c", "a", "b")[as.integer(df$f)]
+  fit_chr <- lmm(y ~ x + fc + (1 | g), df, control = mm_control(verbose = -1))
+  df$ff <- factor(df$fc)
+  fit_fac <- lmm(y ~ x + ff + (1 | g), df, control = mm_control(verbose = -1))
+  expect_identical(names(fixef(fit_chr)), c("(Intercept)", "x", "fcb", "fcc"))
+  expect_equal(unname(fixef(fit_chr)), unname(fixef(fit_fac)), tolerance = 1e-8)
+  # Prediction on the training rows reproduces the fitted values.
+  expect_equal(unname(predict(fit_chr, newdata = df)), unname(fitted(fit_chr)),
+               tolerance = 1e-8)
+  if (requireNamespace("lme4", quietly = TRUE)) {
+    ref <- lme4::lmer(y ~ x + fc + (1 | g), df, REML = TRUE)
+    expect_equal(fixef(fit_chr), lme4::fixef(ref), tolerance = 1e-5)
+  }
+})
+
+test_that("a numeric predictor whose name extends a factor's name is not mangled", {
+  df <- mm_dh_data()
+  set.seed(4242)
+  df$group <- factor(sample(c("u", "v"), nrow(df), replace = TRUE))
+  df$group_size <- rnorm(nrow(df))
+  df$f_x <- rnorm(nrow(df))
+  fit <- lmm(y ~ group + group_size + f + f_x + (1 | g), df,
+             control = mm_control(verbose = -1))
+  expect_identical(
+    names(fixef(fit)),
+    c("(Intercept)", "groupv", "group_size", "fb", "fc", "f_x")
+  )
+})
+
+test_that("contr.SAS is refused: the engine always uses the first level as reference", {
+  df <- mm_dh_data()
+  expect_error(
+    lmm(y ~ f + (1 | g), df, contrasts = list(f = "contr.SAS"),
+        control = mm_control(verbose = -1)),
+    class = "mm_arg_error"
+  )
+})
+
+test_that("y ~ 0 + f estimates one mean per level, matching lme4 and y ~ f", {
+  df <- mm_dh_data()
+  cell <- lmm(y ~ 0 + f + x + (1 | g), df, REML = FALSE,
+              control = mm_control(verbose = -1))
+  base <- lmm(y ~ f + x + (1 | g), df, REML = FALSE,
+              control = mm_control(verbose = -1))
+  expect_identical(names(fixef(cell)), c("fa", "fb", "fc", "x"))
+  expect_equal(as.numeric(logLik(cell)), as.numeric(logLik(base)),
+               tolerance = 1e-6)
+  b <- fixef(base)
+  expect_equal(unname(fixef(cell)[c("fa", "fb", "fc")]),
+               unname(b[["(Intercept)"]] + c(0, b[["fb"]], b[["fc"]])),
+               tolerance = 1e-5)
+  if (requireNamespace("lme4", quietly = TRUE)) {
+    ref <- lme4::lmer(y ~ 0 + f + x + (1 | g), df, REML = FALSE)
+    expect_equal(fixef(cell), lme4::fixef(ref), tolerance = 1e-5)
+  }
+})
+
+test_that("predict(newdata) reproduces fitted values for nested fixed effects", {
+  df <- mm_dh_data()
+  set.seed(31)
+  df$h <- factor(sample(c("u", "v"), nrow(df), replace = TRUE))
+  fit <- lmm(y ~ f / h + (1 | g), df, control = mm_control(verbose = -1))
+  expect_equal(unname(predict(fit, newdata = df)), unname(fitted(fit)),
+               tolerance = 1e-8)
+})

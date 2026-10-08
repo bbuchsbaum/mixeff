@@ -1,5 +1,26 @@
 # mixeff 0.2.0
 
+## Correctness fixes (pre-release audit)
+
+* Character fixed-effect predictors (e.g. columns from `read.csv()`) are now
+  converted to factors with sorted levels, as lme4 does. Previously the fit
+  aborted with an `mm_schema_error` while building coefficient names.
+* A numeric predictor whose name starts with a factor's name (`group` and
+  `group_size`) no longer aborts the fit.
+* Contrast codings mixeff cannot honour are refused with an `mm_arg_error`
+  instead of being silently replaced by treatment coding: a contrast attached
+  to an unordered factor, a non-`contr.treatment` unordered entry in
+  `options(contrasts =)`, and `contrasts = list(f = "contr.SAS")` (which uses
+  the last level as reference; the engine always uses the first).
+* `update()` re-evaluates the original `data` when the updated formula needs
+  columns the stored model frame lacks (as lme4 does), and refuses arguments
+  it cannot carry over (e.g. `subset`, `na.action`) instead of dropping them.
+* The declared Rust toolchain minimum is now 1.85, the bundled engine's
+  actual requirement (some vendored crates use edition 2024).
+* The lme4 migration vignette no longer describes `coef()`, `VarCorr()`,
+  `residuals()`, `anova()`, `getME()`, `isSingular()` and `emmeans` as
+  identical to lme4; it lists the actual differences.
+
 ## Compatibility
 
 * Fit-summary parsing accepts the additive `mixedmodels.fit_summary` 1.1.0

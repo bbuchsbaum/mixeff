@@ -35,10 +35,13 @@ or \code{MASS::negative.binomial(theta)} (fixed theta).}
 
 \item{random}{Reserved for the native random-effect constructor path.}
 
-\item{weights}{Optional prior weights. For binomial models these are trial
-counts for proportion responses; weights must be positive and finite.}
+\item{weights}{Optional prior weights: a column of \code{data} (as in lme4,
+\code{weights = trials}) or a numeric vector. For binomial models these are
+trial counts for proportion responses; weights must be positive and
+finite.}
 
-\item{offset}{Optional fixed linear-predictor offset; values must be finite.}
+\item{offset}{Optional fixed linear-predictor offset: a column of \code{data} or
+a numeric vector; values must be finite.}
 
 \item{subset, na.action, contrasts}{Reserved for future parity with \code{\link[=lmm]{lmm()}}.}
 

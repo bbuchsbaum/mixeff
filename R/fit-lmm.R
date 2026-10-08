@@ -479,7 +479,7 @@ mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
     if (nm %in% ordered_cols) {
       identical(x, "contr.poly")
     } else {
-      x %in% c("contr.treatment", "contr.SAS")
+      identical(x, "contr.treatment")
     }
   }
   nms <- names(contrasts)
@@ -490,7 +490,7 @@ mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
     mm_abort(
       message = paste(
         "Custom `contrasts` are only honored when they match the engine's",
-        "coding: `contr.treatment`/`contr.SAS` for unordered factors and",
+        "coding: `contr.treatment` for unordered factors and",
         "`contr.poly` for ordered factors. Recode the factor (e.g. relevel(),",
         "toggle ordering, or construct numeric columns) for a different coding."
       ),

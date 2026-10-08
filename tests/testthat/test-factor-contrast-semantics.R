@@ -21,9 +21,36 @@ factor_contrast_design <- function(seed = 8L) {
   dat
 }
 
+# mixeff refuses an attached unordered contrast rather than silently
+# replacing it with treatment coding; the mixeff fits below use the same data
+# with the attribute dropped (the random-effect basis is cell-means either way).
+without_attached_contrasts <- function(dat) {
+  for (nm in names(dat)) {
+    if (is.factor(dat[[nm]])) attr(dat[[nm]], "contrasts") <- NULL
+  }
+  dat
+}
+
+test_that("attached unordered contrasts are refused, not silently replaced", {
+  dat <- factor_contrast_design()
+  expect_error(
+    lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
+    class = "mm_arg_error"
+  )
+  old <- options(contrasts = c("contr.sum", "contr.poly"))
+  on.exit(options(old), add = TRUE)
+  expect_error(
+    lmm(y ~ f + (1 | g), without_attached_contrasts(dat),
+        control = mm_control(verbose = -1)),
+    regexp = "contr.sum",
+    class = "mm_arg_error"
+  )
+})
+
 test_that("no-intercept factor random slopes use cell-means coding", {
   dat <- factor_contrast_design()
-  fit <- lmm(y ~ f + (0 + f | g), dat, control = mm_control(verbose = -1))
+  fit <- lmm(y ~ f + (0 + f | g), without_attached_contrasts(dat),
+             control = mm_control(verbose = -1))
 
   vc_names <- VarCorr(fit)$table$name
   re_names <- names(ranef(fit)$g)
@@ -45,7 +72,7 @@ test_that("no-intercept factor random slopes use cell-means coding", {
 })
 
 test_that("as.data.frame.mm_varcorr var1/var2 use lme4-compatible concatenated names", {
-  dat <- factor_contrast_design()
+  dat <- without_attached_contrasts(factor_contrast_design())
   fit <- lmm(y ~ f + (0 + f | g), dat, control = mm_control(verbose = -1))
 
   # Display path keeps human-readable "f: a" format

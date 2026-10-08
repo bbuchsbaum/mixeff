@@ -80,14 +80,22 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 |------|--------|-------|
 | `lmer(y ~ x + (x \| g), data)` | `lmm(y ~ x + (x \| g), data)` | same formula language, incl. `(x\|\|g)`, `(1\|g1/g2)`, crossed |
 | `glmer(y ~ ..., family = binomial)` | `glmm(y ~ ..., family = binomial())` | pass a family **object** (`binomial()`), not a string |
-| `lmerControl(...)` / `glmerControl(...)` | `mm_control(verbose=, max_feval=)` | optimizer/tolerance knobs are engine-chosen (see below) |
-| `fixef`, `ranef`, `VarCorr`, `coef`, `sigma`, `vcov` | identical | same generics |
-| `logLik`, `AIC`, `BIC`, `deviance`, `nobs`, `confint` | identical | `confint` supports Wald, profile, and bootstrap on LMMs; Wald/profile/bootstrap availability per GLMM fit type is the route matrix in `vignette("inference", package = "mixeff")` |
-| `predict`, `fitted`, `residuals`, `simulate`, `refit` | identical (LMM) | `predict()` supports `re.form = NULL/NA`, `se.fit`, `interval`; `simulate()`/`refit()` are LMM-only and refuse GLMM fits with a typed error |
-| `update(fit, . ~ . - x)` | identical | formula edits, `REML=`, `weights=`, etc. |
-| `anova(m1, m2)`, `drop1`, `getME`, `ngrps`, `isSingular` | identical | `isSingular()` is `is_singular()` |
-| `broom.mixed::tidy/glance/augment` | identical | registered for `mm_lmm`/`mm_glmm` |
-| `emmeans::emmeans(fit, ~ x)` | identical | mixeff registers an emmeans basis on the same covariance payload, so estimates and SEs agree; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a default profiled GLMM refuses inference through emmeans too |
+| `lmerControl(...)` / `glmerControl(...)` | `mm_control(optimizer=, max_feval=, verbose=, start=)` | no `optCtrl` / `check.conv.*`; use `verify_convergence()` after the fit |
+| `fixef`, `sigma`, `vcov` | same generics, same values | |
+| `ranef` | same generic | `condVar = TRUE` is LMM-only |
+| `coef` | same generic, **different shape** | only columns that carry a random effect get fixed + random; fixed-only columns are omitted (lme4 repeats them) |
+| `VarCorr` | same generic, **different object** | returns a table (`$table`, `$residual_sd`), not lme4's list of matrices, so `VarCorr(m)$Subject` is `NULL`; `as.data.frame(VarCorr(m))` matches lme4's layout |
+| `logLik`, `BIC`, `deviance`, `nobs` | identical | `AIC(m1, m2)` with several models is refused; use `compare()` |
+| `confint` | same generic, **different default** | Wald (`"asymptotic"`) by default, where lme4 defaults to profile; profile and bootstrap on LMMs; GLMM availability per fit type is the route matrix in `vignette("inference", package = "mixeff")` |
+| `predict`, `fitted` | identical | `re.form = NULL/NA/~0`, `allow.new.levels`, `se.fit`, `interval`; partial `re.form` formulas are refused |
+| `residuals` | LMM: same types; GLMM: response only | GLMM Pearson/deviance residuals are not available yet (lme4's GLMM default is deviance) |
+| `simulate`, `refit` | LMM only | GLMM fits are refused with a typed error; `newdata`, `use.u` and `newparams` are refused |
+| `update(fit, . ~ . - x)` | same generic | a formula that needs new columns re-evaluates the original `data`, as lme4 does; arguments `lmm()`/`glmm()` cannot carry over (e.g. `subset`, `na.action`) are refused rather than dropped |
+| `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | returns mixeff objects (`print()` shows the table) rather than lme4's data frame; single-model `anova()` (Type I/II/III, Satterthwaite/KR) is LMM-only |
+| `getME`, `isSingular` | `getME()`, `is_singular()` | LMM only; `getME()` covers `X`, `Z`, `Zt`, `Lambda`, `Lambdat`, `theta`, `beta`, `y`, `mu`, `flist`, `cnms` |
+| `ngrps` | identical | |
+| `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
+| `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; registered automatically for `mm_lmm`, while `mm_glmm` needs mixeff attached; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a default profiled GLMM refuses inference through emmeans |
 | `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package |
 
 ## Argument map for `lmm()` / `glmm()`
@@ -95,14 +103,15 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | lme4 argument | mixeff | Notes |
 |---------------|--------|-------|
 | `REML` | `lmm(..., REML=)` | same |
-| `weights` | `weights=` | LMM and GLMM |
-| `offset` | `glmm(..., offset=)` | GLMM only; LMM in-fit offset is not yet supported |
+| `weights` | `weights=` | a column of `data` or a vector, as in lme4 (LMM and GLMM) |
+| `offset` | `glmm(..., offset=)` | GLMM only (a column of `data` or a vector); `offset()` inside the formula and LMM offsets are not yet supported |
 | `subset` | `lmm(..., subset=)` | supported for `lmm()` |
 | `na.action` | `lmm(..., na.action=)` | **default refuses NA**; pass `na.action = na.omit` for lme4's complete-case behavior |
-| `contrasts` | partial | unordered factors use treatment coding, ordered factors `contr.poly` (both matching R/lme4 defaults); other codings are refused — recode the factor. Contrast attributes set on factor columns and `options(contrasts=)` are currently ignored — the fit uses treatment coding — a known gap (bd-01KZ050ADJ2Y7SS20YH9CTE2NS); recode factors explicitly when porting |
+| `contrasts` | partial | unordered factors use treatment coding, ordered factors `contr.poly` (both matching R/lme4 defaults). Any other coding is refused with an `mm_arg_error` rather than silently replaced, whether it is requested through `contrasts=`, a contrast attached to the factor (`contrasts(f) <- ...`), or `options(contrasts=)`; use `relevel()` to change the reference level, or build coded columns as numeric predictors |
+| character predictors | converted to factors | sorted levels, as lme4's `factor()` conversion does |
 | numeric/character grouping (accepted silently) | coerced to factor | non-factor grouping columns are coerced to factor, announced via an `mm_grouping_coercion_notice`; silence it with `mm_control(verbose = -1)` |
 | `family = "binomial"` | `family = binomial()` | string families are not accepted |
-| `nAGQ` | `glmm(..., nAGQ=)` | `>1` on the profiled path |
+| `nAGQ` | `glmm(..., nAGQ=)` | `>1` on the profiled path and only for a single scalar random effect; `nAGQ = 0` is not accepted |
 | `control = lmerControl(optimizer=, optCtrl=)` | `mm_control(optimizer=, max_feval=, ...)` | the engine picks a default optimizer; `mm_control()` can override it or cap the evaluation budget |
 | `start` | `mm_control(start=)` | theta warm starts |
 

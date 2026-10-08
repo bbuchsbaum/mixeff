@@ -267,9 +267,20 @@ print.mm_parametric_bootstrap <- function(x, ...) {
 
 #' Analysis of variance for a mixeff LMM
 #'
-#' With no extra models, `anova()` returns a term-level table for `object`.
-#' With further fitted models in `...`, it defers to [compare()] for a
-#' nested model comparison.
+#' With no extra models, `anova()` returns a term-level F-test table for
+#' `object` shaped like lmerTest's: a data frame of class `"anova"` with
+#' columns `Sum Sq`, `Mean Sq`, `NumDF`, `DenDF`, `F value` and `Pr(>F)`
+#' (rows named by term; `Mean Sq = F * sigma^2` and `Sum Sq = NumDF * Mean
+#' Sq`, as in lmerTest). With further fitted models in `...`, it returns
+#' lme4's likelihood-ratio table (`npar`, `AIC`, `BIC`, `logLik`,
+#' `deviance`, `Chisq`, `Df`, `Pr(>Chisq)`, rows named after the arguments),
+#' computed by [compare()] (REML fits are refit by ML, as in lme4).
+#'
+#' mixeff's provenance stays on the result: `x$table` is the full
+#' term-level (or [compare()]) table with method, status, reliability and
+#' reason columns, and `x$type` / `x$requested_method` record the request.
+#' Rows the engine could not certify keep `NA` statistics and their reason
+#' is printed under the table.
 #'
 #' @param object A fitted `mm_lmm`.
 #' @param ... Optional additional fitted models; triggers [compare()].
@@ -285,31 +296,60 @@ print.mm_parametric_bootstrap <- function(x, ...) {
 #'   simple effect at the other factors' reference levels, which is a
 #'   legitimate quantity but is *not* Type III on unbalanced designs; it
 #'   is the hypothesis mixeff computed for `"III"` before engine
-#'   `1f3f689`.
+#'   `1f3f689`. lmerTest's spellings `3`, `2`, `1` (numeric or character)
+#'   are accepted.
 #' @param method Degrees-of-freedom / test method.
 #' @param refit_for_comparison Passed to [compare()] when `...` is used.
+#' @param ddf lmerTest's spelling of the method: `"Satterthwaite"`
+#'   (`method = "satterthwaite"`), `"Kenward-Roger"`
+#'   (`method = "kenward_roger"`), or `"lme4"`, which returns lme4's own
+#'   single-model table (sequential `npar`, `Sum Sq`, `Mean Sq`, `F value`,
+#'   no denominator df or p-values). Supply `ddf` or `method`, not both.
 #'
-#' @return An `mm_anova` object.
+#' @return A data frame of class `c("mm_anova", "anova", "data.frame")` for
+#'   one model, or `c("mm_anova_comparison", "mm_model_comparison",
+#'   "anova", "data.frame")` for several.
 #'
 #' @method anova mm_lmm
 #' @export
 anova.mm_lmm <- function(object, ..., type = c("III", "II", "I", "block"),
                          method = c("auto", "satterthwaite", "kenward_roger",
                                     "bootstrap", "asymptotic", "none"),
-                         refit_for_comparison = c("auto", "error", "ml")) {
+                         refit_for_comparison = c("auto", "error", "ml"),
+                         ddf = NULL) {
   dots <- list(...)
+  lme4_table <- FALSE
+  if (!is.null(ddf)) {
+    if (!missing(method)) {
+      mm_abort(
+        message = "Supply either `method` or lmerTest's `ddf`, not both.",
+        class = "mm_arg_error",
+        input = ddf
+      )
+    }
+    mapped <- mm_ddf_to_method(ddf)
+    method <- mapped$method
+    lme4_table <- mapped$lme4
+  }
   if (length(dots)) {
     cmp_method <- if (identical(match.arg(method), "bootstrap")) "bootstrap" else "auto"
-    return(compare(
+    labels <- vapply(as.list(match.call(expand.dots = FALSE)$...),
+                     deparse1, character(1))
+    labels <- c(deparse1(substitute(object)), labels)
+    cmp <- compare(
       object,
       ...,
       method = cmp_method,
       refit_for_comparison = match.arg(refit_for_comparison)
-    ))
+    )
+    return(mm_anova_comparison_frame(cmp, c(list(object), dots), labels))
   }
-  type <- match.arg(type)
+  type <- mm_anova_type(type)
   method <- match.arg(method)
   refit_for_comparison <- match.arg(refit_for_comparison)
+  if (lme4_table) {
+    return(mm_lme4_sequential_anova(object))
+  }
   terms <- setdiff(mm_fixed_effect_terms(object), "1")
   if (identical(method, "none")) {
     table <- mm_unavailable_effect_table(terms, method)
@@ -333,41 +373,259 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I", "block"),
       table$statistic_name[t_rows] <- "f"
       table$num_df[t_rows] <- 1
     }
+    # Asymptotic single-df rows are Wald z: F(1, Inf) = z^2.
+    z_rows <- !is.na(table$statistic_name) & table$statistic_name == "z"
+    if (any(z_rows)) {
+      table$statistic[z_rows] <- table$statistic[z_rows]^2
+      table$statistic_name[z_rows] <- "f"
+      table$num_df[z_rows] <- 1
+      table$den_df[z_rows] <- Inf
+    }
   }
   table$type <- type
   table <- table[, c("term", "type", setdiff(names(table), c("term", "type"))),
                  drop = FALSE]
-  obj <- list(
-    table = table,
-    type = type,
-    requested_method = method,
-    refit_for_comparison = refit_for_comparison
+  rownames(table) <- NULL
+  mm_anova_frame(object, table, type, method, refit_for_comparison)
+}
+
+# lmerTest's ddf= spellings -> mixeff method names.
+mm_ddf_to_method <- function(ddf) {
+  choices <- c("Satterthwaite", "Kenward-Roger", "lme4")
+  if (!is.character(ddf) || length(ddf) != 1L || is.na(ddf)) {
+    mm_abort(
+      message = "`ddf` must be one of \"Satterthwaite\", \"Kenward-Roger\", or \"lme4\".",
+      class = "mm_arg_error",
+      input = ddf
+    )
+  }
+  hit <- choices[pmatch(tolower(ddf), tolower(choices))]
+  if (is.na(hit)) {
+    mm_abort(
+      message = sprintf(
+        "Unknown `ddf = \"%s\"`; use \"Satterthwaite\", \"Kenward-Roger\", or \"lme4\".",
+        ddf
+      ),
+      class = "mm_arg_error",
+      input = ddf
+    )
+  }
+  switch(
+    hit,
+    Satterthwaite = list(method = "satterthwaite", lme4 = FALSE),
+    `Kenward-Roger` = list(method = "kenward_roger", lme4 = FALSE),
+    lme4 = list(method = "asymptotic", lme4 = TRUE)
   )
-  class(obj) <- "mm_anova"
-  obj
+}
+
+mm_anova_type <- function(type) {
+  if (length(type) > 1L) return("III")
+  type <- as.character(type)
+  map <- c("3" = "III", "2" = "II", "1" = "I", III = "III", II = "II",
+           I = "I", block = "block", marginal = "III")
+  if (!type %in% names(map)) {
+    mm_abort(
+      message = sprintf(
+        "Unknown anova `type = \"%s\"`; use \"III\", \"II\", \"I\" (or 3, 2, 1) or \"block\".",
+        type
+      ),
+      class = "mm_arg_error",
+      input = type
+    )
+  }
+  unname(map[[type]])
+}
+
+mm_anova_method_label <- function(table, method) {
+  used <- unique(stats::na.omit(table$method[table$status %in% "available"]))
+  m <- if (length(used) == 1L) used else method
+  switch(
+    m,
+    satterthwaite = "Satterthwaite's method",
+    kenward_roger = "Kenward-Roger's method",
+    asymptotic_wald_z = "asymptotic Wald (chi-square/df) method",
+    asymptotic = "asymptotic Wald (chi-square/df) method",
+    sprintf("method `%s`", m)
+  )
+}
+
+# lmerTest-shaped single-model table; the full provenance table rides along
+# as an attribute (reachable as x$table).
+mm_anova_frame <- function(object, table, type, method, refit_for_comparison) {
+  F <- as.numeric(table$statistic)
+  F[!(table$statistic_name %in% "f")] <- NA_real_
+  num <- as.numeric(table$num_df)
+  s2 <- as.numeric(sigma(object))^2
+  ms <- F * s2
+  out <- data.frame(
+    `Sum Sq` = ms * num,
+    `Mean Sq` = ms,
+    NumDF = num,
+    DenDF = as.numeric(table$den_df),
+    `F value` = F,
+    `Pr(>F)` = as.numeric(table$p_value),
+    check.names = FALSE
+  )
+  row.names(out) <- table$term
+  heading <- sprintf("Type %s Analysis of Variance Table with %s",
+                     type, mm_anova_method_label(table, method))
+  structure(
+    out,
+    heading = heading,
+    mm_table = table,
+    mm_type = type,
+    mm_requested_method = method,
+    mm_refit_for_comparison = refit_for_comparison,
+    class = c("mm_anova", "anova", "data.frame")
+  )
+}
+
+# lme4::anova(<lmerMod>) with one model (lmerTest's ddf = "lme4"): sequential
+# sums of squares from the RX factor, no denominator df.
+mm_lme4_sequential_anova <- function(object) {
+  X <- stats::model.matrix(object, type = "fixed")
+  asgn <- attr(X, "assign")
+  beta <- object$beta
+  idx <- match(names(beta), colnames(X))
+  if (is.null(asgn) || anyNA(idx)) {
+    mm_abort(
+      message = "lme4's sequential ANOVA table cannot be rebuilt for this fit.",
+      class = "mm_inference_unavailable",
+      reason_code = "lme4_anova_unavailable"
+    )
+  }
+  asgn <- asgn[idx]
+  RX <- tryCatch(getME(object, "RX"), error = function(cnd) cnd)
+  if (inherits(RX, "condition")) {
+    mm_abort(
+      message = paste("lme4's sequential ANOVA table needs a full-rank",
+                      "fixed-effect design:", conditionMessage(RX)),
+      class = "mm_inference_unavailable",
+      reason_code = "lme4_anova_unavailable"
+    )
+  }
+  ss <- as.vector(RX %*% beta)^2
+  labels <- attr(stats::terms(mm_fixed_formula(object)), "term.labels")
+  nm <- c(if (any(asgn == 0L)) "(Intercept)", labels[unique(asgn[asgn > 0L])])
+  ss <- unlist(lapply(split(ss, asgn), sum))
+  df <- lengths(split(asgn, asgn))
+  ms <- ss / df
+  table <- data.frame(npar = as.integer(df), `Sum Sq` = ss, `Mean Sq` = ms,
+                      `F value` = ms / as.numeric(sigma(object))^2,
+                      check.names = FALSE)
+  row.names(table) <- nm
+  if ("(Intercept)" %in% nm) {
+    table <- table[-match("(Intercept)", nm), , drop = FALSE]
+  }
+  structure(table, heading = "Analysis of Variance Table",
+            class = c("anova", "data.frame"))
+}
+
+# lme4-shaped multi-model LRT table built from a compare() result.
+mm_anova_comparison_frame <- function(cmp, fits, labels) {
+  tbl <- cmp$table
+  formulas <- vapply(fits, function(f) deparse1(f$formula), character(1))
+  # compare() orders models by complexity; map rows back to argument labels.
+  row_labels <- labels
+  if (length(labels) == nrow(tbl) && "formula" %in% names(tbl)) {
+    fit_forms <- vapply(cmp$fits, function(f) mm_compare_formula_label(f),
+                        character(1))
+    orig_forms <- vapply(fits, function(f) mm_compare_formula_label(f),
+                         character(1))
+    hit <- match(fit_forms, orig_forms)
+    if (!anyNA(hit) && !anyDuplicated(hit)) row_labels <- labels[hit]
+    formulas <- formulas[if (!anyNA(hit) && !anyDuplicated(hit)) hit else
+      seq_along(formulas)]
+  }
+  if (anyDuplicated(row_labels)) row_labels <- paste0("MODEL", seq_along(row_labels))
+  loglik <- as.numeric(tbl$logLik)
+  out <- data.frame(
+    npar = as.numeric(tbl$df),
+    AIC = as.numeric(tbl$AIC),
+    BIC = as.numeric(tbl$BIC),
+    logLik = loglik,
+    deviance = -2 * loglik,
+    Chisq = as.numeric(tbl$LRT),
+    Df = as.numeric(tbl$delta_df),
+    `Pr(>Chisq)` = as.numeric(tbl$p_value),
+    check.names = FALSE
+  )
+  row.names(out) <- row_labels
+  data_expr <- fits[[1L]]$call$data
+  heading <- c(
+    if (!is.null(data_expr)) paste("Data:", deparse1(data_expr)),
+    "Models:",
+    paste(row_labels, formulas, sep = ": ")
+  )
+  structure(
+    out,
+    heading = heading,
+    mm_comparison = cmp,
+    # mm_model_comparison stays in the class so reporting_table() and code
+    # reading `$table` / `$ledger` keep working.
+    class = c("mm_anova_comparison", "mm_model_comparison", "anova",
+              "data.frame")
+  )
+}
+
+mm_compare_formula_label <- function(fit) {
+  paste(deparse1(fit$formula), length(fit$beta), fit$dof)
+}
+
+#' @export
+`$.mm_anova` <- function(x, name) {
+  if (name %in% names(x)) return(.subset2(x, name))
+  attr(x, paste0("mm_", name), exact = TRUE)
+}
+
+#' @export
+`$.mm_anova_comparison` <- function(x, name) {
+  if (name %in% names(x)) return(.subset2(x, name))
+  cmp <- attr(x, "mm_comparison", exact = TRUE)
+  if (is.null(cmp)) return(NULL)
+  cmp[[name]]
 }
 
 #' @method print mm_anova
 #' @export
 print.mm_anova <- function(x, ...) {
-  cat(sprintf("Type %s analysis of fixed effects (method: %s):\n",
-              x$type %||% "III", x$requested_method %||% "auto"))
-  # Reader-facing columns only (lme4-shaped); provenance/list columns stay in
-  # x$table for programmatic use — rendering them wraps the console table and
-  # dumps list(...) internals.
-  show_cols <- intersect(c("term", "num_df", "den_df", "statistic",
-                           "p_value", "method"), names(x$table))
-  show <- x$table[, show_cols, drop = FALSE]
-  bad <- !is.na(x$table$status) & x$table$status != "available"
-  if (any(bad)) {
-    show$status <- x$table$status
-    show$reason <- x$table$reason
+  NextMethod()
+  table <- x$table
+  if (!is.null(table) && "status" %in% names(table)) {
+    bad <- !is.na(table$status) & table$status != "available"
+    if (any(bad)) {
+      cat("\nNot certified (statistics withheld):\n")
+      for (i in which(bad)) {
+        cat(sprintf("  %s: %s%s\n", table$term[[i]], table$status[[i]],
+                    if (!is.na(table$reason[[i]]) && nzchar(table$reason[[i]]))
+                      paste0(" -- ", table$reason[[i]]) else ""))
+      }
+    }
   }
-  print(show, row.names = FALSE)
-  hidden <- setdiff(names(x$table), names(show))
-  if (length(hidden)) {
-    cat(sprintf("Full provenance columns available in `$table` (%s).\n",
-                paste(hidden, collapse = ", ")))
+  invisible(x)
+}
+
+#' @method print mm_anova_comparison
+#' @export
+print.mm_anova_comparison <- function(x, ...) {
+  # Print as stats' anova table (skip the mm_*_comparison print methods,
+  # which are kept in the class for `$table` / reporting_table()).
+  shown <- x
+  attr(shown, "mm_comparison") <- NULL
+  class(shown) <- c("anova", "data.frame")
+  print(shown, ...)
+  table <- x$table
+  if (!is.null(table) && "status" %in% names(table)) {
+    bad <- !is.na(table$status) &
+      !table$status %in% c("available", "reference_model")
+    if (any(bad)) {
+      cat("\nNot certified:\n")
+      for (i in which(bad)) {
+        cat(sprintf("  row %d: %s%s\n", i, table$status[[i]],
+                    if (!is.na(table$reason[[i]]) && nzchar(table$reason[[i]]))
+                      paste0(" -- ", table$reason[[i]]) else ""))
+      }
+    }
   }
   invisible(x)
 }
@@ -946,7 +1204,9 @@ mm_fit_status_label <- function(fit) {
 }
 
 mm_lrt_stat <- function(null, alternative) {
-  pmax(0, deviance(null) - deviance(alternative))
+  # -2 log-likelihood difference (deviance() of a GLMM is the residual
+  # deviance, not the Laplace objective).
+  pmax(0, 2 * (as.numeric(alternative$logLik) - as.numeric(null$logLik)))
 }
 
 mm_drop_fixed_term_formula <- function(fit, term) {

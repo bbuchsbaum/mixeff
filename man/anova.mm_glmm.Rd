@@ -12,7 +12,10 @@
 \item{...}{Additional fitted models to compare.}
 }
 \value{
-An \code{mm_model_comparison} object (multi-model case).
+A data frame of class \code{c("mm_anova_comparison", "anova", "data.frame")} shaped like \code{anova(glmer1, glmer2)}: columns \code{npar},
+\code{AIC}, \code{BIC}, \code{logLik}, \code{deviance} (\code{-2 * logLik}), \code{Chisq}, \code{Df},
+\verb{Pr(>Chisq)}, rows named after the arguments. The underlying comparison
+(with the model formulas) is reachable as \code{x$table}.
 }
 \description{
 With two or more fitted models, \code{anova()} performs a sequential

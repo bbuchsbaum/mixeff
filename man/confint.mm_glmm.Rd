@@ -20,7 +20,13 @@
 \item{level}{Confidence level.}
 
 \item{method}{\code{"asymptotic"} (the default; the package-wide name for the
-closed-form Wald interval), its synonym \code{"wald"}, or \code{"bootstrap"}.}
+closed-form Wald interval), its synonyms \code{"wald"} and lme4's \code{"Wald"}, or
+\code{"bootstrap"} (lme4's spelling \code{"boot"} is accepted). lme4 defaults to
+\code{"profile"}; mixeff keeps the Wald default because profile intervals are
+refused for GLMMs. The same spellings are accepted by the LMM method,
+whose \code{"profile"} intervals are on the theta scale (\code{theta1}, ...,
+\code{sigma}) rather than lme4's \code{.sig01} standard-deviation/correlation
+scale.}
 
 \item{...}{For \code{method = "bootstrap"}: \code{nsim} (number of replicates,
 default 999) and \code{seed} (non-negative integer; when omitted one is

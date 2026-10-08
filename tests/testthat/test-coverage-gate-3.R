@@ -601,7 +601,7 @@ test_that("aliased coefficient print and design-weak VarCorr", {
   s <- summary(aliased)
   out_s <- capture.output(print(s))
   expect_true(is.character(out_s) && length(out_s) > 0L)
-  expect_true(any(s$coefficients$method == "aliased") ||
+  expect_true(any(s$coef_table$method == "aliased") ||
                 !is.null(attr(s$coefficients, "mm_aliased")))
 
   weak <- mk_cg3_design_weak()

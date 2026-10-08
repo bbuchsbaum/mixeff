@@ -82,7 +82,7 @@ test_that("GLMM default-method summary explains withheld inference plainly", {
               control = mm_control(verbose = -1))
   s <- summary(fit)
   txt <- paste(capture.output(print(s)), collapse = "\n")
-  if (any(is.na(s$coefficients[["Std. Error"]]))) {
+  if (any(is.na(s$coefficients[, "Std. Error"]))) {
     # When SE/z/p are withheld the note must name the remedy, not the
     # working-Hessian geometry.
     expect_match(txt, "joint_laplace", fixed = TRUE)

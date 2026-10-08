@@ -36,10 +36,8 @@
 #'
 #' @examples
 #' mm_json_negotiate(list(schema_name = "formula", schema_version = "v0"))
-#' \dontrun{
 #' # Raises mm_schema_error:
-#' mm_json_negotiate(list(schema_name = "formula", schema_version = "v99"))
-#' }
+#' try(mm_json_negotiate(list(schema_name = "formula", schema_version = "v99")))
 #'
 #' @seealso [mm_json_known_schemas()] for the closed set,
 #'   [mm_formula_manifest()] for the broader capability record.

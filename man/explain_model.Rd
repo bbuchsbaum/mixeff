@@ -32,14 +32,13 @@ not carry a valid compiled artifact.
 }
 
 \examples{
-\dontrun{
+set.seed(1)
 df <- data.frame(
   y = rnorm(20),
   t = rep(0:3, 5),
   s = factor(rep(1:5, each = 4))
 )
 explain_model(compile_model(y ~ t + (1 | s), df))
-}
 
 }
 \seealso{

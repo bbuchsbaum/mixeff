@@ -53,14 +53,16 @@
 #' @method update mm_lmm
 #' @export
 update.mm_lmm <- function(object, formula., ..., evaluate = TRUE) {
+  # Check names before forcing `...`: an unsupported argument such as
+  # `subset = x > 0` would otherwise be evaluated (and fail) first.
+  mm_check_update_overrides(mm_dots_names(...),
+                            c("data", "REML", "weights", "control"), "lmm")
   overrides <- list(...)
   new_formula <- if (missing(formula.)) {
     stats::formula(object)
   } else {
     stats::update.formula(stats::formula(object), formula.)
   }
-  mm_check_update_overrides(overrides, c("data", "REML", "weights", "control"),
-                            "lmm")
   args <- list(
     formula = new_formula,
     data    = mm_update_arg(overrides, "data",
@@ -77,15 +79,15 @@ update.mm_lmm <- function(object, formula., ..., evaluate = TRUE) {
 #' @method update mm_glmm
 #' @export
 update.mm_glmm <- function(object, formula., ..., evaluate = TRUE) {
+  mm_check_update_overrides(mm_dots_names(...),
+                            c("data", "family", "weights", "offset", "method",
+                              "nAGQ", "inference", "control"), "glmm")
   overrides <- list(...)
   new_formula <- if (missing(formula.)) {
     stats::formula(object)
   } else {
     stats::update.formula(stats::formula(object), formula.)
   }
-  mm_check_update_overrides(overrides, c("data", "family", "weights", "offset",
-                                         "method", "nAGQ", "inference",
-                                         "control"), "glmm")
   args <- list(
     formula   = new_formula,
     data      = mm_update_arg(overrides, "data",
@@ -113,9 +115,15 @@ mm_update_arg <- function(overrides, name, default) {
 # update() must not silently drop an argument it does not carry over (e.g.
 # `subset`, `na.action`, `contrasts`): the refit would differ from what the
 # caller asked for without any sign of it.
-mm_check_update_overrides <- function(overrides, supported, fitter) {
-  nms <- names(overrides)
-  if (length(overrides) && (is.null(nms) || any(!nzchar(nms)))) {
+mm_dots_names <- function(...) {
+  nms <- ...names()
+  if (is.null(nms)) return(rep("", ...length()))
+  nms[is.na(nms)] <- ""
+  nms
+}
+
+mm_check_update_overrides <- function(nms, supported, fitter) {
+  if (length(nms) && any(!nzchar(nms))) {
     mm_abort(
       message = "Arguments to update() other than the formula must be named.",
       class = "mm_arg_error"

@@ -81,22 +81,27 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `lmer(y ~ x + (x \| g), data)` | `lmm(y ~ x + (x \| g), data)` | same formula language, incl. `(x\|\|g)`, `(1\|g1/g2)`, crossed |
 | `glmer(y ~ ..., family = binomial)` | `glmm(y ~ ..., family = binomial())` | pass a family **object** (`binomial()`), not a string |
 | `lmerControl(...)` / `glmerControl(...)` | `mm_control(optimizer=, max_feval=, verbose=, start=)` | no `optCtrl` / `check.conv.*`; use `verify_convergence()` after the fit |
-| `fixef`, `sigma`, `vcov` | same generics, same values | |
-| `ranef` | same generic | `condVar = TRUE` is LMM-only |
-| `coef` | same generic, **different shape** | only columns that carry a random effect get fixed + random; fixed-only columns are omitted (lme4 repeats them) |
-| `VarCorr` | same generic, **different object** | returns a table (`$table`, `$residual_sd`), not lme4's list of matrices, so `VarCorr(m)$Subject` is `NULL`; `as.data.frame(VarCorr(m))` matches lme4's layout |
-| `logLik`, `BIC`, `deviance`, `nobs` | identical | `AIC(m1, m2)` with several models is refused; use `compare()` |
-| `confint` | same generic, **different default** | Wald (`"asymptotic"`) by default, where lme4 defaults to profile; profile and bootstrap on LMMs; GLMM availability per fit type is the route matrix in `vignette("inference", package = "mixeff")` |
+| `fixef`, `vcov` | same generics, same values | |
+| `sigma` | identical | 1 for binomial, Poisson and negative-binomial GLMMs (the NB theta is `getME(fit, "glmer.nb.theta")`); for Gamma GLMMs mixeff's dispersion is `sqrt(sum(pearson^2) / n)`, while lme4 also adds the squared spherical modes |
+| `ranef` | same generic | `condVar = TRUE` for LMMs and GLMMs (GLMM conditional variances from the Laplace approximation at the fitted modes, as lme4) |
+| `coef` | identical | every fixed-effect column per group (fixed-only columns repeated), lme4's column order |
+| `VarCorr` | identical shape | named list of covariance matrices with `stddev`/`correlation` attributes and `sc`/`useSc`, so `VarCorr(m)$Subject` is the matrix; prints like lme4 (plus `[boundary]` markers); mixeff's long table is still `VarCorr(m)$table` (and `$residual_sd`); `as.data.frame()` matches lme4 |
+| `logLik`, `AIC`, `BIC`, `nobs` | identical | `AIC(m1, m2)` / `BIC(m1, m2)` return stats' `df`/`AIC` data frame |
+| `deviance` | identical | LMM: as lme4 for ML fits (REML fits return the REML criterion without lme4's deprecation warning); GLMM: sum of squared deviance residuals, as lme4 |
+| `REMLcrit` | `REMLcrit()` | exported by mixeff (lme4's is not a generic; whichever package is attached last masks the other, and mixeff's forwards lme4 fits to lme4) |
+| `family`, `weights`, `model.frame` | identical | `weights()` returns ones for unweighted fits and `type = "working"` for GLMMs; `model.frame()` has lme4's transformed columns and `terms` attribute (the raw variables the engine used are `fit$model_frame`) |
+| `confint` | same generic, **different default** | Wald (`"asymptotic"`, lme4 spelling `"Wald"`) by default, where lme4 defaults to profile; returns fixed effects only. `"profile"` (LMMs) reports theta-scale (`theta1`, ...) and `sigma` rows, not lme4's `.sig01` sd/correlation scale, and omits beta under REML; `"bootstrap"` (lme4 spelling `"boot"`); GLMM availability per fit type is the route matrix in `vignette("inference", package = "mixeff")` |
 | `predict`, `fitted` | identical | `re.form = NULL/NA/~0`, `allow.new.levels`, `se.fit`, `interval`; partial `re.form` formulas are refused |
-| `residuals` | LMM: same types; GLMM: response only | GLMM Pearson/deviance residuals are not available yet (lme4's GLMM default is deviance) |
+| `residuals` | identical | LMM default `"response"`, `"pearson"`/`"deviance"` are `sqrt(w) * (y - mu)`; GLMM default `"deviance"`, plus `"pearson"`, `"working"`, `"response"`; `scaled = TRUE` divides by `sigma()` once |
 | `simulate`, `refit` | LMM only | GLMM fits are refused with a typed error; `newdata`, `use.u` and `newparams` are refused |
 | `update(fit, . ~ . - x)` | same generic | a formula that needs new columns re-evaluates the original `data`, as lme4 does; arguments `lmm()`/`glmm()` cannot carry over (e.g. `subset`, `na.action`) are refused rather than dropped |
-| `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | returns mixeff objects (`print()` shows the table) rather than lme4's data frame; single-model `anova()` (Type I/II/III, Satterthwaite/KR) is LMM-only |
-| `getME`, `isSingular` | `getME()`, `is_singular()` | LMM only; `getME()` covers `X`, `Z`, `Zt`, `Lambda`, `Lambdat`, `theta`, `beta`, `y`, `mu`, `flist`, `cnms` |
+| `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | `anova(m1, m2)` is lme4's data frame (`npar AIC BIC logLik deviance Chisq Df Pr(>Chisq)`); single-model `anova()` is lmerTest's (`Sum Sq Mean Sq NumDF DenDF F value Pr(>F)`, Type I/II/III, Satterthwaite/KR) and LMM-only; mixeff's provenance table is `$table` |
+| `getME` | `getME()` | LMM and GLMM; lme4's components including `u`, `b`, `L`, `RX`, `RZX`, `devcomp`, `lower`, `Gp`, `Ztlist`, `Tlist`, `ST`, `glmer.nb.theta`, `"ALL"`; `devfun` is refused (the optimizer lives in the engine) |
+| `isSingular` | `is_singular(fit, tol = 1e-4)` | lme4's rule (a zero-bounded theta below `tol`), LMM and GLMM; `lme4::isSingular()` is not a generic, so call `is_singular()` |
 | `ngrps` | identical | |
 | `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
 | `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a default profiled GLMM refuses inference through emmeans |
-| `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package |
+| `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package; `summary()$coefficients` is lmerTest's matrix (per-row method labels in `summary()$coef_table`); lmerTest's `ddf = "Satterthwaite"`/`"Kenward-Roger"`/`"lme4"` is accepted by `summary()` and `anova()` |
 
 ## Argument map for `lmm()` / `glmm()`
 

@@ -3,16 +3,19 @@
 \name{getME}
 \alias{getME}
 \alias{getME.mm_lmm}
+\alias{getME.mm_glmm}
 \title{Extract low-level model components}
 \usage{
 getME(object, name, ...)
 
 \method{getME}{mm_lmm}(object, name, ...)
+
+\method{getME}{mm_glmm}(object, name, ...)
 }
 \arguments{
-\item{object}{A fitted \code{mm_lmm} object.}
+\item{object}{A fitted \code{mm_lmm} or \code{mm_glmm} object.}
 
-\item{name}{Component name, or a character vector of names.}
+\item{name}{Component name, or a character vector of names, or \code{"ALL"}.}
 
 \item{...}{Reserved for future methods.}
 }
@@ -20,10 +23,40 @@ getME(object, name, ...)
 The requested component, or a named list for multiple names.
 }
 \description{
-\code{getME()} provides a small, honest subset of the familiar lme4 extractor.
-The fixed-effect design (\code{"X"}), random-effect design (\code{"Z"}), relative
-covariance factor (\code{"Lambda"} / \code{"Lambdat"}), grouping factors (\code{"flist"}),
-random coefficient names (\code{"cnms"}), response (\code{"y"}), fixed coefficients
-(\code{"beta"} / \code{"fixef"}), and theta vector (\code{"theta"}) are rebuilt lazily
-from the serialized R object.
+\code{getME()} mirrors \code{lme4::getME()} for \code{\link[=lmm]{lmm()}} and \code{\link[=glmm]{glmm()}} fits. Every
+component is rebuilt R-side from quantities the fit stores (fixed
+effects, theta and its map, conditional modes, fitted values, the model
+frame), so it works on fits restored with \code{readRDS()}.
+}
+\details{
+Supported components: \code{"X"}, \code{"Z"}, \code{"Zt"}, \code{"Ztlist"}, \code{"mmList"},
+\code{"y"}, \code{"mu"}, \code{"u"}, \code{"b"}, \code{"Gp"}, \code{"Tp"}, \code{"L"}, \code{"Lambda"},
+\code{"Lambdat"}, \code{"Lind"}, \code{"Tlist"}, \code{"ST"}, \code{"A"}, \code{"RX"}, \code{"RZX"},
+\code{"sigma"}, \code{"flist"}, \code{"fixef"}, \code{"beta"}, \code{"theta"}, \code{"REML"},
+\code{"is_REML"}, \code{"n_rtrms"}, \code{"n_rfacs"}, \code{"N"}, \code{"n"}, \code{"p"}, \code{"q"},
+\code{"p_i"}, \code{"l_i"}, \code{"q_i"}, \code{"k"}, \code{"m_i"}, \code{"m"}, \code{"cnms"}, \code{"devcomp"},
+\code{"offset"}, \code{"weights"}, \code{"lower"}, \code{"glmer.nb.theta"} (negative-binomial
+GLMMs), and \code{"ALL"} (a named list of every available component).
+
+\code{"L"} is the sparse Cholesky factor (a \code{Matrix} \code{CHMfactor}, with the same
+fill-reducing permutation lme4 uses) of \verb{Lambda'Z'WZ Lambda + I}, where
+\code{W} holds the prior weights for an LMM and the final PIRLS working weights
+for a GLMM. \code{"RZX"}, \code{"RX"}, \code{"u"} and \code{"devcomp"} (\code{cmp} and \code{dims}) are
+computed from the same decomposition at the fitted parameters. \code{"u"} is
+the minimum-norm spherical mode with \verb{b = Lambda u}, which is the
+penalized optimum also when \code{Lambda} is singular.
+
+\code{"devfun"} is refused: the optimizer runs inside the Rust engine and no R
+deviance function exists. Refusals, and requests for unknown components,
+raise an \code{mm_inference_unavailable} condition with
+\code{reason_code = "getme_component_unavailable"} naming the component.
+}
+\examples{
+set.seed(1)
+df <- data.frame(y = rnorm(60), x = rnorm(60),
+                 g = factor(rep(seq_len(10), each = 6)))
+fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+getME(fit, "theta")
+getME(fit, "lower")
+getME(fit, "devcomp")$cmp
 }

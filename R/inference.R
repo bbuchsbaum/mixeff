@@ -852,6 +852,14 @@ print.mm_df_for_contrast <- function(x, ...) {
   invisible(x)
 }
 
+# lme4's confint.merMod spellings ("Wald", "boot") map onto mixeff's names.
+# Only exact lme4 spellings are translated; the default vector passes
+# through untouched so match.arg() picks the first entry.
+mm_confint_method_spelling <- function(method) {
+  if (length(method) != 1L) return(method)
+  switch(method, Wald = "wald", boot = "bootstrap", method)
+}
+
 #' @method confint mm_lmm
 #' @importFrom stats confint
 #' @export
@@ -860,7 +868,8 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
                                       "profile"),
                            bootstrap = NULL,
                            interval = c("percentile", "basic"), ...) {
-  method <- match.arg(method)
+  method <- match.arg(mm_confint_method_spelling(method),
+                      c("asymptotic", "wald", "bootstrap", "profile"))
   # `"asymptotic"` is the package-wide canonical name for the closed-form
   # Wald interval (shared with contrast()/test_effect()/inference_table());
   # `"wald"` stays accepted as a synonym. Internals compute under "wald".
@@ -935,7 +944,13 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' @param parm Optional fixed-effect names or indices; defaults to all.
 #' @param level Confidence level.
 #' @param method `"asymptotic"` (the default; the package-wide name for the
-#'   closed-form Wald interval), its synonym `"wald"`, or `"bootstrap"`.
+#'   closed-form Wald interval), its synonyms `"wald"` and lme4's `"Wald"`, or
+#'   `"bootstrap"` (lme4's spelling `"boot"` is accepted). lme4 defaults to
+#'   `"profile"`; mixeff keeps the Wald default because profile intervals are
+#'   refused for GLMMs. The same spellings are accepted by the LMM method,
+#'   whose `"profile"` intervals are on the theta scale (`theta1`, ...,
+#'   `sigma`) rather than lme4's `.sig01` standard-deviation/correlation
+#'   scale.
 #' @param ... For `method = "bootstrap"`: `nsim` (number of replicates,
 #'   default 999) and `seed` (non-negative integer; when omitted one is
 #'   drawn from R's RNG so `set.seed()` governs reproducibility).
@@ -949,7 +964,8 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 confint.mm_glmm <- function(object, parm, level = 0.95,
                             method = c("asymptotic", "wald", "profile",
                                        "bootstrap"), ...) {
-  method <- match.arg(method)
+  method <- match.arg(mm_confint_method_spelling(method),
+                      c("asymptotic", "wald", "profile", "bootstrap"))
   if (identical(method, "profile")) {
     # Advice must be actionable on THIS fit: asymptotic Wald intervals are
     # certified only for joint_laplace fits.

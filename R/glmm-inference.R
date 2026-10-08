@@ -242,12 +242,19 @@ drop1.mm_glmm <- function(object, scope = NULL, test = c("none", "Chisq"),
 #' @param object A fitted `mm_glmm`.
 #' @param ... Additional fitted models to compare.
 #'
-#' @return An `mm_model_comparison` object (multi-model case).
+#' @return A data frame of class `c("mm_anova_comparison",
+#'   "mm_glmm_comparison", "anova", "data.frame")` shaped like `anova(glmer1, glmer2)`: columns `npar`,
+#'   `AIC`, `BIC`, `logLik`, `deviance` (`-2 * logLik`), `Chisq`, `Df`,
+#'   `Pr(>Chisq)`, rows named after the arguments. The underlying comparison
+#'   (with the model formulas) is reachable as `x$table`.
 #'
 #' @method anova mm_glmm
 #' @export
 anova.mm_glmm <- function(object, ...) {
   dots <- list(...)
+  labels <- c(deparse1(substitute(object)),
+              vapply(as.list(match.call(expand.dots = FALSE)$...),
+                     deparse1, character(1)))
   if (!length(dots)) {
     mm_abort(
       message = paste(
@@ -267,7 +274,36 @@ anova.mm_glmm <- function(object, ...) {
       class = "mm_arg_error"
     )
   }
-  mm_glmm_lrt_comparison(fits)
+  cmp <- mm_glmm_lrt_comparison(fits)
+  mm_glmm_anova_frame(cmp, fits, labels)
+}
+
+mm_glmm_anova_frame <- function(cmp, fits, labels) {
+  tbl <- cmp$table
+  ord <- attr(cmp, "mm_order") %||% seq_along(fits)
+  row_labels <- labels[ord]
+  if (anyDuplicated(row_labels)) row_labels <- paste0("MODEL", seq_along(row_labels))
+  out <- data.frame(
+    npar = as.numeric(tbl$npar),
+    AIC = tbl$AIC,
+    BIC = tbl$BIC,
+    logLik = tbl$logLik,
+    deviance = -2 * tbl$logLik,
+    Chisq = tbl$Chisq,
+    Df = as.numeric(tbl$Df),
+    `Pr(>Chisq)` = tbl$p_value,
+    check.names = FALSE
+  )
+  row.names(out) <- row_labels
+  data_expr <- fits[[1L]]$call$data
+  structure(
+    out,
+    heading = c(if (!is.null(data_expr)) paste("Data:", deparse1(data_expr)),
+                "Models:", paste(row_labels, tbl$model, sep = ": ")),
+    mm_comparison = cmp,
+    class = c("mm_anova_comparison", "mm_glmm_comparison", "anova",
+              "data.frame")
+  )
 }
 
 # Sequential likelihood-ratio comparison of nested GLMMs, ordered by parameter
@@ -279,7 +315,9 @@ mm_glmm_lrt_comparison <- function(fits) {
   fits <- fits[ord]
   npar <- npar[ord]
   loglik <- vapply(fits, function(f) as.numeric(f$logLik), numeric(1))
-  dev <- vapply(fits, function(f) as.numeric(f$deviance), numeric(1))
+  # The LRT uses the Laplace objective -2 * logLik (lme4's anova "deviance"
+  # column), not deviance(), which is the residual deviance for GLMMs.
+  dev <- -2 * loglik
   aic <- vapply(fits, function(f) AIC(f), numeric(1))
   bic <- vapply(fits, function(f) BIC(f), numeric(1))
   chisq <- c(NA_real_, pmax(0, -diff(dev)))
@@ -302,6 +340,7 @@ mm_glmm_lrt_comparison <- function(fits) {
   rownames(table) <- NULL
   obj <- list(table = table, method = "asymptotic_lrt")
   class(obj) <- "mm_glmm_comparison"
+  attr(obj, "mm_order") <- ord
   obj
 }
 

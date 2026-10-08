@@ -46,8 +46,23 @@ mm_auto_resolved_inference_table <- function(object, method = "auto") {
 summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
                            method = c("auto", "satterthwaite",
                                       "kenward_roger", "bootstrap",
-                                      "asymptotic", "none"), ...) {
+                                      "asymptotic", "none"),
+                           ddf = NULL, ...) {
   tests <- match.arg(tests)
+  lme4_shape <- FALSE
+  if (!is.null(ddf)) {
+    # lmerTest's spelling: summary(fit, ddf = "Kenward-Roger").
+    if (!missing(method)) {
+      mm_abort(
+        message = "Supply either `method` or lmerTest's `ddf`, not both.",
+        class = "mm_arg_error",
+        input = ddf
+      )
+    }
+    mapped <- mm_ddf_to_method(ddf)
+    method <- mapped$method
+    lme4_shape <- mapped$lme4
+  }
   method <- match.arg(method)
   inference <- if (identical(tests, "coefficients")) {
     mm_auto_resolved_inference_table(object, method)
@@ -60,7 +75,8 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
     call = object$call,
     formula = object$formula,
     REML = object$REML,
-    coefficients = coef,
+    coefficients = mm_summary_coef_matrix(coef, lme4_shape),
+    coef_table = coef,
     sigma = object$sigma,
     logLik = object$logLik,
     AIC = object$AIC,
@@ -71,7 +87,8 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
     varcorr = VarCorr(object),
     tests = tests,
     inference = inference,
-    requested_method = method
+    requested_method = method,
+    ddf = ddf
   )
   class(out) <- "summary.mm_lmm"
   out
@@ -85,7 +102,11 @@ print.summary.mm_lmm <- function(x, ...) {
   cat(sprintf("Fit status: %s\n\n", x$fit_status))
   print(x$varcorr)
   cat("\nFixed effects:\n")
-  print(mm_summary_format_coef(x$coefficients))
+  if (identical(x$ddf, "lme4") || is.null(x$coef_table)) {
+    print(x$coefficients)
+  } else {
+    print(mm_summary_format_coef(x$coef_table))
+  }
   notes <- mm_fit_status_note(x$fit_status)
   if (!is.null(x$inference)) {
     inf <- x$inference$table
@@ -141,7 +162,8 @@ summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...) {
     family = object$family,
     method = object$method,
     nAGQ = object$nAGQ,
-    coefficients = coef,
+    coefficients = mm_summary_coef_matrix(coef),
+    coef_table = coef,
     dispersion = object$dispersion,
     logLik = object$logLik,
     AIC = object$AIC,
@@ -319,7 +341,7 @@ print.summary.mm_glmm <- function(x, ...) {
   cat(sprintf("Fit status: %s\n\n", x$fit_status))
   print(x$varcorr)
   cat("\nFixed effects:\n")
-  print(mm_summary_format_coef(x$coefficients))
+  print(mm_summary_format_coef(x$coef_table %||% x$coefficients))
   reason_printed <- FALSE
   if (!is.null(x$vcov_status) && !is.null(x$inference)) {
     rel <- x$vcov_status$reliability
@@ -390,7 +412,7 @@ mm_estimator_substitution_note <- function(sub) {
 # Points at the certified estimator when the fit used the uncertified
 # default -- an available option reported as fact, not a model prescription.
 mm_glmm_withheld_inference_note <- function(x, include_reason = TRUE) {
-  coef <- x$coefficients
+  coef <- x$coef_table %||% as.data.frame(x$coefficients, optional = TRUE)
   stat_cols <- intersect(c("z value", "t value", "statistic"), names(coef))
   if (!length(stat_cols)) return(character())
   stats <- coef[[stat_cols[[1L]]]]
@@ -584,4 +606,24 @@ mm_summary_p_value_column <- function(statistic_name) {
   } else {
     "p.value"
   }
+}
+
+# lme4 / lmerTest shape of summary()$coefficients: a numeric matrix
+# (Estimate, Std. Error, [df,] t or z value, p-value). The per-row method
+# labels stay in summary()$coef_table. `lme4_shape` (lmerTest's
+# ddf = "lme4") reproduces lme4's own Estimate / Std. Error / t value table.
+mm_summary_coef_matrix <- function(coef, lme4_shape = FALSE) {
+  num_cols <- setdiff(names(coef), "method")
+  m <- as.matrix(coef[, num_cols, drop = FALSE])
+  storage.mode(m) <- "double"
+  rownames(m) <- rownames(coef)
+  if (isTRUE(lme4_shape)) {
+    est <- m[, "Estimate"]
+    se <- m[, "Std. Error"]
+    m <- cbind(Estimate = est, `Std. Error` = se, `t value` = est / se)
+    rownames(m) <- rownames(coef)
+  }
+  aliased <- attr(coef, "mm_aliased")
+  if (!is.null(aliased)) attr(m, "mm_aliased") <- aliased
+  m
 }

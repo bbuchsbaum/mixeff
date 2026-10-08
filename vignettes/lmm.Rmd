@@ -194,7 +194,7 @@ s_auto <- summary(fit, method = "auto")
 stopifnot(all(s_auto$inference$table$method == "satterthwaite"))
 stopifnot("satterthwaite_finite_difference_approximation" %in%
             s_auto$inference$table$reliability_reason)
-ctab <- s_auto$coefficients
+ctab <- s_auto$coef_table
 p_col <- grep("^Pr\\(|^p\\.value$", names(ctab), value = TRUE)
 stopifnot(length(p_col) == 1L)
 stopifnot(any(is.finite(ctab[[p_col]])))
@@ -238,7 +238,7 @@ interval methods, and when each is available, are covered in
 Design matrices can be rebuilt from the stored formula and model
 frame — including after a save/reload cycle
 (`vignette("mixeff", package = "mixeff")` covers persistence).
-`getME()` provides a small familiar subset for code that expects
+`getME()` rebuilds lme4's low-level components (`theta`, `Lambdat`, `L`, `RX`, `devcomp`, ...) for code that expects
 lme4-style names.
 
 ```{r design-matrices}

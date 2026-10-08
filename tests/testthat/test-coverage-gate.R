@@ -77,7 +77,7 @@ test_that("print.mm_lmm and extractors produce character output", {
 
   out_vc <- capture.output(print(VarCorr(fit)))
   expect_true(is.character(out_vc) && length(out_vc) > 0L)
-  expect_match(paste(out_vc, collapse = "\n"), "Variance components")
+  expect_match(paste(out_vc, collapse = "\n"), "Groups +Name +Std\\.Dev\\.")
 
   out_re <- capture.output(print(ranef(fit)))
   expect_true(is.character(out_re) && length(out_re) > 0L)
@@ -101,7 +101,7 @@ test_that("print.mm_anova and print.mm_drop1 produce character output", {
   av <- anova(fit)
   out_av <- capture.output(print(av))
   expect_true(is.character(out_av) && length(out_av) > 0L)
-  expect_match(paste(out_av, collapse = "\n"), "analysis of fixed effects")
+  expect_match(paste(out_av, collapse = "\n"), "Analysis of Variance Table")
 
   d1 <- drop1(fit, test = "Chisq")
   out_d1 <- capture.output(print(d1))
@@ -321,15 +321,13 @@ test_that("audit.default refuses non-compiled objects", {
 
 # ---- Happy paths ------------------------------------------------------------
 
-test_that("ranef(glmm, condVar=TRUE) returns unavailable postVar path", {
+test_that("ranef(glmm, condVar=TRUE) attaches Laplace conditional variances", {
   fit <- mk_cov_glmm()
   re <- ranef(fit, condVar = TRUE)
-  expect_identical(
-    attr(re, "mm_unavailable_reason"),
-    "random_effect_conditional_variance_unavailable_for_glmm"
-  )
+  expect_null(attr(re, "mm_unavailable_reason"))
   expect_true(is.array(attr(re[[1L]], "postVar")))
-  expect_true(all(is.na(attr(re[[1L]], "postVar"))))
+  expect_true(all(is.finite(attr(re[[1L]], "postVar"))))
+  expect_true(all(attr(re[[1L]], "postVar") >= 0))
   out <- capture.output(print(re))
   expect_true(is.character(out) && length(out) > 0L)
 })

@@ -149,7 +149,7 @@ mm_check_update_overrides <- function(nms, supported, fitter) {
 # When the updated formula needs other columns, re-evaluate the original
 # `data` argument the way lme4's update() does (via the stored call).
 mm_update_data <- function(object, new_formula, env) {
-  frame <- stats::model.frame(object)
+  frame <- object$model_frame
   needed <- all.vars(new_formula)
   if (all(needed %in% names(frame))) {
     return(frame)

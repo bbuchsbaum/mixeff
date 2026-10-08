@@ -122,7 +122,9 @@ mm_expect_glmm_lme4_parity <- function(case) {
                    case$id, "theta", tol$theta, "GLMM theta")
   mm_assert_parity(as.numeric(logLik(fit)), as.numeric(stats::logLik(ref)),
                    case$id, "logLik", tol$logLik, "GLMM logLik")
-  mm_assert_parity(deviance(fit), -2 * as.numeric(stats::logLik(ref)),
+  # Ledger field "deviance" is -2 * logLik on both sides; deviance() of a
+  # GLMM is now the residual deviance (lme4 semantics, checked separately).
+  mm_assert_parity(-2 * as.numeric(logLik(fit)), -2 * as.numeric(stats::logLik(ref)),
                    case$id, "deviance", tol$deviance, "GLMM deviance")
 
   invisible(pair)

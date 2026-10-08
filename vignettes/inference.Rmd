@@ -83,7 +83,7 @@ vary.
 Start with the ordinary coefficient table.
 
 ```{r coefficient-summary}
-coef_table <- summary(fit, tests = "coefficients", method = "auto")$coefficients
+coef_table <- summary(fit, tests = "coefficients", method = "auto")$coef_table
 knitr::kable(coef_table, digits = 4)
 ```
 
@@ -663,7 +663,7 @@ gfit <- glmm(
   control = mm_control(verbose = -1)
 )
 
-gtab <- summary(gfit, tests = "coefficients")$coefficients
+gtab <- summary(gfit, tests = "coefficients")$coef_table
 gtab
 ```
 

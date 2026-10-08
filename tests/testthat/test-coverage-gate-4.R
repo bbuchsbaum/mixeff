@@ -75,8 +75,8 @@ test_that("mm_glmm_wald_z_inference fallback when inference table absent", {
 
   s <- summary(gfit)
   expect_s3_class(s, "summary.mm_glmm")
-  expect_true(all(is.na(s$coefficients[["z value"]])) ||
-                !"z value" %in% names(s$coefficients))
+  expect_true(all(is.na(s$coef_table[["z value"]])) ||
+                !"z value" %in% names(s$coef_table))
   out <- capture.output(print(s))
   expect_true(any(grepl("Fixed effects|Generalized", out)))
 

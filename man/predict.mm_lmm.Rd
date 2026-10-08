@@ -31,7 +31,12 @@
 
 \method{fitted}{mm_glmm}(object, ...)
 
-\method{residuals}{mm_glmm}(object, type = c("response"), ...)
+\method{residuals}{mm_glmm}(
+  object,
+  type = c("deviance", "pearson", "working", "response"),
+  scaled = FALSE,
+  ...
+)
 }
 \arguments{
 \item{object}{A fitted \code{mm_lmm} object.}
@@ -54,7 +59,11 @@ the population mean (zero random effect), matching
 \code{lme4::predict(allow.new.levels = TRUE)}.}
 
 \item{type}{Prediction scale. Gaussian LMMs use the same values for
-\code{"response"} and \code{"link"}.}
+\code{"response"} and \code{"link"}. For \code{residuals()}, the residual type, as in
+lme4: LMMs default to \code{"response"} (\code{y - mu}, also \code{"working"}), with
+\code{"pearson"}/\code{"deviance"} the weighted residuals \code{sqrt(w) * (y - mu)};
+GLMMs default to \code{"deviance"} and also offer \code{"pearson"}
+(\code{(y - mu) * sqrt(w / V(mu))}), \code{"working"} and \code{"response"}.}
 
 \item{se.fit}{Logical; when \code{TRUE}, returns a list with \code{fit} and \code{se.fit}.
 For population predictions (\code{re.form = NA}) the standard error is the
@@ -76,8 +85,8 @@ prediction-variance payload. Returns a matrix with \code{fit}/\code{lwr}/\code{u
 
 \item{...}{Reserved for generic compatibility.}
 
-\item{scaled}{Logical; when \code{TRUE}, residuals are divided by the residual
-scale.}
+\item{scaled}{Logical; when \code{TRUE}, residuals are divided by \code{sigma(object)}
+(once), as in lme4.}
 }
 \value{
 A numeric vector, or a list with \code{fit} and \code{se.fit} when

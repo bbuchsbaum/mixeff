@@ -21,6 +21,46 @@
   `residuals()`, `anova()`, `getME()`, `isSingular()` and `emmeans` as
   identical to lme4; it lists the actual differences.
 
+## lme4 parity and checklist completion
+
+* `residuals()` follows lme4: LMM `type = "pearson"`/`"deviance"` are
+  `sqrt(w) * (y - mu)` (no longer divided by sigma), and `scaled = TRUE`
+  divides by `sigma()` exactly once (it divided twice for Pearson). GLMM
+  residuals default to `"deviance"` and support `"pearson"`, `"working"` and
+  `"response"`, computed from the family, prior weights and binomial trials.
+* `sigma()` of a negative-binomial GLMM is 1, as in lme4; theta is
+  `getME(fit, "glmer.nb.theta")`. GLMM `deviance()` is the sum of squared
+  deviance residuals (as lme4), no longer `-2 * logLik()`.
+* `coef()` returns every fixed-effect column per group in lme4's order.
+* `VarCorr()` returns lme4's structure (named list of covariance matrices with
+  `stddev`/`correlation` attributes, `sc`/`useSc`), so `VarCorr(m)$Subject`
+  is the matrix; it prints like lme4. `VarCorr(m)$table` and `$residual_sd`
+  still work.
+* `AIC(m1, m2)` / `BIC(m1, m2)` return stats' `df`/`AIC` data frame instead of
+  refusing.
+* New `REMLcrit()`, `family()` methods, `weights(type = "working")`;
+  `weights()` returns ones for unweighted fits; `model.frame()` has lme4's
+  transformed columns and `terms` attribute (raw variables stay in
+  `fit$model_frame`).
+* `getME()` covers lme4's components (`u`, `b`, `L`, `RX`, `RZX`, `devcomp`,
+  `lower`, `Gp`, `Tp`, `Lind`, `Ztlist`, `Tlist`, `ST`, `offset`, `weights`,
+  `glmer.nb.theta`, `"ALL"`, ...) for LMMs and GLMMs; `devfun` is refused with
+  a typed error. `Lambda`/`Lambdat` (and `model.matrix(fit, type = "random")`)
+  now follow the engine's (lme4's) term order; previously theta was assigned
+  in formula order, so crossed designs such as Penicillin's
+  `(1|sample) + (1|plate)` gave a term another term's theta.
+* `is_singular()` uses lme4's rule (a zero-bounded theta below `tol`), honours
+  `tol`, and works for GLMMs.
+* `ranef(condVar = TRUE)` returns Laplace conditional variances for GLMMs
+  instead of `NA`.
+* `summary()` and `anova()` accept lmerTest's `ddf = "Satterthwaite"`,
+  `"Kenward-Roger"` or `"lme4"`. `summary()$coefficients` is lmerTest's
+  numeric matrix (per-row method labels moved to `summary()$coef_table`).
+  `anova(m)` is lmerTest's data frame (`Sum Sq Mean Sq NumDF DenDF F value
+  Pr(>F)`) and `anova(m1, m2)` lme4's (`npar AIC BIC logLik deviance Chisq Df
+  Pr(>Chisq)`); mixeff's provenance table stays in `$table`.
+* `confint()` accepts lme4's `method = "Wald"` and `"boot"` spellings.
+
 ## Compatibility
 
 * Fit-summary parsing accepts the additive `mixedmodels.fit_summary` 1.1.0

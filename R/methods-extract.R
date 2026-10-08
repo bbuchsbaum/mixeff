@@ -12,12 +12,41 @@
 #' @param correlation Logical; accepted for S3 compatibility with [vcov()].
 #' @param condVar Logical; when `TRUE`, attach a `postVar` array of conditional
 #'   variances to each random-effects table. Gaussian [lmm()] fits receive the
-#'   conditional covariances computed by the engine. [glmm()] fits, and any fit
-#'   whose conditional-variance computation refuses, receive an all-`NA`
-#'   `postVar` plus an `mm_unavailable_reason` attribute rather than fabricated
+#'   conditional covariances computed by the engine. [glmm()] fits receive
+#'   lme4's Laplace-approximation conditional covariances
+#'   `sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda'` at the fitted
+#'   modes, with `W` the final PIRLS working weights. A fit whose
+#'   conditional-variance computation refuses receives an all-`NA` `postVar`
+#'   plus an `mm_unavailable_reason` attribute rather than fabricated
 #'   conditional variances.
+#' @param fixed.only For `model.frame()`: return only the fixed-effect
+#'   variables, as `lme4::model.frame.merMod()`.
 #' @param k Penalty per parameter for [AIC()].
-#' @param ... Reserved for generic compatibility.
+#' @param ... Reserved for generic compatibility. For [AIC()] and [BIC()],
+#'   further fitted models: with several models the result is the data frame
+#'   `stats::AIC()` returns (`df` and `AIC`/`BIC`, rows named after the
+#'   arguments).
+#'
+#' @details
+#' These methods follow lme4's shapes. `coef()` returns, per grouping factor,
+#' every fixed-effect column (fixed-only columns repeated) plus the
+#' conditional modes, in lme4's column order. `VarCorr()` returns lme4's
+#' `VarCorr.merMod` structure: a named list of covariance matrices (one per
+#' random-effect term, so `VarCorr(fit)$Subject` is a matrix) with
+#' `"stddev"` and `"correlation"` attributes and list attributes `"sc"`
+#' (residual standard deviation) and `"useSc"`; it prints like lme4 and
+#' `as.data.frame()` gives lme4's long form. mixeff's full-precision long
+#' table remains available as `VarCorr(fit)$table` (with `$residual_sd`).
+#' `sigma()` of a binomial, Poisson or negative-binomial GLMM is 1, as in
+#' lme4 (the negative-binomial theta is `getME(fit, "glmer.nb.theta")`); for
+#' Gamma GLMMs it is mixeff's dispersion estimate `sqrt(sum(pearson^2) / n)`,
+#' whereas lme4 also adds the squared spherical random effects to the
+#' numerator. `deviance()` of a GLMM is the sum of squared deviance
+#' residuals, as `lme4::deviance.merMod()`; `-2 * logLik()` is the Laplace
+#' objective reported in `anova()`. `model.frame()` returns lme4's frame
+#' (transformed columns such as `log(y)`, a `terms` attribute, `(weights)`
+#' and `(offset)` columns); the raw variables the engine used are in
+#' `fit$model_frame`.
 #'
 #' @examples
 #' set.seed(1)
@@ -115,14 +144,23 @@ ranef.mm_lmm <- function(object, condVar = FALSE, ...) {
 #' @export
 ranef.mm_glmm <- function(object, condVar = FALSE, ...) {
   if (isTRUE(condVar)) {
-    out <- lapply(
-      object$random_effects,
-      mm_attach_ranef_postvar_unavailable,
-      reason = "random_effect_conditional_variance_unavailable_for_glmm"
+    # Conditional variances from the Laplace approximation at the fitted
+    # modes: sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda' with the
+    # final PIRLS working weights W (lme4's condVar for glmer fits).
+    postvars <- tryCatch(
+      mm_r_cond_var_postvars(object),
+      error = function(cnd) cnd
     )
+    if (inherits(postvars, "condition")) {
+      out <- lapply(object$random_effects, mm_attach_ranef_postvar_unavailable,
+                    reason = conditionMessage(postvars))
+      class(out) <- class(object$random_effects)
+      attr(out, "mm_unavailable_reason") <-
+        "random_effect_conditional_variance_unavailable"
+      return(out)
+    }
+    out <- mm_attach_ranef_postvars(object$random_effects, postvars)
     class(out) <- class(object$random_effects)
-    attr(out, "mm_unavailable_reason") <-
-      "random_effect_conditional_variance_unavailable_for_glmm"
     return(out)
   }
   object$random_effects
@@ -299,16 +337,26 @@ mm_merge_block_diag_postvar <- function(existing, incoming, group) {
 #' @rdname mm_lmm-methods
 #' @export
 coef.mm_lmm <- function(object, ...) {
+  # lme4::coef.merMod: every fixed-effect column appears for every group
+  # (fixed-only columns repeated), random-only columns are prepended with a
+  # zero fixed part, and the column order follows fixef().
   re <- ranef(object)
   fixed <- fixef(object)
+  fef <- data.frame(rbind(fixed), check.names = FALSE)
+  refnames <- unlist(lapply(re, colnames), use.names = FALSE)
+  missnames <- setdiff(refnames, names(fef))
+  if (length(missnames)) {
+    fill <- stats::setNames(data.frame(rbind(rep(0, length(missnames)))),
+                            missnames)
+    fef <- cbind(fill, fef)
+  }
   out <- lapply(re, function(df) {
-    df_out <- df
-    for (nm in names(df_out)) {
-      if (nm %in% names(fixed)) {
-        df_out[[nm]] <- df_out[[nm]] + fixed[[nm]]
-      }
+    val <- fef[rep.int(1L, nrow(df)), , drop = FALSE]
+    row.names(val) <- row.names(df)
+    for (nm in colnames(df)) {
+      val[[nm]] <- val[[nm]] + df[[nm]]
     }
-    df_out
+    val
   })
   class(out) <- c("mm_coef", "list")
   out
@@ -340,7 +388,7 @@ VarCorr.default <- function(x, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 VarCorr.mm_lmm <- function(x, ...) {
-  mm_varcorr_with_design_notes(x)
+  mm_varcorr_lme4(mm_varcorr_with_design_notes(x), x)
 }
 
 #' @rdname mm_lmm-methods
@@ -396,7 +444,15 @@ sigma.mm_lmm <- function(object, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
-sigma.mm_glmm <- sigma.mm_lmm
+sigma.mm_glmm <- function(object, ...) {
+  # lme4: sigma() is the residual scale only for families with a free scale
+  # parameter (Gamma); binomial, Poisson and negative-binomial fits return 1.
+  # The negative-binomial theta is getME(fit, "glmer.nb.theta").
+  if (identical(object$family$family, "gamma")) {
+    return(object$sigma)
+  }
+  1
+}
 
 # Refuse recognized-but-unsupported lme4 arguments that `...` would otherwise
 # swallow silently, returning a plausible-but-wrong value (no silent surgery;
@@ -465,21 +521,22 @@ deviance.mm_lmm <- function(object, REML = NULL, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
-deviance.mm_glmm <- deviance.mm_lmm
+deviance.mm_glmm <- function(object, ...) {
+  # lme4::deviance.merMod for GLMMs: the sum of squared deviance residuals
+  # at the conditional modes (not -2 * logLik, which is the Laplace
+  # objective reported by logLik() and in anova() tables).
+  sum(mm_glmm_residuals(object, "deviance")^2)
+}
 
 #' @rdname mm_lmm-methods
 #' @export
 AIC.mm_lmm <- function(object, ..., k = 2) {
-  dots <- list(...)
-  if (length(dots)) {
-    mm_abort(
-      message = paste(
-        "AIC comparison across multiple objects is not supported;",
-        "call `AIC()` per model and compare with `compare()`."
-      ),
-      class = "mm_inference_unavailable",
-      input = dots
-    )
+  if (...length()) {
+    # stats::AIC() with several models: a data frame with df and AIC, rows
+    # named after the arguments.
+    labels <- as.character(match.call()[-1L])
+    labels <- labels[names(match.call())[-1L] != "k"]
+    return(mm_information_table(list(object, ...), labels, k, "AIC"))
   }
   -2 * object$logLik + k * object$dof
 }
@@ -491,16 +548,9 @@ AIC.mm_glmm <- AIC.mm_lmm
 #' @rdname mm_lmm-methods
 #' @export
 BIC.mm_lmm <- function(object, ...) {
-  dots <- list(...)
-  if (length(dots)) {
-    mm_abort(
-      message = paste(
-        "BIC comparison across multiple objects is not supported;",
-        "call `BIC()` per model and compare with `compare()`."
-      ),
-      class = "mm_inference_unavailable",
-      input = dots
-    )
+  if (...length()) {
+    labels <- as.character(match.call()[-1L])
+    return(mm_information_table(list(object, ...), labels, NA, "BIC"))
   }
   object$BIC
 }
@@ -541,8 +591,19 @@ formula.mm_glmm <- formula.mm_lmm
 
 #' @rdname mm_lmm-methods
 #' @export
-model.frame.mm_lmm <- function(formula, ...) {
-  formula$model_frame
+model.frame.mm_lmm <- function(formula, fixed.only = FALSE, ...) {
+  # lme4::model.frame.merMod shape: one column per variable expression of
+  # the formula with random-effect bars replaced by `+` (so `log(y)` is a
+  # transformed column), a `terms` attribute carrying lme4's
+  # predvars.fixed / varnames.fixed / predvars.random, and `(weights)` /
+  # `(offset)` columns when the fit has them. The raw variables the engine
+  # saw stay in `fit$model_frame`.
+  fr <- .mm_lazy(formula, "lme4_model_frame", mm_lme4_model_frame)
+  if (isTRUE(fixed.only)) {
+    vars <- attr(attr(fr, "terms"), "varnames.fixed") %||% names(fr)
+    fr <- fr[intersect(vars, names(fr))]
+  }
+  fr
 }
 
 #' @rdname mm_lmm-methods
@@ -584,17 +645,6 @@ ngrps.mm_lmm <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ngrps.mm_glmm <- ngrps.mm_lmm
-
-#' @rdname mm_lmm-methods
-#' @importFrom stats weights
-#' @export
-weights.mm_lmm <- function(object, ...) {
-  object$weights
-}
-
-#' @rdname mm_lmm-methods
-#' @export
-weights.mm_glmm <- weights.mm_lmm
 
 #' @rdname mm_lmm-methods
 #' @importFrom stats extractAIC
@@ -664,13 +714,18 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
       }
     }
   }
-  if (!is.null(x$residual_sd) && length(x$residual_sd) == 1L &&
-      is.finite(x$residual_sd)) {
+  residual <- if (!is.null(attr(x, "useSc"))) {
+    # lme4 shape: a Residual row exactly when the family has a free scale.
+    if (isTRUE(attr(x, "useSc"))) as.numeric(attr(x, "sc")) else NULL
+  } else {
+    x$residual_sd
+  }
+  if (!is.null(residual) && length(residual) == 1L && is.finite(residual)) {
     grp <- c(grp, "Residual")
     var1 <- c(var1, NA_character_)
     var2 <- c(var2, NA_character_)
-    vcov <- c(vcov, x$residual_sd^2)
-    sdcor <- c(sdcor, x$residual_sd)
+    vcov <- c(vcov, residual^2)
+    sdcor <- c(sdcor, residual)
   }
   data.frame(grp = grp, var1 = var1, var2 = var2, vcov = vcov, sdcor = sdcor,
              stringsAsFactors = FALSE)
@@ -912,4 +967,55 @@ mm_varcorr_correlation_display <- function(table) {
     },
     character(1)
   )
+}
+
+# lme4::subbars(): `(a | g)` -> `(a + g)`, so model.frame() collects every
+# variable the model uses.
+mm_subbars <- function(term) {
+  if (!is.call(term)) return(term)
+  if (identical(term[[1L]], as.name("|")) ||
+      identical(term[[1L]], as.name("||"))) {
+    term[[1L]] <- as.name("+")
+  }
+  for (j in seq_along(term)[-1L]) {
+    term[[j]] <- mm_subbars(term[[j]])
+  }
+  term
+}
+
+mm_lme4_model_frame <- function(fit) {
+  frame <- fit$model_frame
+  form <- fit$formula
+  sub <- mm_subbars(form)
+  env <- environment(form) %||% parent.frame()
+  mf <- tryCatch(
+    stats::model.frame(stats::as.formula(sub, env = env), data = frame,
+                       na.action = stats::na.pass),
+    error = function(cnd) NULL
+  )
+  if (is.null(mf) || nrow(mf) != nrow(frame)) {
+    mf <- frame
+    attr(mf, "terms") <- tryCatch(
+      stats::terms(stats::as.formula(sub, env = env), data = frame),
+      error = function(cnd) NULL
+    )
+  }
+  trm <- attr(mf, "terms")
+  if (!is.null(trm)) {
+    fixed <- tryCatch(mm_fixed_formula(fit), error = function(cnd) NULL)
+    if (!is.null(fixed) && length(fixed) == 3L) {
+      fixed_vars <- c(deparse1(form[[2L]]),
+                      attr(stats::terms(fixed), "term.labels"))
+      fixed_vars <- intersect(fixed_vars, names(mf))
+      attr(trm, "varnames.fixed") <- fixed_vars
+      attr(trm, "predvars.fixed") <- as.call(c(
+        as.name("list"), lapply(fixed_vars, str2lang)
+      ))
+    }
+    attr(mf, "terms") <- trm
+  }
+  if (!is.null(fit$weights)) mf[["(weights)"]] <- as.numeric(fit$weights)
+  if (!is.null(fit$offset)) mf[["(offset)"]] <- as.numeric(fit$offset)
+  rownames(mf) <- rownames(frame)
+  mf
 }

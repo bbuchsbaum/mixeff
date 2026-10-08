@@ -9,7 +9,8 @@
   ...,
   type = c("III", "II", "I", "block"),
   method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic", "none"),
-  refit_for_comparison = c("auto", "error", "ml")
+  refit_for_comparison = c("auto", "error", "ml"),
+  ddf = NULL
 )
 }
 \arguments{
@@ -29,17 +30,37 @@ coefficient block for each term — under treatment coding that is the
 simple effect at the other factors' reference levels, which is a
 legitimate quantity but is \emph{not} Type III on unbalanced designs; it
 is the hypothesis mixeff computed for \code{"III"} before engine
-\verb{1f3f689}.}
+\verb{1f3f689}. lmerTest's spellings \code{3}, \code{2}, \code{1} (numeric or character)
+are accepted.}
 
 \item{method}{Degrees-of-freedom / test method.}
 
 \item{refit_for_comparison}{Passed to \code{\link[=compare]{compare()}} when \code{...} is used.}
+
+\item{ddf}{lmerTest's spelling of the method: \code{"Satterthwaite"}
+(\code{method = "satterthwaite"}), \code{"Kenward-Roger"}
+(\code{method = "kenward_roger"}), or \code{"lme4"}, which returns lme4's own
+single-model table (sequential \code{npar}, \verb{Sum Sq}, \verb{Mean Sq}, \verb{F value},
+no denominator df or p-values). Supply \code{ddf} or \code{method}, not both.}
 }
 \value{
-An \code{mm_anova} object.
+A data frame of class \code{c("mm_anova", "anova", "data.frame")} for
+one model, or \code{c("mm_anova_comparison", "anova", "data.frame")} for
+several.
 }
 \description{
-With no extra models, \code{anova()} returns a term-level table for \code{object}.
-With further fitted models in \code{...}, it defers to \code{\link[=compare]{compare()}} for a
-nested model comparison.
+With no extra models, \code{anova()} returns a term-level F-test table for
+\code{object} shaped like lmerTest's: a data frame of class \code{"anova"} with
+columns \verb{Sum Sq}, \verb{Mean Sq}, \code{NumDF}, \code{DenDF}, \verb{F value} and \verb{Pr(>F)}
+(rows named by term; \verb{Mean Sq = F * sigma^2} and \verb{Sum Sq = NumDF * Mean Sq}, as in lmerTest). With further fitted models in \code{...}, it returns
+lme4's likelihood-ratio table (\code{npar}, \code{AIC}, \code{BIC}, \code{logLik},
+\code{deviance}, \code{Chisq}, \code{Df}, \verb{Pr(>Chisq)}, rows named after the arguments),
+computed by \code{\link[=compare]{compare()}} (REML fits are refit by ML, as in lme4).
+}
+\details{
+mixeff's provenance stays on the result: \code{x$table} is the full
+term-level (or \code{\link[=compare]{compare()}}) table with method, status, reliability and
+reason columns, and \code{x$type} / \code{x$requested_method} record the request.
+Rows the engine could not certify keep \code{NA} statistics and their reason
+is printed under the table.
 }

@@ -79,7 +79,11 @@ test_that("standard extractors return stored fit quantities", {
   expect_equal(BIC(fit), fit$BIC)
   expect_equal(deviance(fit), fit$deviance)
   expect_identical(formula(fit), y ~ x + (1 | subject))
-  expect_identical(model.frame(fit), fit$model_frame)
+  # lme4 shape: the variables of the formula plus a terms attribute.
+  mf <- model.frame(fit)
+  expect_false(is.null(attr(mf, "terms")))
+  expect_equal(as.list(mf), as.list(fit$model_frame[names(mf)]),
+               ignore_attr = TRUE)
 
   expect_equal(fitted(fit), stats::predict(fit), ignore_attr = TRUE)
   expect_equal(residuals(fit), df$y - fitted(fit), tolerance = 1e-8,

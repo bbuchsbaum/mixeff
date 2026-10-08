@@ -380,3 +380,23 @@ test_that("confint() accepts lme4's method spellings", {
                ignore_attr = TRUE)
   expect_error(confint(fit, method = "nope"))
 })
+
+test_that("Lambda/Lambdat and Z follow lme4's term order (Penicillin, sleepstudy)", {
+  skip_if_not_installed("lme4")
+  f <- diameter ~ 1 + (1 | plate) + (1 | sample)
+  f2 <- diameter ~ 1 + (1 | sample) + (1 | plate)
+  m <- lme4::lmer(f, lme4::Penicillin)
+  for (form in list(f, f2)) {
+    fit <- lmm(form, lme4::Penicillin, control = mm_control(verbose = -1))
+    shape_close(getME(fit, "Lambda"), lme4::getME(m, "Lambda"), 5e-3)
+    shape_close(getME(fit, "Lambdat"), lme4::getME(m, "Lambdat"), 5e-3)
+    shape_close(getME(fit, "Z"), lme4::getME(m, "Z"), 1e-12)
+    shape_close(model.matrix(fit, type = "random"), lme4::getME(m, "Z"), 1e-12)
+    shape_close(getME(fit, "b"), lme4::getME(m, "b"), 5e-3)
+  }
+  d <- shape_sleep()
+  fit <- lmm(Reaction ~ Days + (Days | Subject), d,
+             control = mm_control(verbose = -1))
+  ms <- lme4::lmer(Reaction ~ Days + (Days | Subject), d)
+  shape_close(getME(fit, "Lambda"), lme4::getME(ms, "Lambda"), 2e-3)
+})

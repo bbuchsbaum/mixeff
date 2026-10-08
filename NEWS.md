@@ -45,8 +45,10 @@
 * `getME()` covers lme4's components (`u`, `b`, `L`, `RX`, `RZX`, `devcomp`,
   `lower`, `Gp`, `Tp`, `Lind`, `Ztlist`, `Tlist`, `ST`, `offset`, `weights`,
   `glmer.nb.theta`, `"ALL"`, ...) for LMMs and GLMMs; `devfun` is refused with
-  a typed error. `Lambda`/`Lambdat` now follow the engine's (lme4's) term
-  order for crossed designs.
+  a typed error. `Lambda`/`Lambdat` (and `model.matrix(fit, type = "random")`)
+  now follow the engine's (lme4's) term order; previously theta was assigned
+  in formula order, so crossed designs such as Penicillin's
+  `(1|sample) + (1|plate)` gave a term another term's theta.
 * `is_singular()` uses lme4's rule (a zero-bounded theta below `tol`), honours
   `tol`, and works for GLMMs.
 * `ranef(condVar = TRUE)` returns Laplace conditional variances for GLMMs

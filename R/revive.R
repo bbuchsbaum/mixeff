@@ -173,7 +173,13 @@ model.matrix.mm_lmm <- function(object, type = c("fixed", "random"), ...) {
   switch(
     type,
     fixed = .mm_lazy(object, "X", mm_fixed_model_matrix),
-    random = .mm_lazy(object, "Z", mm_random_model_matrix)
+    random = .mm_lazy(object, "Z", function(fit) {
+      # Columns in the engine's (lme4's) term order, consistent with
+      # getME(fit, "Lambda") and fit$theta; older fits without a theta map
+      # fall back to the formula-order rebuild.
+      tryCatch(Matrix::t(mm_re_zt(fit)),
+               error = function(cnd) mm_random_model_matrix(fit))
+    })
   )
 }
 
@@ -901,50 +907,6 @@ mm_random_cnms <- function(fit) {
   re <- ranef(fit)
   out <- lapply(re, names)
   class(out) <- c("mm_cnms", "list")
-  out
-}
-
-mm_lambda_matrix <- function(fit) {
-  terms <- fit$artifact$semantic_model$random_terms %||% list()
-  if (!length(terms)) {
-    return(Matrix::Matrix(numeric(), nrow = 0L, ncol = 0L, sparse = TRUE))
-  }
-  theta <- as.numeric(fit$theta)
-  offset <- 0L
-  blocks <- vector("list", length(terms))
-  for (i in seq_along(terms)) {
-    term <- terms[[i]]
-    group <- mm_group_factor(fit$model_frame, mm_random_term_group_label(fit, term, i))
-    p <- length(term$basis %||% list())
-    if (!p) p <- 1L
-    family <- mm_scalar_text(term$covariance, "full")
-    n_theta <- switch(
-      family,
-      full = p * (p + 1L) / 2L,
-      diagonal = p,
-      diag = p,
-      scalar = 1L,
-      p * (p + 1L) / 2L
-    )
-    available <- max(0L, length(theta) - offset)
-    piece <- theta[seq.int(offset + 1L, length.out = min(n_theta, available))]
-    offset <- offset + n_theta
-    if (!length(piece)) piece <- 1
-    L <- matrix(0, nrow = p, ncol = p)
-    if (identical(family, "scalar")) {
-      diag(L) <- piece[[1L]]
-    } else if (family %in% c("diagonal", "diag")) {
-      diag(L) <- rep(piece, length.out = p)
-    } else {
-      L[lower.tri(L, diag = TRUE)] <- rep(piece, length.out = p * (p + 1L) / 2L)
-    }
-    blocks[[i]] <- kronecker(
-      Matrix::Diagonal(n = length(levels(group))),
-      Matrix::Matrix(L, sparse = TRUE)
-    )
-  }
-  out <- do.call(Matrix::bdiag, blocks)
-  attr(out, "mm_method") <- "rebuilt_from_stored_theta"
   out
 }
 

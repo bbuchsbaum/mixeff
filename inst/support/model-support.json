@@ -55,16 +55,14 @@
     {
       "feature": "simulate",
       "lmm": "supported",
-      "glmm": "refused",
-      "condition_class": "mm_inference_unavailable",
-      "notes": "GLMM simulation is not implemented in this version."
+      "glmm": "supported",
+      "notes": "lme4 re.form/use.u semantics (default NA: new random effects; NULL: conditional on the BLUPs). GLMM draws are family-aware (binomial, Poisson, Gamma, negative binomial); partial re.form formulas, newdata and newparams are refused."
     },
     {
       "feature": "refit",
       "lmm": "supported",
-      "glmm": "refused",
-      "condition_class": "mm_inference_unavailable",
-      "notes": "Refit GLMMs by calling glmm() on the modified data."
+      "glmm": "supported",
+      "notes": "Re-fits with the stored settings; binomial fits accept a (successes, failures) matrix, a two-level factor or 0/1 values."
     },
     {
       "feature": "subset / random / custom na.action / custom contrasts (GLMM)",

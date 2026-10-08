@@ -302,6 +302,23 @@ refit.mm_glmm <- function(object, newresp, ...) {
       input = newresp
     )
   }
+  if (identical(object$family$family, "binomial")) {
+    bernoulli <- is.null(weights)
+    if (bernoulli && any(!newresp %in% c(0, 1))) {
+      mm_abort(
+        message = "This binomial fit has a 0/1 response; `newresp` must contain only 0 and 1 (or be a two-level factor, or a (successes, failures) matrix).",
+        class = "mm_arg_error",
+        input = newresp
+      )
+    }
+    if (!bernoulli && any(newresp < 0 | newresp > 1)) {
+      mm_abort(
+        message = "This binomial fit has a proportion response; `newresp` must lie in [0, 1].",
+        class = "mm_arg_error",
+        input = newresp
+      )
+    }
+  }
   data <- object$model_frame
   data[[mm_response_name(object)]] <- as.numeric(newresp)
   control <- list(...)$control

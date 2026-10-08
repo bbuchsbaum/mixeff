@@ -69,7 +69,7 @@ test_that("registry-declared refusals carry their declared classes and codes", {
   expect_error(simulate(fit), class = "mm_inference_unavailable")
   expect_error(refit(fit, fitted(fit)), class = "mm_inference_unavailable")
   expect_error(
-    glmm(y ~ x + (1 | g), d, family = binomial(), subset = 1:50,
+    glmm(y ~ x + (1 | g), d, family = binomial(), random = ~ (1 | g),
          control = mm_control(verbose = -1)),
     class = "mm_fit_error"
   )

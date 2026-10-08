@@ -100,8 +100,12 @@ test_that("predict.mm_lmm rejects bad allow.new.levels and unsupported re.form",
   expect_error(predict(fit, allow.new.levels = NA), class = "mm_arg_error")
   expect_error(predict(fit, allow.new.levels = c(TRUE, FALSE)),
                class = "mm_arg_error")
-  expect_error(predict(fit, re.form = ~(1 | g)),
-               class = "mm_inference_unavailable")
+  # re.form naming every random term is conditional (lme4); a grouping
+  # factor the model does not have is refused.
+  expect_equal(predict(fit, re.form = ~(1 | g)), predict(fit))
+  expect_error(predict(fit, re.form = ~(1 | not_a_group)),
+               class = "mm_arg_error")
+  expect_error(predict(fit, re.form = ~ x), class = "mm_arg_error")
   expect_error(predict(fit, random.only = TRUE), class = "mm_arg_error")
 })
 
@@ -145,8 +149,7 @@ test_that("predict.mm_lmm se.fit and interval shapes (conditional + population)"
 test_that("predict.mm_glmm guards and basic response/link paths", {
   fit <- mk_cg2_glmm()
   expect_error(predict(fit, allow.new.levels = NA), class = "mm_arg_error")
-  expect_error(predict(fit, re.form = ~(1 | g)),
-               class = "mm_inference_unavailable")
+  expect_equal(predict(fit, re.form = ~(1 | g)), predict(fit))
   expect_error(
     predict(fit, interval = "prediction", type = "link"),
     class = "mm_inference_unavailable"

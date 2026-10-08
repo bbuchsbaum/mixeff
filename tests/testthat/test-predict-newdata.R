@@ -84,13 +84,31 @@ test_that("predict(newdata=) allow.new.levels routes to NewReLevels policy", {
   expect_equal(unname(obs), unname(ref), tolerance = 1e-4)
 })
 
-test_that("predict(newdata=) refuses unsupported re.form values", {
+test_that("predict(newdata=) partial re.form matches lme4", {
   data <- mm_sleepstudy_dataset()
   pair <- mm_sleepstudy_pair(data)
+  rf <- stats::as.formula("~(1|Subject)")
+  # Only the intercept BLUPs: fixed part + b0[Subject], like lme4.
+  expect_equal(
+    unname(stats::predict(pair$fit, newdata = data, re.form = rf)),
+    unname(stats::predict(pair$ref, newdata = data, re.form = rf)),
+    tolerance = 1e-4
+  )
+  expect_equal(
+    unname(stats::predict(pair$fit, re.form = rf)),
+    unname(stats::predict(pair$ref, re.form = rf)),
+    tolerance = 1e-4
+  )
+  # Partial conditioning has no SE contract.
+  expect_error(
+    stats::predict(pair$fit, newdata = data, re.form = rf, se.fit = TRUE),
+    class = "mm_inference_unavailable"
+  )
+  # A slope the model does not have is refused.
   expect_error(
     stats::predict(pair$fit, newdata = data,
-                   re.form = stats::as.formula("~(1|Subject)")),
-    class = "mm_inference_unavailable"
+                   re.form = stats::as.formula("~(0 + Reaction|Subject)")),
+    class = "mm_arg_error"
   )
 })
 

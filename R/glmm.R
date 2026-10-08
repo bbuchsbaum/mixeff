@@ -201,6 +201,7 @@ glmm <- function(formula,
   }
 
   spec <- compile_model(engine_formula, data)
+  spec$expansion <- mprep$expansion
   mm_validate_fit_structure(spec, lmm = FALSE)
   mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {

@@ -43,7 +43,9 @@ explain_model <- function(spec) {
 
   audit <- mm_audit_impl(spec)
   out <- list(
-    text                   = mm_explanation_text(spec, audit),
+    text                   = mm_expansion_display_text(
+      mm_explanation_text(spec, audit), spec$expansion
+    ),
     cards                  = audit$random_term_cards,
     cross_card_constraints = audit$cross_card_constraints,
     diagnostics            = audit$diagnostics,

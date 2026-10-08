@@ -354,3 +354,18 @@ test_that("single-model anova tests a poly() term as one multi-df row, like lmer
   expect_equal(a[["F value"]], r[["F value"]], tolerance = 1e-4)
   expect_equal(a[["DenDF"]], r[["DenDF"]], tolerance = 1e-3)
 })
+
+test_that("explain_model() and audit() show the user's terms, not synthetic columns", {
+  set.seed(94)
+  d <- data.frame(x = runif(60), f = sample(c("a", "b"), 60, TRUE),
+                  g = factor(rep(1:6, 10)), y = rnorm(60))
+  fit <- lmm(y ~ poly(x, 2) + factor(f) + (1 | g), d,
+             control = mm_control(verbose = -1))
+  txt <- c(format(explain_model(fit)), audit(fit)$text, audit(fit)$summary_text)
+  expect_false(any(grepl(".poly_x_2", txt, fixed = TRUE)))
+  expect_false(any(grepl(".factor_f", txt, fixed = TRUE)))
+  msgs <- testthat::capture_messages(
+    lmm(y ~ poly(x, 2) + (1 | g), d, control = mm_control(verbose = 0))
+  )
+  expect_false(any(grepl(".poly_x_2", msgs, fixed = TRUE)))
+})

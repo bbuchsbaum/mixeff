@@ -842,3 +842,20 @@ mm_drop_formula_label <- function(fit, term, reduced_formula) {
     fit$formula, stats::as.formula(paste(". ~ . -", term))
   ))
 }
+
+# Rewrite synthetic engine column names (".poly_x_2.1", ".factor_f") in
+# engine-rendered text (explain_model(), audit()) to the user's formula
+# terms ("poly(x, 2)1", "factor(f)"). Longest names first so a prefix never
+# clobbers a longer synthetic name.
+mm_expansion_display_text <- function(text, expansion) {
+  if (is.null(expansion) || !length(expansion$records) || is.null(text)) {
+    return(text)
+  }
+  map <- unlist(lapply(unname(expansion$records), function(rec) rec$components),
+                use.names = TRUE)
+  map <- map[order(nchar(names(map)), decreasing = TRUE)]
+  for (i in seq_along(map)) {
+    text <- gsub(names(map)[[i]], map[[i]], text, fixed = TRUE)
+  }
+  text
+}

@@ -131,6 +131,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   engine_formula <- prep$formula_engine
 
   spec <- compile_model(engine_formula, data)
+  spec$expansion <- prep$expansion
   mm_validate_fit_structure(spec)
   mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {

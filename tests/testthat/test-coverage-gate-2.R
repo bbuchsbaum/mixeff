@@ -177,7 +177,10 @@ test_that("residuals.mm_lmm pearson/scaled and fitted names", {
   rs <- residuals(fit, scaled = TRUE)
   expect_equal(length(r0), nobs(fit))
   expect_equal(length(rp), nobs(fit))
-  expect_false(isTRUE(all.equal(unname(r0), unname(rp))))
+  # lme4: unweighted Pearson residuals equal response residuals; only
+  # scaled = TRUE divides by sigma.
+  expect_equal(unname(r0), unname(rp))
+  expect_equal(unname(rs), unname(r0) / sigma(fit))
   expect_equal(length(rs), nobs(fit))
   expect_equal(length(fitted(fit)), nobs(fit))
 })
@@ -283,10 +286,12 @@ test_that("model.matrix, vcov, ngrps, sigma, logLik, formula, nobs, terms", {
   expect_equal(length(aic), 2L)
 })
 
-test_that("AIC/BIC refuse multi-object comparison", {
+test_that("AIC/BIC with several models return stats' data frame", {
   fit <- mk_cg2_lmm_simple()
-  expect_error(AIC(fit, fit), class = "mm_inference_unavailable")
-  expect_error(BIC(fit, fit), class = "mm_inference_unavailable")
+  a <- AIC(fit, fit)
+  expect_identical(names(a), c("df", "AIC"))
+  expect_equal(a$AIC, rep(AIC(fit), 2L))
+  expect_identical(names(BIC(fit, fit)), c("df", "BIC"))
   expect_true(is.finite(AIC(fit)))
   expect_true(is.finite(BIC(fit)))
 })

@@ -52,7 +52,10 @@ test_that("refit refuses newweights but still accepts control via ...", {
 test_that("residuals honor type and scaled", {
   m <- mk_ss_fit()
   raw <- residuals(m)
-  expect_equal(unname(residuals(m, type = "pearson")),
+  # lme4: Pearson residuals are sqrt(w) * (y - mu) (unit weights here);
+  # only scaled = TRUE divides by sigma.
+  expect_equal(unname(residuals(m, type = "pearson")), unname(raw))
+  expect_equal(unname(residuals(m, type = "pearson", scaled = TRUE)),
                unname(raw / sigma(m)))
   expect_equal(unname(residuals(m, scaled = TRUE)),
                unname(raw / sigma(m)))

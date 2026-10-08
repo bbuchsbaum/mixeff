@@ -20,7 +20,11 @@
 #'   the population mean (zero random effect), matching
 #'   `lme4::predict(allow.new.levels = TRUE)`.
 #' @param type Prediction scale. Gaussian LMMs use the same values for
-#'   `"response"` and `"link"`.
+#'   `"response"` and `"link"`. For `residuals()`, the residual type, as in
+#'   lme4: LMMs default to `"response"` (`y - mu`, also `"working"`), with
+#'   `"pearson"`/`"deviance"` the weighted residuals `sqrt(w) * (y - mu)`;
+#'   GLMMs default to `"deviance"` and also offer `"pearson"`
+#'   (`(y - mu) * sqrt(w / V(mu))`), `"working"` and `"response"`.
 #' @param se.fit Logical; when `TRUE`, returns a list with `fit` and `se.fit`.
 #'   For population predictions (`re.form = NA`) the standard error is the
 #'   Wald SE of the fixed-effect linear predictor, `sqrt(diag(X V X'))`. For
@@ -36,8 +40,8 @@
 #'   conditional (`re.form = NULL`) bounds come from the engine
 #'   prediction-variance payload. Returns a matrix with `fit`/`lwr`/`upr`.
 #' @param level Confidence level for `interval` / `se.fit` intervals.
-#' @param scaled Logical; when `TRUE`, residuals are divided by the residual
-#'   scale.
+#' @param scaled Logical; when `TRUE`, residuals are divided by `sigma(object)`
+#'   (once), as in lme4.
 #' @param ... Reserved for generic compatibility.
 #'
 #' @return A numeric vector, or a list with `fit` and `se.fit` when
@@ -169,14 +173,14 @@ residuals.mm_lmm <- function(object,
                              scaled = FALSE, ...) {
   type <- match.arg(type)
   out <- object$residuals
-  # For a Gaussian LMM with iid residuals, the working and deviance residuals
-  # equal the response residuals; the Pearson residual divides by the residual
-  # scale (unit working weights).
-  if (identical(type, "pearson")) {
-    out <- out / object$sigma
+  # lme4 (residuals.lmResp): "working"/"response" are y - mu; "pearson" and
+  # "deviance" are the weighted residuals sqrt(w) * (y - mu). Only
+  # `scaled = TRUE` divides by sigma, exactly once.
+  if (type %in% c("pearson", "deviance")) {
+    out <- out * sqrt(mm_prior_weights(object))
   }
   if (isTRUE(scaled)) {
-    out <- out / object$sigma
+    out <- out / sigma(object)
   }
   names(out) <- rownames(object$model_frame)
   out
@@ -188,12 +192,18 @@ fitted.mm_glmm <- fitted.mm_lmm
 
 #' @rdname predict.mm_lmm
 #' @export
-residuals.mm_glmm <- function(object, type = c("response"), ...) {
-  # The engine returns response-scale residuals for GLMMs; Pearson/deviance
-  # residuals are not certified by the current contract, so refuse rather than
-  # silently return response residuals under a different label.
+residuals.mm_glmm <- function(object,
+                              type = c("deviance", "pearson", "working",
+                                       "response"),
+                              scaled = FALSE, ...) {
+  # lme4 (residuals.glmResp): deviance residuals by default, computed from
+  # the family at the conditional mean mu, the response y (a proportion for
+  # binomial fits) and the prior weights (trial counts).
   type <- match.arg(type)
-  out <- object$residuals
+  out <- mm_glmm_residuals(object, type)
+  if (isTRUE(scaled)) {
+    out <- out / sigma(object)
+  }
   names(out) <- rownames(object$model_frame)
   out
 }

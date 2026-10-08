@@ -47,12 +47,15 @@ test_that("lazy extractors rebuild fixed and random design components", {
   expect_s4_class(Lambdat, "sparseMatrix")
   expect_equal(dim(Zt), rev(dim(Z)))
   expect_equal(dim(Lambdat), dim(Lambda))
-  expect_equal(as.matrix(Zt), t(as.matrix(Z)))
+  # getME() labels Zt rows lme4-style (levels); model.matrix() keeps the
+  # mixeff column labels, so compare values only.
+  expect_equal(as.matrix(Zt), t(as.matrix(Z)), ignore_attr = TRUE)
   expect_equal(as.matrix(Lambdat), t(as.matrix(Lambda)))
 
   parts <- getME(fit, c("theta", "beta", "flist", "cnms", "y"))
-  expect_equal(parts$theta, fit$theta)
-  expect_equal(parts$beta, fit$beta)
+  # lme4: getME(, "theta") is named, getME(, "beta") is not.
+  expect_equal(parts$theta, fit$theta, ignore_attr = TRUE)
+  expect_equal(parts$beta, unname(fit$beta))
   expect_named(parts$flist, "subject")
   expect_named(parts$cnms, "subject")
   expect_equal(length(parts$y), nobs(fit))

@@ -91,19 +91,47 @@ fit_handle_alive.default <- function(fit, ...) {
 
 #' Extract low-level model components
 #'
-#' `getME()` provides a small, honest subset of the familiar lme4 extractor.
-#' The fixed-effect design (`"X"`), random-effect design (`"Z"`), relative
-#' covariance factor (`"Lambda"` / `"Lambdat"`), grouping factors (`"flist"`),
-#' random coefficient names (`"cnms"`), response (`"y"`), fixed coefficients
-#' (`"beta"` / `"fixef"`), and theta vector (`"theta"`) are rebuilt lazily
-#' from the serialized R object.
+#' `getME()` mirrors `lme4::getME()` for [lmm()] and [glmm()] fits. Every
+#' component is rebuilt R-side from quantities the fit stores (fixed
+#' effects, theta and its map, conditional modes, fitted values, the model
+#' frame), so it works on fits restored with `readRDS()`.
 #'
-#' @param object A fitted `mm_lmm` object.
-#' @param name Component name, or a character vector of names.
+#' Supported components: `"X"`, `"Z"`, `"Zt"`, `"Ztlist"`, `"mmList"`,
+#' `"y"`, `"mu"`, `"u"`, `"b"`, `"Gp"`, `"Tp"`, `"L"`, `"Lambda"`,
+#' `"Lambdat"`, `"Lind"`, `"Tlist"`, `"ST"`, `"A"`, `"RX"`, `"RZX"`,
+#' `"sigma"`, `"flist"`, `"fixef"`, `"beta"`, `"theta"`, `"REML"`,
+#' `"is_REML"`, `"n_rtrms"`, `"n_rfacs"`, `"N"`, `"n"`, `"p"`, `"q"`,
+#' `"p_i"`, `"l_i"`, `"q_i"`, `"k"`, `"m_i"`, `"m"`, `"cnms"`, `"devcomp"`,
+#' `"offset"`, `"weights"`, `"lower"`, `"glmer.nb.theta"` (negative-binomial
+#' GLMMs), and `"ALL"` (a named list of every available component).
+#'
+#' `"L"` is the sparse Cholesky factor (a `Matrix` `CHMfactor`, with the same
+#' fill-reducing permutation lme4 uses) of `Lambda'Z'WZ Lambda + I`, where
+#' `W` holds the prior weights for an LMM and the final PIRLS working weights
+#' for a GLMM. `"RZX"`, `"RX"`, `"u"` and `"devcomp"` (`cmp` and `dims`) are
+#' computed from the same decomposition at the fitted parameters. `"u"` is
+#' the minimum-norm spherical mode with `b = Lambda u`, which is the
+#' penalized optimum also when `Lambda` is singular.
+#'
+#' `"devfun"` is refused: the optimizer runs inside the Rust engine and no R
+#' deviance function exists. Refusals, and requests for unknown components,
+#' raise an `mm_inference_unavailable` condition with
+#' `reason_code = "getme_component_unavailable"` naming the component.
+#'
+#' @param object A fitted `mm_lmm` or `mm_glmm` object.
+#' @param name Component name, or a character vector of names, or `"ALL"`.
 #' @param ... Reserved for future methods.
 #'
 #' @return The requested component, or a named list for multiple names.
 #'
+#' @examples
+#' set.seed(1)
+#' df <- data.frame(y = rnorm(60), x = rnorm(60),
+#'                  g = factor(rep(seq_len(10), each = 6)))
+#' fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+#' getME(fit, "theta")
+#' getME(fit, "lower")
+#' getME(fit, "devcomp")$cmp
 #' @export
 getME <- function(object, name, ...) {
   UseMethod("getME")
@@ -112,38 +140,13 @@ getME <- function(object, name, ...) {
 #' @rdname getME
 #' @export
 getME.mm_lmm <- function(object, name, ...) {
-  if (missing(name) || !is.character(name) || !length(name)) {
-    mm_abort(
-      message = "`name` must be a non-empty character vector.",
-      class = "mm_arg_error",
-      input = name
-    )
-  }
+  mm_getme(object, name)
+}
 
-  values <- lapply(name, function(one) {
-    switch(
-      one,
-      X = stats::model.matrix(object, type = "fixed"),
-      Z = stats::model.matrix(object, type = "random"),
-      Zt = Matrix::t(stats::model.matrix(object, type = "random")),
-      Lambda = .mm_lazy(object, "Lambda", mm_lambda_matrix),
-      Lambdat = Matrix::t(.mm_lazy(object, "Lambda", mm_lambda_matrix)),
-      theta = object$theta,
-      beta = object$beta,
-      fixef = object$beta,
-      y = mm_response_vector(object),
-      mu = fitted(object),
-      flist = .mm_lazy(object, "flist", mm_random_flist),
-      cnms = .mm_lazy(object, "cnms", mm_random_cnms),
-      mm_abort(
-        message = sprintf("`getME()` component `%s` is not available.", one),
-        class = "mm_arg_error",
-        input = one
-      )
-    )
-  })
-  names(values) <- name
-  if (length(values) == 1L) values[[1L]] else values
+#' @rdname getME
+#' @export
+getME.mm_glmm <- function(object, name, ...) {
+  mm_getme(object, name)
 }
 
 #' @export
@@ -152,7 +155,7 @@ getME.default <- function(object, name, ...) {
     return(lme4::getME(object, name, ...))
   }
   mm_abort(
-    message = "`getME()` expects a fitted mixeff LMM.",
+    message = "`getME()` expects a fitted mixeff model.",
     class = "mm_arg_error",
     input = object
   )
@@ -629,8 +632,17 @@ print.mm_reproducibility <- function(x, ...) {
 
 #' Test whether a fit is singular or reduced-rank
 #'
-#' @param x A fitted `mm_lmm`.
-#' @param tol Reserved for compatibility with lme4's `isSingular()`.
+#' Follows `lme4::isSingular()`: a fit is singular when any covariance
+#' parameter with a lower bound of zero (a diagonal element of a relative
+#' covariance factor, `getME(x, "lower") == 0`) is below `tol`. Works for
+#' [lmm()] and [glmm()] fits. `lme4::isSingular()` is a plain function, so
+#' it cannot dispatch on mixeff fits; call `is_singular()` instead. Fits
+#' without a stored theta map (very old serialized objects) fall back to the
+#' engine's fit-status and effective-covariance labels.
+#'
+#' @param x A fitted `mm_lmm` or `mm_glmm`.
+#' @param tol Tolerance on the zero-bounded theta values (default `1e-4`,
+#'   as in lme4).
 #' @param ... Reserved for future methods.
 #'
 #' @return A length-one logical value.
@@ -643,6 +655,17 @@ is_singular <- function(x, tol = 1e-4, ...) {
 #' @rdname is_singular
 #' @export
 is_singular.mm_lmm <- function(x, tol = 1e-4, ...) {
+  if (!is.numeric(tol) || length(tol) != 1L || is.na(tol) || tol < 0) {
+    mm_abort(
+      message = "`tol` must be a single non-negative number.",
+      class = "mm_arg_error",
+      input = tol
+    )
+  }
+  by_theta <- mm_is_singular_theta(x, tol)
+  if (!is.na(by_theta)) {
+    return(by_theta)
+  }
   status <- tolower(fit_status(x))
   cov_status <- vapply(
     x$artifact$effective_covariance %||% list(),
@@ -654,10 +677,14 @@ is_singular.mm_lmm <- function(x, tol = 1e-4, ...) {
     any(cov_status %in% c("boundary", "reduced_rank", "singular"))
 }
 
+#' @rdname is_singular
+#' @export
+is_singular.mm_glmm <- is_singular.mm_lmm
+
 #' @export
 is_singular.default <- function(x, tol = 1e-4, ...) {
   mm_abort(
-    message = "`is_singular()` expects a fitted mixeff LMM.",
+    message = "`is_singular()` expects a fitted mixeff model.",
     class = "mm_arg_error",
     input = x
   )
@@ -733,6 +760,15 @@ mm_response_name <- function(fit) {
 
 mm_response_vector <- function(fit) {
   out <- fit$model_frame[[mm_response_name(fit)]]
+  if (is.null(out) && inherits(fit$formula, "formula") &&
+      length(fit$formula) == 3L) {
+    # Transformed response (e.g. log(y)): the stored frame holds the raw
+    # variables, so evaluate the left-hand side in it.
+    out <- tryCatch(
+      eval(fit$formula[[2L]], fit$model_frame, environment(fit$formula)),
+      error = function(cnd) NULL
+    )
+  }
   names(out) <- rownames(fit$model_frame)
   out
 }

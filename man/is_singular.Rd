@@ -3,16 +3,20 @@
 \name{is_singular}
 \alias{is_singular}
 \alias{is_singular.mm_lmm}
+\alias{is_singular.mm_glmm}
 \title{Test whether a fit is singular or reduced-rank}
 \usage{
 is_singular(x, tol = 1e-04, ...)
 
 \method{is_singular}{mm_lmm}(x, tol = 1e-04, ...)
+
+\method{is_singular}{mm_glmm}(x, tol = 1e-04, ...)
 }
 \arguments{
-\item{x}{A fitted \code{mm_lmm}.}
+\item{x}{A fitted \code{mm_lmm} or \code{mm_glmm}.}
 
-\item{tol}{Reserved for compatibility with lme4's \code{isSingular()}.}
+\item{tol}{Tolerance on the zero-bounded theta values (default \code{1e-4},
+as in lme4).}
 
 \item{...}{Reserved for future methods.}
 }
@@ -20,5 +24,11 @@ is_singular(x, tol = 1e-04, ...)
 A length-one logical value.
 }
 \description{
-Test whether a fit is singular or reduced-rank
+Follows \code{lme4::isSingular()}: a fit is singular when any covariance
+parameter with a lower bound of zero (a diagonal element of a relative
+covariance factor, \code{getME(x, "lower") == 0}) is below \code{tol}. Works for
+\code{\link[=lmm]{lmm()}} and \code{\link[=glmm]{glmm()}} fits. \code{lme4::isSingular()} is a plain function, so
+it cannot dispatch on mixeff fits; call \code{is_singular()} instead. Fits
+without a stored theta map (very old serialized objects) fall back to the
+engine's fit-status and effective-covariance labels.
 }

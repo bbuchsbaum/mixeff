@@ -3,11 +3,10 @@
     Code
       print(VarCorr(fit))
     Output
-      Variance components:
-       group        name variance std_dev correlation       note
-       Batch (Intercept)        0       0             [boundary]
+       Groups   Name        Std.Dev.           
+       Batch    (Intercept) 0.0000   [boundary]
+       Residual             3.7157             
       [boundary]: variance component is at the boundary of the parameter space.
-      Residual std. dev.: 3.71568
 
 # snapshot: print(fit) on singular fit names rank and points to audit verbs
 

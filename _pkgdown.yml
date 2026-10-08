@@ -19,6 +19,8 @@ reference:
   contents:
   - mm_lmm-methods
   - getME
+  - REMLcrit
+  - mm_family
   - is_singular
   - predict.mm_lmm
   - predict.mm_glmm

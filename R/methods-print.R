@@ -151,50 +151,54 @@ mm_print_optimizer_line <- function(x) {
 
 #' @method print mm_varcorr
 #' @export
-print.mm_varcorr <- function(x, ...) {
-  cat("Variance components:\n")
-  weak_groups <- attr(x, "mm_design_weak_identifiability_groups") %||% character()
-  if (nrow(x$table)) {
-    out <- x$table
-    out$variance <- signif(out$variance, 6)
-    out$std_dev <- signif(out$std_dev, 6)
-    corr_cols <- grep("^correlation[0-9]*$", names(out), value = TRUE)
-    if (length(corr_cols)) {
-      display <- mm_varcorr_correlation_display(out)
-      out[setdiff(corr_cols, "correlation")] <- NULL
-      out$correlation <- display
+print.mm_varcorr <- function(x, digits = max(3, getOption("digits") - 2),
+                             ...) {
+  # lme4's layout (Groups / Name / Std.Dev. / Corr); mixeff's own markers
+  # ([boundary], [design_weak_identifiability]) follow as footnotes. The
+  # full-precision long table stays in `x$table`.
+  if (mm_varcorr_is_internal(x)) {
+    tbl <- x$table
+    cat("Variance components:\n")
+    if (nrow(tbl)) print(tbl, row.names = FALSE) else cat("  none\n")
+    if (is.finite(x$residual_sd %||% NA_real_)) {
+      cat(sprintf("Residual std. dev.: %.6g\n", x$residual_sd))
     }
-    boundary <- if (!is.null(out$boundary)) isTRUE(any(out$boundary)) else FALSE
-    if (!"note" %in% names(out)) {
-      out$note <- ""
-    }
-    if (!is.null(out$boundary)) {
-      out$note <- mm_note_append(out$note, ifelse(out$boundary, "[boundary]", ""))
-      out$boundary <- NULL
-    }
-    if (!any(nzchar(out$note))) {
-      out$note <- NULL
-    }
-    print(out, row.names = FALSE)
-    if (boundary) {
-      cat("[boundary]: variance component is at the boundary of the parameter space.\n")
-    }
-    if (length(weak_groups)) {
-      groups <- paste(sprintf("`%s`", weak_groups), collapse = ", ")
-      cat(sprintf(
-        paste0(
-          "[design_weak_identifiability]: random intercept variance for %s ",
-          "is weakly interpretable because its grouping indicators are ",
-          "aliased with the fixed-effect design.\n"
-        ),
-        groups
-      ))
-    }
-  } else {
-    cat("  none\n")
+    return(invisible(x))
   }
-  if (is.finite(x$residual_sd)) {
-    cat(sprintf("Residual std. dev.: %.6g\n", x$residual_sd))
+  weak_groups <- attr(x, "mm_design_weak_identifiability_groups") %||% character()
+  formatted <- mm_format_varcorr(x, digits = digits)
+  if (!nrow(formatted)) {
+    cat("Random effects: none\n")
+    return(invisible(x))
+  }
+  tbl <- x$table
+  marks <- character(nrow(formatted))
+  boundary <- FALSE
+  if (is.data.frame(tbl) && nrow(tbl) && !is.null(tbl$boundary)) {
+    n_re <- nrow(tbl)
+    hit <- which(tbl$boundary %in% TRUE)
+    if (length(hit) && n_re <= length(marks)) {
+      marks[hit] <- "[boundary]"
+      boundary <- TRUE
+    }
+  }
+  if (any(nzchar(marks))) {
+    formatted <- cbind(formatted, " " = marks)
+  }
+  print(formatted, quote = FALSE, ...)
+  if (boundary) {
+    cat("[boundary]: variance component is at the boundary of the parameter space.\n")
+  }
+  if (length(weak_groups)) {
+    groups <- paste(sprintf("`%s`", weak_groups), collapse = ", ")
+    cat(sprintf(
+      paste0(
+        "[design_weak_identifiability]: random intercept variance for %s ",
+        "is weakly interpretable because its grouping indicators are ",
+        "aliased with the fixed-effect design.\n"
+      ),
+      groups
+    ))
   }
   invisible(x)
 }

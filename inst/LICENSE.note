@@ -5,7 +5,7 @@ mixeff is licensed as MIT + file LICENSE.
 Bundled Rust source
 - crate: mixeff-rs
 - source: https://github.com/bbuchsbaum/mixeff-rs.git
-- pinned commit: 1f3f6892226e65dc96fb540e6b3806db0105389e
+- pinned commit: accd4b1397cf9daac37953e27eddf1006d188312
 - upstream license: included at src/rust/upstream/mixeff-rs/LICENSE
 
 Vendored Cargo registry crates
@@ -17,15 +17,20 @@ declared crate licenses at generation time are:
 
 - approx 0.5.1: Apache-2.0 (vendor/approx)
 - autocfg 1.5.0: Apache-2.0 OR MIT (vendor/autocfg)
+- block-buffer 0.10.4: MIT OR Apache-2.0 (vendor/block-buffer)
 - bytemuck 1.25.0: Zlib OR Apache-2.0 OR MIT (vendor/bytemuck)
 - cfg-if 1.0.4: MIT OR Apache-2.0 (vendor/cfg-if)
 - cobyla 1.0.0: license-file: LICENSE.md (vendor/cobyla)
+- cpufeatures 0.2.17: MIT OR Apache-2.0 (vendor/cpufeatures)
+- crypto-common 0.1.7: MIT OR Apache-2.0 (vendor/crypto-common)
 - csv 1.4.0: Unlicense/MIT (vendor/csv)
 - csv-core 0.1.13: Unlicense/MIT (vendor/csv-core)
+- digest 0.10.7: MIT OR Apache-2.0 (vendor/digest)
 - equivalent 1.0.2: Apache-2.0 OR MIT (vendor/equivalent)
 - extendr-api 0.9.0: MIT (vendor/extendr-api)
 - extendr-ffi 0.9.0: MIT (vendor/extendr-ffi)
 - extendr-macros 0.9.0: MIT (vendor/extendr-macros)
+- generic-array 0.14.7: MIT (vendor/generic-array)
 - getrandom 0.2.17: MIT OR Apache-2.0 (vendor/getrandom)
 - hashbrown 0.17.0: MIT OR Apache-2.0 (vendor/hashbrown)
 - indexmap 2.14.0: Apache-2.0 OR MIT (vendor/indexmap)
@@ -67,6 +72,7 @@ declared crate licenses at generation time are:
 - serde_derive 1.0.228: MIT OR Apache-2.0 (vendor/serde_derive)
 - serde_json 1.0.149: MIT OR Apache-2.0 (vendor/serde_json)
 - serde_spanned 0.6.9: MIT OR Apache-2.0 (vendor/serde_spanned)
+- sha2 0.10.9: MIT OR Apache-2.0 (vendor/sha2)
 - simba 0.9.1: Apache-2.0 (vendor/simba)
 - sprs 0.7.1: MIT OR Apache-2.0 (vendor/sprs)
 - statrs 0.18.0: MIT (vendor/statrs)
@@ -78,6 +84,7 @@ declared crate licenses at generation time are:
 - toml_edit 0.22.27: MIT OR Apache-2.0 (vendor/toml_edit)
 - typenum 1.20.0: MIT OR Apache-2.0 (vendor/typenum)
 - unicode-ident 1.0.24: (MIT OR Apache-2.0) AND Unicode-3.0 (vendor/unicode-ident)
+- version_check 0.9.5: MIT/Apache-2.0 (vendor/version_check)
 - wasi 0.11.1+wasi-snapshot-preview1: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT (vendor/wasi)
 - wide 0.7.33: Zlib OR Apache-2.0 OR MIT (vendor/wide)
 - winnow 0.7.15: MIT (vendor/winnow)

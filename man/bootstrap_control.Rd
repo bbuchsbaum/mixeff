@@ -13,8 +13,10 @@ bootstrap_control(
 \arguments{
 \item{nsim}{Requested bootstrap replicate count.}
 
-\item{seed}{Optional integer seed. \code{NULL} leaves the Rust RNG seed
-unspecified and records that state in row details.}
+\item{seed}{Optional integer seed. \code{NULL} (the default) draws a seed from
+R's random number generator when the bootstrap runs, so \code{set.seed()}
+makes the bootstrap reproducible; the seed used is recorded in the
+result.}
 
 \item{failed_refit_policy}{How failed refits are accounted for. Stable Rust
 wire labels are \code{"exclude"}, \code{"count_extreme"}, and \code{"abort"}.}

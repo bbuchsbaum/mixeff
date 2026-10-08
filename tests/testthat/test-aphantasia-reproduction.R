@@ -441,6 +441,7 @@ test_that("aphantasia S1 random-effects stability fits run in the stress tier", 
       stats::as.formula(model_ref$formula),
       cases[[id]]$data,
       family = cases[[id]]$family,
+      method = "pirls_profiled",
       control = mixeff::mm_control(verbose = -1)
     )
     aphantasia_expect_fit_matches_reference(fit, model_ref, id)
@@ -467,6 +468,7 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
     stats::as.formula(primary_ref$formula),
     data_sets$primary,
     family = stats::binomial(),
+    method = "pirls_profiled",
     inference = "working_hessian",
     control = mixeff::mm_control(verbose = -1)
   )

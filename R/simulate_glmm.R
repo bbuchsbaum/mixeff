@@ -242,6 +242,7 @@ simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
 
   resolved <- mm_simulate_resolve_partial(object, target, re.form)
   target <- resolved$target
+  rng_state <- mm_rng_state(seed)
   out <- mm_with_seed(seed, {
     mu <- if (identical(target, "conditional")) {
       matrix(as.numeric(fitted(object)), n, nsim)
@@ -293,7 +294,7 @@ simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
     structure(sims, class = "data.frame",
               row.names = rownames(object$model_frame) %||% seq_len(n))
   })
-  attr(out, "seed") <- seed
+  attr(out, "seed") <- rng_state
   attr(out, "mm_method") <- "r_side_glmm_parametric"
   attr(out, "mm_re_form") <- target
   out

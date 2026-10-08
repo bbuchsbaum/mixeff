@@ -151,9 +151,8 @@ getME.mm_glmm <- function(object, name, ...) {
 
 #' @export
 getME.default <- function(object, name, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::getME(object, name, ...))
-  }
+  fwd <- mm_forward_foreign_generic("getME", object, name, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`getME()` expects a fitted mixeff model.",
     class = "mm_arg_error",
@@ -993,8 +992,8 @@ mm_repro_threshold_table <- function(thresholds) {
   do.call(rbind, rows)
 }
 
-# Recompute an inference table by dispatching one contrast() per fixed-effect
-# term with an explicit method. Used by inference_table(method != "auto") and,
+# Recompute an inference table with one contrast() call (L = identity) using
+# an explicit method. Used by inference_table(method != "auto") and,
 # transitively, by summary(method != "auto") so the user's method request is
 # honored instead of silently replaced by the auto-resolved cached row.
 mm_inference_table_recompute <- function(fit, method) {
@@ -1007,12 +1006,15 @@ mm_inference_table_recompute <- function(fit, method) {
     class(obj) <- "mm_inference_table"
     return(obj)
   }
+  # One bridge call for all coefficients (L = identity): each contrast row is
+  # evaluated independently by the engine, so this matches k single-row
+  # calls while refitting the model once instead of k times.
+  L <- diag(k)
+  dimnames(L) <- list(terms, terms)
+  ct <- contrast(fit, L, method = method)
   rows <- lapply(seq_len(k), function(i) {
-    L <- rep(0, k)
-    L[i] <- 1
-    names(L) <- terms
-    ct <- contrast(fit, L, method = method)
-    mm_inference_row_from_contrast(ct$table, term = terms[[i]])
+    mm_inference_row_from_contrast(ct$table[i, , drop = FALSE],
+                                   term = terms[[i]])
   })
   tbl <- do.call(rbind, rows)
   rownames(tbl) <- NULL

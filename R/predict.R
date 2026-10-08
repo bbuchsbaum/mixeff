@@ -542,7 +542,7 @@ residuals.mm_glmm <- function(object,
 #' SEs are the fixed-effect Wald SE mapped through the link by the delta
 #' method; conditional (`re.form = NULL`) SEs and confidence bounds come from
 #' the engine prediction-variance payload. The engine certifies these rows
-#' for `method = "joint_laplace"` fits and for default `pirls_profiled` fits
+#' for `method = "joint_laplace"` fits and for `pirls_profiled` fits
 #' whose post-fit profiled-optimum certificate is issued (per-row status
 #' `"available"`). Uncertified fits (e.g. singular fits, or fits whose
 #' certificate fails) keep status `"degraded"`, and their conditional SEs and
@@ -769,8 +769,7 @@ mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
 
   spec_data <- mm_translate_data(mm_engine_frame(fit))
   formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
+  control_json <- mm_refit_control_json(fit)
   new_data <- mm_translate_data(mm_engine_newdata(fit, newdata))
 
   json <- tryCatch(
@@ -920,8 +919,7 @@ mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
   spec_data <- mm_translate_data(mm_engine_frame(fit))
   new_data <- mm_translate_data(mm_engine_newdata(fit, se_data))
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
+  control_json <- mm_refit_control_json(fit)
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_predict_new_variance_json,
@@ -977,8 +975,7 @@ mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, l
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
   spec_data <- mm_translate_data(mm_engine_frame(fit))
   new_data <- mm_translate_data(mm_engine_newdata(fit, se_data))
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
+  control_json <- mm_refit_control_json(fit)
   json <- tryCatch(
     .Call(
       wrap__mm_glmm_predict_new_variance_json,

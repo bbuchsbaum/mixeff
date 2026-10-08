@@ -239,7 +239,7 @@ mm_candidate_formula <- function(spec, random_fragment) {
   response <- semantic$response %||% all.vars(spec$formula)[[1L]]
   fixed <- unlist(semantic$fixed_terms %||% list("1"), use.names = FALSE)
   fixed <- fixed[nzchar(fixed)]
-  fixed_rhs <- if (length(fixed)) paste(fixed, collapse = " + ") else "1"
+  fixed_rhs <- mm_fixed_rhs_text(fixed, mm_fixed_terms_have_intercept(fixed))
   stats::as.formula(sprintf("%s ~ %s + %s", response, fixed_rhs, random_fragment))
 }
 

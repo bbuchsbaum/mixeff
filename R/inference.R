@@ -113,8 +113,10 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
 #' Fixed-effect bootstrap control
 #'
 #' @param nsim Requested bootstrap replicate count.
-#' @param seed Optional integer seed. `NULL` leaves the Rust RNG seed
-#'   unspecified and records that state in row details.
+#' @param seed Optional integer seed. `NULL` (the default) draws a seed from
+#'   R's random number generator when the bootstrap runs, so `set.seed()`
+#'   makes the bootstrap reproducible; the seed used is recorded in the
+#'   result.
 #' @param failed_refit_policy How failed refits are accounted for. Stable Rust
 #'   wire labels are `"exclude"`, `"count_extreme"`, and `"abort"`.
 #'
@@ -147,6 +149,17 @@ bootstrap_control <- function(nsim = 999L,
     ),
     class = "mm_bootstrap_control"
   )
+}
+
+# Wire form of a bootstrap control. A NULL seed is resolved from R's RNG at
+# call time (as the GLMM bootstrap does) so `set.seed()` governs the engine's
+# otherwise entropy-seeded StdRng.
+mm_bootstrap_wire <- function(bootstrap) {
+  out <- unclass(bootstrap)
+  if (is.null(out$seed)) {
+    out$seed <- sample.int(.Machine$integer.max, 1L)
+  }
+  out
 }
 
 #' @method print mm_contrast
@@ -315,8 +328,9 @@ test_random_effect.mm_lmm <- function(fit, term,
   reduced <- NULL
   reduced_payload <- NULL
   if (remaining > 0L) {
-    reduced <- lmm(reduced_formula, full$model_frame, REML = FALSE,
-                   weights = full$weights, control = mm_control(verbose = -1))
+    reduced <- mm_internal_lmm(reduced_formula, full$model_frame, REML = FALSE,
+                               weights = full$weights,
+                               control = mm_internal_control(full, keep_start = FALSE))
     reduced_payload <- mm_boundary_lrt_bridge_payload(reduced)
   }
 
@@ -384,9 +398,9 @@ mm_boundary_lrt_ml_fit <- function(fit, refit_for_comparison) {
       input = list(REML = TRUE)
     )
   }
-  lmm(fit$formula, fit$model_frame, REML = FALSE, weights = fit$weights,
-      offset = mm_fit_offset_arg(fit),
-      control = mm_control(verbose = -1))
+  mm_internal_lmm(fit$formula, fit$model_frame, REML = FALSE,
+                  weights = fit$weights, offset = mm_fit_offset_arg(fit),
+                  control = mm_internal_control(fit))
 }
 
 mm_boundary_lrt_bridge_payload <- function(fit) {
@@ -461,8 +475,8 @@ mm_match_random_effect_term <- function(terms, term) {
 
 mm_drop_random_term_formula <- function(fit, drop_index) {
   response <- mm_response_name(fit)
-  fixed <- setdiff(mm_fixed_effect_terms(fit), "1")
-  fixed_rhs <- if (length(fixed)) paste(fixed, collapse = " + ") else "1"
+  fixed <- mm_fixed_effect_terms(fit)
+  fixed_rhs <- mm_fixed_rhs_text(fixed, mm_fixed_terms_have_intercept(fixed))
   terms <- fit$artifact$semantic_model$random_terms %||% list()
   random <- vapply(terms, function(x) x$source_syntax$text %||% "", character(1))
   random <- random[nzchar(random)]
@@ -924,7 +938,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' Two routes are available. `method = "asymptotic"` builds Wald intervals
 #' (`estimate +/- z * SE`) from the Rust fixed-effect inference table; it
 #' requires a certified fit (`method = "joint_laplace"`) or the explicit
-#' working-Hessian opt-in, and refuses the default profiled estimator with
+#' working-Hessian opt-in, and refuses the profiled (`pirls_profiled`) estimator with
 #' a typed reason. `method = "bootstrap"` runs a parametric bootstrap —
 #' each replicate simulates a response from the fitted model under fresh
 #' random-effect draws and refits the same (effective) estimator — and
@@ -1173,7 +1187,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
     }
     mm_inform_bootstrap_scale(fit, bootstrap)
     bootstrap_json <- jsonlite::toJSON(
-      unclass(bootstrap),
+      mm_bootstrap_wire(bootstrap),
       auto_unbox = TRUE,
       null = "null"
     )
@@ -1298,20 +1312,37 @@ mm_fixed_effect_term_type_label <- function(type) {
   )
 }
 
-mm_rust_fit_bridge_payload <- function(fit) {
+mm_rust_fit_bridge_payload <- function(fit, warm_start = FALSE) {
   spec_data <- mm_translate_data(mm_engine_frame(fit))
   formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
-  control_json <- jsonlite::toJSON(
-    unclass(fit$control %||% mm_control()),
-    auto_unbox = TRUE,
-    null = "null"
-  )
   list(
     spec_data = spec_data,
     formula_string = formula_string,
     weights = mm_bridge_weights(fit$weights),
-    control_json = as.character(control_json)
+    control_json = mm_refit_control_json(fit, warm_start = warm_start)
   )
+}
+
+# Control JSON for an engine-side refit of `fit` itself. The user's
+# mm_control() is kept. Refits that recompute quantities of the stored fit
+# (contrasts, predictions, profiles) deliberately do NOT warm start: a cold
+# start with the same control replays the original optimizer path and lands
+# on the identical optimum, whereas a warm start from the fitted theta stops
+# at a point that differs at the optimizer tolerance (~1e-6 relative), so
+# summary()/predict(newdata) would no longer reproduce fixef()/fitted(); it
+# also saved < 10% of the refit time on the benchmarks. `warm_start = TRUE`
+# (start from the fitted theta unless the user set `start`) is for resampling
+# refits of the same model.
+mm_refit_control_json <- function(fit, warm_start = FALSE) {
+  control <- unclass(fit$control %||% mm_control())
+  if (isTRUE(warm_start) && inherits(fit, "mm_lmm") && is.null(control$start)) {
+    theta <- as.numeric(unlist(fit$theta %||% numeric(), use.names = FALSE))
+    if (length(theta) && all(is.finite(theta))) {
+      control$start <- theta
+    }
+  }
+  as.character(jsonlite::toJSON(control, auto_unbox = TRUE, null = "null",
+                                digits = NA))
 }
 
 mm_unavailable_effect_table <- function(term, method) {
@@ -1561,7 +1592,7 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
   L[1L, parameter] <- 1
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -1674,7 +1705,7 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
   mm_inform_bootstrap_scale(fit, bootstrap)
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -1743,7 +1774,7 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
   }
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -2196,15 +2227,17 @@ mm_empty_profile_table <- function() {
 #'   `method`, `reliability`, `reason`).
 #'
 #' @examples
-#' \dontrun{
-#' # Difference-in-differences contrast at a focal SOA = 25 ms
-#' # (Loo et al. 2026 aphantasia primary estimand, glmm path)
-#' soa_s_25 <- (log(0.025) - mean(fit$data$soa_log)) / sd(fit$data$soa_log)
-#' mm_lincomb(fit, c(
-#'   "group: aphant:mask: masked"        = 1,
-#'   "group: aphant:mask: masked:soa_s"  = soa_s_25
-#' ))
-#' }
+#' set.seed(1)
+#' d <- data.frame(
+#'   g   = factor(rep(1:12, each = 8)),
+#'   trt = factor(rep(c("ctrl", "drug"), 48)),
+#'   x   = rnorm(96)
+#' )
+#' d$y <- 1 + 0.5 * (d$trt == "drug") + 0.3 * d$x +
+#'   0.4 * (d$trt == "drug") * d$x + rnorm(12)[d$g] + rnorm(96)
+#' fit <- lmm(y ~ trt * x + (1 | g), d, control = mm_control(verbose = -1))
+#' # Treatment effect at x = 1 (weights use lme4 coefficient names):
+#' mm_lincomb(fit, c(trtdrug = 1, "trtdrug:x" = 1))
 #'
 #' @seealso [contrast()] for the long-form, Rust-routed contrast surface
 #'   with full estimability / reliability reporting.

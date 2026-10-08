@@ -423,7 +423,7 @@ mm_glmm_withheld_inference_note <- function(x, include_reason = TRUE) {
   note <- if (identical(x$method, "pirls_profiled")) {
     paste0(
       "standard errors, z statistics, and p-values are not available from ",
-      "the fast default method (pirls_profiled). Re-fit with ",
+      "the fast profiled method (pirls_profiled). Re-fit with ",
       'method = "joint_laplace" for glmer-equivalent Wald inference, or ',
       'use confint(fit, method = "bootstrap") for parametric-bootstrap ',
       "intervals. inference_options(fit) lists every route."

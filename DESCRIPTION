@@ -37,10 +37,12 @@ Imports:
     grDevices,
     jsonlite,
     Matrix,
+    methods,
     rlang,
     stats,
     utils
 Suggests:
+    boot,
     broom,
     broom.mixed,
     generics,
@@ -54,9 +56,12 @@ Suggests:
     lme4,
     lmerTest,
     MASS,
+    nlme,
     parallel,
     pbkrtest,
     performance,
+    pkgload,
+    processx,
     rextendr,
     rmarkdown,
     testthat (>= 3.0.0)

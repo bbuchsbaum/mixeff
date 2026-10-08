@@ -92,7 +92,7 @@ test_that("predict.mm_glmm refuses unsupported prediction-interval requests", {
 })
 
 test_that("certified pirls conditional se.fit and CI come from the engine", {
-  fit <- glmm(y ~ x + (1 | g), mm_pred_binom_data(), family = binomial(),
+  fit <- glmm(y ~ x + (1 | g), mm_pred_binom_data(), family = binomial(), method = "pirls_profiled",
               control = mm_control(verbose = -1))
   # the default pirls_profiled fit now carries a post-fit profiled-optimum
   # certificate; when it is issued the engine flips the prediction-variance
@@ -112,7 +112,7 @@ test_that("uncertified (singular) pirls se.fit is withheld with the engine reaso
   d <- data.frame(x = rnorm(n), g = factor(rep(1:12, each = 20)))
   d$y <- rbinom(n, 1, plogis(0.2 + 0.6 * d$x))  # no group signal -> singular
   fit <- suppressMessages(
-    glmm(y ~ x + (1 | g), d, family = binomial(),
+    glmm(y ~ x + (1 | g), d, family = binomial(), method = "pirls_profiled",
          control = mm_control(verbose = -1))
   )
   # singular fits never certify: rows stay "degraded" and the SE is withheld
@@ -212,7 +212,7 @@ test_that("population predict accepts newdata without grouping columns", {
   # The default profiled fit differs from glmer's estimator (documented gap),
   # but the same-fit prediction path must still work without grouping cols.
   fit_prof <- glmm(prop ~ period + (1 | herd), data = cbpp,
-                   family = binomial(), weights = cbpp$size,
+                   family = binomial(), method = "pirls_profiled", weights = cbpp$size,
                    control = mm_control(verbose = -1))
   p <- predict(fit_prof, nd, re.form = NA, type = "response")
   expect_length(p, 4L)

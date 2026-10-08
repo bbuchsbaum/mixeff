@@ -229,7 +229,7 @@ test_that("pirls_profiled recovers binomial-probit generating coefficients", {
   y <- rbinom(n, 1, pnorm(0.3 + 0.6 * x + re))
   d <- data.frame(y = y, x = x, g = g)
   m <- glmm(y ~ x + (1 | g), d, family = binomial(link = "probit"),
-            control = mm_cells_control())
+            method = "pirls_profiled", control = mm_cells_control())
   expect_identical(m$method, "pirls_profiled")
   est <- unname(fixef(m))
   # Observed deviations at authoring: +0.072, +0.062 (Wald SEs 0.133, 0.081).
@@ -248,7 +248,7 @@ test_that("pirls_profiled recovers binomial-cloglog generating coefficients", {
   y <- rbinom(n, 1, 1 - exp(-exp(-0.5 + 0.4 * x + re)))
   d <- data.frame(y = y, x = x, g = g)
   m <- glmm(y ~ x + (1 | g), d, family = binomial(link = "cloglog"),
-            control = mm_cells_control())
+            method = "pirls_profiled", control = mm_cells_control())
   expect_identical(m$method, "pirls_profiled")
   est <- unname(fixef(m))
   # Observed deviations at authoring: +0.047, -0.036 (Wald SEs 0.090, 0.073).
@@ -267,7 +267,7 @@ test_that("pirls_profiled recovers poisson-sqrt generating coefficients", {
   y <- rpois(n, (2 + 0.3 * x + re)^2)
   d <- data.frame(y = y, x = x, g = g)
   m <- glmm(y ~ x + (1 | g), d, family = poisson(link = "sqrt"),
-            control = mm_cells_control())
+            method = "pirls_profiled", control = mm_cells_control())
   expect_identical(m$method, "pirls_profiled")
   est <- unname(fixef(m))
   # Observed deviations at authoring: +0.044, +0.005 (Wald SEs 0.040, 0.025).
@@ -287,7 +287,7 @@ test_that("pirls_profiled recovers Gamma-log generating coefficients", {
   y <- rgamma(n, shape = 15, rate = 15 / mu)
   d <- data.frame(y = y, x = x, g = g)
   m <- glmm(y ~ x + (1 | g), d, family = Gamma(link = "log"),
-            control = mm_cells_control())
+            method = "pirls_profiled", control = mm_cells_control())
   expect_identical(m$method, "pirls_profiled")
   est <- unname(fixef(m))
   # Observed deviations at authoring: +0.032, -0.010 (Wald SEs 0.015, 0.015).
@@ -312,7 +312,7 @@ test_that("pirls_profiled recovers a binomial-logit random-slope model", {
   y <- rbinom(n, 1, plogis(eta))
   d <- data.frame(y = y, x = x, g = g)
   m <- glmm(y ~ x + (1 + x | g), d, family = binomial(),
-            control = mm_cells_control())
+            method = "pirls_profiled", control = mm_cells_control())
   expect_identical(m$method, "pirls_profiled")
   est <- unname(fixef(m))
   # Observed deviations at authoring: -0.091, -0.106 (Wald SEs 0.128, 0.168).

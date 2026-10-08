@@ -66,14 +66,13 @@ parsed artifact with the expected schema header.
 }
 
 \examples{
-\dontrun{
+set.seed(1)
 df <- data.frame(
   y       = rnorm(20),
   x       = rnorm(20),
   subject = factor(rep(letters[1:5], each = 4))
 )
 audit(compile_model(y ~ x + (1 + x | subject), df))
-}
 
 }
 \seealso{

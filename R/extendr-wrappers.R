@@ -86,6 +86,14 @@ mm_fit_glmm_json <- function(formula, family, link, method, n_agq, column_order,
 #' @noRd
 mm_fixed_effect_contrast_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method) .Call(wrap__mm_fixed_effect_contrast_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method)
 
+#' Evaluate ONE joint fixed-effect hypothesis `L beta = rhs` (all rows of
+#' `L` together, an F test for Satterthwaite / Kenward-Roger) through the
+#' Rust inference contract. Used for KRmodcomp-style nested model
+#' comparison. Returns a fixed-effect inference table with a single term row.
+#'
+#' @noRd
+mm_fixed_effect_joint_test_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, label, rhs, method) .Call(wrap__mm_fixed_effect_joint_test_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, label, rhs, method)
+
 #' Evaluate fixed-effect-null bootstrap contrast rows through Rust.
 #'
 #' @noRd
@@ -286,13 +294,10 @@ mm_glmm_predict_new_variance_json <- function(formula, family, link, method, n_a
 #' @noRd
 mm_lmm_profile_confint_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level) .Call(wrap__mm_lmm_profile_confint_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level)
 
-#' Demo of the interrupt bridge — a no-op loop that yields to R between
-#' iterations so Ctrl-C can terminate it. Returns `iters` on clean
-#' completion.
-#'
-#' Used in Phase 0 only as a smoke test that the interrupt FFI binding is
-#' linked correctly. Phase 1+ replaces this with the hook called from
-#' inside fit / inference loops.
+#' Demo of the interrupt bridge — a no-op loop that checks for a pending
+#' R interrupt between iterations (safely, via R_ToplevelExec) and returns
+#' an `mm_interrupted` error when one is seen. Returns `iters` on clean
+#' completion. A smoke test for the check the fit loops use.
 #'
 #' @noRd
 mm_interrupt_demo <- function(iters) .Call(wrap__mm_interrupt_demo, iters)

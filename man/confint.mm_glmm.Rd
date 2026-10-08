@@ -41,7 +41,7 @@ attributes (\code{"bootstrap"}).
 Two routes are available. \code{method = "asymptotic"} builds Wald intervals
 (\verb{estimate +/- z * SE}) from the Rust fixed-effect inference table; it
 requires a certified fit (\code{method = "joint_laplace"}) or the explicit
-working-Hessian opt-in, and refuses the default profiled estimator with
+working-Hessian opt-in, and refuses the profiled (\code{pirls_profiled}) estimator with
 a typed reason. \code{method = "bootstrap"} runs a parametric bootstrap —
 each replicate simulates a response from the fitted model under fresh
 random-effect draws and refits the same (effective) estimator — and

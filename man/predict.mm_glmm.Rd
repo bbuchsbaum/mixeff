@@ -105,7 +105,7 @@ Standard errors and confidence intervals: population (\code{re.form = NA})
 SEs are the fixed-effect Wald SE mapped through the link by the delta
 method; conditional (\code{re.form = NULL}) SEs and confidence bounds come from
 the engine prediction-variance payload. The engine certifies these rows
-for \code{method = "joint_laplace"} fits and for default \code{pirls_profiled} fits
+for \code{method = "joint_laplace"} fits and for \code{pirls_profiled} fits
 whose post-fit profiled-optimum certificate is issued (per-row status
 \code{"available"}). Uncertified fits (e.g. singular fits, or fits whose
 certificate fails) keep status \code{"degraded"}, and their conditional SEs and

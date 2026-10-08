@@ -56,10 +56,11 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' fit <- lmm(y ~ t + (1 | s), df)
+#' set.seed(1)
+#' df <- data.frame(t = rep(0:4, 8), s = factor(rep(1:8, each = 5)))
+#' df$y <- 1 + 0.5 * df$t + rnorm(8)[df$s] + rnorm(40)
+#' fit <- lmm(y ~ t + (1 | s), df, control = mm_control(verbose = -1))
 #' verify_convergence(fit)
-#' }
 #'
 #' @seealso [optimizer_certificate()] for what the original fit ran;
 #'   [mm_control()] to refit with a different optimizer or tolerances.

@@ -11,7 +11,7 @@ compare(object, ...)
   object,
   ...,
   target = c("fixed_effects", "random_effects", "prediction"),
-  method = c("auto", "lrt", "bootstrap", "aic"),
+  method = c("auto", "lrt", "bootstrap", "aic", "kenward_roger", "satterthwaite"),
   refit_for_comparison = c("auto", "error", "ml"),
   nsim = 0L,
   seed = NULL
@@ -25,8 +25,19 @@ compare(object, ...)
 \item{target}{Comparison target label.}
 
 \item{method}{\code{"auto"} / \code{"lrt"} for asymptotic likelihood-ratio rows,
-\code{"aic"} for information criteria only, or \code{"bootstrap"} for a small
-parametric-bootstrap LRT when \code{nsim > 0}.}
+\code{"aic"} for information criteria only, \code{"bootstrap"} for a small
+parametric-bootstrap LRT when \code{nsim > 0}, or \code{"kenward_roger"} /
+\code{"satterthwaite"} for pbkrtest's \code{KRmodcomp()} / \code{SATmodcomp()}: an F
+test of the larger model's fixed effects restricted to the smaller
+model's (two models with identical random effects, nested in their fixed
+effects). The restriction matrix is built from the two design matrices
+as pbkrtest does; the test runs on the REML fit of the larger model
+(refitted by REML if it was fitted by ML, as pbkrtest does). The
+engine's Kenward-Roger F is the unscaled statistic (pbkrtest's \code{FtestU}
+row: same F and denominator df; the KR scaling factor is not applied
+and is reported as \code{f_scaling = 1}). The F row
+replaces the LRT row (\code{statistic_name = "F"}, \code{df} = numerator df,
+\code{den_df} = denominator df); the full result is in \verb{$fixed_f}.}
 
 \item{refit_for_comparison}{How to handle REML fits.}
 

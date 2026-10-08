@@ -11,7 +11,8 @@ mm_control(
   start = NULL,
   ftol_rel = NULL,
   ftol_abs = NULL,
-  xtol_rel = NULL
+  xtol_rel = NULL,
+  optCtrl = NULL
 )
 }
 \arguments{
@@ -39,6 +40,17 @@ tolerances on the objective. \code{NULL} keeps the engine default.}
 
 \item{xtol_rel}{Optional positive relative convergence tolerance on the
 optimizer parameters. \code{NULL} keeps the engine default.}
+
+\item{optCtrl}{Optional named list in the style of lme4's
+\code{lmerControl(optCtrl = )}, translated to the engine's controls:
+\code{maxfun}/\code{maxeval} -> \code{max_feval}; \code{ftol_rel}/\code{ftol_abs}/\code{xtol_rel} ->
+the arguments of the same name; \code{xtol_abs} (scalar or one per theta)
+-> the absolute parameter tolerance; \code{rhobeg} (scalar or one per
+theta) -> the optimizer's initial step. Unknown names are refused with
+an \code{mm_arg_error} rather than ignored. lme4's \verb{check.conv.*} options
+have no counterpart: mixeff does not emit post-hoc convergence
+warnings; the fit's convergence status is the engine's typed
+certificate (\code{\link[=optimizer_certificate]{optimizer_certificate()}}, \code{\link[=verify_convergence]{verify_convergence()}}).}
 }
 \value{
 A list of class \code{mm_control}.

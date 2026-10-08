@@ -17,9 +17,21 @@
     },
     {
       "family": "Gamma",
-      "links": ["log"],
+      "links": ["inverse", "log"],
       "estimators": ["pirls_profiled", "joint_laplace"],
-      "notes": ""
+      "notes": "inverse is R's default Gamma link."
+    },
+    {
+      "family": "inverse.gaussian",
+      "links": ["inverse", "log"],
+      "estimators": ["pirls_profiled", "joint_laplace"],
+      "notes": "R's default 1/mu^2 link is not available in the engine and is refused; pass link = \"inverse\" or \"log\"."
+    },
+    {
+      "family": "gaussian",
+      "links": ["log", "inverse", "sqrt"],
+      "estimators": ["pirls_profiled", "joint_laplace"],
+      "notes": "Non-identity links only; gaussian/identity is an LMM and is refused with a pointer to lmm()."
     },
     {
       "family": "negative_binomial",

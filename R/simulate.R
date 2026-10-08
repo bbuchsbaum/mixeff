@@ -13,6 +13,10 @@
 #' for a `cbind()` response; the trial counts become the new prior weights),
 #' a two-level factor, or a logical vector.
 #'
+#' As in lme4, `newresp` is on the scale of the model's response: for a
+#' transformed response such as `log(y) ~ ...` it replaces `log(y)`, and the
+#' refit's formula names it `.mm_refit_response`.
+#'
 #' @param object A fitted `mm_lmm` or `mm_glmm`.
 #' @param newresp The new response (see Details).
 #' @param ... `control =` to override the stored control settings.
@@ -37,12 +41,12 @@ refit <- function(object, newresp, ...) {
 #' @rdname refit
 #' @export
 refit.default <- function(object, newresp, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    if (missing(newresp)) {
-      return(lme4::refit(object, ...))
-    }
-    return(lme4::refit(object, newresp, ...))
+  fwd <- if (missing(newresp)) {
+    mm_forward_foreign_generic("refit", object, ...)
+  } else {
+    mm_forward_foreign_generic("refit", object, newresp, ...)
   }
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`refit()` has no method for this object.",
     class = "mm_arg_error",
@@ -67,19 +71,27 @@ refit.mm_lmm <- function(object, newresp, ...) {
     )
   }
   data <- object$model_frame
-  # An LMM offset is fitted as the adjusted response `.mm_offset_response`;
-  # the new response replaces the user's response column and the offset is
-  # re-applied by lmm().
-  response <- if (!is.null(object$offset)) {
-    all.vars(object$formula[[2L]])[[1L]]
+  formula <- object$formula
+  lhs <- formula[[2L]]
+  newresp <- as.numeric(newresp)
+  if (is.name(lhs)) {
+    # With an LMM offset the engine fits the adjusted response, but the user's
+    # response column is what lmm() reads; it re-applies the offset.
+    data[[as.character(lhs)]] <- newresp
   } else {
-    mm_response_name(object)
+    # A transformed response (`log(y) ~ ...`): as in lme4, `newresp` is the
+    # response on the model's (transformed) scale. Writing it into the raw
+    # column would be re-transformed, and writing it under the label
+    # "log(y)" would be ignored (the original fit came back unchanged), so
+    # the refit uses a dedicated response column instead.
+    data[[".mm_refit_response"]] <- newresp
+    formula[[2L]] <- as.name(".mm_refit_response")
   }
-  data[[response]] <- as.numeric(newresp)
-  control <- list(...)$control %||% mm_control(verbose = -1)
-  fit <- lmm(object$formula, data, REML = isTRUE(object$REML),
-             weights = object$weights, offset = mm_fit_offset_arg(object),
-             control = control)
+  control <- list(...)$control %||% mm_internal_control(object)
+  fit <- mm_internal_lmm(formula, data, REML = isTRUE(object$REML),
+                         weights = object$weights,
+                         offset = mm_fit_offset_arg(object),
+                         control = control)
   fit$refit <- list(
     source = "refit",
     original_fit_status = fit_status(object)
@@ -137,7 +149,10 @@ refit.mm_lmm <- function(object, newresp, ...) {
 #'   named like the model frame. For a binomial `cbind()` fit each column is a
 #'   two-column matrix. Attributes `seed`, `mm_method` and `mm_re_form` record
 #'   the seed, the simulation route, and the resolved conditioning
-#'   (`"unconditional"` or `"conditional"`).
+#'   (`"unconditional"`, `"conditional"` or `"partial"`). Following
+#'   `stats::simulate`, attribute `"seed"` is the `.Random.seed` in force
+#'   before simulation when `seed = NULL`, otherwise `seed` with the RNG kind
+#'   as attribute `"kind"`.
 #'
 #' @examples
 #' set.seed(1)
@@ -172,6 +187,7 @@ simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
   w <- object$weights %||% rep(1, n)
   resolved <- mm_simulate_resolve_partial(object, target, re.form)
   target <- resolved$target
+  rng_state <- mm_rng_state(seed)
   out <- mm_with_seed(seed, {
     eta <- if (identical(target, "conditional")) {
       matrix(as.numeric(fitted(object)), n, nsim)
@@ -185,7 +201,10 @@ simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
   out <- as.data.frame(out)
   names(out) <- paste0("sim_", seq_len(nsim))
   rownames(out) <- rownames(object$model_frame)
-  attr(out, "seed") <- seed
+  # stats::simulate convention (as in simulate.lm): with `seed = NULL` the
+  # attribute is the `.Random.seed` in force before simulating; otherwise the
+  # seed itself with the RNG kind recorded as attribute `kind`.
+  attr(out, "seed") <- rng_state
   attr(out, "mm_method") <- "r_side_gaussian_parametric"
   attr(out, "mm_re_form") <- target
   out
@@ -271,6 +290,20 @@ mm_rmvnorm <- function(n, Sigma) {
   }
   colnames(out) <- colnames(Sigma)
   out
+}
+
+# The stats::simulate "seed" attribute: `.Random.seed` before simulation when
+# `seed` is NULL (initialising the RNG first, as simulate.lm does), else the
+# seed with `kind = as.list(RNGkind())`.
+mm_rng_state <- function(seed) {
+  if (!exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+    stats::runif(1)
+  }
+  if (is.null(seed)) {
+    get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  } else {
+    structure(seed, kind = as.list(RNGkind()))
+  }
 }
 
 mm_with_seed <- function(seed, expr) {

@@ -95,12 +95,13 @@ random-effects stability variants run under `MIXEFF_RUN_APHANTASIA_STRESS=true`.
 # uncertified working-Hessian approximation, because its purpose below is to
 # measure that approximation against the frozen glmer reference (the ~11%
 # anti-conservatism behind the opt-in's documented caveat). A default fit
-# refuses Wald inference on every route.
+# (profiled) fit refuses Wald inference on every route.
 primary_fit <- glmm(
   correct ~ group * mask * soa_s + block +
     (1 + mask + soa_s || participant) + (1 | item),
   primary_dat,
   family = binomial(),
+  method = "pirls_profiled",
   inference = "working_hessian",
   control = mm_control(verbose = -1)
 )
@@ -126,10 +127,10 @@ control group. The estimator matters for two of the models that follow.
 The intact high-baseline Bernoulli model reaches near-exact lme4
 fixed-effect and log-likelihood parity only under
 `method = "joint_laplace"`, which is how the opt-in reproduction test fits
-it (about 40 seconds per fit on a release build). On the default profiled
+it (about 40 seconds per fit on a release build). On the profiled
 path its coefficients drift well past the strict tolerances, so the chunks
 below do not claim parity for it. The combined model is fitted by the
-default profiled path here and in the test suite; like every profiled GLMM
+profiled path here and in the test suite; like every profiled GLMM
 fit, it carries the engine's support note that a fast-PIRLS fit is not
 certified as glmer joint-Laplace parity.
 
@@ -152,6 +153,7 @@ sensitivity_fit <- glmm(
     (1 + mask + soa_s || participant) + (1 | item),
   sensitivity_dat,
   family = binomial(),
+  method = "pirls_profiled",
   control = mm_control(verbose = -1)
 )
 
@@ -160,6 +162,7 @@ intact_fit <- glmm(
     (1 + mask + soa_s || participant) + (1 | item),
   intact_dat,
   family = binomial(),
+  method = "pirls_profiled",
   control = mm_control(verbose = -1)
 )
 
@@ -168,6 +171,7 @@ combined_fit <- glmm(
     (1 + mask + soa_s || participant) + (1 | item),
   combined_dat,
   family = binomial(),
+  method = "pirls_profiled",
   control = mm_control(verbose = -1)
 )
 

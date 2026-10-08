@@ -352,10 +352,13 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I", "block"),
   }
   terms <- setdiff(mm_fixed_effect_terms(object), "1")
   if (identical(method, "none")) {
-    table <- mm_unavailable_effect_table(terms, method)
+    table <- mm_unavailable_effect_table(mm_user_term_label(object, terms), method)
   } else {
     parsed <- mm_rust_term_table(object, method, type = type)
     table <- parsed$table[parsed$table$term %in% terms, , drop = FALSE]
+    # Expanded formula terms: report the user's term names (a multi-column
+    # term such as poly(x, 2) is tested per column by the engine).
+    table$term <- mm_user_term_label(object, table$term)
     table$requested_method <- method
     table <- table[, c("term", "numerator_df", "denominator_df", "statistic",
                        "statistic_name", "p_value", "method", "requested_method",
@@ -654,7 +657,7 @@ drop1.mm_lmm <- function(object,
                          ...) {
   test <- match.arg(test)
   refit_for_comparison <- match.arg(refit_for_comparison)
-  terms <- setdiff(mm_fixed_effect_terms(object), "1")
+  terms <- mm_drop1_terms(object)
   if (!is.null(scope)) {
     terms <- intersect(terms, as.character(scope))
   } else {
@@ -681,7 +684,7 @@ drop1.mm_lmm <- function(object,
       # unavailable row instead of aborting the whole table.
       return(data.frame(
         dropped = term,
-        formula = deparse1(reduced_formula),
+        formula = mm_drop_formula_label(full, term, reduced_formula),
         df = NA_real_,
         logLik = NA_real_,
         AIC = NA_real_,
@@ -698,7 +701,7 @@ drop1.mm_lmm <- function(object,
     df <- full$dof - reduced$dof
     data.frame(
       dropped = term,
-      formula = deparse1(reduced_formula),
+      formula = mm_drop_formula_label(full, term, reduced_formula),
       df = df,
       logLik = as.numeric(logLik(reduced)),
       AIC = AIC(reduced),
@@ -840,7 +843,7 @@ mm_prepare_comparison_fits <- function(fits, refit_for_comparison) {
     fits <- lapply(fits, function(fit) {
       if (!isTRUE(fit$REML)) return(fit)
       lmm(fit$formula, fit$model_frame, REML = FALSE,
-          weights = fit$weights,
+          weights = fit$weights, offset = mm_fit_offset_arg(fit),
           control = mm_control(verbose = -1))
     })
     refit <- has_reml
@@ -1211,7 +1214,14 @@ mm_lrt_stat <- function(null, alternative) {
 
 mm_drop_fixed_term_formula <- function(fit, term) {
   response <- mm_response_name(fit)
-  fixed <- setdiff(mm_fixed_effect_terms(fit), c("1", term))
+  drop <- term
+  if (!is.null(fit$expansion) && term %in% names(fit$expansion$term_map)) {
+    # A user term (e.g. poly(x, 2)) spans several engine terms.
+    engine <- setdiff(mm_fixed_effect_terms(fit), "1")
+    drop <- engine[mm_term_key(engine) %in%
+                     mm_term_key(fit$expansion$term_map[[term]])]
+  }
+  fixed <- setdiff(mm_fixed_effect_terms(fit), c("1", drop))
   fixed_rhs <- if (length(fixed)) paste(fixed, collapse = " + ") else "1"
   random <- vapply(
     fit$artifact$semantic_model$random_terms %||% list(),
@@ -1227,7 +1237,7 @@ mm_drop_fixed_term_formula <- function(fit, term) {
 # iff no OTHER term contains all of its variables (e.g. `recipe` is not
 # droppable from `recipe * temperature`).
 mm_droppable_terms <- function(fit) {
-  tt <- stats::terms(mm_fixed_formula(fit))
+  tt <- mm_user_fixed_terms(fit)
   labels <- attr(tt, "term.labels")
   fac <- attr(tt, "factors")
   if (!length(labels) || is.null(dim(fac))) return(labels)

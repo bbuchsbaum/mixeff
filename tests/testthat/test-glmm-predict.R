@@ -78,8 +78,8 @@ test_that("predict.mm_glmm refuses unsupported prediction-interval requests", {
   # the population Wald path carries no family variance term
   expect_error(predict(fit, re.form = NA, interval = "prediction"),
                class = "mm_inference_unavailable")
-  expect_error(predict(fit, re.form = ~ (1 | g)),
-               class = "mm_inference_unavailable")
+  # A re.form naming every random term is conditional prediction (lme4).
+  expect_equal(predict(fit, re.form = ~ (1 | g)), predict(fit))
   # grouped binomial: future trial count is not representable in newdata
   set.seed(77)
   gb <- data.frame(trials = rep(20L, 60), x = rnorm(60),

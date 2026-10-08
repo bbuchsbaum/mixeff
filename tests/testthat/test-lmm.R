@@ -166,8 +166,8 @@ test_that("revived extractor paths return typed values", {
 
   pred <- stats::predict(fit, newdata = df)
   expect_equal(unname(pred), unname(fitted(fit)), tolerance = 1e-8)
-  expect_error(stats::predict(fit, re.form = ~(1 | subject)),
-               class = "mm_inference_unavailable")
+  expect_equal(stats::predict(fit, re.form = ~(1 | subject)),
+               stats::predict(fit))
 })
 
 test_that("lmm()/glmm() advise rescaling when a predictor is far from unit scale", {

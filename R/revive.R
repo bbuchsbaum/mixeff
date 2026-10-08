@@ -734,7 +734,11 @@ mm_object_schema <- function(artifact) {
 }
 
 mm_fixed_model_matrix <- function(fit) {
-  stats::model.matrix(mm_fixed_formula(fit), data = fit$model_frame)
+  X <- stats::model.matrix(mm_fixed_formula(fit), data = fit$model_frame)
+  if (!is.null(fit$expansion)) {
+    colnames(X) <- mm_expansion_user_names(colnames(X), fit$expansion)
+  }
+  X
 }
 
 mm_fixed_formula <- function(fit) {

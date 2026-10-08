@@ -12,7 +12,8 @@ lmm(
   subset = NULL,
   na.action = NULL,
   contrasts = NULL,
-  control = mm_control()
+  control = mm_control(),
+  offset = NULL
 )
 }
 \arguments{
@@ -30,10 +31,15 @@ one value per row or an expression evaluated in \code{data}.}
 \code{data} (as in \code{\link[stats:lm]{stats::lm()}}).}
 
 \item{na.action}{Optional function controlling missing-value handling,
-applied to the model variables before fitting (e.g. \link[stats:na.fail]{stats::na.omit}).
-The default (\code{NULL}) refuses any \code{NA} in a model variable with a typed
-\code{mm_data_error} (audit-first: missing-data dropping must be opt-in). Pass
-\code{na.action = na.omit} for lme4's complete-case behavior.}
+applied to the model variables (including evaluated transforms such as
+\code{log(x)}) after \code{subset} (e.g. \link[stats:na.fail]{stats::na.omit}). The default (\code{NULL})
+refuses any \code{NA} in a model variable with a typed \code{mm_data_error}
+(audit-first: missing-data dropping must be opt-in). Pass
+\code{na.action = na.omit} for lme4's complete-case behavior, or
+\link[stats:na.fail]{stats::na.exclude} to also pad \code{\link[=fitted]{fitted()}}, \code{\link[=residuals]{residuals()}} and in-sample
+\code{\link[=predict]{predict()}} back to the rows of \code{data} with \code{NA} (as lm/lme4 do). Factor
+levels left unused after \code{subset}/NA removal are dropped, as
+\code{model.frame(drop.unused.levels = TRUE)} does in lme4.}
 
 \item{contrasts}{Optional named list of factor contrasts. The engine codes
 unordered factors with treatment contrasts (\code{contr.treatment}) and ordered
@@ -42,6 +48,12 @@ lme4/R defaults. A request for any other coding is refused (recode the
 factor instead).}
 
 \item{control}{A list from \code{\link[=mm_control]{mm_control()}}.}
+
+\item{offset}{Optional known component of the linear predictor: a numeric
+vector with one value per row of \code{data}, or an expression evaluated in
+\code{data} (as in \code{lme4::lmer(offset = )}). \code{offset()} terms in the formula
+are supported too and are added to it. The engine fits \code{y - offset};
+\code{\link[=fitted]{fitted()}} and \code{\link[=predict]{predict()}} add the offset back, so they match lmer.}
 }
 \value{
 An object of class \code{mm_lmm}, also inheriting from \code{mm_fit} and
@@ -68,6 +80,23 @@ R. Evaluation budgets are bounded (a bounded budget caps optimizer
 iterations; it does not prove every native evaluation terminates); runtime on
 large problems is governed by \code{mm_control(max_feval = )}.
 }
+\section{Formula language}{
+
+The fixed-effects part accepts R's formula language as \code{lm()}/\code{lmer()}
+do: \code{factor()}, \code{relevel()}, \code{cut()}, \code{scale()}, \code{poly()},
+\code{splines::ns()}/\code{bs()}, \code{as.numeric()}, comparisons such as \code{I(x > 0)},
+\code{offset()}, and the operators \code{*}, \code{:}, \code{^}, \code{\%in\%}, \code{-} and parenthesised
+groups such as \code{(a + b)^2} or \code{a * (b + c)}. Terms the engine cannot
+evaluate itself are evaluated in R (with \code{\link[stats:model.frame]{stats::model.frame()}}
+semantics: on the full \code{data}, before \code{subset}/\code{na.action}) and sent to
+the engine as synthetic columns; coefficient names match lme4's
+(\verb{poly(x, 2)1}, \verb{factor(cyl)6}), and \code{\link[=predict]{predict()}} on new data reuses the
+training basis (\code{predvars}), as \code{lm()} does. A logical predictor is coded
+like a factor with levels \code{FALSE}/\code{TRUE}, as \code{model.matrix()} codes it.
+Such transforms are not supported inside random-effect terms, where the
+engine refuses them with a typed error.
+}
+
 \examples{
 set.seed(1)
 df <- data.frame(

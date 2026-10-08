@@ -21,8 +21,15 @@
 #'   trial counts for proportion responses; weights must be positive and
 #'   finite.
 #' @param offset Optional fixed linear-predictor offset: a column of `data` or
-#'   a numeric vector; values must be finite.
-#' @param subset,na.action,contrasts Reserved for future parity with [lmm()].
+#'   a numeric vector; values must be finite. `offset()` terms in the formula
+#'   are also supported and are added to it (as in [stats::glm()]).
+#' @param subset,na.action,contrasts As in [lmm()]: `subset` selects rows
+#'   (evaluated in `data`), `na.action` controls missing values (the default
+#'   `NULL` refuses `NA` in a model variable with a typed `mm_data_error`;
+#'   pass `na.omit` for lme4's complete-case behaviour, or `na.exclude` to pad
+#'   `fitted()`/`residuals()`/`predict()` back to the original rows), and
+#'   `contrasts` is honoured only when it names the engine's coding
+#'   (`contr.treatment` for unordered, `contr.poly` for ordered factors).
 #' @param method GLMM estimation method. `"pirls_profiled"` is the default
 #'   fast-PIRLS profiled path. `"joint_laplace"` requests the labeled joint
 #'   Laplace route and requires `nAGQ <= 1`. The joint route tracks the lme4
@@ -88,7 +95,7 @@ glmm <- function(formula,
                  weights = NULL,
                  offset = NULL,
                  subset = NULL,
-                 na.action = na.omit,
+                 na.action = NULL,
                  contrasts = NULL,
                  method = c("pirls_profiled", "joint_laplace"),
                  nAGQ = 1L,
@@ -125,16 +132,29 @@ glmm <- function(formula,
     )
   }
 
-  if (!is.null(random) || !is.null(substitute(subset)) ||
-      !identical(na.action, na.omit) || !is.null(contrasts)) {
+  if (!is.null(random)) {
     mm_abort(
-      message = "`random`, `subset`, custom `na.action`, and `contrasts` are reserved for the fitted GLMM bridge.",
+      message = "`random` is reserved for the native random-effect constructor path; write random terms in `formula`.",
       class = "mm_fit_error",
       input = call
     )
   }
-  weights <- mm_glmm_validate_weights(weights, data, "weights")
-  offset <- mm_glmm_validate_weights(offset, data, "offset", positive = FALSE)
+  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
+  if (is.data.frame(data)) {
+    weights <- mm_glmm_validate_weights(weights, data, "weights")
+    offset <- mm_glmm_validate_weights(offset, data, "offset", positive = FALSE)
+  }
+
+  # Same lme4-style data preparation as lmm() (R/model-data.R): transforms,
+  # subset, na.action, unused levels, grouping coercion, formula expansion.
+  # Formula offset() terms are added to `offset`.
+  mprep <- mm_prepare_model_data(formula, data, substitute(subset), na.action,
+                                 weights, offset, parent.frame(),
+                                 control$verbose, lmm = FALSE)
+  data <- mprep$data
+  weights <- mprep$weights
+  offset <- mprep$offset
+  engine_formula <- mprep$formula_engine
 
   # Resolve binomial responses: translate a cbind(successes, failures) LHS into
   # a proportion response + trial-count weights, and pick the engine family
@@ -143,19 +163,18 @@ glmm <- function(formula,
   formula <- prep$formula
   data <- prep$data
   weights <- prep$weights
+  engine_formula[[2L]] <- formula[[2L]]
+  if (!is.null(mprep$na_action)) attr(data, "na.action") <- mprep$na_action
+  if (!is.null(attr(mprep$data, "mm_predvars"))) {
+    attr(data, "mm_predvars") <- attr(mprep$data, "mm_predvars")
+  }
   engine_family <- prep$engine_family
   if (identical(family_info$family, "negative_binomial")) {
     # Theta mode rides the family string (see mm_glmm_nb_engine_spec).
     engine_family <- mm_glmm_nb_engine_spec(family_info)
   }
 
-  # lme4 parity: grouping variables must be categorical. Coerce non-factor /
-  # non-character grouping columns to factors (announced, not silent) so an
-  # integer subject/item ID does not hit the native "grouping factor not
-  # categorical" refusal.
-  data <- mm_apply_grouping_coercion(formula, data, control$verbose)
-
-  spec <- compile_model(formula, data)
+  spec <- compile_model(engine_formula, data)
   mm_validate_fit_structure(spec, lmm = FALSE)
   mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {
@@ -184,7 +203,7 @@ glmm <- function(formula,
   }
 
   spec_data <- mm_translate_data(spec$model_frame)
-  formula_string <- mm_coerce_formula_string(formula)
+  formula_string <- mm_coerce_formula_string(engine_formula)
   control_json <- jsonlite::toJSON(unclass(control), auto_unbox = TRUE,
                                    null = "null")
 
@@ -254,9 +273,13 @@ glmm <- function(formula,
     inference_request = inference,
     control        = control,
     vars           = spec$vars,
-    model_frame    = spec$model_frame,
+    model_frame    = data,
     weights        = weights,
     offset         = offset,
+    offset_arg     = mprep$offset_arg,
+    engine_formula = if (!identical(engine_formula, formula)) engine_formula,
+    expansion      = mprep$expansion,
+    na.action      = mprep$na_action,
     artifact       = artifact,
     fit            = fit_result,
     fit_summary    = fit_summary,
@@ -287,6 +310,7 @@ glmm <- function(formula,
     )
   )
   fit <- mm_apply_lme4_coef_naming(fit)
+  fit <- mm_apply_lme4_group_labels(fit)
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
   # No silent surgery on the estimator that produced the numbers: when the
   # engine substituted a fallback for the requested method (typed

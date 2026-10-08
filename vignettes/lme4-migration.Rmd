@@ -78,7 +78,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 
 | lme4 | mixeff | Notes |
 |------|--------|-------|
-| `lmer(y ~ x + (x \| g), data)` | `lmm(y ~ x + (x \| g), data)` | same formula language, incl. `(x\|\|g)`, `(1\|g1/g2)`, crossed |
+| `lmer(y ~ x + (x \| g), data)` | `lmm(y ~ x + (x \| g), data)` | same formula language, incl. `(x\|\|g)`, `(1\|g1/g2)`, crossed; fixed-part `factor()`, `poly()`, `scale()`, `ns()`/`bs()`, `cut()`, `relevel()`, `offset()`, `^`, `%in%` and `(a + b)^2` work with lme4's coefficient names (evaluated in R and sent to the engine as columns, so `explain_model()` text shows synthetic `.poly_x_2.1`-style names); such transforms inside a random-effect bar are refused |
 | `glmer(y ~ ..., family = binomial)` | `glmm(y ~ ..., family = binomial())` | pass a family **object** (`binomial()`), not a string |
 | `lmerControl(...)` / `glmerControl(...)` | `mm_control(optimizer=, max_feval=, verbose=, start=)` | no `optCtrl` / `check.conv.*`; use `verify_convergence()` after the fit |
 | `fixef`, `vcov` | same generics, same values | |
@@ -91,14 +91,14 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `REMLcrit` | `REMLcrit()` | exported by mixeff (lme4's is not a generic; whichever package is attached last masks the other, and mixeff's forwards lme4 fits to lme4) |
 | `family`, `weights`, `model.frame` | identical | `weights()` returns ones for unweighted fits and `type = "working"` for GLMMs; `model.frame()` has lme4's transformed columns and `terms` attribute (the raw variables the engine used are `fit$model_frame`) |
 | `confint` | same generic, **different default** | Wald (`"asymptotic"`, lme4 spelling `"Wald"`) by default, where lme4 defaults to profile; returns fixed effects only. `"profile"` (LMMs) reports theta-scale (`theta1`, ...) and `sigma` rows, not lme4's `.sig01` sd/correlation scale, and omits beta under REML; `"bootstrap"` (lme4 spelling `"boot"`); GLMM availability per fit type is the route matrix in `vignette("inference", package = "mixeff")` |
-| `predict`, `fitted` | identical | `re.form = NULL/NA/~0`, `allow.new.levels`, `se.fit`, `interval`; partial `re.form` formulas are refused |
+| `predict`, `fitted` | identical | `re.form = NULL/NA/~0` or a partial formula such as `~(1 \| g)` (no `se.fit`/`interval` for partial ones), `allow.new.levels`, `na.action` (default `na.pass`), `se.fit`, `interval`; `newdata` is narrowed to the needed variables and coerced like the training frame; an `offset =` fit offset must be resupplied with `predict(offset =)` (lme4 silently uses 0) |
 | `residuals` | identical | LMM default `"response"`, `"pearson"`/`"deviance"` are `sqrt(w) * (y - mu)`; GLMM default `"deviance"`, plus `"pearson"`, `"working"`, `"response"`; `scaled = TRUE` divides by `sigma()` once |
 | `simulate`, `refit` | LMM only | GLMM fits are refused with a typed error; `newdata`, `use.u` and `newparams` are refused |
 | `update(fit, . ~ . - x)` | same generic | a formula that needs new columns re-evaluates the original `data`, as lme4 does; arguments `lmm()`/`glmm()` cannot carry over (e.g. `subset`, `na.action`) are refused rather than dropped |
-| `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | `anova(m1, m2)` is lme4's data frame (`npar AIC BIC logLik deviance Chisq Df Pr(>Chisq)`); single-model `anova()` is lmerTest's (`Sum Sq Mean Sq NumDF DenDF F value Pr(>F)`, Type I/II/III, Satterthwaite/KR) and LMM-only; mixeff's provenance table is `$table` |
+| `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | `anova(m1, m2)` is lme4's data frame (`npar AIC BIC logLik deviance Chisq Df Pr(>Chisq)`); single-model `anova()` is lmerTest's (`Sum Sq Mean Sq NumDF DenDF F value Pr(>F)`, Type I/II/III, Satterthwaite/KR) and LMM-only; mixeff's provenance table is `$table`; a multi-column term such as `poly(x, 2)` is tested one column per row (`drop1()` drops it as one term, like lme4) |
 | `getME` | `getME()` | LMM and GLMM; lme4's components including `u`, `b`, `L`, `RX`, `RZX`, `devcomp`, `lower`, `Gp`, `Ztlist`, `Tlist`, `ST`, `glmer.nb.theta`, `"ALL"`; `devfun` is refused (the optimizer lives in the engine) |
 | `isSingular` | `is_singular(fit, tol = 1e-4)` | lme4's rule (a zero-bounded theta below `tol`), LMM and GLMM; `lme4::isSingular()` is not a generic, so call `is_singular()` |
-| `ngrps` | identical | |
+| `ngrps` | identical | interaction/nested groups are named as in lme4 (`a:b`; `b:a` for the nested term of `a/b`) with levels `x:y` |
 | `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
 | `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a default profiled GLMM refuses inference through emmeans |
 | `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package; `summary()$coefficients` is lmerTest's matrix (per-row method labels in `summary()$coef_table`); lmerTest's `ddf = "Satterthwaite"`/`"Kenward-Roger"`/`"lme4"` is accepted by `summary()` and `anova()` |
@@ -109,12 +109,12 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 |---------------|--------|-------|
 | `REML` | `lmm(..., REML=)` | same |
 | `weights` | `weights=` | a column of `data` or a vector, as in lme4 (LMM and GLMM) |
-| `offset` | `glmm(..., offset=)` | GLMM only (a column of `data` or a vector); `offset()` inside the formula and LMM offsets are not yet supported |
-| `subset` | `lmm(..., subset=)` | supported for `lmm()` |
-| `na.action` | `lmm(..., na.action=)` | **default refuses NA**; pass `na.action = na.omit` for lme4's complete-case behavior |
+| `offset` | `offset=` | a column of `data`, an expression, or a vector (LMM and GLMM); `offset()` formula terms are added to it. LMMs fit `y - offset` and add it back in `fitted()`/`predict()` |
+| `subset` | `subset=` | LMM and GLMM; formula transforms are evaluated before subsetting, as in `model.frame()`; unused factor levels are dropped afterwards |
+| `na.action` | `na.action=` | LMM and GLMM; **default refuses NA**; pass `na.action = na.omit` for lme4's complete-case behavior, or `na.exclude` to pad `fitted()`/`residuals()`/`predict()` |
 | `contrasts` | partial | unordered factors use treatment coding, ordered factors `contr.poly` (both matching R/lme4 defaults). Any other coding is refused with an `mm_arg_error` rather than silently replaced, whether it is requested through `contrasts=`, a contrast attached to the factor (`contrasts(f) <- ...`), or `options(contrasts=)`; use `relevel()` to change the reference level, or build coded columns as numeric predictors |
-| character predictors | converted to factors | sorted levels, as lme4's `factor()` conversion does |
-| numeric/character grouping (accepted silently) | coerced to factor | non-factor grouping columns are coerced to factor, announced via an `mm_grouping_coercion_notice`; silence it with `mm_control(verbose = -1)` |
+| character predictors | converted to factors | sorted levels, as lme4's `factor()` conversion does; logical predictors are coded as factors with levels `FALSE`/`TRUE`, as `model.matrix()` does (e.g. `lFALSE`, `lTRUE` without an intercept) |
+| numeric/character grouping (accepted silently) | coerced to factor | non-factor grouping columns are coerced to factor, announced via an `mm_grouping_coercion_notice`; silence it with `mm_control(verbose = -1)`; an ordered grouping factor is used as an unordered one (grouping needs only its levels) |
 | `family = "binomial"` | `family = binomial()` | string families are not accepted |
 | `nAGQ` | `glmm(..., nAGQ=)` | `>1` on the profiled path and only for a single scalar random effect; `nAGQ = 0` is not accepted |
 | `control = lmerControl(optimizer=, optCtrl=)` | `mm_control(optimizer=, max_feval=, ...)` | the engine picks a default optimizer; `mm_control()` can override it or cap the evaluation budget |
@@ -209,7 +209,7 @@ number without comment:
 
 | Situation | lme4 (+lmerTest) | mixeff |
 |-----------|------|--------|
-| `NA` in a model variable | silently dropped | refused unless `na.action = na.omit` |
+| `NA` in a model variable | silently dropped | refused unless `na.action = na.omit` (or `na.exclude`) |
 | Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
 | Satterthwaite df at a boundary | lmerTest prints df anyway | refused with a reason; use bootstrap |
 | Prediction SE for an unseen grouping level | — | `NA` with the reason in `mm_reason` |

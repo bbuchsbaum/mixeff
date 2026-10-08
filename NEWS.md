@@ -60,6 +60,37 @@
   Pr(>F)`) and `anova(m1, m2)` lme4's (`npar AIC BIC logLik deviance Chisq Df
   Pr(>Chisq)`); mixeff's provenance table stays in `$table`.
 * `confint()` accepts lme4's `method = "Wald"` and `"boot"` spellings.
+* Stateful and expanded fixed-effect formula terms now work in `lmm()` and
+  `glmm()`: `factor()`, `relevel()`, `cut()`, `scale()`, `poly()`,
+  `splines::ns()`/`bs()`, `as.numeric()`, `I(x > 0)`, `offset()`, `^`,
+  `%in%`, and parenthesised groups such as `(a + b)^2` and `a * (b + c)`.
+  Coefficient names, `terms()`, `model.matrix()`, `drop1()` and `emmeans`
+  grids follow lme4, and `predict(newdata)` reuses the training basis.
+* `lmm()` gains `offset =` (and `offset()` formula terms); fitted values and
+  predictions include the offset, as in lmer.
+* `glmm()` now accepts `subset`, `na.action` and `contrasts` with the same
+  data preparation as `lmm()`. Its `na.action` default is now `NULL`
+  (refuse `NA`, like `lmm()`); the old `na.omit` default was never applied.
+* `na.action = na.exclude` pads `fitted()`, `residuals()` and in-sample
+  `predict()` to the original rows; the na.action record is kept on the fit
+  (`fit$na.action`, model-frame attribute) and used by the emmeans bridge.
+* Unused factor levels (fixed and grouping) are dropped after `subset`/NA
+  removal, so `ngrps()` and coefficient sets match lme4.
+* `predict(newdata)` keeps only the variables it needs (an unused Date
+  column no longer fails), coerces integer/character grouping and
+  character/logical fixed columns like the training frame, returns `NA` for
+  incomplete rows (new `na.action` argument, default `na.pass` as in lme4),
+  accepts partial `re.form` formulas such as `~ (1 | g)`, and evaluates
+  formula offsets from `newdata` (an `offset =` argument offset must be
+  resupplied via `predict(offset =)`).
+* Interaction and nested grouping factors are labelled as in lme4 (`a:b`,
+  and `b:a` for the nested term of `a/b`, with levels `x:y`) in `ranef()`,
+  `VarCorr()` and `ngrps()`; GLMM `predict(newdata)` works for them.
+* Logical predictors are coded as factors with levels `FALSE`/`TRUE`, as
+  `model.matrix()` does, so no-intercept and margin-free interaction models
+  match lme4 (`lFALSE`, `lTRUE`).
+* Ordered grouping factors are grouped as unordered factors (no dense
+  `contr.poly` basis is built for them).
 
 ## Compatibility
 

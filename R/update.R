@@ -27,8 +27,8 @@
 #'   omit to keep the current formula. Random-effect terms (`(x | g)`,
 #'   `(x || g)`) are preserved across `. ~ .` edits.
 #' @param ... Arguments to override on the re-fit. For `mm_lmm`: `data`,
-#'   `REML`, `weights`, `control`. For `mm_glmm`: additionally `family`,
-#'   `offset`, `method`, `nAGQ`, `inference`.
+#'   `REML`, `weights`, `offset`, `control`. For `mm_glmm`: additionally
+#'   `family`, `method`, `nAGQ`, `inference`.
 #' @param evaluate If `TRUE` (default) re-fit and return the new model; if
 #'   `FALSE` return the unevaluated call.
 #'
@@ -56,7 +56,7 @@ update.mm_lmm <- function(object, formula., ..., evaluate = TRUE) {
   # Check names before forcing `...`: an unsupported argument such as
   # `subset = x > 0` would otherwise be evaluated (and fail) first.
   mm_check_update_overrides(mm_dots_names(...),
-                            c("data", "REML", "weights", "control"), "lmm")
+                            c("data", "REML", "weights", "offset", "control"), "lmm")
   overrides <- list(...)
   new_formula <- if (missing(formula.)) {
     stats::formula(object)
@@ -69,6 +69,7 @@ update.mm_lmm <- function(object, formula., ..., evaluate = TRUE) {
                             mm_update_data(object, new_formula, parent.frame())),
     REML    = mm_update_arg(overrides, "REML", isTRUE(object$REML)),
     weights = mm_update_arg(overrides, "weights", object$weights),
+    offset  = mm_update_arg(overrides, "offset", mm_fit_offset_arg(object)),
     control = mm_update_arg(overrides, "control",
                             object$control %||% mm_control(verbose = -1))
   )
@@ -95,7 +96,7 @@ update.mm_glmm <- function(object, formula., ..., evaluate = TRUE) {
     family    = mm_update_arg(overrides, "family",
                               mm_glmm_family_from_info(object$family)),
     weights   = mm_update_arg(overrides, "weights", object$weights),
-    offset    = mm_update_arg(overrides, "offset", object$offset),
+    offset    = mm_update_arg(overrides, "offset", mm_fit_offset_arg(object)),
     method    = mm_update_arg(overrides, "method", object$method),
     nAGQ      = mm_update_arg(overrides, "nAGQ", object$nAGQ),
     inference = mm_update_arg(overrides, "inference", object$inference_request),

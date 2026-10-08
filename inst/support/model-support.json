@@ -48,9 +48,9 @@
     },
     {
       "feature": "offset",
-      "lmm": "unsupported",
+      "lmm": "supported",
       "glmm": "supported",
-      "notes": "lmm() has no offset argument; glmm(offset =) is supported."
+      "notes": "offset = argument and offset() formula terms. LMMs fit y - offset and add the offset back to fitted values and predictions (lmer semantics). predict(newdata) evaluates formula offsets from newdata; an offset = argument offset must be resupplied via predict(offset =)."
     },
     {
       "feature": "simulate",
@@ -67,11 +67,23 @@
       "notes": "Refit GLMMs by calling glmm() on the modified data."
     },
     {
-      "feature": "subset / random / custom na.action / custom contrasts (GLMM)",
-      "lmm": "see notes",
+      "feature": "subset / na.action / contrasts",
+      "lmm": "supported",
+      "glmm": "supported",
+      "notes": "Same data preparation for lmm() and glmm(): the default na.action (NULL) refuses NA; na.omit drops incomplete rows and na.exclude also pads fitted/residuals/predict. Unused factor levels are dropped after subset/NA removal. contrasts = is honoured only when it names the engine coding (contr.treatment / contr.poly)."
+    },
+    {
+      "feature": "random = (GLMM)",
+      "lmm": "not applicable",
       "glmm": "refused",
       "condition_class": "mm_fit_error",
-      "notes": "Reserved arguments on glmm(); recode data before fitting. LMMs: default refuses NA unless na.action = na.omit; non-default contrast codings are refused at compile time."
+      "notes": "Reserved argument on glmm(); write random terms in the formula."
+    },
+    {
+      "feature": "stateful fixed-effect terms (factor(), poly(), scale(), ns()/bs(), cut(), relevel(), offset(), ^, %in%, parenthesised groups)",
+      "lmm": "supported",
+      "glmm": "supported",
+      "notes": "Evaluated in R as stats::model.frame() does and sent to the engine as synthetic columns; coefficient names match lme4 and predict(newdata) reuses the training basis. Such terms inside random-effect bars are refused by the engine."
     },
     {
       "feature": "marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect)",

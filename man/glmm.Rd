@@ -12,7 +12,7 @@ glmm(
   weights = NULL,
   offset = NULL,
   subset = NULL,
-  na.action = na.omit,
+  na.action = NULL,
   contrasts = NULL,
   method = c("pirls_profiled", "joint_laplace"),
   nAGQ = 1L,
@@ -41,9 +41,16 @@ trial counts for proportion responses; weights must be positive and
 finite.}
 
 \item{offset}{Optional fixed linear-predictor offset: a column of \code{data} or
-a numeric vector; values must be finite.}
+a numeric vector; values must be finite. \code{offset()} terms in the formula
+are also supported and are added to it (as in \code{\link[stats:glm]{stats::glm()}}).}
 
-\item{subset, na.action, contrasts}{Reserved for future parity with \code{\link[=lmm]{lmm()}}.}
+\item{subset, na.action, contrasts}{As in \code{\link[=lmm]{lmm()}}: \code{subset} selects rows
+(evaluated in \code{data}), \code{na.action} controls missing values (the default
+\code{NULL} refuses \code{NA} in a model variable with a typed \code{mm_data_error};
+pass \code{na.omit} for lme4's complete-case behaviour, or \code{na.exclude} to pad
+\code{fitted()}/\code{residuals()}/\code{predict()} back to the original rows), and
+\code{contrasts} is honoured only when it names the engine's coding
+(\code{contr.treatment} for unordered, \code{contr.poly} for ordered factors).}
 
 \item{method}{GLMM estimation method. \code{"pirls_profiled"} is the default
 fast-PIRLS profiled path. \code{"joint_laplace"} requests the labeled joint

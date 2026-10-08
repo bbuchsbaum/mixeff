@@ -235,8 +235,8 @@ mm_cond_var_postvars <- function(fit) {
 }
 
 mm_compute_cond_var_postvars <- function(fit) {
-  spec_data <- mm_translate_data(fit$model_frame)
-  formula_string <- mm_coerce_formula_string(fit$formula)
+  spec_data <- mm_translate_data(mm_engine_frame(fit))
+  formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
                                    auto_unbox = TRUE, null = "null")
 
@@ -305,7 +305,7 @@ mm_compute_cond_var_postvars <- function(fit) {
       out[[group]] <- mm_merge_block_diag_postvar(out[[group]], arr, group)
     }
   }
-  out
+  mm_rename_postvar_groups(out, fit$group_map)
 }
 
 mm_merge_block_diag_postvar <- function(existing, incoming, group) {
@@ -662,6 +662,20 @@ extractAIC.mm_glmm <- extractAIC.mm_lmm
 #' @importFrom stats terms
 #' @export
 terms.mm_lmm <- function(x, ...) {
+  if (!is.null(x$expansion)) {
+    # Fixed-effect terms as the user wrote them (poly(), factor(), offset(),
+    # ...), with `predvars` holding the training basis, like terms(lmer_fit).
+    tt <- x$expansion$terms
+    return(stats::terms(stats::reformulate(
+      c(attr(tt, "term.labels"),
+        vapply(attr(tt, "offset") %||% integer(),
+               function(i) deparse1(attr(tt, "variables")[[i + 1L]]),
+               character(1))),
+      response = x$formula[[2L]],
+      intercept = attr(tt, "intercept") == 1L,
+      env = environment(x$formula)
+    )))
+  }
   stats::terms(mm_fixed_formula(x))
 }
 

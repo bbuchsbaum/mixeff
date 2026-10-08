@@ -231,7 +231,7 @@ glmm <- function(formula,
   spec_data <- mm_translate_data(spec$model_frame)
   formula_string <- mm_coerce_formula_string(engine_formula)
   control_json <- jsonlite::toJSON(unclass(control), auto_unbox = TRUE,
-                                   null = "null")
+                                   null = "null", digits = NA)
 
   json <- tryCatch(
     .Call(

@@ -19,7 +19,7 @@ PR).
 
 ## 1. Release blockers
 
-- [ ] **The vendored engine is stale.**
+- [x] **The vendored engine is stale.** _Fixed: re-pinned to mixeff-rs `accd4b1` (rc.5 + fixes) in mixeff `f934dff`._
   - mixeff vendors mixeff-rs `1f3f689` (rc.1, 2026-08-02), which is 42
     commits behind rc.5.
   - Fixes that R users currently do not get:
@@ -42,20 +42,19 @@ PR).
     - the rc.5 nested-REML fix (977ef11), because the gradient-oracle
       TrustBQ from f636282 had a wrong-optimum regression on PW2;
     - a full re-run of the parity suite.
-- [ ] **The declared Rust minimum is wrong.**
+- [x] **The declared Rust minimum is wrong.** _Fixed: 1.85 everywhere, plus a test against the bundled manifests._
   - `DESCRIPTION` and `src/rust/Cargo.toml` say 1.78.
   - The engine declares `rust-version = "1.85"`.
   - The vendored `indexmap 2.14` and `hashbrown 0.17` need 1.85, and
     `cobyla 1.0.0` and `hashbrown` use `edition = "2024"`.
   - Update `DESCRIPTION`, `src/rust/Cargo.toml`, `cran-comments.md` and
     `tests/testthat/test-msrv.R`.
-- [~] **`y ~ 0 + f` silently drops a factor level** **[repro]**.
+- [x] **`y ~ 0 + f` silently drops a factor level** **[repro]** _Fixed: mixeff-rs `b0037a4`._
   - The engine always treatment-coded factors, even without an intercept.
   - R full-codes the first factor in that case (`model.c` `modelmatrix`).
   - The R name map keeps the matching subset of columns, so nothing
     warned.
-  - Fixed in mixeff-rs branch `fix/no-intercept-factor-coding`.
-- [~] **`predict(newdata=)` is wrong for non-marginal fixed formulas**
+- [x] **`predict(newdata=)` is wrong for non-marginal fixed formulas** _Fixed: mixeff-rs `b0037a4`._
   **[repro]**.
   - `linear/predict.rs` built the newdata design with a separate
     all-treatment builder.
@@ -63,17 +62,16 @@ PR).
     zero.
   - `y ~ f + f:h` (that is, `f/h`) was off by up to 0.88; `y ~ 0 + f:h` was
     off by 7.6.
-  - Fixed on the same branch.
-- [ ] **A character fixed-effect predictor aborts the fit.**
+- [x] **A character fixed-effect predictor aborts the fit.** _Fixed: converted to sorted factors in `compile_model()`._
   - `R/data-translate.R:88-91` builds levels in first-appearance order.
   - `R/coef-names.R` `mm_coef_name_map()` only treats `is.factor` columns as
     factors.
   - Result: `mm_schema_error`. This hits every `read.csv` user.
-- [ ] **A factor whose name prefixes another predictor aborts the fit.**
+- [x] **A factor whose name prefixes another predictor aborts the fit.** _Fixed: suffix must be a level or contrast name._
   - Examples: `group` with `group_size`, `a` with `age`.
   - `mm_engine_encode_names()` uses `startsWith` without checking that the
     remainder is a level, which produces `group: _size`.
-- [ ] **Requested contrasts are silently ignored.**
+- [x] **Requested contrasts are silently ignored.** _Fixed: all three are refused with `mm_arg_error`._
   - Unordered factors carrying `contrasts<-` matrices and
     `options(contrasts = c("contr.sum", …))` are dropped.
   - The model.frame "contrasts dropped" warning is muffled in
@@ -81,7 +79,7 @@ PR).
   - `contr.SAS` is accepted, but the engine uses the first level as the
     reference.
   - All three should be refused, as ordered factors already are.
-- [ ] **The vignettes overclaim parity.**
+- [x] **The vignettes overclaim parity.** _Fixed: verb map rewritten; bead ID removed._
   - `vignettes/lme4-migration.Rmd:85-91` says `coef`, `VarCorr`,
     `residuals`, `anova`, `getME`, `isSingular` and `emmeans` are
     "identical" to lme4.
@@ -108,17 +106,19 @@ PR).
   - `||` vs `|` halves the p-value.
   - A correlation of 0 is interior; only an added variance lies on the
     boundary.
-- [ ] **High: binomial integer counts with trials fit to `Ok(NaN)`**
-  **[repro]** (`generalized/pirls.rs:642`). Either reject y > 1 or convert
-  counts to proportions.
-- [ ] **High: LMM prior weights are not validated** **[repro]**
-  (`linear/mod.rs:1364`).
+- [x] **High: binomial integer counts with trials fit to `Ok(NaN)`**
+  **[repro]** (`generalized/pirls.rs:642`). _Fixed in mixeff-rs `accd4b1`:
+  responses above 1 are refused._
+- [x] **High: LMM prior weights are not validated** **[repro]**
+  (`linear/mod.rs:1364`). _Fixed in mixeff-rs `accd4b1`: length, finiteness
+  and positivity are checked up front; zero weights are refused._
   - A wrong length panics on an assert in `FeMat::reweight`.
   - A zero weight gives a misleading "misspecified" error, and an unfitted
     model's logLik is `-inf`.
   - Decide lme4's zero-weight semantics.
-- [ ] **Medium: weighted-LMM simulation and parametric bootstrap draw
-  ε ~ N(0, σ²)** instead of N(0, σ²/w) (`linear/mod.rs:3753`).
+- [x] **Medium: weighted-LMM simulation and parametric bootstrap draw
+  ε ~ N(0, σ²)** instead of N(0, σ²/w) (`linear/mod.rs:3753`). _Fixed in
+  mixeff-rs `accd4b1`._
 - [ ] **Medium: `||` with a factor creates a different model from lme4**
   (`linear/mod.rs:4937`).
   - It is not documented in `docs/guide/05_what_is_supported.md`.
@@ -166,19 +166,24 @@ PR).
 - [ ] **`(1|a:b)` labels differ from lme4.**
   - Groups are named `"a & b"` with levels `x_y`.
   - GLMM `predict(newdata)` then aborts (`R/predict.R:427`).
-- [ ] **`simulate.mm_lmm` on singular crossed fits** draws a zero-variance
-  term with another term's variance (`R/simulate.R:224-233`).
-- [ ] **`simulate.mm_lmm` ignores weights**, and `attr(, "seed")` does not
-  follow the `stats::simulate` convention.
+- [x] **`simulate.mm_lmm` on singular crossed fits** draws a zero-variance
+  term with another term's variance (`R/simulate.R:224-233`). _Fixed in
+  `f934dff`._
+- [x] **`simulate.mm_lmm` ignores weights.** _Fixed in `f934dff`._
+- [ ] **`simulate.mm_lmm`'s `attr(, "seed")` does not follow the
+  `stats::simulate` convention.**
 - [ ] **LMM bootstraps ignore `set.seed()`.**
   - `bootstrap_control(seed = NULL)` leads to `StdRng::from_entropy()`.
   - Draw the seed from R's RNG, as the GLMM path already does.
-- [ ] **`update(fit, . ~ . + z)` fails, because it reuses the narrowed model
-  frame.** Unknown arguments are silently dropped (`R/update.R`).
+- [x] **`update(fit, . ~ . + z)` fails, because it reuses the narrowed model
+  frame.** Unknown arguments are silently dropped (`R/update.R`). _Fixed: it
+  re-evaluates `data` and refuses unknown arguments._
 - [ ] **`glmm()` argument handling differs from `lmm()`.**
-  - `weights = col` and `offset = col` are not evaluated in `data`.
-  - The `na.action = na.omit` default is never applied.
-  - `subset` is forced before it is refused.
+  - [x] `weights = col` and `offset = col` are not evaluated in `data`.
+    _Fixed._
+  - [ ] The `na.action = na.omit` default is never applied.
+  - [x] `subset` is forced before it is refused. _Fixed: it is no longer
+    forced._
 - [ ] **Residuals:**
   - LMM Pearson residuals divide by σ and ignore weights, and
     `scaled = TRUE` divides by σ twice (`R/predict.R:175-181`).

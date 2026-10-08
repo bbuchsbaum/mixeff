@@ -163,6 +163,14 @@
   per-observation vectors cross the bridge as R doubles instead of JSON and
   are stored once in the fit object.
 
+* Single-model `anova()` tests a multi-column term such as `poly(x, 2)` as
+  one multi-df row (joint F with the same df method), matching lmerTest,
+  when no other term contains it.
+* Engine error messages containing `%` (e.g. a formula with `%in%`, or a
+  column name with `%s`) reach R verbatim: extendr passed the message to
+  `Rf_error()` as a printf format string, which garbled them and could read
+  out of bounds.
+
 ## Compatibility
 
 * Fit-summary parsing accepts the additive `mixedmodels.fit_summary` 1.1.0

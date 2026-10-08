@@ -338,3 +338,19 @@ test_that("partial re.form keeps only the named terms' BLUPs (lme4)", {
                predict(gr, nd, re.form = ~ (1 | g), type = "link"),
                tolerance = 2e-3)
 })
+
+test_that("single-model anova tests a poly() term as one multi-df row, like lmerTest", {
+  skip_if_not_installed("lmerTest")
+  set.seed(93)
+  d <- data.frame(x = runif(150, -2, 2), z = rnorm(150),
+                  g = factor(rep(1:15, each = 10)))
+  d$y <- 1 + d$x - 0.5 * d$x^2 + 0.3 * d$z + rnorm(15)[d$g] + rnorm(150)
+  fit <- lmm(y ~ poly(x, 2) + z + (1 | g), d, control = mm_control(verbose = -1))
+  ref <- lmerTest::lmer(y ~ poly(x, 2) + z + (1 | g), d)
+  a <- anova(fit)
+  r <- stats::anova(ref)
+  expect_identical(rownames(a), rownames(r))
+  expect_equal(a[["NumDF"]], r[["NumDF"]])
+  expect_equal(a[["F value"]], r[["F value"]], tolerance = 1e-4)
+  expect_equal(a[["DenDF"]], r[["DenDF"]], tolerance = 1e-3)
+})

@@ -415,11 +415,86 @@ anova.mm_lmm <- function(object, ..., type = c("III", "II", "I", "block"),
       table$den_df[z_rows] <- Inf
     }
   }
+  if (!identical(method, "none")) {
+    table <- mm_anova_group_expanded_terms(object, table, type)
+  }
   table$type <- type
   table <- table[, c("term", "type", setdiff(names(table), c("term", "type"))),
                  drop = FALSE]
   rownames(table) <- NULL
   mm_anova_frame(object, table, type, method, refit_for_comparison)
+}
+
+# A user term that expands into several engine columns (poly(x, 2),
+# ns(x, 3), ...) is tested per column by the engine. lmerTest tests it as one
+# multi-df term. For a term no other term contains (so Type I/II/III all test
+# exactly its coefficients), replace the per-column rows by one joint F test
+# of all the term's coefficients, with the same df method as the rows.
+mm_anova_group_expanded_terms <- function(fit, table, type) {
+  ex <- fit$expansion
+  if (is.null(ex) || !length(ex$term_map)) return(table)
+  multi <- names(ex$term_map)[lengths(ex$term_map) > 1L]
+  if (!length(multi)) return(table)
+  droppable <- mm_droppable_terms(fit)
+  X <- stats::model.matrix(fit, type = "fixed")
+  for (lab in intersect(multi, droppable)) {
+    pieces <- which(startsWith(table$term, lab))
+    if (length(pieces) < 2L) next
+    method <- unique(table$method[pieces])
+    if (length(method) != 1L ||
+        !method %in% c("satterthwaite", "kenward_roger")) next
+    # Each per-column row is labelled with its coefficient's name.
+    cols <- match(table$term[pieces], colnames(X))
+    if (anyNA(cols)) next
+    L <- matrix(0, nrow = length(cols), ncol = ncol(X),
+                dimnames = list(colnames(X)[cols], colnames(X)))
+    L[cbind(seq_along(cols), cols)] <- 1
+    joint <- tryCatch(mm_anova_joint_f(fit, L, method, lab),
+                      error = function(cnd) NULL)
+    if (is.null(joint)) next
+    row <- table[pieces[[1L]], , drop = FALSE]
+    row$term <- lab
+    row$num_df <- joint$num_df
+    row$den_df <- joint$den_df
+    row$statistic <- joint$statistic
+    row$statistic_name <- "f"
+    row$p_value <- joint$p_value
+    row$status <- joint$status
+    table <- rbind(table[seq_len(pieces[[1L]] - 1L), , drop = FALSE], row,
+                   table[-seq_len(max(pieces)), , drop = FALSE])
+  }
+  table
+}
+
+mm_anova_joint_f <- function(fit, L, method, label) {
+  bridge <- mm_rust_fit_bridge_payload(fit)
+  json <- mm_fixed_effect_joint_test_json(
+    bridge$formula_string,
+    isTRUE(fit$REML),
+    bridge$spec_data$column_order,
+    bridge$spec_data$numeric_columns,
+    bridge$spec_data$categorical_values,
+    bridge$spec_data$categorical_levels,
+    bridge$spec_data$categorical_ordered,
+    bridge$weights,
+    bridge$control_json,
+    as.numeric(t(mm_coef_l_to_engine(L, fit))),
+    as.integer(nrow(L)),
+    as.integer(ncol(L)),
+    label,
+    rep(0, nrow(L)),
+    method
+  )
+  row <- mm_json_parse_fixed_effect_inference_table(
+    jsonlite::fromJSON(json, simplifyVector = FALSE)
+  )$table[1L, , drop = FALSE]
+  list(
+    statistic = as.numeric(row$statistic),
+    num_df = as.numeric(row$numerator_df),
+    den_df = as.numeric(row$denominator_df),
+    p_value = as.numeric(row$p_value),
+    status = as.character(row$status)
+  )
 }
 
 # lmerTest's ddf= spellings -> mixeff method names.

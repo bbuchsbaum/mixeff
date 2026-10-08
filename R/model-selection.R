@@ -71,7 +71,8 @@ mm_compare_fixed_f <- function(small, big, method) {
     # Kenward-Roger / Satterthwaite are REML constructions; pbkrtest refits
     # an ML model by REML too. Recorded in the result (`refit_reml`).
     mm_internal_lmm(big$formula, big$model_frame, REML = TRUE,
-                    weights = big$weights, control = mm_internal_control(big))
+                    weights = big$weights, offset = mm_fit_offset_arg(big),
+                    control = mm_internal_control(big))
   } else {
     big
   }

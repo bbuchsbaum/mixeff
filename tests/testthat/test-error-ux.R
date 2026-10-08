@@ -129,3 +129,16 @@ test_that("mm_negative_binomial rejects bad theta with a typed arg error", {
   expect_error(mm_negative_binomial(theta = -1), class = "mm_arg_error")
   expect_error(mm_negative_binomial(theta = c(1, 2)), class = "mm_arg_error")
 })
+
+test_that("engine error text containing '%' reaches R verbatim (no printf expansion)", {
+  err <- tryCatch(mm_parse_formula("y ~ a %in% b"), error = function(e) e)
+  if (inherits(err, "error")) {
+    expect_match(conditionMessage(err), "'%'", fixed = TRUE)
+    expect_false(grepl("0x0p", conditionMessage(err), fixed = TRUE))
+  }
+  # A data column whose name contains printf directives must not be expanded.
+  d <- data.frame(y = rnorm(12), g = factor(rep(1:3, 4)))
+  names(d)[1] <- "y%s%n"
+  err2 <- tryCatch(compile_model(`y%s%n` ~ zz + (1 | g), d), error = function(e) e)
+  expect_s3_class(err2, "error")
+})

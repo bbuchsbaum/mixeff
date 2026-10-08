@@ -32,6 +32,15 @@
   `re.form = NULL` (or `use.u = TRUE`) conditions on the fitted random
   effects. Previously `NULL` drew new random effects and `NA` left them out
   entirely. Seeded draws now reproduce lme4's when the estimates agree.
+* New diagnostics: `plot()` on a fit draws Pearson residuals against fitted
+  values (also Q-Q and scale-location via `which =`), `qqnorm()` works on
+  fits, and `plot()`/`qqnorm()` on `ranef()` output draw caterpillar and Q-Q
+  plots with conditional-variance intervals. With lattice loaded,
+  `dotplot()` and `qqmath()` work on `ranef()` output as in lme4.
+* New `hatvalues()`, `cooks.distance()` and `influence()` (case or group
+  deletion refits, with `dfbeta()`, `dfbetas()` and `cooks.distance()`
+  methods for the result). LMM values match lme4. GLMM hat values use the
+  working weights, as `glm` does, so they differ from lme4's.
 
 ## Compatibility
 

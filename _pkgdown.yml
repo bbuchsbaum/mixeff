@@ -25,6 +25,12 @@ reference:
   - update.mm
   - refit
   - simulate.mm_lmm
+- title: Diagnostics and influence
+  desc: Residual and random-effect plots, leverage, influence, R2 and ICC.
+  contents:
+  - plot.mm_fit
+  - plot.mm_ranef
+  - mm_influence
 - title: Inference
   desc: Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   contents:

@@ -33,10 +33,13 @@ SystemRequirements: Cargo (Rust's package manager, >= 1.85.0), rustc (>= 1.85.0)
 Depends:
     R (>= 4.2)
 Imports:
+    graphics,
+    grDevices,
     jsonlite,
     Matrix,
     rlang,
-    stats
+    stats,
+    utils
 Suggests:
     broom,
     broom.mixed,
@@ -46,9 +49,11 @@ Suggests:
     estimability,
     jsonvalidate,
     knitr,
+    lattice,
     lme4,
     lmerTest,
     MASS,
+    parallel,
     pbkrtest,
     rextendr,
     rmarkdown,

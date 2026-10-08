@@ -18,8 +18,8 @@ omit to keep the current formula. Random-effect terms (\code{(x | g)},
 \code{(x || g)}) are preserved across \code{. ~ .} edits.}
 
 \item{...}{Arguments to override on the re-fit. For \code{mm_lmm}: \code{data},
-\code{REML}, \code{weights}, \code{control}. For \code{mm_glmm}: additionally \code{family},
-\code{offset}, \code{method}, \code{nAGQ}, \code{inference}.}
+\code{REML}, \code{weights}, \code{offset}, \code{control}. For \code{mm_glmm}: additionally
+\code{family}, \code{method}, \code{nAGQ}, \code{inference}.}
 
 \item{evaluate}{If \code{TRUE} (default) re-fit and return the new model; if
 \code{FALSE} return the unevaluated call.}

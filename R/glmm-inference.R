@@ -187,7 +187,7 @@ contrast.mm_glmm <- function(fit, L, rhs = 0,
 drop1.mm_glmm <- function(object, scope = NULL, test = c("none", "Chisq"),
                           ...) {
   test <- match.arg(test)
-  terms <- setdiff(mm_fixed_effect_terms(object), "1")
+  terms <- mm_drop1_terms(object)
   if (!is.null(scope)) {
     terms <- intersect(terms, as.character(scope))
   }
@@ -202,7 +202,7 @@ drop1.mm_glmm <- function(object, scope = NULL, test = c("none", "Chisq"),
     df <- object$dof - reduced$dof
     data.frame(
       dropped = term,
-      formula = deparse1(reduced_formula),
+      formula = mm_drop_formula_label(object, term, reduced_formula),
       df = df,
       logLik = as.numeric(logLik(reduced)),
       AIC = AIC(reduced),

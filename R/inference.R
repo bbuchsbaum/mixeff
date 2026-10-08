@@ -385,6 +385,7 @@ mm_boundary_lrt_ml_fit <- function(fit, refit_for_comparison) {
     )
   }
   lmm(fit$formula, fit$model_frame, REML = FALSE, weights = fit$weights,
+      offset = mm_fit_offset_arg(fit),
       control = mm_control(verbose = -1))
 }
 
@@ -1282,8 +1283,8 @@ mm_fixed_effect_term_type_label <- function(type) {
 }
 
 mm_rust_fit_bridge_payload <- function(fit) {
-  spec_data <- mm_translate_data(fit$model_frame)
-  formula_string <- mm_coerce_formula_string(fit$formula)
+  spec_data <- mm_translate_data(mm_engine_frame(fit))
+  formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- jsonlite::toJSON(
     unclass(fit$control %||% mm_control()),
     auto_unbox = TRUE,

@@ -21,17 +21,41 @@
 #' @param subset Optional expression selecting rows of `data`, evaluated in
 #'   `data` (as in [stats::lm()]).
 #' @param na.action Optional function controlling missing-value handling,
-#'   applied to the model variables before fitting (e.g. [stats::na.omit]).
-#'   The default (`NULL`) refuses any `NA` in a model variable with a typed
-#'   `mm_data_error` (audit-first: missing-data dropping must be opt-in). Pass
-#'   `na.action = na.omit` for lme4's complete-case behavior.
+#'   applied to the model variables (including evaluated transforms such as
+#'   `log(x)`) after `subset` (e.g. [stats::na.omit]). The default (`NULL`)
+#'   refuses any `NA` in a model variable with a typed `mm_data_error`
+#'   (audit-first: missing-data dropping must be opt-in). Pass
+#'   `na.action = na.omit` for lme4's complete-case behavior, or
+#'   [stats::na.exclude] to also pad [fitted()], [residuals()] and in-sample
+#'   [predict()] back to the rows of `data` with `NA` (as lm/lme4 do). Factor
+#'   levels left unused after `subset`/NA removal are dropped, as
+#'   `model.frame(drop.unused.levels = TRUE)` does in lme4.
 #' @param contrasts Optional named list of factor contrasts. The engine codes
 #'   unordered factors with treatment contrasts (`contr.treatment`) and ordered
 #'   factors with orthonormal polynomial contrasts (`contr.poly`), matching
 #'   lme4/R defaults. A request for any other coding is refused (recode the
 #'   factor instead).
 #' @param control A list from [mm_control()].
+#' @param offset Optional known component of the linear predictor: a numeric
+#'   vector with one value per row of `data`, or an expression evaluated in
+#'   `data` (as in `lme4::lmer(offset = )`). `offset()` terms in the formula
+#'   are supported too and are added to it. The engine fits `y - offset`;
+#'   [fitted()] and [predict()] add the offset back, so they match lmer.
 #'
+#' @section Formula language:
+#' The fixed-effects part accepts R's formula language as `lm()`/`lmer()`
+#' do: `factor()`, `relevel()`, `cut()`, `scale()`, `poly()`,
+#' `splines::ns()`/`bs()`, `as.numeric()`, comparisons such as `I(x > 0)`,
+#' `offset()`, and the operators `*`, `:`, `^`, `%in%`, `-` and parenthesised
+#' groups such as `(a + b)^2` or `a * (b + c)`. Terms the engine cannot
+#' evaluate itself are evaluated in R (with [stats::model.frame()]
+#' semantics: on the full `data`, before `subset`/`na.action`) and sent to
+#' the engine as synthetic columns; coefficient names match lme4's
+#' (`poly(x, 2)1`, `factor(cyl)6`), and [predict()] on new data reuses the
+#' training basis (`predvars`), as `lm()` does. A logical predictor is coded
+#' like a factor with levels `FALSE`/`TRUE`, as `model.matrix()` codes it.
+#' Such transforms are not supported inside random-effect terms, where the
+#' engine refuses them with a typed error.
 #'
 #' @details
 #' Optimization runs inside a single native call with no progress output: the
@@ -58,7 +82,7 @@
 #' @export
 lmm <- function(formula, data, REML = TRUE, weights = NULL,
                 subset = NULL, na.action = NULL, contrasts = NULL,
-                control = mm_control()) {
+                control = mm_control(), offset = NULL) {
   call <- match.call()
   control <- mm_validate_control(control)
   if (inherits(formula, "formula") && length(formula) == 3L &&
@@ -80,6 +104,11 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   }
   if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
   weights <- mm_lmm_weights(substitute(weights), data, parent.frame())
+  offset_arg <- if (is.data.frame(data)) {
+    eval(substitute(offset), data, parent.frame())
+  } else {
+    offset
+  }
   if (!is.logical(REML) || length(REML) != 1L || is.na(REML)) {
     mm_abort(
       message = "`REML` must be TRUE or FALSE.",
@@ -88,20 +117,18 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
     )
   }
 
-  # lme4-style data preparation: row subset, then NA handling. Both run before
-  # the design is compiled so the engine sees a clean, complete frame.
-  prep <- mm_prepare_fit_data(formula, data, substitute(subset), na.action,
-                              weights, parent.frame())
+  # lme4-style data preparation (see R/model-data.R): formula transforms are
+  # evaluated, then `subset` and `na.action` select rows, unused factor levels
+  # are dropped, grouping columns are coerced (announced, not silent), and
+  # stateful fixed-effect terms are expanded into synthetic columns.
+  prep <- mm_prepare_model_data(formula, data, substitute(subset), na.action,
+                                weights, offset_arg, parent.frame(),
+                                control$verbose, lmm = TRUE)
   data <- prep$data
   weights <- prep$weights
+  engine_formula <- prep$formula_engine
 
-  # lme4 parity: grouping variables must be categorical. Coerce non-factor /
-  # non-character grouping columns to factors (announced, not silent) so an
-  # integer subject/item ID does not hit the native "grouping factor not
-  # categorical" refusal.
-  data <- mm_apply_grouping_coercion(formula, data, control$verbose)
-
-  spec <- compile_model(formula, data)
+  spec <- compile_model(engine_formula, data)
   mm_validate_fit_structure(spec)
   mm_scaling_advisory(spec, control$verbose)
   if (control$verbose >= 0L) {
@@ -109,7 +136,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   }
 
   spec_data <- mm_translate_data(spec$model_frame)
-  formula_string <- mm_coerce_formula_string(formula)
+  formula_string <- mm_coerce_formula_string(engine_formula)
   control_json <- jsonlite::toJSON(unclass(control), auto_unbox = TRUE, null = "null")
 
   json <- tryCatch(
@@ -148,8 +175,13 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
     REML           = isTRUE(REML),
     control        = control,
     vars           = spec$vars,
-    model_frame    = spec$model_frame,
+    model_frame    = data,
     weights        = weights,
+    offset         = prep$offset,
+    offset_arg     = prep$offset_arg,
+    engine_formula = if (!identical(engine_formula, formula)) engine_formula,
+    expansion      = prep$expansion,
+    na.action      = prep$na_action,
     artifact       = artifact,
     fit            = fit_result,
     fit_summary    = fit_summary,
@@ -178,7 +210,14 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       artifact = artifact
     )
   )
+  if (!is.null(fit$offset)) {
+    # The engine fitted y - offset; report fitted values on the response
+    # scale (lmer semantics). Residuals are unchanged by the shift.
+    fit$fitted <- fit$fitted + fit$offset
+    fit$fixed_fitted <- fit$fixed_fitted + fit$offset
+  }
   fit <- mm_apply_lme4_coef_naming(fit)
+  fit <- mm_apply_lme4_group_labels(fit)
   class(fit) <- c("mm_lmm", "mm_fit", "mm_compiled")
   fit
 }
@@ -407,60 +446,6 @@ mm_scaling_advisory <- function(spec, verbose) {
     )
   }
   invisible(NULL)
-}
-
-# lme4-style data preparation shared by the fit drivers: apply a `subset`
-# expression and an `na.action` to `data` (and the already-evaluated `weights`
-# vector, kept aligned). Returns the processed `data` and `weights`. The NA
-# policy is applied by *calling* the supplied na.action on the model variables,
-# so na.omit / na.exclude / na.fail / na.pass all behave as their authors
-# intend; the default (NULL) leaves NAs for compile_model() to refuse.
-mm_prepare_fit_data <- function(formula, data, subset_expr, na.action,
-                                weights, enclos) {
-  if (!is.data.frame(data)) {
-    mm_abort(message = "`data` must be a data.frame.", class = "mm_data_error",
-             input = data)
-  }
-  n0 <- nrow(data)
-
-  # ---- subset ----
-  if (!identical(subset_expr, quote(NULL)) && !is.null(subset_expr)) {
-    keep <- eval(subset_expr, data, enclos)
-    if (is.logical(keep)) {
-      if (length(keep) != n0) {
-        mm_abort(
-          message = sprintf("`subset` must have one value per row of `data` (%d).", n0),
-          class = "mm_arg_error", input = keep
-        )
-      }
-      keep[is.na(keep)] <- FALSE
-      idx <- which(keep)
-    } else if (is.numeric(keep)) {
-      idx <- as.integer(keep)
-      idx <- idx[!is.na(idx)]
-    } else {
-      mm_abort(message = "`subset` must evaluate to a logical or integer index.",
-               class = "mm_arg_error", input = keep)
-    }
-    data <- data[idx, , drop = FALSE]
-    if (!is.null(weights)) weights <- weights[idx]
-  }
-
-  # ---- na.action ----
-  if (!is.null(na.action)) {
-    if (!is.function(na.action)) na.action <- match.fun(na.action)
-    vars <- intersect(all.vars(formula), names(data))
-    sub <- data[, vars, drop = FALSE]
-    cleaned <- na.action(sub)                 # may error (na.fail) or drop rows
-    omitted <- attr(cleaned, "na.action")
-    if (!is.null(omitted)) {
-      drop_idx <- as.integer(omitted)
-      data <- data[-drop_idx, , drop = FALSE]
-      if (!is.null(weights)) weights <- weights[-drop_idx]
-    }
-  }
-
-  list(data = data, weights = weights)
 }
 
 # The engine codes unordered factors with treatment (dummy) contrasts and

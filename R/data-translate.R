@@ -280,7 +280,7 @@ mm_check_no_na <- function(data, vars, .call = rlang::caller_env()) {
   )
   mm_abort(
     message = sprintf(
-      "Missing values in design variable(s): %s. mixeff requires complete cases; pass na.omit(data) explicitly before fitting.",
+      "Missing values in design variable(s): %s. mixeff requires complete cases by default; pass `na.action = na.omit` (or `na.exclude`) to lmm()/glmm(), or na.omit(data), to drop incomplete rows.",
       details
     ),
     class = "mm_data_error",

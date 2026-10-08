@@ -122,12 +122,52 @@ mm_coef_name_map <- function(fit, engine_names = names(fit$beta)) {
     )
   }
 
+  lme4_names <- r_names[keep]
+  assign <- as.integer(x_assign[keep])
+  term_labels <- attr(stats::terms(rhs), "term.labels")
+  if (!is.null(fit$expansion)) {
+    # Stateful / expanded fixed terms: the design above is built on the
+    # synthetic columns; report lme4's names ("poly(x, 2)1", "factor(f)b"),
+    # order, term labels and assign index, which come from model.matrix()
+    # of the user's own fixed formula.
+    user_tt <- fit$expansion$terms
+    user_X <- withCallingHandlers(
+      stats::model.matrix(
+        user_tt,
+        stats::model.frame(user_tt, data = fit$model_frame,
+                           na.action = stats::na.pass)
+      ),
+      warning = muffle_contrasts_dropped
+    )
+    translated <- mm_expansion_user_names(lme4_names, fit$expansion)
+    pos <- match(colnames(user_X), translated)
+    if (anyNA(match(translated, colnames(user_X)))) {
+      mm_abort(
+        message = paste0(
+          "Could not map the expanded fixed-effect design back to the ",
+          "formula's coefficient names (",
+          paste(setdiff(translated, colnames(user_X)), collapse = ", "),
+          "); please report it with a reproducer."
+        ),
+        class = "mm_schema_error",
+        expected = colnames(user_X),
+        observed = translated
+      )
+    }
+    present <- !is.na(pos)
+    pos <- pos[present]
+    lme4_names <- translated[pos]
+    matched <- matched[pos]
+    assign <- as.integer(attr(user_X, "assign")[present])
+    term_labels <- attr(user_tt, "term.labels")
+  }
+
   list(
     engine_names = engine_names,
-    lme4_names   = r_names[keep],
+    lme4_names   = lme4_names,
     perm         = matched,
-    assign       = as.integer(x_assign[keep]),
-    term_labels  = attr(stats::terms(rhs), "term.labels")
+    assign       = assign,
+    term_labels  = term_labels
   )
 }
 

@@ -169,3 +169,22 @@ test_that("simulate() keeps a zero-variance crossed term at zero", {
   )
   expect_equal(Sigma[1, 1], 0)
 })
+
+test_that("simulate() covariance fallback uses the VarCorr table within the term's group", {
+  df <- mm_dh_data()
+  fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+  # Drop the traces so every SD must come from the VarCorr fallback.
+  fit_no_trace <- fit
+  fit_no_trace$artifact$covariance_parameter_traces <- list()
+  terms <- fit$artifact$semantic_model$random_terms
+  id <- if (is.null(terms[[1]]$id)) "r0" else terms[[1]]$id
+  vc <- VarCorr(fit)$table
+  expected <- vc$variance[vc$group == "g" & vc$name == "(Intercept)"][[1L]]
+  got <- mixeff:::mm_random_term_covariance(fit_no_trace, id, "(Intercept)", "g")
+  expect_equal(got[1, 1], expected)
+  # An unknown group label with several groups in the table finds nothing.
+  fit_two <- fit_no_trace
+  fit_two$varcorr$table <- rbind(vc, transform(vc[vc$group == "g", ], group = "h"))
+  got2 <- mixeff:::mm_random_term_covariance(fit_two, id, "(Intercept)", "zzz")
+  expect_equal(got2[1, 1], 0)
+})

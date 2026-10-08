@@ -31,6 +31,7 @@ reference:
   - plot.mm_fit
   - plot.mm_ranef
   - mm_influence
+  - mm_variance_components
 - title: Inference
   desc: Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   contents:

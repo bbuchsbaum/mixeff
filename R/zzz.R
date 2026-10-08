@@ -44,6 +44,23 @@ mm_register_external_s3 <- function() {
   if ("lattice" %in% loadedNamespaces()) {
     mm_register_lattice_s3()
   }
+  # performance::icc()/r2() and insight::get_variance() (both in Suggests).
+  setHook(
+    packageEvent("insight", "onLoad"),
+    function(...) mm_register_insight_s3(),
+    action = "append"
+  )
+  setHook(
+    packageEvent("performance", "onLoad"),
+    function(...) mm_register_performance_s3(),
+    action = "append"
+  )
+  if ("insight" %in% loadedNamespaces()) {
+    mm_register_insight_s3()
+  }
+  if ("performance" %in% loadedNamespaces()) {
+    mm_register_performance_s3()
+  }
   if ("emmeans" %in% loadedNamespaces()) {
     mm_register_emmeans_s3()
   }

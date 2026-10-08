@@ -44,6 +44,7 @@ Suggests:
     broom,
     broom.mixed,
     generics,
+    insight,
     ggplot2,
     emmeans (>= 1.4),
     estimability,
@@ -55,6 +56,7 @@ Suggests:
     MASS,
     parallel,
     pbkrtest,
+    performance,
     rextendr,
     rmarkdown,
     testthat (>= 3.0.0)

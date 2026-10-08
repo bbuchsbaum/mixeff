@@ -41,6 +41,11 @@
   deletion refits, with `dfbeta()`, `dfbetas()` and `cooks.distance()`
   methods for the result). LMM values match lme4. GLMM hat values use the
   working weights, as `glm` does, so they differ from lme4's.
+* New `mm_r2()`, `mm_icc()` and `mm_variance_components()` compute
+  Nakagawa marginal/conditional R2 and adjusted/unadjusted ICC. With
+  performance and insight installed, `performance::r2()`,
+  `performance::icc()` and `insight::get_variance()` also work on mixeff
+  fits and agree with their values on the matching lme4 fit.
 
 ## Compatibility
 

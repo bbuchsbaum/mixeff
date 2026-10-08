@@ -110,8 +110,10 @@ NULL
 hatvalues.mm_lmm <- function(model, fullHatMatrix = FALSE, ...) {
   parts <- mm_influence_parts(model)
   X <- stats::model.matrix(model, type = "fixed")
-  Z <- stats::model.matrix(model, type = "random")
-  Lambda <- mm_hat_lambda(model)
+  # getME() returns Z and Lambda as a consistent pair in the engine's
+  # (lme4's) term order.
+  Z <- getME(model, "Z")
+  Lambda <- getME(model, "Lambda")
   if (ncol(Z) != nrow(Lambda)) {
     mm_abort(
       message = "The random-effect design and covariance factor have incompatible sizes; hat values are unavailable for this fit.",
@@ -140,30 +142,6 @@ hatvalues.mm_lmm <- function(model, fullHatMatrix = FALSE, ...) {
   out <- Matrix::colSums(CL^2)
   names(out) <- nm
   out
-}
-
-# Relative covariance factor Lambda, block-diagonal in the column order of
-# model.matrix(type = "random") (formula term order, levels, then
-# coefficients). Built per term from the term's fitted covariance so it does
-# not depend on the engine's theta ordering.
-mm_hat_lambda <- function(fit) {
-  terms <- fit$artifact$semantic_model$random_terms %||% list()
-  scale <- if (inherits(fit, "mm_glmm") &&
-               !identical(fit$family$family, "gamma")) 1 else fit$sigma
-  blocks <- lapply(seq_along(terms), function(i) {
-    term <- terms[[i]]
-    term_id <- term$id %||% sprintf("r%d", i - 1L)
-    group_label <- mm_random_term_group_label(fit, term, i)
-    k <- nlevels(mm_group_factor(fit$model_frame, group_label))
-    cn <- vapply(term$basis %||% list(), mm_basis_label, character(1))
-    if (!length(cn)) cn <- "(Intercept)"
-    L <- mm_chol_lower_psd(
-      mm_random_term_covariance(fit, term_id, cn, group_label)
-    ) / scale
-    Matrix::kronecker(Matrix::Diagonal(k), Matrix::Matrix(L, sparse = TRUE))
-  })
-  if (!length(blocks)) return(Matrix::Matrix(0, 0, 0, sparse = TRUE))
-  Matrix::bdiag(blocks)
 }
 
 #' @rdname mm_influence

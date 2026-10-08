@@ -680,8 +680,11 @@ test_that("simulate population path and re.form guard", {
   sims <- simulate(fit, nsim = 2L, seed = 1L, re.form = NA)
   expect_equal(ncol(sims), 2L)
   expect_equal(nrow(sims), nobs(fit))
-  expect_error(simulate(fit, re.form = ~(1 | g)),
-               class = "mm_inference_unavailable")
+  # Naming every random term is conditional simulation; a non-formula
+  # re.form is an argument error.
+  expect_identical(attr(simulate(fit, re.form = ~(1 | g)), "mm_re_form"),
+                   "conditional")
+  expect_error(simulate(fit, re.form = "g"), class = "mm_arg_error")
 })
 
 test_that("diagnostics filters and fit_status on fit and spec", {

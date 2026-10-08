@@ -21,6 +21,18 @@
   `residuals()`, `anova()`, `getME()`, `isSingular()` and `emmeans` as
   identical to lme4; it lists the actual differences.
 
+## lme4 parity and checklist completion
+
+* `simulate()` now works for GLMMs (binomial, Poisson, Gamma, negative
+  binomial) and `refit()` re-fits a GLMM to a new response. Binomial
+  `cbind()` fits simulate two-column count matrices and proportion fits
+  simulate proportions, as in lme4.
+* Breaking: `simulate()` now uses lme4's `re.form` meaning. The default
+  `re.form = NA` (or `~0`, or `use.u = FALSE`) draws new random effects;
+  `re.form = NULL` (or `use.u = TRUE`) conditions on the fitted random
+  effects. Previously `NULL` drew new random effects and `NA` left them out
+  entirely. Seeded draws now reproduce lme4's when the estimates agree.
+
 ## Compatibility
 
 * Fit-summary parsing accepts the additive `mixedmodels.fit_summary` 1.1.0

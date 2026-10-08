@@ -40,10 +40,10 @@ mm_engine_encode_names <- function(r_names, factor_vars, logical_vars = characte
     for (v in factor_vars) {
       if (startsWith(comp, v)) {
         lev <- substring(comp, nchar(v) + 1L)
-        if (!nzchar(lev)) next
         allowed <- factor_suffixes[[v]]
-        if (!is.null(allowed) && !(lev %in% allowed)) next
-        return(paste0(v, ": ", lev))
+        if (nzchar(lev) && (is.null(allowed) || lev %in% allowed)) {
+          return(paste0(v, ": ", lev))
+        }
       }
     }
     for (v in logical_vars) {

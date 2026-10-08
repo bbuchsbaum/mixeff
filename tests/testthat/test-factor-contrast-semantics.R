@@ -163,3 +163,24 @@ test_that("ordered factor fits (poly-coded) under the standard UNNAMED contrasts
   expect_equal(as.numeric(stats::logLik(fit)), as.numeric(stats::logLik(ref)),
                tolerance = 1e-4)
 })
+
+test_that("an unset contrasts option is refused for unordered factors too", {
+  dat <- without_attached_contrasts(factor_contrast_design())
+  old <- options(contrasts = NULL)
+  on.exit(options(old), add = TRUE)
+  expect_error(
+    lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
+    regexp = "not contr.treatment",
+    class = "mm_arg_error"
+  )
+})
+
+test_that("an attached contr.treatment string is honoured (it is the engine's coding)", {
+  dat <- without_attached_contrasts(factor_contrast_design())
+  plain <- lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1))
+  contrasts(dat$f) <- "contr.treatment"
+  tagged <- expect_no_warning(
+    lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1))
+  )
+  expect_equal(fixef(tagged), fixef(plain))
+})

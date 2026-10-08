@@ -67,10 +67,19 @@ refit.mm_lmm <- function(object, newresp, ...) {
     )
   }
   data <- object$model_frame
-  data[[mm_response_name(object)]] <- as.numeric(newresp)
+  # An LMM offset is fitted as the adjusted response `.mm_offset_response`;
+  # the new response replaces the user's response column and the offset is
+  # re-applied by lmm().
+  response <- if (!is.null(object$offset)) {
+    all.vars(object$formula[[2L]])[[1L]]
+  } else {
+    mm_response_name(object)
+  }
+  data[[response]] <- as.numeric(newresp)
   control <- list(...)$control %||% mm_control(verbose = -1)
   fit <- lmm(object$formula, data, REML = isTRUE(object$REML),
-             weights = object$weights, control = control)
+             weights = object$weights, offset = mm_fit_offset_arg(object),
+             control = control)
   fit$refit <- list(
     source = "refit",
     original_fit_status = fit_status(object)
@@ -118,7 +127,9 @@ refit.mm_lmm <- function(object, newresp, ...) {
 #' @param use.u Logical; `TRUE` is the same as `re.form = NULL` and `FALSE`
 #'   the same as `re.form = NA`. Specify at most one of `use.u` and `re.form`.
 #' @param re.form `NA` or `~0` (default `NA`) to simulate new random effects,
-#'   or `NULL` to condition on the fitted random effects.
+#'   `NULL` to condition on the fitted random effects, or a formula such as
+#'   `~ (1 | g)` to condition on those terms' fitted random effects and draw
+#'   new ones for the others (as lme4).
 #' @param ... Reserved; lme4 arguments that cannot be honoured (`newdata`,
 #'   `newparams`, ...) are refused with a typed error.
 #'
@@ -159,9 +170,13 @@ simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
   n <- nobs(object)
   # Prior weights scale the residual variance: sigma^2 / w.
   w <- object$weights %||% rep(1, n)
+  resolved <- mm_simulate_resolve_partial(object, target, re.form)
+  target <- resolved$target
   out <- mm_with_seed(seed, {
     eta <- if (identical(target, "conditional")) {
       matrix(as.numeric(fitted(object)), n, nsim)
+    } else if (identical(target, "partial")) {
+      mm_simulate_partial_eta(object, resolved, nsim)
     } else {
       mm_simulate_fixed_eta(object) + mm_simulate_new_re(object, nsim)
     }

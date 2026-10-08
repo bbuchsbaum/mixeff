@@ -33,16 +33,49 @@ mm_simulate_target <- function(re.form, use.u, re_form_missing, use_u_missing) {
   target <- mm_prediction_target(re.form)
   if (identical(target, "population")) return("unconditional")
   if (identical(target, "conditional")) return("conditional")
+  if (inherits(re.form, "formula")) return("partial")
   mm_abort(
     message = paste(
       "`re.form` must be NA or ~0 (simulate new random effects, the lme4",
-      "default) or NULL (condition on the fitted random effects); partial",
-      "random-effect formulas are not available for simulation."
+      "default), NULL (condition on the fitted random effects), or a",
+      "formula naming the random-effect terms to condition on."
     ),
-    class = "mm_inference_unavailable",
-    reason_code = "simulate_partial_re_form_unavailable",
+    class = "mm_arg_error",
     input = re.form
   )
+}
+
+# Resolve a "partial" simulation target against the fit (lme4 semantics:
+# condition on the BLUPs of the terms named in `re.form`, draw new random
+# effects for every other term). A formula naming every term is plain
+# conditional simulation.
+mm_simulate_resolve_partial <- function(fit, target, re.form) {
+  if (!identical(target, "partial")) return(list(target = target))
+  rf <- mm_resolve_re_form(fit, re.form)
+  if (identical(rf$target, "conditional")) return(list(target = "conditional"))
+  if (identical(rf$target, "population")) return(list(target = "unconditional"))
+  labels <- vapply(mm_lme4_group_specs(re.form), `[[`, character(1), "label")
+  list(target = "partial", formula = re.form, condition_on = labels)
+}
+
+# In-sample values for the fitted rows (drops na.exclude padding).
+mm_simulate_insample <- function(fit, x) {
+  x <- as.numeric(x)
+  n <- nobs(fit)
+  if (length(x) > n && !is.null(fit$na.action)) x <- x[-fit$na.action]
+  x
+}
+
+# Linear predictor conditioned on the BLUPs of the `re.form` terms plus new
+# random effects for the remaining terms.
+mm_simulate_partial_eta <- function(fit, resolved, nsim) {
+  n <- nobs(fit)
+  cond <- mm_simulate_insample(
+    fit, stats::predict(fit, re.form = resolved$formula,
+                        type = if (inherits(fit, "mm_glmm")) "link" else NULL)
+  )
+  matrix(cond, n, nsim) +
+    mm_simulate_new_re(fit, nsim, exclude = resolved$condition_on)
 }
 
 mm_simulate_check_nsim <- function(nsim) {
@@ -99,6 +132,7 @@ mm_simulate_term_layout <- function(fit) {
     }
     Sigma <- mm_random_term_covariance(fit, term_id, basis_labels, group_label)
     list(
+      label = group_label,
       group = group,
       nlevels = nlevels(group),
       basis = basis_values,
@@ -116,9 +150,11 @@ mm_simulate_term_layout <- function(fit) {
 
 # n x nsim matrix of simulated random-effect contributions (Z b) on the
 # linear-predictor scale.
-mm_simulate_new_re <- function(fit, nsim) {
+mm_simulate_new_re <- function(fit, nsim, exclude = character()) {
   n <- nobs(fit)
   layout <- mm_simulate_term_layout(fit)
+  # Terms conditioned on (partial re.form) contribute their BLUPs elsewhere.
+  layout <- Filter(function(t) !(t$label %in% exclude), layout)
   if (!length(layout)) return(matrix(0, n, nsim))
   q_term <- vapply(layout, function(t) t$nlevels * length(t$basis), numeric(1))
   q <- sum(q_term)
@@ -204,9 +240,13 @@ simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
     )
   }
 
+  resolved <- mm_simulate_resolve_partial(object, target, re.form)
+  target <- resolved$target
   out <- mm_with_seed(seed, {
     mu <- if (identical(target, "conditional")) {
       matrix(as.numeric(fitted(object)), n, nsim)
+    } else if (identical(target, "partial")) {
+      family$linkinv(mm_simulate_partial_eta(object, resolved, nsim))
     } else {
       eta <- mm_simulate_fixed_eta(object) + mm_simulate_new_re(object, nsim)
       family$linkinv(eta)
@@ -331,7 +371,7 @@ refit.mm_glmm <- function(object, newresp, ...) {
   fit <- do.call(glmm, list(
     formula = object$formula, data = data,
     family = mm_glmm_family_from_info(object$family),
-    weights = weights, offset = object$offset,
+    weights = weights, offset = mm_fit_offset_arg(object),
     method = object$method, nAGQ = object$nAGQ,
     inference = object$inference_request %||% "auto",
     control = control

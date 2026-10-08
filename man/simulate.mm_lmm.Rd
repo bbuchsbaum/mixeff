@@ -20,7 +20,9 @@
 the same as \code{re.form = NA}. Specify at most one of \code{use.u} and \code{re.form}.}
 
 \item{re.form}{\code{NA} or \code{~0} (default \code{NA}) to simulate new random effects,
-or \code{NULL} to condition on the fitted random effects.}
+\code{NULL} to condition on the fitted random effects, or a formula such as
+\code{~ (1 | g)} to condition on those terms' fitted random effects and draw
+new ones for the others (as lme4).}
 
 \item{...}{Reserved; lme4 arguments that cannot be honoured (\code{newdata},
 \code{newparams}, ...) are refused with a typed error.}

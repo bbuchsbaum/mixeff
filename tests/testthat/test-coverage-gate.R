@@ -421,6 +421,5 @@ test_that("refit and simulate arg guards on LMM/GLMM", {
   gfit <- mk_cov_glmm()
   expect_error(refit(gfit, 1:3), class = "mm_arg_error")
   expect_error(simulate(gfit, nsim = 0), class = "mm_arg_error")
-  expect_error(simulate(gfit, re.form = ~ (1 | g)),
-               class = "mm_inference_unavailable")
+  expect_error(simulate(gfit, re.form = "g"), class = "mm_arg_error")
 })

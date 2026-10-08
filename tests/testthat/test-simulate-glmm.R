@@ -145,8 +145,9 @@ test_that("GLMM simulate/refit refuse what they cannot honour", {
   f <- glmm(y ~ x + (1 | g), d, family = poisson(),
             control = mm_control(verbose = -1))
   expect_error(simulate(f, newdata = d), class = "mm_arg_error")
-  expect_error(simulate(f, re.form = ~ (1 | g)),
-               class = "mm_inference_unavailable")
+  # A formula naming every term is conditional simulation (lme4).
+  expect_identical(attr(simulate(f, re.form = ~ (1 | g)), "mm_re_form"),
+                   "conditional")
   expect_error(refit(f), class = "mm_arg_error")
   expect_error(refit(f, d[, 1:2]), class = "mm_arg_error")
   expect_error(refit(f, c(1, NA, rep(1, 38))), class = "mm_arg_error")
@@ -155,4 +156,49 @@ test_that("GLMM simulate/refit refuse what they cannot honour", {
   fw <- glmm(p ~ x + (1 | g), d, family = binomial(), weights = rep(2.5, 40),
              control = mm_control(verbose = -1))
   expect_error(simulate(fw), class = "mm_inference_unavailable")
+})
+
+test_that("refit() reproduces fits with formula or argument offsets (no double counting)", {
+  set.seed(91)
+  n <- 200
+  d <- data.frame(x = rnorm(n), g = factor(rep(1:20, each = 10)),
+                  expo = runif(n, 0.5, 2))
+  d$count <- rpois(n, exp(0.2 + 0.4 * d$x + rnorm(20, sd = 0.3)[d$g] + log(d$expo)))
+  ctl <- mm_control(verbose = -1)
+  f_formula <- glmm(count ~ x + offset(log(expo)) + (1 | g), d,
+                    family = poisson, control = ctl)
+  expect_equal(fixef(refit(f_formula, d$count)), fixef(f_formula), tolerance = 1e-6)
+  f_arg <- glmm(count ~ x + (1 | g), d, family = poisson,
+                offset = log(d$expo), control = ctl)
+  expect_equal(fixef(refit(f_arg, d$count)), fixef(f_arg), tolerance = 1e-6)
+
+  d$y <- 1 + 0.5 * d$x + rnorm(20)[d$g] + rnorm(n) + log(d$expo)
+  l_formula <- lmm(y ~ x + offset(log(expo)) + (1 | g), d, control = ctl)
+  expect_equal(fixef(refit(l_formula, d$y)), fixef(l_formula), tolerance = 1e-6)
+  l_arg <- lmm(y ~ x + (1 | g), d, offset = log(d$expo), control = ctl)
+  expect_equal(fixef(refit(l_arg, d$y)), fixef(l_arg), tolerance = 1e-6)
+})
+
+test_that("simulate() with a partial re.form conditions on the named terms only (lme4 semantics)", {
+  set.seed(92)
+  d <- expand.grid(subj = factor(1:20), item = factor(1:10), rep = 1:2)
+  d$y <- rnorm(20, sd = 2)[d$subj] + rnorm(10, sd = 1)[d$item] + rnorm(nrow(d))
+  fit <- lmm(y ~ 1 + (1 | subj) + (1 | item), d,
+             control = mm_control(verbose = -1))
+  sims <- as.matrix(simulate(fit, nsim = 400, seed = 3, re.form = ~ (1 | subj)))
+  cond <- predict(fit, re.form = ~ (1 | subj))
+  # Averaging over the redrawn item effects and noise recovers the
+  # subject-conditional mean.
+  expect_lt(max(abs(rowMeans(sims) - cond)), 0.35)
+  # Naming every term is ordinary conditional simulation.
+  full <- simulate(fit, nsim = 1, seed = 3, re.form = ~ (1 | subj) + (1 | item))
+  expect_identical(attr(full, "mm_re_form"), "conditional")
+  # GLMMs take the same route.
+  d$count <- rpois(nrow(d), exp(0.5 + rnorm(20, sd = 0.4)[d$subj]))
+  g <- glmm(count ~ 1 + (1 | subj) + (1 | item), d, family = poisson,
+            control = mm_control(verbose = -1))
+  gs <- simulate(g, nsim = 2, seed = 1, re.form = ~ (1 | subj))
+  expect_identical(attr(gs, "mm_re_form"), "partial")
+  expect_equal(dim(gs), c(nrow(d), 2L))
+  expect_error(simulate(fit, re.form = "subj"), class = "mm_arg_error")
 })

@@ -33,8 +33,33 @@ mm_register_external_s3 <- function() {
     function(...) mm_register_broom_s3(),
     action = "append"
   )
+  setHook(
+    packageEvent("lattice", "onLoad"),
+    function(...) mm_register_lattice_s3(),
+    action = "append"
+  )
   if ("lme4" %in% loadedNamespaces()) {
     mm_register_lme4_s3()
+  }
+  if ("lattice" %in% loadedNamespaces()) {
+    mm_register_lattice_s3()
+  }
+  # performance::icc()/r2() and insight::get_variance() (both in Suggests).
+  setHook(
+    packageEvent("insight", "onLoad"),
+    function(...) mm_register_insight_s3(),
+    action = "append"
+  )
+  setHook(
+    packageEvent("performance", "onLoad"),
+    function(...) mm_register_performance_s3(),
+    action = "append"
+  )
+  if ("insight" %in% loadedNamespaces()) {
+    mm_register_insight_s3()
+  }
+  if ("performance" %in% loadedNamespaces()) {
+    mm_register_performance_s3()
   }
   if ("emmeans" %in% loadedNamespaces()) {
     mm_register_emmeans_s3()
@@ -58,6 +83,14 @@ mm_register_lme4_s3 <- function() {
   registerS3method("ngrps", "mm_glmm", ngrps.mm_glmm, envir = ns)
   registerS3method("refit", "mm_lmm", refit.mm_lmm, envir = ns)
   registerS3method("refit", "mm_glmm", refit.mm_glmm, envir = ns)
+  invisible(TRUE)
+}
+
+# lattice's dotplot()/qqmath() for ranef() output (lattice is in Suggests).
+mm_register_lattice_s3 <- function() {
+  ns <- asNamespace("lattice")
+  registerS3method("dotplot", "mm_ranef", dotplot.mm_ranef, envir = ns)
+  registerS3method("qqmath", "mm_ranef", qqmath.mm_ranef, envir = ns)
   invisible(TRUE)
 }
 

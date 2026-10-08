@@ -91,6 +91,29 @@
   match lme4 (`lFALSE`, `lTRUE`).
 * Ordered grouping factors are grouped as unordered factors (no dense
   `contr.poly` basis is built for them).
+* `simulate()` now works for GLMMs (binomial, Poisson, Gamma, negative
+  binomial) and `refit()` re-fits a GLMM to a new response. Binomial
+  `cbind()` fits simulate two-column count matrices and proportion fits
+  simulate proportions, as in lme4.
+* Breaking: `simulate()` now uses lme4's `re.form` meaning. The default
+  `re.form = NA` (or `~0`, or `use.u = FALSE`) draws new random effects;
+  `re.form = NULL` (or `use.u = TRUE`) conditions on the fitted random
+  effects. Previously `NULL` drew new random effects and `NA` left them out
+  entirely. Seeded draws now reproduce lme4's when the estimates agree.
+* New diagnostics: `plot()` on a fit draws Pearson residuals against fitted
+  values (also Q-Q and scale-location via `which =`), `qqnorm()` works on
+  fits, and `plot()`/`qqnorm()` on `ranef()` output draw caterpillar and Q-Q
+  plots with conditional-variance intervals. With lattice loaded,
+  `dotplot()` and `qqmath()` work on `ranef()` output as in lme4.
+* New `hatvalues()`, `cooks.distance()` and `influence()` (case or group
+  deletion refits, with `dfbeta()`, `dfbetas()` and `cooks.distance()`
+  methods for the result). LMM values match lme4. GLMM hat values use the
+  working weights, as `glm` does, so they differ from lme4's.
+* New `mm_r2()`, `mm_icc()` and `mm_variance_components()` compute
+  Nakagawa marginal/conditional R2 and adjusted/unadjusted ICC. With
+  performance and insight installed, `performance::r2()`,
+  `performance::icc()` and `insight::get_variance()` also work on mixeff
+  fits and agree with their values on the matching lme4 fit.
 
 ## Compatibility
 

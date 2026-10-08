@@ -261,8 +261,9 @@ rbind(
   coefficient_tests = glmm_status(coef_tab,
                                   has_numbers = any(is.finite(coef_tab[, "Std. Error"]))),
   confint           = glmm_status(confint(glmm_fit)),
-  simulate          = glmm_status(stats::simulate(glmm_fit, nsim = 1L)),
-  refit             = glmm_status(refit(glmm_fit, fitted(glmm_fit)))
+  simulate          = glmm_status(stats::simulate(glmm_fit, nsim = 1L, seed = 1L)),
+  refit             = glmm_status(refit(glmm_fit,
+                                        stats::simulate(glmm_fit, seed = 1L)))
 )
 ```
 
@@ -270,8 +271,10 @@ Wald `confint()` on the default fit raises `mm_inference_unavailable` (the
 working-Hessian payload is not certified for Wald intervals); the same
 request on the joint-Laplace fit succeeds, as shown above. The bootstrap
 route complements it from the other side: `confint(glmm_fit, method =
-"bootstrap")` succeeds on this default fit (route 2 above). `simulate()`
-and `refit()` are not implemented for GLMM fits.
+"bootstrap")` succeeds on this default fit (route 2 above). `simulate()` draws
+family-aware responses with lme4's semantics (new random effects by
+default, `re.form = NULL` to condition on the fitted ones), and `refit()`
+re-fits the same GLMM to a new response such as a simulated one.
 
 ```{r checks, include = FALSE}
 stopifnot(inherits(glmm_fit, "mm_glmm"))
@@ -298,7 +301,7 @@ stopifnot(max(abs(fixef(glmm_joint) - lme4::fixef(glmer_fit))) < 5e-3)
 # Refusals stay refusals.
 stopifnot(inherits(tryCatch(confint(glmm_fit), error = identity),
                    "mm_inference_unavailable"))
-stopifnot(inherits(tryCatch(stats::simulate(glmm_fit, nsim = 1L),
-                            error = identity),
-                   "mm_inference_unavailable"))
+# simulate()/refit() are available for GLMMs.
+stopifnot(inherits(refit(glmm_fit, stats::simulate(glmm_fit, seed = 1L)),
+                   "mm_glmm"))
 ```

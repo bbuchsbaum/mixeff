@@ -26,8 +26,28 @@
 * Fit-summary parsing accepts the additive `mixedmodels.fit_summary` 1.1.0
   schema emitted by mixeff-rs 1.0.0-rc.4, while retaining 1.0.0 support.
   Covariance provenance is preserved in the stored payload. Unknown schema
-  versions and malformed payloads remain errors. The bundled engine pin is
-  unchanged.
+  versions and malformed payloads remain errors.
+* The bundled `mixeff-rs` engine moves from rc.1 (`1f3f689`) to rc.5 plus
+  pre-release fixes (`accd4b1`). This brings the upstream fixes for joint
+  Laplace GLMM convergence without NLopt (and Ctrl-C during its inner PIRLS),
+  GLMM parametric-bootstrap replicates that silently used the fast
+  estimator, colliding `(1|a:b)` interaction keys, Wald p-values underflowing
+  to 0, and negative-binomial deviance precision; it is also 2-7x faster on
+  vector-valued and crossed models. New in this pin:
+  * `y ~ 0 + f` codes the first factor with one column per level, as R's
+    `model.matrix()` does; previously the reference level was silently
+    dropped (its mean forced to zero).
+  * `predict(newdata =)` uses the fit's design coding, fixing wrong
+    predictions for non-marginal formulas such as `y ~ f / h`.
+  * LMM prior weights are validated (length, finite, positive) and
+    simulation / parametric bootstrap draws residuals with sd
+    `sigma / sqrt(w)`; binomial GLMM responses above 1 are refused instead of
+    producing NaN estimates.
+* `mixedmodels.fixed_effect_inference_table` 1.2.0 (per-row covariance
+  provenance) is the current schema; stored 1.1.0 tables still parse.
+* `simulate()` for LMMs scales residual noise by prior weights, and keeps a
+  zero-variance random-effect term at zero instead of borrowing another
+  term's variance.
 
 ## Breaking: API-shape stabilization
 

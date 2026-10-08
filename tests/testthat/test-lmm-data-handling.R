@@ -135,3 +135,37 @@ test_that("predict(newdata) reproduces fitted values for nested fixed effects", 
   expect_equal(unname(predict(fit, newdata = df)), unname(fitted(fit)),
                tolerance = 1e-8)
 })
+
+test_that("simulate() scales residual noise by prior weights (sigma / sqrt(w))", {
+  df <- mm_dh_data()
+  w <- rep(c(1, 100), length.out = nrow(df))
+  fit <- lmm(y ~ x + (1 | g), df, weights = w,
+             control = mm_control(verbose = -1))
+  sims <- as.matrix(simulate(fit, nsim = 200, seed = 1, re.form = NA))
+  resid_sd <- apply(sims - fit$fixed_fitted, 1, stats::sd)
+  heavy <- w == 100
+  expect_gt(mean(resid_sd[!heavy]), 5 * mean(resid_sd[heavy]))
+})
+
+test_that("simulate() keeps a zero-variance crossed term at zero", {
+  set.seed(2)
+  d <- expand.grid(subj = factor(1:15), item = factor(1:8), rep = 1:2)
+  d$y <- rnorm(15, sd = 2)[as.integer(d$subj)] + rnorm(nrow(d), sd = 0.5)
+  fit <- lmm(y ~ 1 + (1 | subj) + (1 | item), d,
+             control = mm_control(verbose = -1))
+  vc <- VarCorr(fit)$table
+  skip_if_not(any(vc$group == "item" & vc$variance == 0),
+              "item variance is not exactly zero for this draw")
+  # Before the fix the zero SD was treated as "missing" and replaced by the
+  # first "(Intercept)" variance in VarCorr -- the subject variance.
+  terms <- fit$artifact$semantic_model$random_terms
+  labels <- vapply(seq_along(terms), function(i) {
+    mixeff:::mm_random_term_group_label(fit, terms[[i]], i)
+  }, character(1))
+  i <- match("item", labels)
+  Sigma <- mixeff:::mm_random_term_covariance(
+    fit, if (is.null(terms[[i]]$id)) sprintf("r%d", i - 1L) else terms[[i]]$id,
+    "(Intercept)", "item"
+  )
+  expect_equal(Sigma[1, 1], 0)
+})

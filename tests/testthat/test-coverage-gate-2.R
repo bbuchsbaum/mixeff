@@ -628,6 +628,12 @@ test_that("mm_json_parse_* cover missing schema and empty inference table", {
   ))
   expect_equal(nrow(empty$table), 0L)
   expect_true(inherits(empty, "mm_fixed_effect_inference_table"))
+  current <- mixeff:::mm_json_parse_fixed_effect_inference_table(list(
+    schema_name = "mixedmodels.fixed_effect_inference_table",
+    schema_version = "1.2.0",
+    rows = list()
+  ))
+  expect_equal(nrow(current$table), 0L)
 })
 
 # ---- fit-lmm / mm_control validation ----------------------------------------

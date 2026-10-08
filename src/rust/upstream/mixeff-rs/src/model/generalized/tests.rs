@@ -1,4 +1,5 @@
 use super::*;
+use crate::compiler::{NewtonDecrementVariant, NewtonDecrementVerdict};
 use crate::formula::parse_formula;
 use crate::model::data::DataFrame;
 use crate::model::linear::FitToleranceOverrides;
@@ -126,6 +127,7 @@ fn joint_glmm_stationarity_failure_is_not_converged_interior() {
     certificate.apply_derivative_evidence(
         OptimizerDerivativeEvidence {
             method: EvidenceMethod::FiniteDifference,
+            hessian_method: EvidenceMethod::FiniteDifference,
             gradient: gradient.clone(),
             hessian: None,
         },
@@ -138,6 +140,8 @@ fn joint_glmm_stationarity_failure_is_not_converged_interior() {
         probe_gradient: gradient.clone(),
         escalated_indices: Vec::new(),
         unassessable_indices: Vec::new(),
+        base_objective: f64::NAN,
+        curvature_probes: Vec::new(),
     };
     annotate_glmm_covariance_status(
         &mut certificate,
@@ -146,6 +150,7 @@ fn joint_glmm_stationarity_failure_is_not_converged_interior() {
         &lower_bounds,
         &certification,
         gradient_tolerance,
+        None,
     );
 
     assert_eq!(certificate.status, crate::compiler::FitStatus::NotOptimized);
@@ -183,6 +188,71 @@ fn joint_glmm_stationarity_failure_is_not_converged_interior() {
 }
 
 #[test]
+fn joint_glmm_unavailable_gradient_preserves_assessed_failures() {
+    for theta in [0.0, 0.5] {
+        for other_gradient in [0.0, 0.1, -0.1] {
+            for unavailable in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+                let params = vec![1.0, theta];
+                let lower_bounds = vec![f64::NEG_INFINITY, 0.0];
+                let mut optsum = OptSummary::new(params.clone());
+                optsum.return_value = "JOINT_LAPLACE:FTOL_REACHED".to_string();
+                optsum.finitial = 10.0;
+                optsum.fmin = 5.0;
+                optsum.feval = 20;
+                let mut certificate = OptimizerCertificate::from_opt_summary_with_context(
+                    &optsum,
+                    &params,
+                    &lower_bounds,
+                    Some(20),
+                );
+                let gradient = vec![unavailable, other_gradient];
+                let certification = JointLaplaceCertificationGradient {
+                    gradient: gradient.clone(),
+                    probe_gradient: gradient.clone(),
+                    escalated_indices: Vec::new(),
+                    unassessable_indices: vec![0],
+                    base_objective: 5.0,
+                    curvature_probes: Vec::new(),
+                };
+                certificate.apply_derivative_evidence(
+                    OptimizerDerivativeEvidence {
+                        method: EvidenceMethod::FiniteDifference,
+                        hessian_method: EvidenceMethod::FiniteDifference,
+                        gradient,
+                        hessian: None,
+                    },
+                    0.02,
+                    1e-6,
+                );
+                annotate_glmm_covariance_status(
+                    &mut certificate,
+                    &params,
+                    1,
+                    &lower_bounds,
+                    &certification,
+                    0.02,
+                    None,
+                );
+                let assessed_failure =
+                    other_gradient < -0.02 || (theta > 0.0 && other_gradient > 0.02);
+                assert_eq!(
+                    certificate.status,
+                    if assessed_failure {
+                        crate::compiler::FitStatus::NotOptimized
+                    } else {
+                        crate::compiler::FitStatus::NotAssessed
+                    }
+                );
+                assert!(certificate.evidence.optimizer_stop.acceptable_stop);
+                assert!(certificate.free_gradient_norm.is_none());
+                assert!(certificate.evidence.gradient.raw_gradient_norm.is_none());
+                assert!(crate::model::snapshot::encode_snapshot(&certificate).is_ok());
+            }
+        }
+    }
+}
+
+#[test]
 fn joint_glmm_noise_dominated_stationarity_is_not_assessed() {
     // Probe readings on the two theta components are pure inner-PIRLS
     // noise (bd-01KTQFTH6J0ZFGR5RMV28HAX44 measured 0.703/0.365 at a
@@ -215,10 +285,13 @@ fn joint_glmm_noise_dominated_stationarity_is_not_assessed() {
         probe_gradient: probe_gradient.clone(),
         escalated_indices: Vec::new(),
         unassessable_indices: vec![2, 3],
+        base_objective: f64::NAN,
+        curvature_probes: Vec::new(),
     };
     certificate.apply_derivative_evidence(
         OptimizerDerivativeEvidence {
             method: EvidenceMethod::FiniteDifference,
+            hessian_method: EvidenceMethod::FiniteDifference,
             gradient: certification.gradient.clone(),
             hessian: None,
         },
@@ -232,6 +305,7 @@ fn joint_glmm_noise_dominated_stationarity_is_not_assessed() {
         &lower_bounds,
         &certification,
         gradient_tolerance,
+        None,
     );
 
     assert_eq!(certificate.status, crate::compiler::FitStatus::NotAssessed);
@@ -300,10 +374,13 @@ fn joint_glmm_escalated_stationarity_pass_certifies_with_evidence_trail() {
         probe_gradient,
         escalated_indices: vec![2, 3],
         unassessable_indices: Vec::new(),
+        base_objective: f64::NAN,
+        curvature_probes: Vec::new(),
     };
     certificate.apply_derivative_evidence(
         OptimizerDerivativeEvidence {
             method: EvidenceMethod::FiniteDifference,
+            hessian_method: EvidenceMethod::FiniteDifference,
             gradient: certification.gradient.clone(),
             hessian: None,
         },
@@ -317,6 +394,7 @@ fn joint_glmm_escalated_stationarity_pass_certifies_with_evidence_trail() {
         &lower_bounds,
         &certification,
         gradient_tolerance,
+        None,
     );
 
     assert_eq!(
@@ -637,6 +715,35 @@ fn experimental_joint_failed_stop_returns_labelled_fast_pirls_fallback() {
         metadata.effective_method.as_deref(),
         Some("fast_pirls_profiled")
     );
+    // Exercise the fallback snapshot path with a deliberately exhausted joint
+    // budget, rather than depending on an unrelated fit failing by accident.
+    let expected_artifact = model.compiler_artifact().clone();
+    let expected_certificate = model.pirls_profiled_optimum_certificate().clone();
+    let expected_vcov = model.vcov();
+    let json = model.snapshot_json().unwrap();
+    {
+        let guard = crate::model::snapshot::OptimizerEntryGuard::expect_none();
+        let restored = GeneralizedLinearMixedModel::restore_json(&json).unwrap();
+        assert_eq!(guard.entries_since(), 0);
+        assert_eq!(restored.compiler_artifact(), &expected_artifact);
+        assert_eq!(
+            restored.pirls_profiled_optimum_certificate(),
+            &expected_certificate
+        );
+        assert_relative_eq!(restored.vcov(), expected_vcov, epsilon = 1e-10);
+    }
+    let y = model.y.as_slice().to_vec();
+    model.refit(&y).unwrap();
+    assert_eq!(
+        model
+            .compiler_artifact()
+            .glmm_fit_metadata
+            .as_ref()
+            .unwrap()
+            .estimation_method,
+        "fast_pirls_profiled",
+        "a substituted template refits the effective estimator"
+    );
 }
 
 #[test]
@@ -669,12 +776,21 @@ fn profiled_glmm_certificate_records_first_order_evidence_or_explicit_skip() {
         );
     } else {
         assert!(
-            certificate.checks.iter().any(|check| matches!(
-                check,
-                crate::compiler::CertificateCheck::NotAssessed { reason }
-                    if reason.contains("profiled-optimum certificate not issued")
-            )),
-            "a skipped profiled-optimum certificate must leave an explicit not-assessed reason"
+            certificate.checks.iter().any(|check| match check {
+                crate::compiler::CertificateCheck::Incomplete { evidence } =>
+                    matches!(
+                        evidence.status,
+                        crate::compiler::IncompleteCheckStatus::Skipped
+                            | crate::compiler::IncompleteCheckStatus::Unavailable
+                    ) && evidence
+                        .reason
+                        .contains("profiled-optimum certificate not issued"),
+                crate::compiler::CertificateCheck::Failed { code, message } =>
+                    code == "profiled_optimum"
+                        && message.contains("profiled-optimum certificate not issued"),
+                _ => false,
+            }),
+            "an incomplete or failed profiled-optimum certificate must record its actual outcome"
         );
     }
 }
@@ -1094,10 +1210,10 @@ fn gamma_dispersion_fixture() -> DataFrame {
     let mut x = Vec::new();
     let mut group = Vec::new();
     let group_effects = [-0.25, 0.1, 0.3, -0.15];
-    for g in 0..4 {
+    for (g, &group_effect) in group_effects.iter().enumerate() {
         for obs in 0..5 {
             let xv = obs as f64 - 2.0;
-            let eta = 1.2 + 0.25 * xv + group_effects[g];
+            let eta = 1.2 + 0.25 * xv + group_effect;
             let wiggle = 1.0 + 0.06 * ((g + obs) % 3) as f64;
             y.push(eta.exp() * wiggle);
             x.push(xv);
@@ -1117,10 +1233,10 @@ fn negative_binomial_fixture() -> DataFrame {
     let mut x = Vec::new();
     let mut group = Vec::new();
     let group_effects = [-0.35, 0.1, 0.25, -0.05];
-    for g in 0..4 {
+    for (g, &group_effect) in group_effects.iter().enumerate() {
         for obs in 0..6 {
             let xv = obs as f64 - 2.5;
-            let eta = 1.0 + 0.18 * xv + group_effects[g];
+            let eta = 1.0 + 0.18 * xv + group_effect;
             let base = eta.exp();
             let overdispersion_bump = if (g + obs) % 3 == 0 { 2.0 } else { 0.0 };
             y.push((base + overdispersion_bump).round().max(0.0));
@@ -2344,6 +2460,31 @@ fn test_cbpp_agq_deviance_uses_case_weights() {
         );
 }
 
+/// fast=true regression guard for the contraception `(1 | dist)` row. The
+/// comparison harness fits this row through the certified fast=false joint
+/// path since its promotion (mote bd-01M35AQYXEXZHJA7JA7GTXR032), so the
+/// MixedModels.jl fast=true oracle it used to carry is pinned here instead.
+/// Reference: MixedModels.jl 5.3.0 `fit(MixedModel, @formula(use ~ 1 + age +
+/// livch + urban + (1 | dist)), contra, Bernoulli(); fast=true)`, deviance
+/// 2413.6626372063283 (also `glmm_contra_intercept_fast` in
+/// examples/optimizer_bench_harness.rs). Response constants are zero for 0/1
+/// data, so the dropped-constants deviance is directly comparable.
+#[test]
+fn contraception_intercept_fast_pirls_matches_mixedmodels_fast_true_objective() {
+    let (data, _) = crate::datasets::load("contraception").unwrap();
+    let formula = parse_formula("use ~ 1 + age + livch + urban + (1 | dist)").unwrap();
+    let mut model =
+        GeneralizedLinearMixedModel::new(formula, &data, Family::Binomial, None).unwrap();
+    model.fit_with_options(true, 1, false).unwrap();
+    let objective = model.deviance(1);
+    let julia_fast = 2413.6626372063283;
+    let delta = (objective - julia_fast).abs();
+    assert!(
+        delta <= 1e-3,
+        "contraception (1 | dist) fast=true objective {objective:.9} should match MixedModels.jl fast=true {julia_fast:.9}; delta={delta:.3e}"
+    );
+}
+
 #[cfg(feature = "nlopt")]
 #[test]
 fn test_grouseticks_poisson_glmm_deviance() {
@@ -2932,9 +3073,9 @@ fn glmm_certified_pirls_poisson_fixture() -> (GeneralizedLinearMixedModel, DataF
 fn test_glmm_pirls_certified_prediction_variance_rows_available() {
     let (model, data) = glmm_certified_pirls_poisson_fixture();
     assert!(
-        matches!(model.pirls_profiled_optimum_certificate, Some(Ok(_))),
+        matches!(model.pirls_profiled_optimum_certificate(), Some(Ok(_))),
         "fixture should certify: {:?}",
-        model.pirls_profiled_optimum_certificate
+        model.pirls_profiled_optimum_certificate()
     );
 
     let payload = model
@@ -2982,9 +3123,9 @@ fn test_glmm_pirls_certified_prediction_variance_rows_available() {
 fn test_glmm_pirls_native_prediction_variance_rows_degrade_without_certificate() {
     let (model, data) = glmm_certified_pirls_poisson_fixture();
     assert!(
-        matches!(model.pirls_profiled_optimum_certificate, Some(Err(_))),
+        matches!(model.pirls_profiled_optimum_certificate(), Some(Err(_))),
         "native fixture should keep uncertified geometry explicit: {:?}",
-        model.pirls_profiled_optimum_certificate
+        model.pirls_profiled_optimum_certificate()
     );
 
     let payload = model
@@ -3007,6 +3148,7 @@ fn test_glmm_pirls_native_prediction_variance_rows_degrade_without_certificate()
 #[test]
 fn test_glmm_pirls_uncertified_fit_keeps_degraded_with_refit_guidance() {
     let (mut model, data) = glmm_certified_pirls_poisson_fixture();
+    model.complete_pirls_certificate();
     model.pirls_profiled_optimum_certificate =
         Some(Err("forced certificate failure for test".to_string()));
 
@@ -3034,7 +3176,7 @@ fn test_glmm_link_scale_rows_do_not_carry_future_observation_columns() {
         .predict_new_variance(&data, GlmmPredictionScale::Link, NewReLevels::Error)
         .unwrap();
     let first = &payload.rows[0];
-    if matches!(model.pirls_profiled_optimum_certificate, Some(Ok(_))) {
+    if matches!(model.pirls_profiled_optimum_certificate(), Some(Ok(_))) {
         assert_eq!(first.status, PredictionVarianceStatus::Available);
     } else {
         assert_eq!(first.status, PredictionVarianceStatus::Degraded);
@@ -3948,7 +4090,7 @@ fn glmm_verify_convergence_reports_estimator_substitution_not_objective_drift() 
 fn glmm_native_uncertified_profiled_optimum_leaves_explicit_skip_reason() {
     let (model, _) = glmm_certified_pirls_poisson_fixture();
     assert!(matches!(
-        model.pirls_profiled_optimum_certificate,
+        model.pirls_profiled_optimum_certificate(),
         Some(Err(_))
     ));
     let certificate = model
@@ -3958,12 +4100,21 @@ fn glmm_native_uncertified_profiled_optimum_leaves_explicit_skip_reason() {
         .expect("fitted GLMM carries an optimizer certificate");
     assert!(certificate.free_gradient_norm.is_none());
     assert!(
-        certificate.checks.iter().any(|check| matches!(
-            check,
-            crate::compiler::CertificateCheck::NotAssessed { reason }
-                if reason.contains("profiled-optimum certificate not issued")
-        )),
-        "uncertified profiled optimum must leave an explicit not-assessed reason"
+        certificate.checks.iter().any(|check| match check {
+            crate::compiler::CertificateCheck::Incomplete { evidence } =>
+                matches!(
+                    evidence.status,
+                    crate::compiler::IncompleteCheckStatus::Skipped
+                        | crate::compiler::IncompleteCheckStatus::Unavailable
+                ) && evidence
+                    .reason
+                    .contains("profiled-optimum certificate not issued"),
+            crate::compiler::CertificateCheck::Failed { code, message } =>
+                code == "profiled_optimum"
+                    && message.contains("profiled-optimum certificate not issued"),
+            _ => false,
+        }),
+        "uncertified profiled optimum must record its actual execution outcome"
     );
 }
 
@@ -3983,4 +4134,2566 @@ fn glmm_fit_metadata_deserializes_legacy_json_without_method_fields() {
     assert_eq!(metadata.requested_method, None);
     assert_eq!(metadata.effective_method, None);
     assert_eq!(metadata.fallback_status, None);
+}
+
+/// Post-fit tail cost on the registry GLMM rows: the profiled-optimum
+/// certificate (finite-difference PIRLS probes) and the final PIRLS pass.
+/// `cargo test --release --lib generalized::tests::glmm_post_fit_tail_cost -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn glmm_post_fit_tail_cost() {
+    use std::time::Instant;
+    let cases: Vec<(&str, &str, Family)> = vec![
+        (
+            "grouseticks",
+            "TICKS ~ 1 + YEAR + cHEIGHT + (1 | BROOD) + (1 | INDEX) + (1 | LOCATION)",
+            Family::Poisson,
+        ),
+        (
+            "verbagg",
+            "r2 ~ 1 + Anger + Gender + btype + situ + mode + (1 | id) + (1 | item)",
+            Family::Binomial,
+        ),
+    ];
+    for (name, formula, family) in cases {
+        let (mut data, _) = crate::datasets::load(name).unwrap();
+        if let Some(column) = data.categorical("r2") {
+            // verbagg's binary response is recorded as a factor (N/Y).
+            let numeric: Vec<f64> = column
+                .values
+                .iter()
+                .map(|v| if v == "Y" { 1.0 } else { 0.0 })
+                .collect();
+            let mut lowered = DataFrame::new();
+            for name in data.column_names() {
+                if name == "r2" {
+                    lowered.add_numeric("r2", numeric.clone()).unwrap();
+                } else if let Some(values) = data.numeric(name) {
+                    lowered.add_numeric(name, values.to_vec()).unwrap();
+                } else if let Some(cat) = data.categorical(name) {
+                    lowered.add_categorical(name, cat.values.clone()).unwrap();
+                }
+            }
+            data = lowered;
+        }
+        let mut model =
+            GeneralizedLinearMixedModel::new(parse_formula(formula).unwrap(), &data, family, None)
+                .unwrap();
+        let t0 = Instant::now();
+        model.fit_with_options(true, 1, false).unwrap();
+        let fit_ms = t0.elapsed().as_secs_f64() * 1e3;
+        let t1 = Instant::now();
+        model.complete_pirls_certificate();
+        let certificate_ms = t1.elapsed().as_secs_f64() * 1e3;
+        let outcome = model.pirls_profiled_optimum_certificate().clone().unwrap();
+        let mut theta = model.lmm.optsum.final_params.clone();
+        let t2 = Instant::now();
+        model.finalize_theta_after_optimizer(&mut theta, 1).unwrap();
+        let final_pirls_ms = t2.elapsed().as_secs_f64() * 1e3;
+        println!(
+            "{name:12} d={} fit {fit_ms:8.1} ms (feval {}) | certificate {certificate_ms:7.1} ms ({:.0}% of fit, {}) | final PIRLS {final_pirls_ms:6.1} ms",
+            model.theta.len(),
+            model.lmm.optsum.feval,
+            100.0 * certificate_ms / fit_ms,
+            if outcome.is_ok() { "issued" } else { "not issued" }
+        );
+    }
+}
+
+/// Phase 7 T7.2: the profiled-optimum certificate is deferred; inspecting
+/// through `&self` and completing in place must agree exactly, and the
+/// eager wire form (diagnostic slot, evidence, checks) is preserved.
+#[test]
+fn deferred_pirls_certificate_matches_in_place_completion() {
+    let (fitted, _) = glmm_certified_pirls_poisson_fixture();
+    assert!(
+        fitted.pirls_certificate_pending,
+        "the fit should defer the certificate"
+    );
+    assert!(fitted.pirls_profiled_optimum_certificate.is_none());
+    let deferred_checks = fitted
+        .lmm
+        .compiler_artifact
+        .optimizer_certificate
+        .as_ref()
+        .unwrap()
+        .checks
+        .iter()
+        .filter(|check| {
+            matches!(check, crate::compiler::CertificateCheck::Incomplete { evidence }
+                if evidence.status == crate::compiler::IncompleteCheckStatus::Deferred)
+        })
+        .count();
+    assert_eq!(
+        deferred_checks, 1,
+        "deferred marker on the stored certificate"
+    );
+
+    // `&self` inspection completes on a clone and caches the view.
+    let inspected = fitted.clone();
+    let inspected_json = serde_json::to_value(inspected.compiler_artifact()).unwrap();
+    let inspected_certificate = inspected.pirls_profiled_optimum_certificate().clone();
+    assert!(
+        inspected.pirls_certificate_pending,
+        "inspection must not mutate the stored state"
+    );
+
+    // In-place completion (what mutating paths call).
+    let mut completed = fitted.clone();
+    completed.complete_pirls_certificate();
+    assert!(!completed.pirls_certificate_pending);
+    let completed_json = serde_json::to_value(completed.compiler_artifact()).unwrap();
+    assert_eq!(inspected_json, completed_json);
+    assert_eq!(
+        inspected_certificate,
+        completed.pirls_profiled_optimum_certificate
+    );
+    // The completed certificate carries first-order evidence, not the marker.
+    let certificate = completed
+        .compiler_artifact()
+        .optimizer_certificate
+        .as_ref()
+        .unwrap();
+    assert!(!certificate.checks.iter().any(|check| {
+        matches!(check, crate::compiler::CertificateCheck::Incomplete { evidence }
+            if evidence.status == crate::compiler::IncompleteCheckStatus::Deferred)
+    }));
+    assert!(completed
+        .compiler_artifact()
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic
+            .payload
+            .contains_key("glmm_pirls_profiled_optimum_certificate")));
+}
+
+#[test]
+fn deferred_pirls_certificate_is_completed_by_verification_and_reset_by_refit() {
+    let (mut model, data) = glmm_certified_pirls_poisson_fixture();
+    assert!(model.pirls_certificate_pending);
+    model.verify_convergence().unwrap();
+    assert!(
+        !model.pirls_certificate_pending,
+        "verification records on the completed certificate"
+    );
+    assert!(model.pirls_profiled_optimum_certificate.is_some());
+
+    let y = data.numeric("y").unwrap().to_vec();
+    model.refit(&y).unwrap();
+    assert!(
+        model.pirls_certificate_pending,
+        "a refit defers its own certificate again"
+    );
+    let payload = model
+        .predict_new_variance(&data, GlmmPredictionScale::Response, NewReLevels::Error)
+        .unwrap();
+    assert!(!payload.rows.is_empty());
+}
+
+/// Phase 7 T7.3: a warm-started refit reaches the cold refit's optimum
+/// with fewer evaluations; `refit` keeps its cold-start (Julia `refit!`)
+/// semantics.
+#[test]
+fn warm_refit_reaches_the_cold_refit_optimum_with_fewer_evaluations() {
+    use crate::model::linear::RefitStart;
+    use rand::SeedableRng;
+    let (model, _) = glmm_certified_pirls_poisson_fixture();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+    let y_sim = model.simulate_response(&mut rng).unwrap();
+
+    let mut cold = model.clone();
+    cold.refit(&y_sim).unwrap();
+    let mut cold_explicit = model.clone();
+    cold_explicit
+        .refit_with_start(&y_sim, RefitStart::Initial)
+        .unwrap();
+    assert_eq!(cold.lmm.optsum.feval, cold_explicit.lmm.optsum.feval);
+    assert_eq!(cold.objective(), cold_explicit.objective());
+
+    let mut warm = model.clone();
+    warm.refit_with_start(&y_sim, RefitStart::Fitted).unwrap();
+    let tolerance = 1e-6 * (1.0 + cold.objective().abs());
+    assert!(
+        (warm.objective() - cold.objective()).abs() <= tolerance,
+        "warm {} vs cold {}",
+        warm.objective(),
+        cold.objective()
+    );
+    for (a, b) in warm.theta().iter().zip(cold.theta()) {
+        assert!((a - b).abs() <= 1e-3, "theta {a} vs {b}");
+    }
+    assert!(
+        warm.lmm.optsum.feval <= cold.lmm.optsum.feval,
+        "warm {} evaluations vs cold {}",
+        warm.lmm.optsum.feval,
+        cold.lmm.optsum.feval
+    );
+    assert!(
+        warm.pirls_certificate_pending,
+        "the refit defers its certificate"
+    );
+
+    let mut bad = model.clone();
+    assert!(bad
+        .refit_with_start(&y_sim, RefitStart::From(vec![f64::NAN]))
+        .is_err());
+}
+
+/// Cold versus warm refit cost on the registry GLMM rows.
+/// `cargo test --release --lib generalized::tests::glmm_refit_cost -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn glmm_refit_cost() {
+    use crate::model::linear::RefitStart;
+    use rand::SeedableRng;
+    use std::time::Instant;
+    let (data, _) = crate::datasets::load("grouseticks").unwrap();
+    let formula = "TICKS ~ 1 + YEAR + cHEIGHT + (1 | BROOD) + (1 | INDEX) + (1 | LOCATION)";
+    let mut model = GeneralizedLinearMixedModel::new(
+        parse_formula(formula).unwrap(),
+        &data,
+        Family::Poisson,
+        None,
+    )
+    .unwrap();
+    model.fit_with_options(true, 1, false).unwrap();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(3);
+    for replicate in 0..3 {
+        let y_sim = model.simulate_response(&mut rng).unwrap();
+        let mut cold = model.clone();
+        let t0 = Instant::now();
+        cold.refit(&y_sim).unwrap();
+        let cold_ms = t0.elapsed().as_secs_f64() * 1e3;
+        let mut warm = model.clone();
+        let t1 = Instant::now();
+        warm.refit_with_start(&y_sim, RefitStart::Fitted).unwrap();
+        let warm_ms = t1.elapsed().as_secs_f64() * 1e3;
+        println!(
+            "grouseticks replicate {replicate}: cold {cold_ms:7.1} ms ({} evals, obj {:.6}) | warm {warm_ms:7.1} ms ({} evals, obj {:.6}) | {:.2}x",
+            cold.lmm.optsum.feval,
+            cold.objective(),
+            warm.lmm.optsum.feval,
+            warm.objective(),
+            cold_ms / warm_ms
+        );
+    }
+}
+
+/// Joint Laplace rows used by inference and optimizer tests: cbpp grouped
+/// binomial, culcita Bernoulli, and contraception intercept/slope models.
+fn joint_laplace_row(name: &str) -> GeneralizedLinearMixedModel {
+    let (formula, data, family, weights) = match name {
+        "cbpp" => {
+            let (mut data, _) = crate::datasets::load("cbpp").unwrap();
+            let incidence = data.numeric("incidence").unwrap().to_vec();
+            let size = data.numeric("size").unwrap().to_vec();
+            let proportion = incidence
+                .iter()
+                .zip(&size)
+                .map(|(&y, &n)| y / n)
+                .collect::<Vec<_>>();
+            data.add_numeric("proportion", proportion).unwrap();
+            (
+                "proportion ~ 1 + period + (1 | herd)",
+                data,
+                Family::Binomial,
+                Some(size),
+            )
+        }
+        "culcita" => {
+            let (data, _) = crate::datasets::load("culcitalogreg").unwrap();
+            (
+                "predation ~ ttt + (1 | block)",
+                data,
+                Family::Binomial,
+                None,
+            )
+        }
+        "contraception" | "contraception_slope" => {
+            let (data, _) = crate::datasets::load("contraception").unwrap();
+            (
+                if name == "contraception_slope" {
+                    "use ~ 1 + age + livch + urban + (1 + urban | dist)"
+                } else {
+                    "use ~ 1 + age + livch + urban + (1 | dist)"
+                },
+                data,
+                Family::Binomial,
+                None,
+            )
+        }
+        other => panic!("unknown joint row {other}"),
+    };
+    let formula = parse_formula(formula).unwrap();
+    match weights {
+        Some(weights) => {
+            GeneralizedLinearMixedModel::new_with_weights(formula, &data, family, None, weights)
+                .unwrap()
+        }
+        None => GeneralizedLinearMixedModel::new(formula, &data, family, None).unwrap(),
+    }
+}
+
+fn joint_laplace_fit(name: &str) -> GeneralizedLinearMixedModel {
+    let mut model = joint_laplace_row(name);
+    model.fit_with_options(false, 1, false).unwrap();
+    model
+}
+
+#[test]
+fn joint_glmm_refit_retains_estimator_for_every_start_and_quadrature() {
+    use crate::model::linear::RefitStart;
+    for n_agq in [0, 1, 3] {
+        let mut template = joint_laplace_row("cbpp");
+        template.fit_with_options(false, n_agq, false).unwrap();
+        let y = template.y.as_slice().to_vec();
+        let expected = if n_agq <= 1 {
+            "joint_laplace"
+        } else {
+            "joint_agq"
+        };
+        assert_eq!(
+            template
+                .compiler_artifact()
+                .glmm_fit_metadata
+                .as_ref()
+                .unwrap()
+                .estimation_method,
+            expected
+        );
+        for start in [
+            RefitStart::Initial,
+            RefitStart::Fitted,
+            RefitStart::From(template.theta()),
+        ] {
+            let mut refit = template.clone();
+            refit.refit_with_start(&y, start).unwrap();
+            assert_eq!(
+                refit
+                    .compiler_artifact()
+                    .glmm_fit_metadata
+                    .as_ref()
+                    .unwrap()
+                    .estimation_method,
+                expected
+            );
+            assert_eq!(refit.opt_summary().n_agq, n_agq);
+            assert!((refit.objective() - template.objective()).abs() < 1e-5);
+        }
+        let mut refit = template.clone();
+        refit.refit_with_options(&y, n_agq, false).unwrap();
+        assert_eq!(
+            refit
+                .compiler_artifact()
+                .glmm_fit_metadata
+                .as_ref()
+                .unwrap()
+                .estimation_method,
+            expected
+        );
+    }
+}
+
+#[test]
+fn joint_glmm_refit_preserves_caller_optimizer_and_controls() {
+    let mut template = joint_laplace_row("cbpp");
+    let optimizer = default_joint_glmm_optimizer();
+    template
+        .fit_with_glmm_options(
+            GlmmFitOptions::joint_laplace().with_optimizer_control(
+                OptimizerControl::default()
+                    .with_optimizer(optimizer)
+                    .with_max_feval(4000),
+            ),
+        )
+        .unwrap();
+    let y = template.y.as_slice().to_vec();
+    template.refit(&y).unwrap();
+    assert_eq!(
+        template.opt_summary().caller_selected_optimizer(),
+        Some(optimizer)
+    );
+    assert!(template.opt_summary().caller_set_field("max_feval"));
+    assert_eq!(template.opt_summary().max_feval, 4000);
+    assert_eq!(
+        template
+            .compiler_artifact()
+            .glmm_fit_metadata
+            .as_ref()
+            .unwrap()
+            .estimation_method,
+        "joint_laplace"
+    );
+}
+
+#[test]
+fn joint_glmm_refit_interrupt_preserves_the_original_template() {
+    let mut model = small_joint_poisson_fixture();
+    let interrupt = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let callback_interrupt = Arc::clone(&interrupt);
+    let callback = FitProgressCallback::new(move |_| {
+        if callback_interrupt.load(Ordering::SeqCst) {
+            return Err(MixedModelError::Interrupted("refit interrupted".into()));
+        }
+        Ok(())
+    });
+    model
+        .fit_with_glmm_options(GlmmFitOptions::joint_laplace().with_progress_callback(callback))
+        .unwrap();
+    let original_y = model.y.clone();
+    let original_objective = model.objective();
+    let original_status = model.lmm.optsum.return_value.clone();
+    let new_y: Vec<_> = original_y.iter().map(|value| value + 1.0).collect();
+    interrupt.store(true, Ordering::SeqCst);
+    assert_eq!(model.refit(&new_y).unwrap_err().code(), "interrupted");
+    assert_eq!(model.y, original_y);
+    assert_eq!(model.objective(), original_objective);
+    assert_eq!(model.lmm.optsum.return_value, original_status);
+    interrupt.store(false, Ordering::SeqCst);
+    model.refit(original_y.as_slice()).unwrap();
+    assert!(glmm_objective_includes_response_constants(
+        &model.lmm.optsum.return_value
+    ));
+}
+
+#[test]
+fn joint_glmm_refit_refuses_estimator_substitution() {
+    let mut template = small_joint_poisson_fixture();
+    template.fit_with_options(false, 1, false).unwrap();
+    assert!(glmm_objective_includes_response_constants(
+        &template.opt_summary().return_value
+    ));
+    let y = template.y.as_slice().to_vec();
+    template.lmm.optsum.max_feval = 1;
+    let original_objective = template.objective();
+    let error = template
+        .refit(&y)
+        .expect_err("a fallback is not a joint refit");
+    assert!(
+        matches!(error, MixedModelError::Unsupported(ref reason) if reason.contains("template estimator"))
+    );
+    assert_eq!(
+        template
+            .compiler_artifact()
+            .glmm_fit_metadata
+            .as_ref()
+            .unwrap()
+            .estimation_method,
+        "joint_laplace"
+    );
+    assert_eq!(template.objective(), original_objective);
+    assert!(
+        template.refit(&y).is_err(),
+        "retry must still target the joint estimator"
+    );
+}
+
+#[test]
+fn joint_glmm_bootstrap_matches_explicit_joint_replicates() {
+    use rand::SeedableRng;
+    let template = joint_laplace_fit("cbpp");
+    let mut rng = rand::rngs::StdRng::seed_from_u64(81);
+    let bootstrap =
+        crate::stats::bootstrap::parametricbootstrap_glmm(&mut rng, 4, &template).unwrap();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(81);
+    let mut successful = 0;
+    for replicate in &bootstrap.fits {
+        let y = template.simulate_response(&mut rng).unwrap();
+        let mut explicit = template.clone();
+        explicit
+            .reset_for_refit_with_start(Some(&y), Some(template.theta()))
+            .unwrap();
+        explicit.configure_profile_start_optimizer();
+        explicit.fit_with_options(false, 1, false).unwrap();
+        if glmm_objective_includes_response_constants(&explicit.opt_summary().return_value) {
+            successful += 1;
+            assert_eq!(replicate.objective, explicit.objective());
+            assert_eq!(replicate.beta, MixedModelFit::coef(&explicit));
+            assert_eq!(replicate.theta, explicit.theta());
+        } else {
+            // A fast fallback cannot count as a joint-bootstrap success.
+            assert!(replicate.objective.is_nan());
+            assert!(replicate.sigma.is_nan());
+            assert!(replicate.se.iter().all(|v| v.is_nan()));
+        }
+    }
+    assert!(
+        successful >= 2,
+        "expected successful joint replicates, got {successful}/4"
+    );
+}
+
+#[test]
+fn joint_glmm_estimated_negative_binomial_refit_runs_outer_iterations() {
+    let data = negative_binomial_fixture();
+    let mut model = GeneralizedLinearMixedModel::new_negative_binomial_estimated(
+        parse_formula("y ~ 1 + x + (1 | group)").unwrap(),
+        &data,
+        Some(0.8),
+        None,
+    )
+    .unwrap();
+    model.fit_with_options(false, 1, false).unwrap();
+    let metadata = model
+        .compiler_artifact()
+        .glmm_fit_metadata
+        .as_ref()
+        .unwrap();
+    assert_eq!(metadata.estimation_method, "joint_laplace");
+    assert!(metadata.family_parameters["negative_binomial_theta_outer_iterations"] > 1.0);
+    let original_objective = model.objective();
+    let y = model.y.as_slice().to_vec();
+    model.refit(&y).unwrap();
+    assert_eq!(
+        model
+            .compiler_artifact()
+            .glmm_fit_metadata
+            .as_ref()
+            .unwrap()
+            .estimation_method,
+        "joint_laplace"
+    );
+    assert!(model.negative_binomial_theta_estimated());
+    assert!(
+        (model.objective() - original_objective).abs() <= 1e-5 * (1.0 + original_objective.abs())
+    );
+}
+
+/// Everything a caller can read about a fitted model's inference, as JSON.
+fn joint_reported_results(model: &GeneralizedLinearMixedModel) -> serde_json::Value {
+    let matrix = |m: DMatrix<f64>| {
+        (0..m.nrows())
+            .map(|i| (0..m.ncols()).map(|j| m[(i, j)]).collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    };
+    serde_json::json!({
+        "coef": MixedModelFit::coef(model).as_slice(),
+        "theta": model.theta(),
+        "objective": MixedModelFit::objective(model),
+        "vcov": matrix(MixedModelFit::vcov(model)),
+        "stderror": MixedModelFit::stderror(model).as_slice(),
+        "fit_summary": serde_json::to_value(
+            crate::stats::model_summary::FitSummaryPayload::from_generalized_model(model)
+        ).unwrap(),
+        "artifact": serde_json::to_value(model.compiler_artifact()).unwrap(),
+        "audit_report": serde_json::to_value(model.audit_report()).unwrap(),
+        "print_summary": model.print_summary().to_string(),
+    })
+}
+
+thread_local! {
+    /// Test-only switch restoring the eager joint-Laplace inference path, so
+    /// the deferred path can be compared against it in the same build.
+    pub(super) static EAGER_JOINT_LAPLACE_INFERENCE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+fn eager_joint_laplace_fit(name: &str) -> GeneralizedLinearMixedModel {
+    EAGER_JOINT_LAPLACE_INFERENCE.with(|eager| eager.set(true));
+    let mut model = joint_laplace_row(name);
+    let result = model.fit_with_options(false, 1, false).map(|_| ());
+    EAGER_JOINT_LAPLACE_INFERENCE.with(|eager| eager.set(false));
+    result.unwrap();
+    assert!(!model.joint_inference_pending);
+    model
+}
+
+fn pirls_state(model: &GeneralizedLinearMixedModel) -> Vec<f64> {
+    let mut state = Vec::new();
+    for u in &model.u {
+        state.extend_from_slice(u.as_slice());
+    }
+    state.extend_from_slice(model.eta.as_slice());
+    state.extend_from_slice(model.mu.as_slice());
+    state.extend_from_slice(model.beta.as_slice());
+    state.push(model.dispersion);
+    state
+}
+
+/// The joint-Laplace inference artifacts (finite-difference joint Hessian)
+/// are deferred until inspected; every reported result must equal the eager
+/// path's, and neither `&self` inspection nor in-place completion may move
+/// the fitted PIRLS state.
+#[test]
+fn deferred_joint_laplace_inference_matches_eager_path() {
+    for name in ["cbpp", "culcita", "contraception"] {
+        let eager = eager_joint_laplace_fit(name);
+        let eager_results = joint_reported_results(&eager);
+
+        let deferred = joint_laplace_fit(name);
+        assert!(deferred.joint_inference_pending, "{name}: fit should defer");
+        assert!(!deferred.pirls_certificate_pending);
+        assert!(deferred
+            .lmm
+            .compiler_artifact
+            .fixed_effect_inference_table
+            .is_none());
+        assert!(deferred
+            .lmm
+            .compiler_artifact
+            .fixed_effect_covariance_matrix
+            .is_none());
+        let fitted_state = pirls_state(&deferred);
+        // The eager Hessian's restoring re-evaluation lands on the fitted
+        // modes on these rows, so even the unreported state agrees.
+        assert_eq!(fitted_state, pirls_state(&eager), "{name}: fitted state");
+
+        // `&self` readers complete on a clone and see the eager payloads.
+        let inspected = deferred.clone();
+        assert_eq!(
+            MixedModelFit::vcov(&inspected),
+            MixedModelFit::vcov(&eager),
+            "{name}: vcov"
+        );
+        assert_eq!(joint_reported_results(&inspected), eager_results, "{name}");
+        assert!(
+            inspected.joint_inference_pending,
+            "{name}: &self stays deferred"
+        );
+        assert_eq!(pirls_state(&inspected), fitted_state, "{name}: &self state");
+
+        // In-place completion (what mutating paths call), from a fresh
+        // clone and from one with a cached inspection.
+        let mut completed = deferred.clone();
+        completed.complete_joint_laplace_inference();
+        assert!(!completed.joint_inference_pending);
+        assert_eq!(joint_reported_results(&completed), eager_results, "{name}");
+        assert_eq!(
+            serde_json::to_value(&completed.lmm.compiler_artifact).unwrap(),
+            eager_results["artifact"],
+            "{name}: stored artifact after completion"
+        );
+        assert_eq!(pirls_state(&completed), fitted_state, "{name}: state");
+        let mut completed_from_view = inspected.clone();
+        completed_from_view.complete_joint_laplace_inference();
+        assert_eq!(
+            serde_json::to_value(&completed_from_view.lmm.compiler_artifact).unwrap(),
+            eager_results["artifact"],
+            "{name}: completion from a cached inspection"
+        );
+    }
+}
+
+/// Values pinned from the eager path on macOS aarch64 with the NLopt BOBYQA
+/// joint driver whose FTOL stops are confirmed by restarts (e774238).
+///
+/// This is a fit-level anchor, not a fixture gate (VERSIONING.md §3.1).
+/// Before the confirmation restarts, BOBYQA's FTOL stop landed wherever
+/// last-bit rounding put it (Linux x86_64 contraception 9.2e-5 above the
+/// optimum); with them, perturbed starts land within ~5e-8 of the optimum,
+/// and the Linux x86_64 and Windows CI lanes for e774238 pass this test.
+/// The objective is held to the documented parity band. The
+/// finite-difference standard errors keep a looser 1e-3 relative tolerance:
+/// the stop point still varies at the 1e-8 objective level, and the
+/// finite-difference Hessian evaluated there moves the SEs far less than
+/// 1e-3, which still catches any real Hessian regression. Deferred-vs-eager
+/// equality is checked exactly, on one platform, by the tests above.
+#[cfg(feature = "nlopt")]
+#[test]
+fn deferred_joint_laplace_inference_matches_pinned_eager_values() {
+    let pinned: [(&str, f64, &[f64]); 3] = [
+        (
+            "cbpp",
+            184.05256373024386,
+            &[
+                0.23247181492924562,
+                0.3066425760106268,
+                0.32663735507697705,
+                0.4274373106693532,
+            ],
+        ),
+        (
+            "culcita",
+            60.70584123451043,
+            &[
+                1.8130429096648315,
+                1.4651833576983542,
+                1.551965193127762,
+                1.725285543382114,
+            ],
+        ),
+        (
+            "contraception",
+            2413.6164607096907,
+            &[
+                0.14903571978693272,
+                0.007885872895859583,
+                0.17958009844119066,
+                0.15438236572648847,
+                0.16294238769115987,
+                0.11942516623455823,
+            ],
+        ),
+    ];
+    for (name, objective, stderror) in pinned {
+        let model = joint_laplace_fit(name);
+        assert!(model.joint_inference_pending);
+        let optsum = model.opt_summary();
+        let actual = MixedModelFit::objective(&model);
+        assert!(
+            (actual - objective).abs() <= 1e-7_f64.max(1e-8 * objective.abs()),
+            "{name}: objective {actual:.12} vs pinned {objective:.12} \
+             (feval {} of max {}, return {})",
+            optsum.feval,
+            optsum.max_feval,
+            optsum.return_value
+        );
+        let se = MixedModelFit::stderror(&model);
+        assert_eq!(se.len(), stderror.len());
+        for (actual, expected) in se.iter().zip(stderror) {
+            assert_relative_eq!(*actual, *expected, max_relative = 1e-3);
+        }
+        let vcov = MixedModelFit::vcov(&model);
+        for (index, expected) in stderror.iter().enumerate() {
+            assert_relative_eq!(vcov[(index, index)].sqrt(), *expected, max_relative = 1e-3);
+        }
+        assert!(matches!(
+            model
+                .compiler_artifact()
+                .model_boundary
+                .inference_availability,
+            InferenceAvailability::Available { .. }
+        ));
+    }
+}
+
+/// NLopt BOBYQA's FTOL stop fires on the first small improving step at any
+/// trust-region radius, so without confirmation restarts the joint fit
+/// stopped anywhere from 1e-7 to 2.5e-4 above the optimum depending on
+/// last-bit differences in the start (contraception stopped 9.2e-5 high on
+/// Linux CI). Starts perturbed at 1e-7..1e-6 relative must all land no more
+/// than 1e-7 (the parity band) above the pinned optimum.
+#[cfg(feature = "nlopt")]
+#[test]
+fn joint_laplace_nlopt_stop_is_robust_to_start_perturbations() {
+    for (name, pinned) in [
+        ("contraception", 2413.6164607096907),
+        ("cbpp", 184.05256373024386),
+    ] {
+        let mut profiled = joint_laplace_row(name);
+        profiled.fit_with_options(true, 1, false).unwrap();
+        let start_beta = profiled.beta.as_slice().to_vec();
+        let start_theta = profiled.theta.clone();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(20260922);
+        for eps in [1e-7, 1e-6] {
+            for _ in 0..3 {
+                let mut perturb = |value: f64| {
+                    let r: f64 = rand::Rng::gen_range(&mut rng, -1.0..1.0);
+                    value + eps * r * value.abs().max(1e-3)
+                };
+                let beta = start_beta.iter().map(|&v| perturb(v)).collect::<Vec<_>>();
+                let theta = start_theta
+                    .iter()
+                    .map(|&v| perturb(v).max(0.0))
+                    .collect::<Vec<_>>();
+                let mut model = profiled.clone();
+                let start_objective = model.deviance_with_response_constants(1);
+                model.lmm.optsum.optimizer = Optimizer::NloptBobyqa;
+                let maxeval = joint_glmm_default_maxeval_for(
+                    Optimizer::NloptBobyqa,
+                    beta.len() + theta.len(),
+                );
+                model
+                    .fit_joint_glmm_from_start(
+                        beta,
+                        theta,
+                        start_objective,
+                        1,
+                        maxeval,
+                        Some(profiled.clone()),
+                    )
+                    .unwrap();
+                let optsum = model.opt_summary();
+                let objective = MixedModelFit::objective(&model);
+                // One-sided: a platform that finds a lower optimum passes;
+                // the lower bound only guards against a broken objective.
+                assert!(
+                    objective <= pinned + 1e-7 && objective >= pinned - 1e-4,
+                    "{name} eps {eps:e}: objective {objective:.10} vs pinned {pinned:.10} \
+                     (feval {} of max {}, return {})",
+                    optsum.feval,
+                    optsum.max_feval,
+                    optsum.return_value
+                );
+            }
+        }
+    }
+}
+
+/// Asserts a no-`nlopt` joint fit reached `pinned` within the parity band
+/// with a certified interior optimum and a confirmed stop.
+#[cfg(not(feature = "nlopt"))]
+fn assert_trust_bq_joint_optimum(model: &GeneralizedLinearMixedModel, label: &str, pinned: f64) {
+    let optsum = model.opt_summary();
+    let objective = MixedModelFit::objective(model);
+    assert_eq!(optsum.optimizer, Optimizer::TrustBq, "{label}");
+    assert!(
+        (objective - pinned).abs() <= 1e-7,
+        "{label}: objective {objective:.10} vs pinned {pinned:.10} \
+         (feval {} of max {}, return {})",
+        optsum.feval,
+        optsum.max_feval,
+        optsum.return_value
+    );
+    let certificate = model
+        .compiler_artifact()
+        .optimizer_certificate
+        .as_ref()
+        .unwrap();
+    assert_eq!(
+        certificate.status,
+        crate::compiler::FitStatus::ConvergedInterior,
+        "{label}: return {}",
+        optsum.return_value
+    );
+    assert!(
+        !certificate
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.payload.contains_key("ftol_confirmation")),
+        "{label}: unconfirmed FTOL stop"
+    );
+}
+
+/// The no-`nlopt` joint driver (TrustBQ) stopped 1.05e-4 above the
+/// contraception `(1 | dist)` optimum: in raw coordinates its axis stencil,
+/// sized for the intercept, spans 2.6 standard errors of `age` and hid an
+/// `age` gradient of 2.6. It now works in profiled-covariance coordinates,
+/// under MixedModels.jl tolerances, with confirmed FTOL stops, and must reach
+/// the NLopt-path optimum (Julia fast = false 2413.6164609) with a certified
+/// interior stop. The rare-event Bernoulli AGQ5 fit (1e-6 high before, with a
+/// diagonal model and a loose stall band) is held to its NLopt optimum too.
+#[cfg(not(feature = "nlopt"))]
+#[test]
+fn joint_trust_bq_reaches_the_nlopt_optimum() {
+    let model = joint_laplace_fit("contraception");
+    assert!(model.lmm.optsum.return_value.starts_with("JOINT_LAPLACE:"));
+    assert_trust_bq_joint_optimum(&model, "contraception", 2413.6164607096907);
+
+    // Independent MixedModels.jl 5.9.0 / Julia 1.12.4 fit with ftol_abs=1e-12 and
+    // ftol_rel=1e-14 (2026-09-27); the ordinary Julia stop is 5.6e-6 higher.
+    let slope = joint_laplace_fit("contraception_slope");
+    assert_trust_bq_joint_optimum(&slope, "contraception_slope", 2399.0171950823055);
+
+    let (data, _) = crate::datasets::load("rare_event_bernoulli").unwrap();
+    let formula = parse_formula("y ~ 1 + exposure + (1 | group)").unwrap();
+    let mut rare =
+        GeneralizedLinearMixedModel::new(formula, &data, Family::Bernoulli, None).unwrap();
+    rare.fit_with_options(false, 5, false).unwrap();
+    assert!(rare.lmm.optsum.return_value.starts_with("JOINT_AGQ:"));
+    assert_trust_bq_joint_optimum(&rare, "rare-event AGQ5", 67.4708483512);
+}
+
+/// Mirror of `joint_laplace_nlopt_stop_is_robust_to_start_perturbations` for
+/// the no-`nlopt` TrustBQ joint driver: starts perturbed at 1e-7..1e-5
+/// relative must all land within 1e-7 of the reference optimum, certified.
+/// Both contraception models take one start per level; the random-slope
+/// row covers a nine-parameter fit with correlated covariance parameters.
+#[cfg(not(feature = "nlopt"))]
+#[test]
+fn joint_trust_bq_stop_is_robust_to_start_perturbations() {
+    for (name, pinned, starts) in [
+        ("contraception", 2413.6164607096907, 1),
+        ("cbpp", 184.05256373024386, 3),
+        ("contraception_slope", 2399.0171950823055, 1),
+    ] {
+        let mut profiled = joint_laplace_row(name);
+        profiled.fit_with_options(true, 1, false).unwrap();
+        let start_beta = profiled.beta.as_slice().to_vec();
+        let start_theta = profiled.theta.clone();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(20260924);
+        for eps in [1e-7, 1e-6, 1e-5] {
+            for _ in 0..starts {
+                let mut perturb = |value: f64| {
+                    let r: f64 = rand::Rng::gen_range(&mut rng, -1.0..1.0);
+                    value + eps * r * value.abs().max(1e-3)
+                };
+                let beta = start_beta.iter().map(|&v| perturb(v)).collect::<Vec<_>>();
+                let theta = start_theta
+                    .iter()
+                    .zip(profiled.lmm.lower_bounds())
+                    .map(|(&v, lower)| perturb(v).max(lower))
+                    .collect::<Vec<_>>();
+                let mut model = profiled.clone();
+                let start_objective = model.deviance_with_response_constants(1);
+                model.lmm.optsum.optimizer = Optimizer::TrustBq;
+                let maxeval =
+                    joint_glmm_default_maxeval_for(Optimizer::TrustBq, beta.len() + theta.len());
+                model
+                    .fit_joint_glmm_from_start(
+                        beta,
+                        theta,
+                        start_objective,
+                        1,
+                        maxeval,
+                        Some(profiled.clone()),
+                    )
+                    .unwrap();
+                assert_trust_bq_joint_optimum(&model, &format!("{name} eps {eps:e}"), pinned);
+            }
+        }
+    }
+}
+
+/// A covariance displacement leaves a resolvable objective gap with every
+/// raw gradient below 0.02. The former polish stopped at that threshold and
+/// also rejected every gain below 1e-9 times the objective (~2.4e-6 here).
+/// This endpoint test isolates both cutoffs from platform-dependent changes
+/// in the derivative-free optimizer's trajectory.
+#[cfg(not(feature = "nlopt"))]
+#[test]
+fn joint_trust_bq_polish_resolves_small_gradient_gap() {
+    let mut model = joint_laplace_row("contraception_slope");
+    // A stationary point in optimizer order; its objective agrees within
+    // 8e-9 with the independent tightened Julia fit pinned above.
+    let mut params = vec![
+        0.45822329006150314,
+        -0.026519224579353476,
+        -1.3547894778871892,
+        0.013539306388126646,
+        -0.22909102450955046,
+        -0.8152842251981027,
+        0.4831117324841304,
+        -0.5113571114204088,
+        0.6168095824417931,
+    ];
+    params[7] -= 2e-4;
+    let n_beta = model.beta.len();
+    let mut lower_bounds = vec![f64::NEG_INFINITY; n_beta];
+    lower_bounds.extend(model.lmm.lower_bounds());
+    model.lmm.optsum.n_agq = 1;
+    let pinned = 2399.0171950823055;
+    let before = model.joint_glmm_deviance_at_params(&params, n_beta, 1);
+    assert!(before - pinned > 1e-7 && before - pinned < 1e-9 * before);
+    let certification =
+        model.joint_laplace_certification_gradient(&params, n_beta, 1, &lower_bounds, 0.02);
+    assert!(certification.unassessable_indices.is_empty());
+    let gradient_norm = certification
+        .gradient
+        .iter()
+        .map(|g| g.abs())
+        .fold(0.0_f64, f64::max);
+    assert!(gradient_norm < 0.02, "gradient norm {gradient_norm}");
+    let polished = model
+        .polish_joint_laplace_stationarity(&params, &lower_bounds, 4, 0.02)
+        .unwrap();
+    let after = model.joint_glmm_deviance_at_params(&polished, n_beta, 1);
+    assert!(
+        (after - pinned).abs() <= 1e-7,
+        "polish left objective {after:.12}; reference {pinned:.12}; initial gap {:.3e}",
+        before - pinned,
+    );
+}
+
+/// A tight evaluation budget must not turn a confirmed or unconfirmable
+/// FTOL stop into a budget stop. A confirming restart that gains nothing
+/// keeps the FTOL label even if it then exhausts the budget, and a restart
+/// that cannot afford twice BOBYQA's 2n + 1 interpolation set is not
+/// launched; that stop keeps its FTOL label and is recorded as unconfirmed
+/// on the certificate rather than claimed as confirmed. Sweeping the budget
+/// across cbpp's first-pass and restart stop points covers both cases.
+#[cfg(feature = "nlopt")]
+#[test]
+fn joint_laplace_nlopt_ftol_confirmation_respects_tight_budgets() {
+    let pinned = 184.05256373024386;
+    let mut profiled = joint_laplace_row("cbpp");
+    profiled.fit_with_options(true, 1, false).unwrap();
+    let n_params = profiled.beta.len() + profiled.theta.len();
+    let min_restart_budget = 2 * (2 * n_params as i64 + 1);
+    // Objectives reached by an FTOL stop under a smaller budget.
+    let mut ftol_objectives: Vec<f64> = Vec::new();
+    let (mut saw_unconfirmed, mut saw_confirmed) = (false, false);
+    for maxeval in 40..=130u32 {
+        let mut model = profiled.clone();
+        let start_objective = model.deviance_with_response_constants(1);
+        model.lmm.optsum.optimizer = Optimizer::NloptBobyqa;
+        model
+            .fit_joint_glmm_from_start(
+                profiled.beta.as_slice().to_vec(),
+                profiled.theta.clone(),
+                start_objective,
+                1,
+                maxeval,
+                Some(profiled.clone()),
+            )
+            .unwrap();
+        let optsum = model.opt_summary().clone();
+        let objective = MixedModelFit::objective(&model);
+        let label = optsum.return_value.as_str();
+        assert!(
+            label == "JOINT_LAPLACE:FTOL_REACHED" || label == "JOINT_LAPLACE:MAXEVAL_REACHED",
+            "max {maxeval}: unexpected return {label}"
+        );
+        assert!(optsum.feval <= i64::from(maxeval));
+        let unconfirmed = model
+            .compiler_artifact()
+            .optimizer_certificate
+            .as_ref()
+            .is_some_and(|certificate| {
+                certificate
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.payload.contains_key("ftol_confirmation"))
+            });
+        if label.ends_with("MAXEVAL_REACHED") {
+            // A budget stop must have moved past every FTOL stop reached
+            // under a smaller budget: a restart that gained nothing (or was
+            // never launched) cannot relabel the fit.
+            assert!(
+                ftol_objectives.iter().all(|&f| objective < f - 1e-12),
+                "max {maxeval}: MAXEVAL at objective {objective:.12} already reached by an FTOL stop"
+            );
+            assert!(
+                !unconfirmed,
+                "max {maxeval}: budget stop marked as an FTOL confirmation gap"
+            );
+        } else {
+            ftol_objectives.push(objective);
+            if unconfirmed {
+                saw_unconfirmed = true;
+                assert!(
+                    i64::from(maxeval) - optsum.feval < min_restart_budget,
+                    "max {maxeval}: unconfirmed although {} evaluations remained",
+                    i64::from(maxeval) - optsum.feval
+                );
+            } else {
+                saw_confirmed = true;
+                assert!(
+                    objective <= pinned + 1e-7,
+                    "max {maxeval}: confirmed FTOL stop at {objective:.12}, pinned {pinned:.12}"
+                );
+            }
+        }
+    }
+    assert!(saw_unconfirmed && saw_confirmed);
+}
+
+/// Every path that records on, re-fits, or switches estimator from a
+/// deferred joint fit must complete or clear the deferral: a stale flag
+/// would let an inspection overwrite a later stage's payloads.
+#[test]
+fn deferred_joint_laplace_inference_across_verification_refit_and_stage_switch() {
+    let eager = eager_joint_laplace_fit("cbpp");
+    let eager_artifact = serde_json::to_value(eager.compiler_artifact()).unwrap();
+
+    // Verification records on the certificate only, so the inference stays
+    // deferred (a view cached before verification is dropped); everything
+    // but the verification record is the eager artifact.
+    let mut verified = joint_laplace_fit("cbpp");
+    let fitted_state = pirls_state(&verified);
+    let _ = MixedModelFit::vcov(&verified);
+    verified.verify_convergence().unwrap();
+    assert!(verified.joint_inference_pending);
+    assert_eq!(pirls_state(&verified), fitted_state);
+    let mut verified_artifact = serde_json::to_value(verified.compiler_artifact()).unwrap();
+    assert!(!verified_artifact["optimizer_certificate"]["verification"].is_null());
+    verified_artifact["optimizer_certificate"]["verification"] =
+        eager_artifact["optimizer_certificate"]["verification"].clone();
+    assert_eq!(verified_artifact, eager_artifact);
+
+    // A caller-driven PIRLS completes from the fitted state first.
+    let mut driven = joint_laplace_fit("cbpp");
+    driven.pirls(false, false).unwrap();
+    assert!(!driven.joint_inference_pending);
+    assert_eq!(
+        serde_json::to_value(driven.compiler_artifact()).unwrap(),
+        eager_artifact
+    );
+
+    // Generic refits retain the joint estimator and defer its own inference.
+    let mut refit = joint_laplace_fit("cbpp");
+    let y = refit.y.as_slice().to_vec();
+    refit.refit(&y).unwrap();
+    assert!(refit.joint_inference_pending);
+    assert!(!refit.pirls_certificate_pending);
+    let refit_artifact = refit.compiler_artifact();
+    assert_eq!(
+        refit_artifact
+            .glmm_fit_metadata
+            .as_ref()
+            .unwrap()
+            .estimation_method,
+        "joint_laplace"
+    );
+
+    // profiled -> joint -> profiled stage switches on one model.
+    let mut model = joint_laplace_row("cbpp");
+    model.fit_with_options(true, 1, false).unwrap();
+    assert!(model.pirls_certificate_pending && !model.joint_inference_pending);
+    model.reset_for_refit(None).unwrap();
+    assert!(!model.pirls_certificate_pending && !model.joint_inference_pending);
+    model.fit_with_options(false, 1, false).unwrap();
+    assert!(!model.pirls_certificate_pending && model.joint_inference_pending);
+    assert!(model.pirls_profiled_optimum_certificate().is_none());
+    assert!(matches!(
+        model
+            .compiler_artifact()
+            .model_boundary
+            .inference_availability,
+        InferenceAvailability::Available { .. }
+    ));
+    model.reset_for_refit(None).unwrap();
+    model.configure_profile_start_optimizer();
+    model.fit_with_options(true, 1, false).unwrap();
+    assert!(model.pirls_certificate_pending && !model.joint_inference_pending);
+    assert!(model.pirls_profiled_optimum_certificate().is_some());
+    assert_eq!(
+        model
+            .compiler_artifact()
+            .glmm_fit_metadata
+            .as_ref()
+            .unwrap()
+            .estimation_method,
+        "fast_pirls_profiled"
+    );
+
+    // Joint AGQ is not deferred (its artifacts carry no Hessian).
+    let mut agq = joint_laplace_row("culcita");
+    agq.fit_with_options(false, 3, false).unwrap();
+    assert!(!agq.joint_inference_pending);
+}
+
+/// A rejected AGQ request after a fit records its diagnostic on the stored
+/// artifact; a `&self` view cached before it must not hide it (fast and
+/// joint deferrals).
+#[test]
+fn deferred_inspection_sees_invalid_agq_diagnostic_recorded_after_fit() {
+    let (_, data) = glmm_certified_pirls_poisson_fixture();
+    for fast in [true, false] {
+        let formula = parse_formula("y ~ 1 + x + (1 + x | group)").unwrap();
+        let mut model =
+            GeneralizedLinearMixedModel::new(formula, &data, Family::Poisson, None).unwrap();
+        model.fit_with_options(fast, 1, false).unwrap();
+        assert!(
+            if fast {
+                model.pirls_certificate_pending
+            } else {
+                model.joint_inference_pending
+            },
+            "fast={fast}: the fit should defer its post-fit work"
+        );
+        let has_invalid_agq = |model: &GeneralizedLinearMixedModel| {
+            model
+                .compiler_artifact()
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == DiagnosticCode::InvalidAgqRequest)
+        };
+        // Fill the cached view, then fail an AGQ request.
+        let _ = MixedModelFit::vcov(&model);
+        assert!(!has_invalid_agq(&model));
+        assert!(model
+            .fit_with_glmm_options(GlmmFitOptions {
+                fast,
+                n_agq: 5,
+                ..GlmmFitOptions::default()
+            })
+            .is_err());
+        assert!(has_invalid_agq(&model), "fast={fast}: compiler_artifact");
+        assert!(
+            model
+                .audit_report()
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == DiagnosticCode::InvalidAgqRequest),
+            "fast={fast}: audit_report"
+        );
+        assert!(
+            model
+                .print_summary()
+                .top_diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == DiagnosticCode::InvalidAgqRequest),
+            "fast={fast}: print_summary"
+        );
+        let view = serde_json::to_value(model.compiler_artifact()).unwrap();
+        model.complete_deferred_inspection();
+        assert_eq!(
+            view,
+            serde_json::to_value(model.compiler_artifact()).unwrap(),
+            "fast={fast}: view vs in-place completion"
+        );
+    }
+}
+
+/// Unstable probes that move beta/theta/modes complete deferred work from
+/// the fitted state first, so the inference table reports the fitted beta.
+#[test]
+fn deferred_joint_laplace_inference_is_completed_before_probes() {
+    let eager = eager_joint_laplace_fit("cbpp");
+    let eager_artifact = serde_json::to_value(eager.compiler_artifact()).unwrap();
+    let mut probed = joint_laplace_fit("cbpp");
+    let far_theta = vec![probed.theta[0] * 0.5];
+    probed.profiled_deviance_at_theta(&far_theta, 1).unwrap();
+    assert!(!probed.joint_inference_pending);
+    assert_eq!(
+        serde_json::to_value(probed.compiler_artifact()).unwrap(),
+        eager_artifact
+    );
+    let mut via_lmm_mut = joint_laplace_fit("cbpp");
+    let _ = via_lmm_mut.lmm_mut();
+    assert!(!via_lmm_mut.joint_inference_pending);
+    assert_eq!(
+        serde_json::to_value(via_lmm_mut.compiler_artifact()).unwrap(),
+        eager_artifact
+    );
+}
+
+/// Prediction variance reads the certified joint covariance through the
+/// deferral.
+#[test]
+fn deferred_joint_laplace_inference_prediction_variance_matches_eager() {
+    let eager = eager_joint_laplace_fit("culcita");
+    let deferred = joint_laplace_fit("culcita");
+    let (data, _) = crate::datasets::load("culcitalogreg").unwrap();
+    let eager_payload = eager
+        .predict_new_variance(&data, GlmmPredictionScale::Response, NewReLevels::Error)
+        .unwrap();
+    let deferred_payload = deferred
+        .predict_new_variance(&data, GlmmPredictionScale::Response, NewReLevels::Error)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&deferred_payload).unwrap(),
+        serde_json::to_value(&eager_payload).unwrap()
+    );
+}
+
+/// Joint Laplace fit cost, eager versus deferred inference (interleaved in
+/// one binary), with and without a first inference inspection (`vcov`).
+/// `cargo test --release --lib generalized::tests::glmm_joint_inference_deferral_cost -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn glmm_joint_inference_deferral_cost() {
+    use std::time::Instant;
+    fn median(mut values: Vec<f64>) -> f64 {
+        values.sort_by(f64::total_cmp);
+        values[values.len() / 2]
+    }
+    for name in ["cbpp", "contraception"] {
+        // [eager fit, eager fit+vcov, deferred fit, deferred fit+vcov]
+        let mut samples: [Vec<f64>; 4] = Default::default();
+        for rep in 0..28 {
+            for eager in [true, false] {
+                EAGER_JOINT_LAPLACE_INFERENCE.with(|flag| flag.set(eager));
+                let mut model = joint_laplace_row(name);
+                let t0 = Instant::now();
+                model.fit_with_options(false, 1, false).unwrap();
+                let fit = t0.elapsed().as_secs_f64() * 1e3;
+                let vcov = MixedModelFit::vcov(&model);
+                let inspected = t0.elapsed().as_secs_f64() * 1e3;
+                EAGER_JOINT_LAPLACE_INFERENCE.with(|flag| flag.set(false));
+                assert!(vcov.iter().all(|value| value.is_finite()));
+                if rep >= 3 {
+                    let offset = if eager { 0 } else { 2 };
+                    samples[offset].push(fit);
+                    samples[offset + 1].push(inspected);
+                }
+            }
+        }
+        let [eager_fit, eager_vcov, deferred_fit, deferred_vcov] = samples.map(median);
+        println!(
+            "{name:14} eager fit {eager_fit:8.3} ms (+vcov {eager_vcov:8.3}) | deferred fit {deferred_fit:8.3} ms (+vcov {deferred_vcov:8.3}) | fit speedup {:.2}x (25 reps, interleaved)",
+            eager_fit / deferred_fit
+        );
+    }
+}
+
+// --- Fixed-β PIRLS `[X|y]`-block staleness and response-constant cache
+// (mote bd-01M35KYR62T30QR6DDPYBYNEVC). ---
+
+fn assert_blocks_bit_identical(actual: &[MatrixBlock], expected: &[MatrixBlock], what: &str) {
+    assert_eq!(actual.len(), expected.len(), "{what}: block count");
+    for (idx, (a, e)) in actual.iter().zip(expected).enumerate() {
+        assert_eq!(
+            std::mem::discriminant(a),
+            std::mem::discriminant(e),
+            "{what}[{idx}]: storage kind changed"
+        );
+        let (a, e) = (a.as_dense(), e.as_dense());
+        assert_eq!(a.shape(), e.shape(), "{what}[{idx}]: shape");
+        for (x, y) in a.iter().zip(e.iter()) {
+            assert_eq!(x.to_bits(), y.to_bits(), "{what}[{idx}]: {x:e} vs {y:e}");
+        }
+    }
+}
+
+fn assert_bits_eq(actual: &[f64], expected: &[f64], what: &str) {
+    assert_eq!(actual.len(), expected.len(), "{what}: length");
+    for (x, y) in actual.iter().zip(expected) {
+        assert_eq!(x.to_bits(), y.to_bits(), "{what}: {x:e} vs {y:e}");
+    }
+}
+
+/// The model with its A/L system rebuilt in full from its own final IRLS
+/// weights and working response (the pre-skip behaviour of every PIRLS
+/// iteration).
+fn with_full_rebuild_at_current_weights(
+    model: &GeneralizedLinearMixedModel,
+) -> GeneralizedLinearMixedModel {
+    let mut reference = model.clone();
+    let sqrtwts = model.lmm.sqrtwts.clone();
+    let rank = model.lmm.feterm.rank;
+    let working_y: Vec<f64> = model.lmm.xy_mat.xy.column(rank).iter().copied().collect();
+    reference
+        .lmm
+        .update_irls_weights(&sqrtwts, &working_y)
+        .unwrap();
+    reference.lmm.update_l().unwrap();
+    reference
+}
+
+#[test]
+fn fixed_beta_pirls_exits_with_fe_blocks_bit_identical_to_a_full_rebuild() {
+    for name in ["cbpp", "contraception"] {
+        let mut model = joint_laplace_row(name);
+        let n_beta = model.lmm.feterm.rank;
+        let mut params: Vec<f64> = model.beta.iter().copied().collect();
+        params.extend(model.theta.iter().map(|t| 0.8 * t));
+        let objective = model.joint_glmm_deviance_at_params(&params, n_beta, 1);
+        assert!(objective.is_finite(), "{name}: probe objective");
+        assert!(
+            !model.lmm.fe_blocks_stale(),
+            "{name}: PIRLS returned with stale [X|y] blocks"
+        );
+
+        let reference = with_full_rebuild_at_current_weights(&model);
+        assert_blocks_bit_identical(&model.lmm.a_blocks, &reference.lmm.a_blocks, "A");
+        assert_blocks_bit_identical(&model.lmm.l_blocks, &reference.lmm.l_blocks, "L");
+        // The readers of the `[X|y]` rows agree too.
+        assert_bits_eq(
+            model.lmm.beta().as_slice(),
+            reference.lmm.beta().as_slice(),
+            "profiled beta",
+        );
+        assert_eq!(model.lmm.pwrss().to_bits(), reference.lmm.pwrss().to_bits());
+    }
+}
+
+#[test]
+fn re_only_update_marks_fe_blocks_stale_until_refreshed_or_fully_factored() {
+    let mut model = joint_laplace_row("cbpp");
+    model.fit_with_options(true, 1, false).unwrap();
+    assert!(
+        !model.lmm.fe_blocks_stale(),
+        "fast (varying-β) fit left stale blocks"
+    );
+
+    let rank = model.lmm.feterm.rank;
+    let sqrtwts: Vec<f64> = model.lmm.sqrtwts.iter().map(|w| 1.1 * w).collect();
+    let working_y: Vec<f64> = model
+        .lmm
+        .xy_mat
+        .xy
+        .column(rank)
+        .iter()
+        .map(|y| y + 0.05)
+        .collect();
+
+    let mut full = model.clone();
+    full.lmm.update_irls_weights(&sqrtwts, &working_y).unwrap();
+    full.lmm.update_l().unwrap();
+    assert!(!full.lmm.fe_blocks_stale());
+
+    let mut partial = model.clone();
+    partial
+        .lmm
+        .update_irls_weights_re_only(&sqrtwts, &working_y);
+    assert!(partial.lmm.fe_a_blocks_stale && partial.lmm.fe_l_row_stale);
+    partial.lmm.update_l_re_only().unwrap();
+    assert!(partial.lmm.fe_blocks_stale());
+
+    // The RE rows are already exact; only the `[X|y]` rows lag.
+    let k = partial.lmm.reterms.len();
+    let re_blocks = k * (k + 1) / 2;
+    assert_blocks_bit_identical(
+        &partial.lmm.a_blocks[..re_blocks],
+        &full.lmm.a_blocks[..re_blocks],
+        "RE A",
+    );
+    assert_blocks_bit_identical(
+        &partial.lmm.l_blocks[..re_blocks],
+        &full.lmm.l_blocks[..re_blocks],
+        "RE L",
+    );
+    let stale_fe_a = partial.lmm.a_blocks[re_blocks + k].as_dense();
+    assert_ne!(
+        stale_fe_a,
+        full.lmm.a_blocks[re_blocks + k].as_dense(),
+        "the skipped [X|y]'[X|y] block should still hold the previous weights"
+    );
+
+    // Path 1: the cheap refresh used on PIRLS exit.
+    let mut refreshed = partial.clone();
+    refreshed.lmm.refresh_stale_fe_blocks().unwrap();
+    assert!(!refreshed.lmm.fe_blocks_stale());
+    assert_blocks_bit_identical(&refreshed.lmm.a_blocks, &full.lmm.a_blocks, "refreshed A");
+    assert_blocks_bit_identical(&refreshed.lmm.l_blocks, &full.lmm.l_blocks, "refreshed L");
+
+    // Path 2: a full factor update self-heals the stale A rows first.
+    partial.lmm.update_l().unwrap();
+    assert!(!partial.lmm.fe_blocks_stale());
+    assert_blocks_bit_identical(&partial.lmm.a_blocks, &full.lmm.a_blocks, "self-healed A");
+    assert_blocks_bit_identical(&partial.lmm.l_blocks, &full.lmm.l_blocks, "self-healed L");
+}
+
+#[test]
+fn joint_and_fast_fits_leave_fe_blocks_matching_a_forced_rebuild() {
+    for fast in [false, true] {
+        let mut model = joint_laplace_row("cbpp");
+        model.fit_with_options(fast, 1, false).unwrap();
+        assert!(
+            !model.lmm.fe_blocks_stale(),
+            "fast={fast}: stale blocks after fit"
+        );
+
+        let mut forced = model.clone();
+        forced.lmm.recompute_a_blocks().unwrap();
+        forced.lmm.update_l().unwrap();
+        assert_blocks_bit_identical(&model.lmm.a_blocks, &forced.lmm.a_blocks, "A");
+        assert_blocks_bit_identical(&model.lmm.l_blocks, &forced.lmm.l_blocks, "L");
+        assert_bits_eq(
+            MixedModelFit::vcov(&model).as_slice(),
+            MixedModelFit::vcov(&forced).as_slice(),
+            "vcov",
+        );
+        assert_bits_eq(
+            MixedModelFit::stderror(&model).as_slice(),
+            MixedModelFit::stderror(&forced).as_slice(),
+            "stderror",
+        );
+    }
+}
+
+#[test]
+fn response_constant_cache_matches_uncached_and_follows_the_response() {
+    let mut model = joint_laplace_row("cbpp");
+    model.fit_with_options(false, 1, false).unwrap();
+    assert!(
+        model.current_response_log_constants().is_some(),
+        "joint fit builds the cache"
+    );
+
+    let uncached_objective = |model: &GeneralizedLinearMixedModel| {
+        let mut plain = model.clone();
+        plain.response_log_constants = None;
+        plain.laplace_objective_with_response_constants()
+    };
+    assert_eq!(
+        model.laplace_objective_with_response_constants().to_bits(),
+        uncached_objective(&model).to_bits()
+    );
+
+    // Reset for a refit with a new response: the constants follow the new y.
+    let old_constants = model.current_response_log_constants().unwrap().to_vec();
+    let sizes = model.wt.clone();
+    let new_y: Vec<f64> = model
+        .y
+        .iter()
+        .zip(&sizes)
+        .map(|(&p, &n)| ((p * n).round() + 1.0).min(n) / n)
+        .collect();
+    model.reset_for_refit(Some(&new_y)).unwrap();
+    assert!(
+        model.current_response_log_constants().is_none(),
+        "a new response must invalidate the cached constants"
+    );
+    // A joint-objective evaluation on the new response (optimizer-free, so
+    // the check is the same with and without NLopt).
+    let n_beta = model.lmm.feterm.rank;
+    let mut params: Vec<f64> = model.beta.iter().copied().collect();
+    params.extend(model.theta.iter().copied());
+    let refit_objective = model.joint_glmm_deviance_at_params(&params, n_beta, 1);
+    assert!(refit_objective.is_finite());
+    let new_constants = model.current_response_log_constants().unwrap().to_vec();
+    assert_ne!(new_constants, old_constants);
+    let expected: Vec<f64> = (0..model.y.len())
+        .map(|i| model.response_log_constant_observation(i).unwrap())
+        .collect();
+    assert_bits_eq(&new_constants, &expected, "refit constants");
+    assert_eq!(
+        model.laplace_objective_with_response_constants().to_bits(),
+        uncached_objective(&model).to_bits()
+    );
+    assert_eq!(
+        refit_objective.to_bits(),
+        uncached_objective(&model).to_bits()
+    );
+
+    // Direct writes to the public response/weight fields are caught too.
+    model.y[0] = if model.y[0] > 0.0 { 0.0 } else { 1.0 };
+    assert!(model.current_response_log_constants().is_none());
+    assert_eq!(
+        model.laplace_objective_with_response_constants().to_bits(),
+        uncached_objective(&model).to_bits()
+    );
+    model.ensure_response_log_constants();
+    model.wt[0] += 1.0;
+    assert!(model.current_response_log_constants().is_none());
+}
+
+#[test]
+fn response_constant_cache_key_is_checked_once_per_objective_evaluation() {
+    use super::pirls::RESPONSE_LOG_CONSTANT_KEY_CHECKS;
+    let key_checks = || RESPONSE_LOG_CONSTANT_KEY_CHECKS.with(|count| count.get());
+
+    let mut model = joint_laplace_row("culcita");
+    model.fit_with_options(true, 1, false).unwrap();
+    model.ensure_response_log_constants();
+    assert!(
+        model.y.len() > 3,
+        "fixture must have more observations than allowed checks"
+    );
+
+    for n_agq in [1, 7] {
+        let before = key_checks();
+        let objective = model.deviance_with_response_constants(n_agq);
+        assert!(objective.is_finite());
+        let checks = key_checks() - before;
+        // One check in `ensure_response_log_constants`, one per summed
+        // objective / offset — independent of the number of observations.
+        assert!(
+            checks <= 2,
+            "n_agq={n_agq}: {checks} cache-key checks for one evaluation (n = {})",
+            model.y.len()
+        );
+    }
+    let before = key_checks();
+    let _ = model.response_constants_offset();
+    let _ = model.laplace_objective_with_response_constants();
+    assert_eq!(key_checks() - before, 2);
+}
+
+// ---- Newton-decrement stationarity (bd-01M35YW5H031824SVC9EWP0JRZ) ----
+
+/// Certification probes of `f` at `x` built the way the joint certificate
+/// builds them: a default-step probe per coordinate (central unless the minus
+/// step crosses the lower bound), plus the two escalated probes for the
+/// coordinates listed in `escalate`.
+fn synthetic_certification(
+    f: &dyn Fn(&[f64]) -> f64,
+    x: &[f64],
+    lower_bounds: &[f64],
+    escalate: &[usize],
+) -> JointLaplaceCertificationGradient {
+    let base = f(x);
+    let probe = |index: usize, h: f64| {
+        let mut plus = x.to_vec();
+        plus[index] += h;
+        if x[index] - h > lower_bounds[index] {
+            let mut minus = x.to_vec();
+            minus[index] -= h;
+            JointFdProbe::central(h, f(&plus), f(&minus))
+        } else {
+            JointFdProbe::forward(h, f(&plus), base)
+        }
+    };
+    let mut curvature_probes = Vec::new();
+    let mut gradient = Vec::new();
+    for (index, value) in x.iter().enumerate() {
+        let scale = value.abs().max(1.0);
+        let mut probes = vec![probe(index, JOINT_LAPLACE_FD_RELATIVE_STEP * scale)];
+        if escalate.contains(&index) {
+            probes.extend(
+                JOINT_LAPLACE_CERT_FD_ESCALATED_RELATIVE_STEPS
+                    .map(|step| probe(index, step * scale)),
+            );
+        }
+        gradient.push(probes.last().unwrap().gradient);
+        curvature_probes.push(probes);
+    }
+    JointLaplaceCertificationGradient {
+        probe_gradient: curvature_probes.iter().map(|p| p[0].gradient).collect(),
+        gradient,
+        escalated_indices: escalate.to_vec(),
+        unassessable_indices: Vec::new(),
+        base_objective: base,
+        curvature_probes,
+    }
+}
+
+fn quadratic_gap<'a>(hessian: &'a DMatrix<f64>, optimum: &[f64]) -> impl Fn(&[f64]) -> f64 + 'a {
+    let optimum = DVector::from_column_slice(optimum);
+    move |x: &[f64]| {
+        let d = DVector::from_column_slice(x) - &optimum;
+        0.5 * d.dot(&(hessian * &d))
+    }
+}
+
+fn correlated_test_hessian() -> DMatrix<f64> {
+    DMatrix::from_row_slice(3, 3, &[40.0, 30.0, 1.0, 30.0, 25.0, 0.5, 1.0, 0.5, 8.0])
+}
+
+#[test]
+fn newton_decrement_recovers_quadratic_gap() {
+    let hessian = correlated_test_hessian();
+    let optimum = [0.4, -1.2, 0.7];
+    let f = quadratic_gap(&hessian, &optimum);
+    let lower_bounds = [f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0];
+    // Premature point along the flat (correlated) β direction plus a θ offset.
+    for (scale, expect_within) in [(5.0e-4, true), (2.0e-2, false)] {
+        let x = [
+            optimum[0] + scale,
+            optimum[1] - 1.1 * scale,
+            optimum[2] + 0.1 * scale,
+        ];
+        let gap = f(&x);
+        let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+        let g = DVector::from_column_slice(&certification.gradient);
+
+        let diagonal = joint_newton_decrement(&certification, &x, &lower_bounds, 2, None, 1.0e-6);
+        assert!(diagonal.excluded.is_empty());
+        assert_eq!(diagonal.parameter_indices, vec![0, 1, 2]);
+        assert_eq!(diagonal.eager.variant, NewtonDecrementVariant::Diagonal);
+        let expected_diagonal = 0.5 * (0..3).map(|i| g[i] * g[i] / hessian[(i, i)]).sum::<f64>();
+        assert_relative_eq!(
+            diagonal.eager.objective_gap.unwrap(),
+            expected_diagonal,
+            max_relative = 1e-5
+        );
+
+        let beta_block = hessian.view((0, 0), (2, 2)).into_owned();
+        let block = joint_newton_decrement(
+            &certification,
+            &x,
+            &lower_bounds,
+            2,
+            Some(&beta_block),
+            1.0e-6,
+        );
+        assert_eq!(
+            block.eager.variant,
+            NewtonDecrementVariant::BetaBlockThetaDiagonal
+        );
+        let g_beta = g.rows(0, 2).into_owned();
+        let expected_block = 0.5
+            * (g_beta.dot(&beta_block.clone().cholesky().unwrap().solve(&g_beta))
+                + g[2] * g[2] / hessian[(2, 2)]);
+        assert_relative_eq!(
+            block.eager.objective_gap.unwrap(),
+            expected_block,
+            max_relative = 1e-5
+        );
+        // The β block absorbs the strong β correlation, so it tracks the
+        // true gap far better than the diagonal does here.
+        assert!((block.eager.objective_gap.unwrap() / gap - 1.0).abs() < 0.1);
+        let diagonal_ratio = diagonal.eager.objective_gap.unwrap() / gap;
+        assert!(
+            !(0.5..=2.0).contains(&diagonal_ratio),
+            "diagonal/true = {diagonal_ratio}"
+        );
+
+        let full = full_newton_decrement_estimate(&block, &hessian, &[0, 1, 2]);
+        assert_eq!(full.variant, NewtonDecrementVariant::Full);
+        assert_relative_eq!(full.objective_gap.unwrap(), gap, max_relative = 1e-5);
+        let expected_verdict = if expect_within {
+            NewtonDecrementVerdict::WithinTolerance
+        } else {
+            NewtonDecrementVerdict::ExceedsTolerance
+        };
+        assert_eq!(full.verdict, expected_verdict, "gap {gap:e}");
+        assert_eq!(block.eager.verdict, expected_verdict, "gap {gap:e}");
+    }
+}
+
+#[test]
+fn newton_decrement_block_falls_back_to_diagonal_when_working_curvature_disagrees() {
+    let hessian = correlated_test_hessian();
+    let optimum = [0.4, -1.2, 0.7];
+    let f = quadratic_gap(&hessian, &optimum);
+    let lower_bounds = [f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0];
+    let x = [0.41, -1.21, 0.71];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    // A working Hessian whose diagonal is 3x the probed curvature is not a
+    // trustworthy stand-in: the estimate must fall back to the diagonal.
+    let wrong_block = 3.0 * hessian.view((0, 0), (2, 2)).into_owned();
+    let evidence = joint_newton_decrement(
+        &certification,
+        &x,
+        &lower_bounds,
+        2,
+        Some(&wrong_block),
+        1.0e-6,
+    );
+    assert_eq!(evidence.eager.variant, NewtonDecrementVariant::Diagonal);
+}
+
+#[test]
+fn newton_decrement_handles_bound_active_and_one_sided_coordinates() {
+    let hessian = DMatrix::from_diagonal(&DVector::from_vec(vec![10.0, 4.0, 2.0]));
+    let optimum = [0.5, -0.3, 0.0];
+    let f = quadratic_gap(&hessian, &optimum);
+    let lower_bounds = [f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0];
+
+    // θ exactly on its bound: excluded as at_lower_bound; the decrement is
+    // assessed over the free β coordinates only.
+    let x = [0.501, -0.302, 0.0];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    let evidence = joint_newton_decrement(&certification, &x, &lower_bounds, 2, None, 1.0e-6);
+    assert_eq!(evidence.parameter_indices, vec![0, 1]);
+    assert_eq!(
+        evidence.excluded,
+        vec![crate::compiler::NewtonDecrementExclusion {
+            index: 2,
+            reason: "at_lower_bound".to_string()
+        }]
+    );
+    let expected = 0.5 * (10.0 * 0.001_f64.powi(2) + 4.0 * 0.002_f64.powi(2));
+    assert_relative_eq!(
+        evidence.eager.objective_gap.unwrap(),
+        expected,
+        max_relative = 1e-5
+    );
+    assert_eq!(
+        evidence.eager.verdict,
+        NewtonDecrementVerdict::ExceedsTolerance
+    );
+
+    // θ just inside its bound (closer than the probe step): only a forward
+    // probe exists, so its curvature is unknown and the decrement is not
+    // assessed rather than guessed.
+    let x = [0.5, -0.3, 5.0e-6];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    let evidence = joint_newton_decrement(&certification, &x, &lower_bounds, 2, None, 1.0e-6);
+    assert_eq!(evidence.eager.verdict, NewtonDecrementVerdict::NotAssessed);
+    assert!(evidence.eager.objective_gap.is_none());
+    assert_eq!(evidence.excluded[0].reason, "one_sided_probe");
+}
+
+#[test]
+fn newton_decrement_refuses_nonpositive_curvature() {
+    // A saddle in the θ coordinate.
+    let hessian = DMatrix::from_diagonal(&DVector::from_vec(vec![10.0, 4.0, -2.0]));
+    let optimum = [0.5, -0.3, 1.0];
+    let f = quadratic_gap(&hessian, &optimum);
+    let lower_bounds = [f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0];
+    let x = [0.5001, -0.3, 1.0005];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    let evidence = joint_newton_decrement(&certification, &x, &lower_bounds, 2, None, 1.0e-6);
+    assert_eq!(evidence.eager.verdict, NewtonDecrementVerdict::NotAssessed);
+    assert!(evidence.eager.objective_gap.is_none());
+    assert_eq!(evidence.excluded[0].index, 2);
+    assert_eq!(evidence.excluded[0].reason, "nonpositive_curvature");
+
+    // The full Hessian is indefinite: reported as such, never regularized.
+    let x = [0.5001, -0.3, 1.0];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    let mut evidence = joint_newton_decrement(&certification, &x, &lower_bounds, 2, None, 1.0e-6);
+    // Force the gradient readings to exist for every coordinate.
+    evidence.parameter_indices = vec![0, 1, 2];
+    evidence.gradient = certification.gradient.clone();
+    let full = full_newton_decrement_estimate(&evidence, &hessian, &[0, 1, 2]);
+    assert_eq!(full.verdict, NewtonDecrementVerdict::NotAssessed);
+    assert!(full.objective_gap.is_none());
+    assert!(full.reason.unwrap().contains("not positive definite"));
+}
+
+#[test]
+fn newton_decrement_escalated_readings_are_judged_in_gap_units() {
+    // A stiff coordinate with a strong cubic term: the escalated central
+    // differences disagree through O(h^2) truncation (by far more than the
+    // absolute 2e-2 agreement test allows), but their Richardson
+    // extrapolation reproduces the default-step reading.
+    let (c, k, x0) = (1.7e5, 5.0e4, 0.0);
+    let f = move |x: &[f64]| {
+        let d = x[0] - x0;
+        0.5 * c * d * d + k * d * d * d
+    };
+    let x = [x0 - 2.0e-7];
+    let lower = [f64::NEG_INFINITY];
+    let certification = synthetic_certification(&f, &x, &lower, &[0]);
+    let probes = &certification.curvature_probes[0];
+    // Apart in gap units, not only in absolute terms: the reading is
+    // determined through the default-step confirmation.
+    assert!((probes[1].gradient - probes[2].gradient).powi(2) / (2.0 * c) > 1.0e-7);
+    let true_gradient = c * (x[0] - x0) + 3.0 * k * (x[0] - x0).powi(2);
+    match decrement_reading(&certification, &x, &lower, 0, 1.0e-6) {
+        DecrementReading::Determined {
+            gradient,
+            curvature,
+        } => {
+            assert_relative_eq!(gradient, true_gradient, max_relative = 1e-3);
+            assert_relative_eq!(curvature, c, max_relative = 1e-3);
+        }
+        other => panic!("expected a determined reading, got {other:?}"),
+    }
+
+    // Readings that agree nowhere (escalated pair apart, extrapolation away
+    // from the default-step reading) are ill-determined.
+    let mut noisy = certification.clone();
+    noisy.curvature_probes[0][0] = JointFdProbe::central(
+        probes[0].step,
+        f(&[x[0] + probes[0].step]) + 1.0e-4,
+        f(&[x[0] - probes[0].step]),
+    );
+    assert_eq!(
+        decrement_reading(&noisy, &x, &lower, 0, 1.0e-6),
+        DecrementReading::Excluded("gradient_ill_determined")
+    );
+}
+
+/// Certificate for a synthetic acceptable joint stop at `params`.
+fn synthetic_joint_certificate(
+    params: &[f64],
+    lower_bounds: &[f64],
+    certification: &JointLaplaceCertificationGradient,
+) -> OptimizerCertificate {
+    let mut optsum = OptSummary::new(params.to_vec());
+    optsum.optimizer = Optimizer::TrustBq;
+    optsum.backend = Optimizer::TrustBq.canonical_backend();
+    optsum.return_value = "JOINT_LAPLACE:FTOL_REACHED".to_string();
+    optsum.finitial = 100.1;
+    optsum.fmin = 100.0;
+    optsum.feval = 50;
+    optsum.max_feval = 5000;
+    optsum.final_params = params.to_vec();
+    let mut certificate = OptimizerCertificate::from_opt_summary_with_context(
+        &optsum,
+        params,
+        lower_bounds,
+        Some(500),
+    );
+    certificate.apply_derivative_evidence(
+        OptimizerDerivativeEvidence {
+            method: EvidenceMethod::FiniteDifference,
+            hessian_method: EvidenceMethod::FiniteDifference,
+            gradient: certification.gradient.clone(),
+            hessian: None,
+        },
+        2.0e-2,
+        1.0e-6,
+    );
+    certificate
+}
+
+#[test]
+fn joint_glmm_decrement_certifies_stiff_gradient_and_flags_flat_gap() {
+    let lower_bounds = [f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0];
+    // Stiff β direction (curvature 6e4, like contraception's `age`): a raw
+    // gradient of ~0.15 is only 2e-7 above the optimum in deviance.
+    let stiff = DMatrix::from_diagonal(&DVector::from_vec(vec![6.0e4, 50.0, 30.0]));
+    let optimum = [0.0, 1.0, 0.6];
+    let f = quadratic_gap(&stiff, &optimum);
+    let x = [2.5e-6, 1.0, 0.6];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    let mut certificate = synthetic_joint_certificate(&x, &lower_bounds, &certification);
+    assert!(certificate.free_gradient_norm.unwrap() > 2.0e-2);
+    annotate_glmm_covariance_status(
+        &mut certificate,
+        &x,
+        2,
+        &lower_bounds,
+        &certification,
+        2.0e-2,
+        Some(&stiff.view((0, 0), (2, 2)).into_owned()),
+    );
+    assert_eq!(
+        certificate.status,
+        crate::compiler::FitStatus::ConvergedInterior
+    );
+    assert!(!joint_certificate_requires_fallback(&certificate));
+    // The raw gradient evidence is kept alongside the decrement.
+    assert!(certificate.free_gradient_norm.unwrap() > 2.0e-2);
+    let evidence = certificate.stationarity_decrement.as_ref().unwrap();
+    assert_eq!(
+        evidence.eager.verdict,
+        NewtonDecrementVerdict::WithinTolerance
+    );
+    assert!(certificate.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == DiagnosticCode::OptimizerRecovery
+            && diagnostic.payload.get("stationarity_check")
+                == Some(&serde_json::json!("newton_decrement"))
+    }));
+    assert!(!certificate
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.code == DiagnosticCode::OptimizerNonconvergence));
+    // The new field round-trips through the wire format.
+    let json = serde_json::to_value(&certificate).unwrap();
+    assert_eq!(
+        json["stationarity_decrement"]["eager"]["verdict"],
+        serde_json::json!("within_tolerance")
+    );
+    let decoded: OptimizerCertificate = serde_json::from_value(json).unwrap();
+    assert_eq!(decoded, certificate);
+
+    // Flat θ direction (curvature 1e-2): a raw gradient of 2e-4 passes the
+    // absolute tolerance, yet the stop sits 2e-6 above the optimum.
+    let flat = DMatrix::from_diagonal(&DVector::from_vec(vec![50.0, 30.0, 1.0e-2]));
+    let f = quadratic_gap(&flat, &optimum);
+    let x = [0.0, 1.0, 0.62];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    let mut certificate = synthetic_joint_certificate(&x, &lower_bounds, &certification);
+    assert!(certificate.free_gradient_norm.unwrap() <= 2.0e-2);
+    annotate_glmm_covariance_status(
+        &mut certificate,
+        &x,
+        2,
+        &lower_bounds,
+        &certification,
+        2.0e-2,
+        Some(&flat.view((0, 0), (2, 2)).into_owned()),
+    );
+    assert_eq!(certificate.status, crate::compiler::FitStatus::NotOptimized);
+    assert!(joint_certificate_requires_fallback(&certificate));
+    let diagnostic = certificate
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == DiagnosticCode::OptimizerNonconvergence)
+        .unwrap();
+    assert_eq!(
+        diagnostic.payload.get("stationarity_check"),
+        Some(&serde_json::json!("newton_decrement"))
+    );
+    let gap = diagnostic.payload["decrement_objective_gap"]
+        .as_f64()
+        .unwrap();
+    assert_relative_eq!(gap, f(&x), max_relative = 1e-4);
+    let mut optsum = OptSummary::new(x.to_vec());
+    optsum.finitial = 100.1;
+    optsum.fmin = 100.0;
+    record_uncertified_joint_candidate_diagnostic(&mut certificate, &optsum);
+    assert!(certificate.diagnostics.iter().any(|diagnostic| {
+        diagnostic.payload.get("scorecard_class")
+            == Some(&serde_json::json!(
+                "stationarity_uncertified_joint_candidate"
+            ))
+    }));
+}
+
+/// Objective gap of the joint fit's certificate evidence against the true gap
+/// at deliberately premature points, on real models. Premature points are
+/// displacements along the flattest Hessian direction evaluated as if they
+/// were final (the direction where a raw gradient norm is least informative)
+/// and, with NLopt, loose-`ftol_abs` BOBYQA stops. The eager estimate and the
+/// full-Hessian estimate must track the true gap within a factor of three,
+/// rank every premature point above the optimum, and leave the optimum
+/// certified.
+#[test]
+fn joint_glmm_newton_decrement_calibration() {
+    for (name, n_agq) in [("cbpp", 1), ("culcita", 1), ("culcita", 5)] {
+        let mut best = joint_laplace_row(name);
+        best.fit_with_options(false, n_agq, false).unwrap();
+        let p = best.beta.len();
+        let optimum = best.lmm.optsum.final_params.clone();
+        let mut lower_bounds = vec![f64::NEG_INFINITY; p];
+        lower_bounds.extend(best.lmm.lower_bounds());
+        let certificate = best
+            .lmm
+            .compiler_artifact
+            .optimizer_certificate
+            .clone()
+            .unwrap();
+        assert_eq!(
+            certificate.status,
+            crate::compiler::FitStatus::ConvergedInterior
+        );
+        let optimum_gap = certificate
+            .stationarity_decrement
+            .as_ref()
+            .and_then(|evidence| evidence.eager.objective_gap)
+            .unwrap();
+        assert!(
+            optimum_gap < 1.0e-7,
+            "{name} agq{n_agq}: optimum reads {optimum_gap:e}"
+        );
+
+        let hessian = best
+            .finite_difference_joint_laplace_hessian(&optimum, &lower_bounds)
+            .unwrap();
+        let eigen = SymmetricEigen::new(hessian.clone());
+        let flattest = (0..optimum.len())
+            .min_by(|&a, &b| eigen.eigenvalues[a].total_cmp(&eigen.eigenvalues[b]))
+            .unwrap();
+        let direction = eigen.eigenvectors.column(flattest).into_owned();
+        let curvature = eigen.eigenvalues[flattest];
+        #[allow(unused_mut, reason = "NLopt stops are appended when the feature is on")]
+        let mut points = [1.0e-5, 1.0e-4]
+            .map(|target| {
+                let step = (2.0 * target / curvature).sqrt();
+                let x = (0..optimum.len())
+                    .map(|i| optimum[i] + step * direction[i])
+                    .collect::<Vec<_>>();
+                (x, None::<crate::compiler::FitStatus>)
+            })
+            .to_vec();
+        #[cfg(feature = "nlopt")]
+        {
+            let mut profiled = joint_laplace_row(name);
+            profiled.fit_with_options(true, n_agq, false).unwrap();
+            for ftol_abs in [1.0e-2, 1.0e-4] {
+                let mut model = profiled.clone();
+                let start_objective = model.deviance_with_response_constants(n_agq);
+                model.lmm.optsum.optimizer = Optimizer::NloptBobyqa;
+                model.lmm.optsum.ftol_abs = ftol_abs;
+                model
+                    .lmm
+                    .optsum
+                    .caller_set_fields
+                    .push("ftol_abs".to_string());
+                model
+                    .fit_joint_glmm_from_start(
+                        profiled.beta.as_slice().to_vec(),
+                        profiled.theta.clone(),
+                        start_objective,
+                        n_agq,
+                        2000,
+                        None,
+                    )
+                    .unwrap();
+                let status = model
+                    .lmm
+                    .compiler_artifact
+                    .optimizer_certificate
+                    .as_ref()
+                    .map(|certificate| certificate.status);
+                points.push((model.lmm.optsum.final_params.clone(), status));
+            }
+        }
+
+        let f_optimum = best.joint_glmm_deviance_at_params(&optimum, p, n_agq);
+        let mut calibrated = 0;
+        for (x, fit_status) in points {
+            let mut model = best.clone();
+            let true_gap = model.joint_glmm_deviance_at_params(&x, p, n_agq) - f_optimum;
+            if true_gap < 3.0e-6 {
+                // A stop that landed within the tolerance band is not a
+                // premature-stop calibration point.
+                continue;
+            }
+            calibrated += 1;
+            // A premature optimizer stop's own certificate must say so,
+            // whatever its raw gradient norm read.
+            if let Some(status) = fit_status {
+                assert_eq!(status, crate::compiler::FitStatus::NotOptimized);
+            }
+            let certification =
+                model.joint_laplace_certification_gradient(&x, p, n_agq, &lower_bounds, 2.0e-2);
+            let beta_hessian = model.joint_working_beta_hessian();
+            let evidence = joint_newton_decrement(
+                &certification,
+                &x,
+                &lower_bounds,
+                p,
+                beta_hessian.as_ref(),
+                JOINT_STATIONARITY_GAP_TOLERANCE,
+            );
+            let eager = evidence.eager.objective_gap.unwrap();
+            assert_eq!(
+                evidence.eager.variant,
+                NewtonDecrementVariant::BetaBlockThetaDiagonal
+            );
+            assert_eq!(
+                evidence.eager.verdict,
+                NewtonDecrementVerdict::ExceedsTolerance
+            );
+            assert!(eager > 10.0 * optimum_gap);
+            assert!(
+                (1.0 / 3.0..=3.0).contains(&(eager / true_gap)),
+                "{name} agq{n_agq}: eager {eager:e} vs true {true_gap:e}"
+            );
+            let point_hessian = model
+                .finite_difference_joint_laplace_hessian(&x, &lower_bounds)
+                .unwrap();
+            let active = (0..x.len()).collect::<Vec<_>>();
+            let full = full_newton_decrement_estimate(&evidence, &point_hessian, &active)
+                .objective_gap
+                .unwrap();
+            assert!(
+                (1.0 / 3.0..=3.0).contains(&(full / true_gap)),
+                "{name} agq{n_agq}: full {full:e} vs true {true_gap:e}"
+            );
+        }
+        assert!(calibrated >= 2, "{name} agq{n_agq}: {calibrated} points");
+    }
+}
+
+#[test]
+fn joint_glmm_diagonal_decrement_is_evidence_only() {
+    // Without a working β block the estimate is the pure diagonal, which
+    // correlated coordinates can bias either way: it is recorded, and the
+    // raw gradient rule decides as before.
+    let lower_bounds = [f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0];
+    let stiff = DMatrix::from_diagonal(&DVector::from_vec(vec![6.0e4, 50.0, 30.0]));
+    let optimum = [0.0, 1.0, 0.6];
+    let f = quadratic_gap(&stiff, &optimum);
+    let x = [2.5e-6, 1.0, 0.6];
+    let certification = synthetic_certification(&f, &x, &lower_bounds, &[]);
+    let mut certificate = synthetic_joint_certificate(&x, &lower_bounds, &certification);
+    annotate_glmm_covariance_status(
+        &mut certificate,
+        &x,
+        2,
+        &lower_bounds,
+        &certification,
+        2.0e-2,
+        None,
+    );
+    let evidence = certificate.stationarity_decrement.as_ref().unwrap();
+    assert_eq!(evidence.eager.variant, NewtonDecrementVariant::Diagonal);
+    assert_eq!(
+        evidence.eager.verdict,
+        NewtonDecrementVerdict::WithinTolerance
+    );
+    assert_eq!(certificate.status, crate::compiler::FitStatus::NotOptimized);
+}
+
+fn synthetic_trust_bq_result(
+    fmin: f64,
+    fevals: usize,
+    stop_reason: TrustBqStopReason,
+) -> crate::optimizer::trust_bq::TrustBqResult {
+    crate::optimizer::trust_bq::TrustBqResult {
+        x: vec![fmin],
+        fmin,
+        fevals,
+        iterations: 1,
+        final_radius: 1.0e-2,
+        stop_reason,
+        last_model_sample_count: 0,
+    }
+}
+
+fn synthetic_restart_plan(maxeval: usize) -> JointRestartPlan {
+    JointRestartPlan {
+        maxeval,
+        min_restart_budget: 20,
+        restart_budget: 40,
+        max_restarts: 3,
+        ftol_abs: 1.0e-8,
+        ftol_rel: 0.0,
+    }
+}
+
+/// The TrustBQ joint FTOL-confirmation rules, on scripted restarts: a
+/// no-gain restart confirms and keeps the first stop's label whatever the
+/// restart returned; a material gain is confirmed in turn; a restart that
+/// exhausts only its own allowance is not a stop, one that exhausts the fit's
+/// budget is; the budget floor, the restart cap and a failed restart leave
+/// the stop unconfirmed; radius stops need no confirmation.
+#[test]
+fn joint_trust_bq_confirmation_rules() {
+    use TrustBqStopReason::*;
+    let first = || synthetic_trust_bq_result(10.0, 100, ObjectiveStagnation);
+
+    // No gain: confirmed, label kept although the restart hit its allowance.
+    let (result, fevals, outcome) = confirm_joint_trust_bq_stop(
+        first(),
+        100,
+        &synthetic_restart_plan(1000),
+        |x, budget, spent| {
+            assert_eq!(x, &[10.0]);
+            assert_eq!(budget, 40);
+            (
+                Ok(synthetic_trust_bq_result(10.0, 40, MaxEvaluations)),
+                spent + 40,
+            )
+        },
+    )
+    .unwrap();
+    assert_eq!(outcome, JointFtolConfirmation::Confirmed);
+    assert_eq!(
+        (result.stop_reason, result.fmin, fevals),
+        (ObjectiveStagnation, 10.0, 140)
+    );
+
+    // Material gain (own allowance spent), then a confirming restart.
+    let mut script = vec![(9.0, MaxEvaluations), (9.0 - 5.0e-9, RadiusBelowTolerance)].into_iter();
+    let (result, fevals, outcome) = confirm_joint_trust_bq_stop(
+        first(),
+        100,
+        &synthetic_restart_plan(1000),
+        |_, budget, spent| {
+            let (fmin, stop) = script.next().unwrap();
+            (
+                Ok(synthetic_trust_bq_result(fmin, budget, stop)),
+                spent + budget,
+            )
+        },
+    )
+    .unwrap();
+    assert_eq!(outcome, JointFtolConfirmation::Confirmed);
+    assert_eq!(
+        (result.stop_reason, result.fmin, fevals),
+        (ObjectiveStagnation, 9.0 - 5.0e-9, 180)
+    );
+
+    // Material gain that spends the fit's budget: an honest budget stop.
+    let (result, fevals, outcome) = confirm_joint_trust_bq_stop(
+        first(),
+        100,
+        &synthetic_restart_plan(130),
+        |_, budget, spent| {
+            assert_eq!(budget, 30);
+            (
+                Ok(synthetic_trust_bq_result(9.0, budget, MaxEvaluations)),
+                spent + budget,
+            )
+        },
+    )
+    .unwrap();
+    assert_eq!(outcome, JointFtolConfirmation::NotNeeded);
+    assert_eq!((result.stop_reason, fevals), (MaxEvaluations, 130));
+
+    // Material gain ending in a native radius stop: that stop stands.
+    let (result, _, outcome) = confirm_joint_trust_bq_stop(
+        first(),
+        100,
+        &synthetic_restart_plan(1000),
+        |_, _, spent| {
+            (
+                Ok(synthetic_trust_bq_result(9.0, 30, RadiusBelowTolerance)),
+                spent + 30,
+            )
+        },
+    )
+    .unwrap();
+    assert_eq!(outcome, JointFtolConfirmation::NotNeeded);
+    assert_eq!(result.stop_reason, RadiusBelowTolerance);
+
+    // Too little budget left: no restart, recorded as unconfirmed.
+    let (result, fevals, outcome) =
+        confirm_joint_trust_bq_stop(first(), 100, &synthetic_restart_plan(119), |_, _, _| {
+            panic!("no restart may be launched")
+        })
+        .unwrap();
+    assert!(matches!(
+        outcome,
+        JointFtolConfirmation::Unconfirmed {
+            reason: "insufficient_evaluation_budget",
+            restarts: 0,
+            ..
+        }
+    ));
+    assert_eq!((result.stop_reason, fevals), (ObjectiveStagnation, 100));
+
+    // Every restart gains: the cap stops the loop, unconfirmed.
+    let mut fmin = 10.0;
+    let (_, _, outcome) = confirm_joint_trust_bq_stop(
+        first(),
+        100,
+        &synthetic_restart_plan(10_000),
+        |_, budget, spent| {
+            fmin -= 1.0;
+            (
+                Ok(synthetic_trust_bq_result(fmin, budget, ObjectiveTolerance)),
+                spent + budget,
+            )
+        },
+    )
+    .unwrap();
+    assert!(matches!(
+        outcome,
+        JointFtolConfirmation::Unconfirmed {
+            reason: "restart_cap_reached",
+            restarts: 3,
+            ..
+        }
+    ));
+
+    // A failed restart is unconfirmed, and its evaluations still count.
+    let (_, fevals, outcome) = confirm_joint_trust_bq_stop(
+        first(),
+        100,
+        &synthetic_restart_plan(1000),
+        |_, _, spent| {
+            (
+                Err(MixedModelError::Optimization("boom".to_string())),
+                spent + 7,
+            )
+        },
+    )
+    .unwrap();
+    assert!(matches!(
+        outcome,
+        JointFtolConfirmation::Unconfirmed {
+            reason: "restart_failed",
+            restarts: 1,
+            ..
+        }
+    ));
+    assert_eq!(fevals, 107);
+
+    // A host interrupt during a restart stops the fit.
+    let error = confirm_joint_trust_bq_stop(
+        first(),
+        100,
+        &synthetic_restart_plan(1000),
+        |_, _, spent| {
+            (
+                Err(MixedModelError::Interrupted("host".to_string())),
+                spent + 3,
+            )
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code(), "interrupted");
+
+    // A radius stop is native convergence: nothing to confirm.
+    let (result, _, outcome) = confirm_joint_trust_bq_stop(
+        synthetic_trust_bq_result(10.0, 100, RadiusBelowTolerance),
+        100,
+        &synthetic_restart_plan(1000),
+        |_, _, _| panic!("no restart for a radius stop"),
+    )
+    .unwrap();
+    assert_eq!(outcome, JointFtolConfirmation::NotNeeded);
+    assert_eq!(result.stop_reason, RadiusBelowTolerance);
+}
+
+/// Host interrupts raised from the inner PIRLS progress report of a joint
+/// objective evaluation used to be swallowed as an infinite objective, and
+/// the fit carried on. Interrupting on every PIRLS event past the ones the
+/// profiled start uses (and, for TrustBQ, on the last joint-optimizer event,
+/// which falls in a confirmation restart) must return the interrupt, for
+/// both joint drivers.
+#[test]
+fn joint_fit_propagates_host_interrupts_after_the_profiled_start() {
+    let fit = |optimizer: Optimizer, callback: FitProgressCallback| {
+        let mut model = joint_laplace_row("cbpp");
+        model
+            .fit_with_glmm_options(
+                GlmmFitOptions::joint_laplace()
+                    .with_optimizer(optimizer)
+                    .with_progress_callback(callback),
+            )
+            .map(|model| model.opt_summary().clone())
+    };
+    let counting = |phase: FitProgressPhase, counter: Arc<AtomicUsize>| {
+        FitProgressCallback::new(move |progress| {
+            if progress.phase == phase {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(())
+        })
+    };
+    let interrupting = |phase: FitProgressPhase, at: usize| {
+        let seen = Arc::new(AtomicUsize::new(0));
+        FitProgressCallback::new(move |progress| {
+            if progress.phase == phase && seen.fetch_add(1, Ordering::SeqCst) + 1 == at {
+                return Err(MixedModelError::Interrupted("test interrupt".to_string()));
+            }
+            Ok(())
+        })
+    };
+    // PIRLS events of the profiled start alone.
+    let profiled_events = Arc::new(AtomicUsize::new(0));
+    let mut profiled = joint_laplace_row("cbpp");
+    profiled
+        .fit_with_glmm_options(GlmmFitOptions::default().with_progress_callback(counting(
+            FitProgressPhase::Pirls,
+            Arc::clone(&profiled_events),
+        )))
+        .unwrap();
+    let profiled_events = profiled_events.load(Ordering::SeqCst);
+
+    #[allow(unused_mut, reason = "NLopt BOBYQA is added when the feature is on")]
+    let mut optimizers = vec![Optimizer::TrustBq];
+    #[cfg(feature = "nlopt")]
+    optimizers.push(Optimizer::NloptBobyqa);
+    for optimizer in optimizers {
+        let joint_pirls = Arc::new(AtomicUsize::new(0));
+        fit(
+            optimizer,
+            counting(FitProgressPhase::Pirls, Arc::clone(&joint_pirls)),
+        )
+        .unwrap();
+        let joint_pirls = joint_pirls.load(Ordering::SeqCst);
+        assert!(joint_pirls > profiled_events + 10, "{optimizer:?}");
+        for at in [
+            profiled_events + 1,
+            (profiled_events + joint_pirls) / 2,
+            joint_pirls,
+        ] {
+            let error = fit(optimizer, interrupting(FitProgressPhase::Pirls, at)).unwrap_err();
+            assert_eq!(
+                error.code(),
+                "interrupted",
+                "{optimizer:?} PIRLS event {at}"
+            );
+        }
+    }
+
+    let optimizer_events = Arc::new(AtomicUsize::new(0));
+    let model = fit(
+        Optimizer::TrustBq,
+        counting(
+            FitProgressPhase::JointGlmmOptimizer,
+            Arc::clone(&optimizer_events),
+        ),
+    )
+    .unwrap();
+    let last = optimizer_events.load(Ordering::SeqCst);
+    assert!(last > 1 && model.return_value.ends_with("FTOL_REACHED"));
+    let error = fit(
+        Optimizer::TrustBq,
+        interrupting(FitProgressPhase::JointGlmmOptimizer, last),
+    )
+    .unwrap_err();
+    assert_eq!(error.code(), "interrupted");
+}
+
+#[test]
+fn joint_trust_bq_transform_decorrelates_only_well_conditioned_blocks() {
+    let factor = |r: f64| {
+        DMatrix::from_row_slice(2, 2, &[1.0, r, r, 1.0])
+            .cholesky()
+            .unwrap()
+            .l()
+    };
+    // 1 - r^2 = 1e-4: L_22 = 1e-2, decorrelated.
+    assert!(well_conditioned_correlation_factor(factor((1.0f64 - 1.0e-4).sqrt())).is_some());
+    // 1 - r^2 = 1e-8: L_22 = 1e-4, SE scaling only.
+    assert!(well_conditioned_correlation_factor(factor((1.0f64 - 1.0e-8).sqrt())).is_none());
+
+    // A model whose two covariates are collinear to 1e-5: its profiled
+    // correlation factor fails the guard, so the transform's β block is
+    // diagonal (standard errors only), and the joint fit still converges.
+    let mut data = DataFrame::new();
+    let (mut y, mut x1, mut x2, mut group) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for g in 0..8 {
+        for j in 0..12 {
+            let x = (j as f64 - 5.5) / 3.0 + 0.1 * g as f64;
+            let jitter = 1.0e-5 * (((7 * g + 3 * j) % 11) as f64 - 5.0);
+            let eta = -0.3 + 0.6 * x + 0.3 * ((g % 3) as f64 - 1.0);
+            y.push(
+                if ((g * 12 + j) * 37 % 100) as f64 / 100.0 < 1.0 / (1.0 + (-eta).exp()) {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+            x1.push(x);
+            x2.push(x + jitter);
+            group.push(format!("g{g}"));
+        }
+    }
+    data.add_numeric("y", y).unwrap();
+    data.add_numeric("x1", x1).unwrap();
+    data.add_numeric("x2", x2).unwrap();
+    data.add_categorical("group", group).unwrap();
+    let formula = parse_formula("y ~ 1 + x1 + x2 + (1 | group)").unwrap();
+    let mut model =
+        GeneralizedLinearMixedModel::new(formula, &data, Family::Bernoulli, None).unwrap();
+    model.fit_with_options(true, 1, false).unwrap();
+    assert_eq!(model.beta.len(), 3, "collinear pair kept at full rank");
+    let raw = model.joint_beta_correlation_factor().unwrap();
+    assert!(raw.diagonal().min() < 1.0e-3, "fixture is collinear: {raw}");
+    let transform = model.joint_trust_bq_transform(model.theta.len());
+    for i in 0..3 {
+        for j in 0..i {
+            assert_eq!(transform[(i, j)], 0.0);
+        }
+    }
+
+    // A caller-set initial step scales θ, as for NLopt.
+    model.lmm.optsum.initial_step = vec![0.2];
+    model
+        .lmm
+        .optsum
+        .caller_set_fields
+        .push("initial_step".to_string());
+    let transform = model.joint_trust_bq_transform(1);
+    assert_eq!(transform[(3, 3)], 0.2);
+}
+
+/// Mirror of `joint_laplace_nlopt_ftol_confirmation_respects_tight_budgets`
+/// for TrustBQ. Sweeping the budget across cbpp's first-pass stop and its
+/// confirming restart: a confirming restart that gains nothing keeps the
+/// FTOL label even when it spends the last evaluation; a stop with fewer
+/// evaluations left than two models is recorded as unconfirmed; a budget stop
+/// has moved past every FTOL stop reached under a smaller budget.
+#[cfg(not(feature = "nlopt"))]
+#[test]
+fn joint_trust_bq_ftol_confirmation_respects_tight_budgets() {
+    let pinned = 184.05256373024386;
+    let mut profiled = joint_laplace_row("cbpp");
+    profiled.fit_with_options(true, 1, false).unwrap();
+    let n_params = profiled.beta.len() + profiled.theta.len();
+    // Five parameters: full model of 2n + n(n-1)/2 samples.
+    let min_restart_budget = 2 * (2 * n_params + n_params * (n_params - 1) / 2 + 1) as i64;
+    let mut ftol_objectives: Vec<f64> = Vec::new();
+    let (mut saw_unconfirmed, mut saw_confirmed, mut saw_confirmed_at_budget) =
+        (false, false, false);
+    for maxeval in (250..=430u32).step_by(3) {
+        let mut model = profiled.clone();
+        let start_objective = model.deviance_with_response_constants(1);
+        model.lmm.optsum.optimizer = Optimizer::TrustBq;
+        model
+            .fit_joint_glmm_from_start(
+                profiled.beta.as_slice().to_vec(),
+                profiled.theta.clone(),
+                start_objective,
+                1,
+                maxeval,
+                Some(profiled.clone()),
+            )
+            .unwrap();
+        let optsum = model.opt_summary().clone();
+        let objective = MixedModelFit::objective(&model);
+        let label = optsum.return_value.as_str();
+        assert!(
+            label == "JOINT_LAPLACE:FTOL_REACHED" || label == "JOINT_LAPLACE:MAXEVAL_REACHED",
+            "max {maxeval}: unexpected return {label}"
+        );
+        assert!(optsum.feval <= i64::from(maxeval));
+        let unconfirmed = model
+            .compiler_artifact()
+            .optimizer_certificate
+            .as_ref()
+            .is_some_and(|certificate| {
+                certificate
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.payload.contains_key("ftol_confirmation"))
+            });
+        if label.ends_with("MAXEVAL_REACHED") {
+            assert!(
+                ftol_objectives.iter().all(|&f| objective < f - 1e-12),
+                "max {maxeval}: MAXEVAL at objective {objective:.12} already reached by an FTOL stop"
+            );
+            assert!(
+                !unconfirmed,
+                "max {maxeval}: budget stop marked unconfirmed"
+            );
+        } else {
+            ftol_objectives.push(objective);
+            if unconfirmed {
+                saw_unconfirmed = true;
+                assert!(
+                    i64::from(maxeval) - optsum.feval < min_restart_budget,
+                    "max {maxeval}: unconfirmed although {} evaluations remained",
+                    i64::from(maxeval) - optsum.feval
+                );
+            } else {
+                saw_confirmed = true;
+                saw_confirmed_at_budget |= optsum.feval == i64::from(maxeval);
+                assert!(
+                    objective <= pinned + 1e-7,
+                    "max {maxeval}: confirmed FTOL stop at {objective:.12}, pinned {pinned:.12}"
+                );
+            }
+        }
+    }
+    assert!(saw_unconfirmed && saw_confirmed && saw_confirmed_at_budget);
+}
+
+#[test]
+fn binomial_response_counts_above_one_are_refused() {
+    let mut df = DataFrame::new();
+    let n = 40;
+    df.add_numeric("y", (0..n).map(|i| (i % 6) as f64).collect())
+        .unwrap();
+    df.add_numeric("x", (0..n).map(|i| (i % 5) as f64 - 2.0).collect())
+        .unwrap();
+    df.add_categorical("g", (0..n).map(|i| format!("G{}", i % 8)).collect())
+        .unwrap();
+    let err = GeneralizedLinearMixedModel::new_with_weights(
+        parse_formula("y ~ x + (1|g)").unwrap(),
+        &df,
+        Family::Binomial,
+        None,
+        vec![5.0; n],
+    )
+    .unwrap_err();
+    assert!(matches!(err, MixedModelError::InvalidArgument(msg) if msg.contains("proportion")));
 }

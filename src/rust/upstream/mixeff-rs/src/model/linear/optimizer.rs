@@ -6,6 +6,7 @@
 //! `linear.rs`.
 
 use super::*;
+use crate::compiler::{IncompleteCheckEvidence, IncompleteCheckStatus};
 
 #[derive(Debug, Clone)]
 struct KktBoundaryRestartCandidate {
@@ -76,6 +77,9 @@ impl LinearMixedModel {
         &mut self,
         options: ConvergenceVerificationOptions,
     ) -> Result<ConvergenceVerification> {
+        // Verification records onto the stored certificate; make sure it is
+        // the complete one first.
+        self.ensure_derivative_evidence();
         if self.optsum.feval <= 0 {
             let verification = ConvergenceVerification::not_run("model has not been fitted");
             if let Some(certificate) = &mut self.compiler_artifact.optimizer_certificate {
@@ -254,6 +258,7 @@ impl LinearMixedModel {
         optimizer: Optimizer,
     ) -> Result<()> {
         self.optsum.reml = reml;
+        let optimizer_start = std::time::Instant::now();
         self.set_initial_objective_with_rescue()?;
         match optimizer {
             Optimizer::PatternSearch => {
@@ -318,6 +323,21 @@ impl LinearMixedModel {
                 ));
             }
         }
+        self.finish_fit_after_optimizer(reml, optimizer_start)?;
+        Ok(())
+    }
+
+    /// Shared post-optimizer tail for every LMM fit path: boundary restart,
+    /// optional active-face refit, optimizer certificate, covariance and
+    /// inference refreshes. Records the optimizer/post-fit wall-clock split
+    /// in `fit_phase_timings` (diagnostic only).
+    pub(super) fn finish_fit_after_optimizer(
+        &mut self,
+        reml: bool,
+        optimizer_start: std::time::Instant,
+    ) -> Result<()> {
+        let post_fit_start = std::time::Instant::now();
+        let optimizer = post_fit_start.duration_since(optimizer_start);
         self.apply_kkt_guided_boundary_restart(reml)?;
         self.apply_active_face_refit()?;
         self.refresh_optimizer_certificate();
@@ -325,6 +345,10 @@ impl LinearMixedModel {
         self.refresh_covariance_parameter_traces();
         self.refresh_fixed_effect_covariance_matrix();
         self.refresh_fixed_effect_inference_table();
+        self.fit_phase_timings = Some(FitPhaseTimings {
+            optimizer,
+            post_fit: post_fit_start.elapsed(),
+        });
         Ok(())
     }
 
@@ -342,6 +366,11 @@ impl LinearMixedModel {
         vec![alternate]
     }
 
+    /// Reason recorded on the certificate while its derivative evidence is
+    /// deferred. Replaced by the real evidence on first inspection.
+    pub(crate) const DEFERRED_DERIVATIVE_EVIDENCE_REASON: &'static str =
+        "deferred until the certificate is inspected";
+
     pub(super) fn refresh_optimizer_certificate(&mut self) {
         let theta = self.theta();
         let lower_bounds = self.lower_bounds();
@@ -351,23 +380,98 @@ impl LinearMixedModel {
             &lower_bounds,
             Some(self.dims.n),
         );
+        // Any earlier inspected view described the previous fit.
+        self.inspection_artifact = std::sync::OnceLock::new();
+        self.derivative_evidence_pending = false;
         if certificate.evidence.optimizer_stop.acceptable_stop {
             if let Some(reason) = self.derivative_certificate_skip_reason(&certificate) {
-                certificate.mark_derivative_checks_not_assessed(reason);
-            } else if let Some(derivatives) =
-                self.finite_difference_optimizer_derivatives(&theta, &lower_bounds)
-            {
-                let (gradient_tolerance, hessian_tolerance) =
-                    self.derivative_certificate_tolerances(certificate.objective_value);
-                certificate.apply_derivative_evidence(
-                    derivatives,
-                    gradient_tolerance,
-                    hessian_tolerance,
-                );
+                certificate.mark_derivative_checks_incomplete(IncompleteCheckEvidence::new(
+                    "derivative_inspection",
+                    IncompleteCheckStatus::Skipped,
+                    reason,
+                ));
+            } else {
+                // The finite-difference gradient/Hessian evidence costs about
+                // 2·d² objective evaluations, often a quarter of a fit's wall
+                // time, and most fits are never inspected (bootstrap
+                // replicates, batch columns, benchmark loops). Record it as
+                // deferred and complete it on first inspection
+                // (`inspection_artifact`) or before any mutation
+                // (`ensure_derivative_evidence`); every accessor therefore
+                // still reports exactly the evidence the eager path produced.
+                certificate.mark_derivative_checks_incomplete(IncompleteCheckEvidence::new(
+                    "derivative_inspection",
+                    IncompleteCheckStatus::Deferred,
+                    Self::DEFERRED_DERIVATIVE_EVIDENCE_REASON,
+                ));
+                self.derivative_evidence_pending = true;
             }
         }
         self.reword_optimizer_certificate_diagnostics(&mut certificate);
         self.compiler_artifact.optimizer_certificate = Some(certificate);
+    }
+
+    /// Complete a certificate's deferred derivative evidence from `&self`
+    /// (objective evaluations run on the fast kernel or a cloned evaluator,
+    /// never on `self`). Applying the evidence replaces the deferred
+    /// not-assessed checks exactly as the eager path filled them.
+    pub(crate) fn complete_certificate_derivatives(&self, certificate: &mut OptimizerCertificate) {
+        if !certificate.evidence.optimizer_stop.acceptable_stop {
+            return;
+        }
+        let theta = self.theta();
+        let lower_bounds = self.lower_bounds();
+        // Exact gradient with a finite-difference-of-gradient Hessian (2·d
+        // gradient evaluations); the 2·d² objective-difference evidence is
+        // the fallback when the blocked gradient cannot be formed.
+        let derivatives = self
+            .analytic_optimizer_derivatives(&theta, &lower_bounds)
+            .or_else(|| self.finite_difference_optimizer_derivatives(&theta, &lower_bounds));
+        if let Some(derivatives) = derivatives {
+            let (gradient_tolerance, hessian_tolerance) =
+                self.derivative_certificate_tolerances(certificate.objective_value);
+            certificate.apply_derivative_evidence(
+                derivatives,
+                gradient_tolerance,
+                hessian_tolerance,
+            );
+        } else {
+            certificate.mark_derivative_checks_incomplete(IncompleteCheckEvidence::new(
+                "derivative_inspection",
+                IncompleteCheckStatus::Unavailable,
+                "neither analytic nor finite-difference derivative evidence could be computed",
+            ));
+        }
+    }
+
+    /// Complete any deferred derivative evidence in place. Mutating paths
+    /// that touch the certificate (verification, refits that append to it)
+    /// call this first so the stored certificate is the complete one.
+    pub(crate) fn ensure_derivative_evidence(&mut self) {
+        if !self.derivative_evidence_pending {
+            return;
+        }
+        // Always complete from the stored certificate (an inspected copy may
+        // predate later mutations of the artifact), then drop that copy.
+        self.inspection_artifact = std::sync::OnceLock::new();
+        if let Some(mut certificate) = self.compiler_artifact.optimizer_certificate.take() {
+            if Self::certificate_derivatives_deferred(&certificate) {
+                self.complete_certificate_derivatives(&mut certificate);
+            }
+            self.compiler_artifact.optimizer_certificate = Some(certificate);
+        }
+        self.derivative_evidence_pending = false;
+    }
+
+    /// Whether `certificate` still carries the deferred-evidence marker set
+    /// by `refresh_optimizer_certificate`. A certificate replaced wholesale
+    /// after the fit (the GLMM drivers install their own) never does, so it
+    /// is never "completed" with the wrong model's derivatives.
+    pub(crate) fn certificate_derivatives_deferred(certificate: &OptimizerCertificate) -> bool {
+        certificate.checks.iter().any(|check| {
+            matches!(check, CertificateCheck::Incomplete { evidence }
+                if evidence.status == IncompleteCheckStatus::Deferred && evidence.check_name == "derivative_inspection")
+        })
     }
 
     fn reword_optimizer_certificate_diagnostics(&self, certificate: &mut OptimizerCertificate) {
@@ -504,7 +608,97 @@ impl LinearMixedModel {
         (gradient_tolerance, hessian_tolerance)
     }
 
-    fn finite_difference_optimizer_derivatives(
+    /// Certificate derivative evidence from the analytic gradient
+    /// (`docs/profiled_deviance_gradient.md`): the gradient is exact, the
+    /// Hessian is the symmetrized central difference of the gradient over
+    /// the interior coordinates (two gradient evaluations per free
+    /// coordinate instead of the 2·d² objective evaluations of
+    /// `finite_difference_optimizer_derivatives`). `None` when the gradient
+    /// cannot be formed for this design, so the caller can fall back.
+    pub(super) fn analytic_optimizer_derivatives(
+        &self,
+        theta: &[f64],
+        lower_bounds: &[f64],
+    ) -> Option<OptimizerDerivativeEvidence> {
+        let n_theta = theta.len();
+        if n_theta == 0
+            || n_theta
+                > self
+                    .compiler_artifact
+                    .compiler_policy
+                    .thresholds
+                    .convergence_derivative_nparmax
+        {
+            return None;
+        }
+        // Evaluate on cloned factor blocks and terms (the θ-invariant A
+        // blocks are borrowed), as the optimizer does; cloning the whole
+        // model would copy the design for every certificate.
+        let mut l_blocks = self.l_blocks.clone();
+        let mut reterms = self.reterms.clone();
+        let dims = self.dims;
+        let reml = self.optsum.reml;
+        let sigma = self.optsum.sigma;
+        let cholesky_zero_pad_tolerance = self
+            .compiler_policy()
+            .thresholds
+            .cholesky_zero_pad_tolerance;
+        let mut gradient_at = |trial: &[f64]| -> Option<Vec<f64>> {
+            let (objective, gradient) = Self::profiled_objective_and_gradient_from_parts(
+                &self.a_blocks,
+                &mut l_blocks,
+                &mut reterms,
+                trial,
+                dims,
+                reml,
+                sigma,
+                cholesky_zero_pad_tolerance,
+            )
+            .ok()??;
+            (objective.is_finite() && gradient.iter().all(|value| value.is_finite()))
+                .then_some(gradient)
+        };
+        let gradient = gradient_at(theta)?;
+
+        let boundary_tolerance = self.optsum.xtol_zero_abs.max(1e-12) * 10.0;
+        let free_indices = theta
+            .iter()
+            .zip(lower_bounds.iter())
+            .enumerate()
+            .filter_map(|(index, (&value, &lower))| {
+                (!(lower.is_finite() && (value - lower).abs() <= boundary_tolerance))
+                    .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let hessian_steps = finite_difference_steps(theta, lower_bounds, 1e-4);
+        let mut hessian = DMatrix::zeros(n_theta, n_theta);
+        for &row in &free_indices {
+            let step = feasible_central_step(theta[row], lower_bounds[row], hessian_steps[row])?;
+            let mut plus = theta.to_vec();
+            let mut minus = theta.to_vec();
+            plus[row] += step;
+            minus[row] -= step;
+            let g_plus = gradient_at(&plus)?;
+            let g_minus = gradient_at(&minus)?;
+            for &col in &free_indices {
+                hessian[(col, row)] = (g_plus[col] - g_minus[col]) / (2.0 * step);
+            }
+        }
+        // Symmetrize: each entry is the mean of the two one-directional
+        // difference estimates.
+        let transposed = hessian.transpose();
+        hessian += transposed;
+        hessian *= 0.5;
+
+        Some(OptimizerDerivativeEvidence {
+            method: EvidenceMethod::Exact,
+            hessian_method: EvidenceMethod::FiniteDifference,
+            gradient,
+            hessian: Some(hessian),
+        })
+    }
+
+    pub(super) fn finite_difference_optimizer_derivatives(
         &self,
         theta: &[f64],
         lower_bounds: &[f64],
@@ -623,6 +817,7 @@ impl LinearMixedModel {
 
         Some(OptimizerDerivativeEvidence {
             method: EvidenceMethod::FiniteDifference,
+            hessian_method: EvidenceMethod::FiniteDifference,
             gradient,
             hessian: Some(hessian),
         })
@@ -1610,6 +1805,17 @@ impl LinearMixedModel {
             && matches!(self.a_blocks[2], MatrixBlock::Dense(_))
     }
 
+    /// Large-θ fits (`n_theta > 6`) run the native TrustBQ path driven by
+    /// the analytic gradient (Phase 5 S5.3, bd-01M1T81RYWZGSEP95CXNWF3A4C):
+    /// on the default-feature `optimizer_bench_harness` crossed rows it
+    /// replaced NEWUOA's 268-412 evaluations with 39-42 oracle calls
+    /// (1.9-3.4× faster wall) with every objective gate passing. A
+    /// wall-clock budget (`max_time`) keeps the NLopt path, which honors it.
+    #[cfg(feature = "nlopt")]
+    fn use_large_theta_trust_bq_optimizer(&self) -> bool {
+        self.n_theta() > 6 && self.optsum.max_time <= 0.0
+    }
+
     #[cfg(feature = "nlopt")]
     fn use_large_theta_nlopt_optimizer(&self) -> bool {
         self.n_theta() > 6
@@ -1640,6 +1846,96 @@ impl LinearMixedModel {
             offset += nt;
         }
         (offset == theta.len()).then_some(())
+    }
+
+    /// Objective and analytic gradient at `theta` on the optimizer's work
+    /// blocks: always the generic blocked factorization (the objective fast
+    /// paths do not keep `L`), then the gradient from the factor. `None`
+    /// when the factorization fails; the gradient's own failure (a selected
+    /// inverse too large to hold) is returned as an error so the caller can
+    /// fall back to the interpolation model up front.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn profiled_objective_and_gradient_from_parts(
+        a_blocks: &[MatrixBlock],
+        l_blocks: &mut [MatrixBlock],
+        reterms: &mut [ReMat],
+        theta: &[f64],
+        dims: ModelDims,
+        is_reml: bool,
+        fixed_sigma: Option<f64>,
+        cholesky_zero_pad_tolerance: f64,
+    ) -> Result<Option<(f64, Vec<f64>)>> {
+        if Self::apply_theta_to_reterms(reterms, theta).is_none() {
+            return Ok(None);
+        }
+        if update_l_from_parts(a_blocks, l_blocks, reterms, cholesky_zero_pad_tolerance).is_err() {
+            return Ok(None);
+        }
+        let objective = Self::profiled_objective_from_l_blocks(
+            l_blocks,
+            reterms.len(),
+            dims,
+            is_reml,
+            fixed_sigma,
+        );
+        let gradient = super::gradient::ProfiledGradientInputs {
+            a_blocks,
+            l_blocks,
+            reterms,
+            dims,
+            reml: is_reml,
+            sigma: fixed_sigma,
+            fe_blocks: None,
+            trailing_l: None,
+        }
+        .profiled_gradient()?;
+        Ok(Some((objective, gradient)))
+    }
+
+    /// The profiled objective read off a freshly updated factor.
+    fn profiled_objective_from_l_blocks(
+        l_blocks: &[MatrixBlock],
+        k: usize,
+        dims: ModelDims,
+        is_reml: bool,
+        fixed_sigma: Option<f64>,
+    ) -> f64 {
+        let n = dims.n as f64;
+        let p = dims.p as f64;
+
+        let mut logdet_lzz = 0.0;
+        for j in 0..k {
+            logdet_lzz += logdet_block(&l_blocks[block_index(j, j)]);
+        }
+
+        // Read the trailing dense block in place (no per-evaluation clone).
+        let l_owned;
+        let l_last: &DMatrix<f64> = match l_blocks[block_index(k, k)].as_dense_ref() {
+            Some(dense) => dense,
+            None => {
+                l_owned = l_blocks[block_index(k, k)].as_dense();
+                &l_owned
+            }
+        };
+        let pp1 = l_last.nrows();
+        let last_diag = l_last[(pp1 - 1, pp1 - 1)];
+        let pwrss = last_diag * last_diag;
+
+        let logdet = if is_reml {
+            let mut logdet_lxx = 0.0;
+            for i in 0..(pp1 - 1) {
+                let d = l_last[(i, i)];
+                if d > 0.0 {
+                    logdet_lxx += d.ln();
+                }
+            }
+            logdet_lzz + 2.0 * logdet_lxx
+        } else {
+            logdet_lzz
+        };
+
+        let denomdf = if is_reml { n - p } else { n };
+        Self::objective_from_components(logdet, pwrss, denomdf, fixed_sigma)
     }
 
     fn profiled_objective_from_parts(
@@ -1680,39 +1976,11 @@ impl LinearMixedModel {
         if update_l_from_parts(a_blocks, l_blocks, reterms, cholesky_zero_pad_tolerance).is_err() {
             return None;
         }
-
-        let k = reterms.len();
-        let n = dims.n as f64;
-        let p = dims.p as f64;
-
-        let mut logdet_lzz = 0.0;
-        for j in 0..k {
-            logdet_lzz += logdet_block(&l_blocks[block_index(j, j)]);
-        }
-
-        let l_last = l_blocks[block_index(k, k)].as_dense();
-        let pp1 = l_last.nrows();
-        let last_diag = l_last[(pp1 - 1, pp1 - 1)];
-        let pwrss = last_diag * last_diag;
-
-        let logdet = if is_reml {
-            let mut logdet_lxx = 0.0;
-            for i in 0..(pp1 - 1) {
-                let d = l_last[(i, i)];
-                if d > 0.0 {
-                    logdet_lxx += d.ln();
-                }
-            }
-            logdet_lzz + 2.0 * logdet_lxx
-        } else {
-            logdet_lzz
-        };
-
-        let denomdf = if is_reml { n - p } else { n };
-        Some(Self::objective_from_components(
-            logdet,
-            pwrss,
-            denomdf,
+        Some(Self::profiled_objective_from_l_blocks(
+            l_blocks,
+            reterms.len(),
+            dims,
+            is_reml,
             fixed_sigma,
         ))
     }
@@ -1781,8 +2049,8 @@ impl LinearMixedModel {
                 l_last[(2, 1)] -= z2 * z1;
                 l_last[(2, 2)] -= z2 * z2;
             } else {
-                for row in 0..pp1 {
-                    solved_by_row[row] = solve_scaled_vsize1_row(a10, row, level, lambda, l00);
+                for (row, solved) in solved_by_row.iter_mut().enumerate() {
+                    *solved = solve_scaled_vsize1_row(a10, row, level, lambda, l00);
                 }
                 for row in 0..pp1 {
                     for col in 0..=row {
@@ -2065,6 +2333,7 @@ impl LinearMixedModel {
             TrustBqStopReason::StepBelowTolerance => "XTOL_REACHED".to_string(),
             TrustBqStopReason::ObjectiveStagnation => "FTOL_REACHED".to_string(),
             TrustBqStopReason::CertifiedConvergence => "FTOL_REACHED".to_string(),
+            TrustBqStopReason::GradientBelowTolerance => "GTOL_REACHED".to_string(),
         }
     }
 
@@ -2098,6 +2367,7 @@ impl LinearMixedModel {
         optimizer: Optimizer,
         return_value: Option<String>,
     ) -> Result<&mut Self> {
+        crate::model::snapshot::record_optimizer_entry();
         Self::rectify_theta_columns(&mut best_theta_val, &self.parmap, self.reterms.len());
         self.set_theta(&best_theta_val)?;
         self.update_l()?;
@@ -2581,6 +2851,7 @@ impl LinearMixedModel {
         let is_reml = reml;
         let fixed_sigma = self.optsum.sigma;
         let sample_reuse_control = self.trust_bq_sample_reuse;
+        let gradient_oracle_control = self.trust_bq_gradient_oracle;
         let cholesky_zero_pad_tolerance = self
             .compiler_policy()
             .thresholds
@@ -2648,6 +2919,62 @@ impl LinearMixedModel {
         );
         let resolve_reuse_samples =
             |family_policy_reuse: bool| sample_reuse_control.resolve(family_policy_reuse);
+
+        // Analytic-gradient oracle for the full stage (Phase 5 S5.3). The
+        // family policy chooses it; a caller control can force it either way.
+        // One silent probe at the start point checks that the blocked
+        // gradient can be formed for this design (its selected inverse has a
+        // size guard); otherwise the interpolation model is used.
+        let gradient_oracle_requested = gradient_oracle_control.resolve(policy.gradient_oracle);
+        let use_gradient_oracle = gradient_oracle_requested && {
+            let mut rw = reterms_work.borrow_mut();
+            let mut lw = l_blocks_work.borrow_mut();
+            matches!(
+                Self::profiled_objective_and_gradient_from_parts(
+                    &a_blocks,
+                    &mut lw,
+                    &mut rw,
+                    &self.optsum.initial,
+                    dims,
+                    is_reml,
+                    fixed_sigma,
+                    cholesky_zero_pad_tolerance,
+                ),
+                Ok(Some(_))
+            )
+        };
+        let mut oracle_fn = |theta: &[f64]| -> Result<(f64, Vec<f64>)> {
+            let evaluated = {
+                let mut rw = reterms_work.borrow_mut();
+                let mut lw = l_blocks_work.borrow_mut();
+                Self::profiled_objective_and_gradient_from_parts(
+                    &a_blocks,
+                    &mut lw,
+                    &mut rw,
+                    theta,
+                    dims,
+                    is_reml,
+                    fixed_sigma,
+                    cholesky_zero_pad_tolerance,
+                )
+            };
+            // Failed or non-finite evaluations map to the same finite penalty
+            // as in `objective_fn`; the non-finite gradient tells the
+            // optimizer not to take secant information from the point.
+            let (obj, gradient) = match evaluated {
+                Ok(Some((obj, gradient))) if obj.is_finite() => (obj, gradient),
+                _ => (invalid_objective, vec![f64::NAN; theta.len()]),
+            };
+            fit_log.borrow_mut().push(FitLogEntry {
+                theta: theta.to_vec(),
+                objective: obj,
+            });
+            if obj + 1e-12 < best_fmin.get() {
+                best_fmin.set(obj);
+                *best_theta.borrow_mut() = theta.to_vec();
+            }
+            Ok((obj, gradient))
+        };
         let mut trust_bq_initial = self.optsum.initial.clone();
         let lower_bounds = self.lower_bounds();
         let upper_bounds = vec![f64::INFINITY; n_theta];
@@ -2701,55 +3028,78 @@ impl LinearMixedModel {
                 let stage_result = {
                     let progress_callback = self.progress_callback.clone();
                     let mut last_progress = 0usize;
-                    let mut stage_objective = |reduced: &[f64]| -> Result<f64> {
+                    let expand = |reduced: &[f64]| -> Vec<f64> {
                         let mut full = expanded.clone();
                         for (slot, &index) in diagonal_indices.iter().enumerate() {
                             full[index] = reduced[slot];
                         }
-                        objective_fn(&full)
+                        full
                     };
-                    minimize_trust_bq_with_progress(
-                        &reduced_initial,
-                        &reduced_lower,
-                        &reduced_upper,
-                        TrustBqOptions {
-                            initial_radius: trust_bq_initial_radius(
-                                &reduced_step,
-                                diagonal_indices.len(),
-                            ),
-                            final_radius: trust_bq_final_radius(
-                                &reduced_xtol,
-                                diagonal_indices.len(),
-                            )
+                    let mut stage_objective =
+                        |reduced: &[f64]| -> Result<f64> { objective_fn(&expand(reduced)) };
+                    // The reduced problem's gradient is the full gradient on
+                    // the diagonal slots.
+                    let mut stage_oracle = |reduced: &[f64]| -> Result<(f64, Vec<f64>)> {
+                        let (value, gradient) = oracle_fn(&expand(reduced))?;
+                        let reduced_gradient = diagonal_indices
+                            .iter()
+                            .map(|&index| gradient[index])
+                            .collect();
+                        Ok((value, reduced_gradient))
+                    };
+                    let stage_options = TrustBqOptions {
+                        initial_radius: trust_bq_initial_radius(
+                            &reduced_step,
+                            diagonal_indices.len(),
+                        ),
+                        final_radius: trust_bq_final_radius(&reduced_xtol, diagonal_indices.len())
                             .max(1e-3),
-                            max_evaluations: stage_budget,
-                            ftol_abs: 1e-4,
-                            ftol_rel: 1e-6,
-                            max_cross_terms: if diagonal_indices.len() <= 3 {
-                                usize::MAX
-                            } else {
-                                0
-                            },
-                            reuse_samples: resolve_reuse_samples(diagonal_indices.len() >= 7),
-                            stall_iterations: 3,
-                            stall_ftol_rel: 1e-6,
-                            stall_ftol_abs: 1e-8,
-                            stall_requires_stable_x: false,
-                            ..TrustBqOptions::default()
+                        max_evaluations: stage_budget,
+                        ftol_abs: 1e-4,
+                        ftol_rel: 1e-6,
+                        max_cross_terms: if diagonal_indices.len() <= 3 {
+                            usize::MAX
+                        } else {
+                            0
                         },
-                        &mut stage_objective,
-                        |progress| {
-                            if let Some(callback) = &progress_callback {
-                                callback.report_if_due(
-                                    FitProgressPhase::LmmOptimizer,
-                                    progress.fevals,
-                                    Some(stage_budget),
-                                    &mut last_progress,
-                                )?;
-                            }
-                            Ok(false)
-                        },
-                    )
+                        reuse_samples: resolve_reuse_samples(diagonal_indices.len() >= 7),
+                        stall_iterations: 3,
+                        stall_ftol_rel: 1e-6,
+                        stall_ftol_abs: 1e-8,
+                        stall_requires_stable_x: false,
+                        gradient_tolerance_rel: policy.gradient_tolerance_rel,
+                        ..TrustBqOptions::default()
+                    };
+                    let mut stage_progress = |progress: &TrustBqProgress<'_>| -> Result<bool> {
+                        if let Some(callback) = &progress_callback {
+                            callback.report_if_due(
+                                FitProgressPhase::LmmOptimizer,
+                                progress.fevals,
+                                Some(stage_budget),
+                                &mut last_progress,
+                            )?;
+                        }
+                        Ok(false)
+                    };
+                    if use_gradient_oracle {
+                        minimize_trust_bq_with_gradient_and_progress(
+                            &reduced_initial,
+                            &reduced_lower,
+                            &reduced_upper,
+                            stage_options,
+                            &mut stage_oracle,
+                            &mut stage_progress,
+                        )
+                    } else {
+                        minimize_trust_bq_with_progress(
+                            &reduced_initial,
+                            &reduced_lower,
+                            &reduced_upper,
+                            stage_options,
+                            &mut stage_objective,
+                            &mut stage_progress,
+                        )
+                    }
                 };
                 if let Ok(stage_result) = stage_result {
                     ladder_fevals = stage_result.fevals;
@@ -2797,35 +3147,50 @@ impl LinearMixedModel {
                 reml,
             )
         };
-        let result = minimize_trust_bq_with_progress(
-            &trust_bq_initial,
-            &lower_bounds,
-            &upper_bounds,
-            TrustBqOptions {
-                // From a ladder warm start the optimum is expected nearby, so
-                // begin with a contracted trust region (it re-expands on
-                // successful steps); a cold start keeps the policy radius.
-                initial_radius: if ladder_label.is_some() {
-                    (policy.initial_radius / 8.0).max(policy.final_radius * 10.0)
-                } else {
-                    policy.initial_radius
-                },
-                final_radius: policy.final_radius,
-                max_evaluations: full_stage_max_evaluations,
-                ftol_abs: policy.ftol_abs,
-                ftol_rel: policy.ftol_rel,
-                ftol_requires_local_radius: true,
-                max_cross_terms: policy.max_cross_terms,
-                reuse_samples: resolve_reuse_samples(policy.reuse_samples),
-                stall_iterations: policy.stall_iterations,
-                stall_ftol_rel: policy.stall_ftol_rel,
-                stall_ftol_abs: policy.stall_ftol_abs,
-                stall_requires_stable_x: policy.stall_requires_stable_x,
-                ..TrustBqOptions::default()
+        let full_stage_options = TrustBqOptions {
+            // From a ladder warm start the optimum is expected nearby, so
+            // begin with a contracted trust region (it re-expands on
+            // successful steps); a cold start keeps the policy radius.
+            initial_radius: if ladder_label.is_some() {
+                (policy.initial_radius / 8.0).max(policy.final_radius * 10.0)
+            } else {
+                policy.initial_radius
             },
-            &mut objective_fn,
-            &mut certificate_progress,
-        )?;
+            final_radius: policy.final_radius,
+            max_evaluations: full_stage_max_evaluations,
+            ftol_abs: policy.ftol_abs,
+            ftol_rel: policy.ftol_rel,
+            ftol_requires_local_radius: true,
+            max_cross_terms: policy.max_cross_terms,
+            reuse_samples: resolve_reuse_samples(policy.reuse_samples),
+            stall_iterations: policy.stall_iterations,
+            stall_ftol_rel: policy.stall_ftol_rel,
+            stall_ftol_abs: policy.stall_ftol_abs,
+            stall_requires_stable_x: policy.stall_requires_stable_x,
+            rejected_step_model_reuse: policy.rejected_step_model_reuse,
+            accepted_step_model_reuse: policy.accepted_step_model_reuse,
+            gradient_tolerance_rel: policy.gradient_tolerance_rel,
+            ..TrustBqOptions::default()
+        };
+        let result = if use_gradient_oracle {
+            minimize_trust_bq_with_gradient_and_progress(
+                &trust_bq_initial,
+                &lower_bounds,
+                &upper_bounds,
+                full_stage_options,
+                &mut oracle_fn,
+                &mut certificate_progress,
+            )?
+        } else {
+            minimize_trust_bq_with_progress(
+                &trust_bq_initial,
+                &lower_bounds,
+                &upper_bounds,
+                full_stage_options,
+                &mut objective_fn,
+                &mut certificate_progress,
+            )?
+        };
         let trace_classification = result.trace_classification();
         let _trust_bq_diagnostics = (
             result.iterations,
@@ -2844,6 +3209,11 @@ impl LinearMixedModel {
                 (result.x, result.fmin)
             };
         let base_status = Self::trust_bq_status_label(result.stop_reason);
+        let base_status = if use_gradient_oracle {
+            format!("GRADIENT_ORACLE: {base_status}")
+        } else {
+            base_status
+        };
         let return_value = Some(match &ladder_label {
             Some(label) => format!("START_LADDER({label}): {base_status}"),
             None => base_status,
@@ -3081,12 +3451,10 @@ impl LinearMixedModel {
             obj
         };
 
-        let maxfun = maxeval_override.unwrap_or_else(|| {
-            if self.optsum.max_feval > 0 {
-                self.optsum.max_feval as usize
-            } else {
-                10000
-            }
+        let maxfun = maxeval_override.unwrap_or(if self.optsum.max_feval > 0 {
+            self.optsum.max_feval as usize
+        } else {
+            10000
         });
 
         let lower_bounds = self.lower_bounds();
@@ -3392,6 +3760,7 @@ impl LinearMixedModel {
 
     /// Fit the model with explicit options.
     pub fn fit_with_options(&mut self, options: FitOptions) -> Result<&mut Self> {
+        crate::model::snapshot::record_optimizer_entry();
         if self.optsum.feval > 0 {
             return Err(MixedModelError::AlreadyFitted);
         }
@@ -3434,6 +3803,13 @@ impl LinearMixedModel {
             );
         }
 
+        self.apply_optimizer_control(&options.optimizer_control)?;
+        self.fit_with_current_controls(reml)
+    }
+
+    /// Run a fit using the controls already installed on this model. Refits
+    /// retain the template's strategies, explicit optimizer, audit and callback.
+    pub(super) fn fit_with_current_controls(&mut self, reml: bool) -> Result<&mut Self> {
         if self.feterm.rank >= self.dims.n {
             return Err(MixedModelError::RankSaturatedFixedEffects {
                 rank: self.feterm.rank,
@@ -3441,16 +3817,16 @@ impl LinearMixedModel {
             });
         }
 
-        self.apply_optimizer_control(&options.optimizer_control)?;
         self.optsum.reml = reml;
 
-        if let Some(optimizer) = options.optimizer_control.optimizer.named() {
+        if let Some(optimizer) = self.optsum.caller_selected_optimizer() {
             self.fit_with_forced_optimizer(reml, optimizer)?;
             return Ok(self);
         }
 
         // Initial objective evaluation (with one rescaling retry on a
         // non-finite value — see set_initial_objective_with_rescue).
+        let optimizer_start = std::time::Instant::now();
         self.set_initial_objective_with_rescue()?;
 
         if self.use_scalar_single_theta_optimizer() {
@@ -3466,6 +3842,8 @@ impl LinearMixedModel {
             {
                 if self.use_nlopt_bobyqa_small_theta_optimizer() {
                     self.fit_nlopt_small_theta(reml)?;
+                } else if self.use_large_theta_trust_bq_optimizer() {
+                    self.fit_trust_bq_with_maxeval(reml, None)?;
                 } else if self.use_large_theta_nlopt_optimizer() {
                     self.fit_nlopt_large_theta(reml)?;
                 } else {
@@ -3479,13 +3857,7 @@ impl LinearMixedModel {
             }
         }
 
-        self.apply_kkt_guided_boundary_restart(reml)?;
-        self.apply_active_face_refit()?;
-        self.refresh_optimizer_certificate();
-        self.refresh_effective_covariance_summaries();
-        self.refresh_covariance_parameter_traces();
-        self.refresh_fixed_effect_covariance_matrix();
-        self.refresh_fixed_effect_inference_table();
+        self.finish_fit_after_optimizer(reml, optimizer_start)?;
         Ok(self)
     }
 
@@ -3849,45 +4221,6 @@ where
     objective(&trial).filter(|value| value.is_finite())
 }
 
-pub(super) fn finite_difference_deviance_varpar(
-    evaluator: &mut LinearMixedModel,
-    varpar: &[f64],
-    index: usize,
-    delta: f64,
-    reml: bool,
-) -> Result<f64> {
-    let mut trial = varpar.to_vec();
-    trial[index] += delta;
-    evaluator.deviance_varpar(&trial, reml).and_then(|value| {
-        value.is_finite().then_some(value).ok_or_else(|| {
-            MixedModelError::Optimization(
-                "finite-difference deviance_varpar evaluation is non-finite".to_string(),
-            )
-        })
-    })
-}
-
-pub(super) fn finite_difference_deviance_varpar_2d(
-    evaluator: &mut LinearMixedModel,
-    varpar: &[f64],
-    row: usize,
-    row_delta: f64,
-    col: usize,
-    col_delta: f64,
-    reml: bool,
-) -> Result<f64> {
-    let mut trial = varpar.to_vec();
-    trial[row] += row_delta;
-    trial[col] += col_delta;
-    evaluator.deviance_varpar(&trial, reml).and_then(|value| {
-        value.is_finite().then_some(value).ok_or_else(|| {
-            MixedModelError::Optimization(
-                "finite-difference deviance_varpar evaluation is non-finite".to_string(),
-            )
-        })
-    })
-}
-
 pub(in crate::model) fn jittered_theta(
     theta: &[f64],
     lower_bounds: &[f64],
@@ -3967,6 +4300,20 @@ pub(super) struct TrustBqModelFamilyPolicy {
     pub(super) stall_requires_stable_x: bool,
     pub(super) certificate_ftol_abs: f64,
     pub(super) certificate_ftol_rel: f64,
+    /// Persistent-model reuse caps for the profiled-LMM full stage only (see
+    /// `TrustBqOptions::rejected_step_model_reuse` /
+    /// `accepted_step_model_reuse`). The auxiliary active-face and
+    /// diagonal-first ladder solves deliberately keep the TrustBQ defaults
+    /// (no reuse).
+    pub(super) rejected_step_model_reuse: usize,
+    pub(super) accepted_step_model_reuse: usize,
+    /// Drive the full stage with the analytic-gradient oracle
+    /// (`minimize_with_gradient_and_progress`) instead of the
+    /// finite-difference interpolation model.
+    pub(super) gradient_oracle: bool,
+    /// First-order stop band for the gradient oracle
+    /// (`TrustBqOptions::gradient_tolerance_rel`).
+    pub(super) gradient_tolerance_rel: f64,
 }
 
 /// Central TrustBQ tuning matrix for the profiled-LMM theta objective.
@@ -3982,6 +4329,11 @@ pub(super) struct TrustBqModelFamilyPolicy {
 ///   bd-01KRPK18T967WA61XD6KSA043W, exact reuse was safe but marginal in
 ///   bd-01KRPK18TNRMXYBST852KZN5TX, and certificate-aware stop remains
 ///   conservative after bd-01KRPK18SMAKTTZCGY94HN6C7Y.
+/// - every family reuses the quadratic model for one step after a rejected
+///   trial and for one translated step after a well-predicted accepted move
+///   (bd-01M1S3CXKWMC52HYW3Z3S16HN7): 39% fewer objective evaluations over
+///   the eight TrustBQ rows of `optimizer_bench_harness` with every fitted
+///   objective inside the 1e-6 relative reference gate.
 pub(super) fn trust_bq_model_family_policy(
     n_theta: usize,
     maxeval_override: Option<usize>,
@@ -4044,6 +4396,21 @@ pub(super) fn trust_bq_model_family_policy(
     } else {
         ftol_rel
     };
+    // Persistent quadratic-model reuse (bd-01M1S3CXKWMC52HYW3Z3S16HN7).
+    // Every family keeps the model for one extra step after a rejected trial
+    // (centre unchanged, radius shrunk) and carries a translated model across
+    // one highly successful accepted step. Both caps are one, so a model is
+    // never more than one step away from a fresh stencil. On the
+    // optimizer_bench_harness (base d6b81ce) rejected-step reuse alone cut
+    // evaluations 29-57% on vector rows and 6-31% on crossed rows; adding the
+    // translated rule to the crossed family cut crossed rows a further
+    // 21-32% (665->313, 554->414, 498->336) with every objective gate
+    // passing, so the translation is not restricted to small theta.
+    let (rejected_step_model_reuse, accepted_step_model_reuse) = match family {
+        TrustBqModelFamily::Small
+        | TrustBqModelFamily::Moderate
+        | TrustBqModelFamily::CrossedLarge => (1, 1),
+    };
 
     TrustBqModelFamilyPolicy {
         initial_radius: trust_bq_initial_radius(initial_step, n_theta),
@@ -4063,6 +4430,19 @@ pub(super) fn trust_bq_model_family_policy(
         stall_requires_stable_x,
         certificate_ftol_abs,
         certificate_ftol_rel,
+        rejected_step_model_reuse,
+        accepted_step_model_reuse,
+        // Analytic gradient (Phase 5 S5.3, bd-01M1T81RYWZGSEP95CXNWF3A4C).
+        // With the exact gradient the trust-region loop needs one oracle
+        // call per iteration (SR1 secant Hessian seeded by d gradient
+        // differences) instead of a `2d + d(d-1)/2` stencil per model. On
+        // the native optimizer_bench_harness rows the oracle cut evaluations
+        // from 145-197 to 15-21 on vector rows (d = 3) and from 313-414 to
+        // 89-94 on crossed rows (d = 9, 60 of which were the finite-difference
+        // ladder stage), with every objective gate passing, so every family
+        // uses it; scalar single-theta fits never reach TrustBQ.
+        gradient_oracle: true,
+        gradient_tolerance_rel: 1e-9,
     }
 }
 
@@ -4076,6 +4456,14 @@ struct TrustBqCertificateStopState {
     theta_tolerance: f64,
     min_fevals: usize,
     min_tail_fevals: usize,
+    /// Evaluation count at which the certificate was last computed. The
+    /// certificate is a deterministic function of the best point, and the
+    /// best point cannot change without an evaluation, so re-running it at
+    /// the same count would only repeat the previous (negative) answer at the
+    /// cost of a full finite-difference KKT/Hessian pass. Zero-evaluation
+    /// iterations happen when a persistent-model step degenerates (see
+    /// `TrustBqOptions::rejected_step_model_reuse`).
+    last_checked_feval: Option<usize>,
 }
 
 impl TrustBqCertificateStopState {
@@ -4094,6 +4482,7 @@ impl TrustBqCertificateStopState {
             objective_tolerance_abs: ftol_abs.max(1e-8),
             objective_tolerance_rel: ftol_rel.max(1e-10),
             theta_tolerance: 1e-5,
+            last_checked_feval: None,
             min_fevals,
             min_tail_fevals,
         }
@@ -4124,8 +4513,18 @@ impl TrustBqCertificateStopState {
         let enough_tail =
             progress.fevals.saturating_sub(self.last_meaningful_feval) >= self.min_tail_fevals;
         let contracted = progress.radius < 0.75;
+        // Same evaluation count as the last certificate pass means the same
+        // best point: the answer cannot have changed, so do not pay for the
+        // finite-difference pass again.
+        let unchanged_since_last_check = self.last_checked_feval == Some(progress.fevals);
 
-        enough_total && enough_tail && stable_theta && contracted
+        let check = enough_total && enough_tail && stable_theta && contracted;
+        if check && !unchanged_since_last_check {
+            self.last_checked_feval = Some(progress.fevals);
+            true
+        } else {
+            false
+        }
     }
 }
 

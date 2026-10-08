@@ -2,24 +2,29 @@ Authors of mixeff and the bundled Rust sources
 ==============================================
 
 mixeff (R package): Bradley Buchsbaum
-mixeff-rs 1.0.0-rc.1 (bundled engine, src/rust/upstream/): Bradley Buchsbaum (MIT)
+mixeff-rs 1.0.0-rc.5 (bundled engine, src/rust/upstream/): Bradley Buchsbaum (MIT)
 
-Vendored Cargo registry dependencies (src/rust/vendor.tar.xz, 69 crates).
+Vendored Cargo registry dependencies (src/rust/vendor.tar.xz, 76 crates).
 Declared authors come from each crate's Cargo.toml; the manifests are
 not guaranteed to list every contributor, so the repository URLs and the
 license texts preserved inside the archive are the authoritative record.
 
 - approx 0.5.1: Brendan Zabarauskas [Apache-2.0]
 - autocfg 1.5.0: Josh Stone [Apache-2.0 OR MIT]
+- block-buffer 0.10.4: RustCrypto Developers [MIT OR Apache-2.0]
 - bytemuck 1.25.0: Lokathor [Zlib OR Apache-2.0 OR MIT]
 - cfg-if 1.0.4: Alex Crichton [MIT OR Apache-2.0]
 - cobyla 1.0.0: Remi Lafage [license-file: LICENSE.md]
+- cpufeatures 0.2.17: RustCrypto Developers [MIT OR Apache-2.0]
+- crypto-common 0.1.7: RustCrypto Developers [MIT OR Apache-2.0]
 - csv 1.4.0: Andrew Gallant [Unlicense/MIT]
 - csv-core 0.1.13: Andrew Gallant [Unlicense/MIT]
+- digest 0.10.7: RustCrypto Developers [MIT OR Apache-2.0]
 - equivalent 1.0.2: The equivalent crate developers (https://github.com/indexmap-rs/equivalent) [Apache-2.0 OR MIT]
 - extendr-api 0.9.0: The extendr-api crate developers (https://github.com/extendr/extendr) [MIT]
 - extendr-ffi 0.9.0: The extendr-ffi crate developers (https://github.com/extendr/extendr) [MIT]
 - extendr-macros 0.9.0: The extendr-macros crate developers (https://github.com/extendr/extendr) [MIT]
+- generic-array 0.14.7: The generic-array crate developers (https://github.com/fizyk20/generic-array.git) [MIT]
 - getrandom 0.2.17: The Rand Project Developers [MIT OR Apache-2.0]
 - hashbrown 0.17.0: Amanieu d'Antras [MIT OR Apache-2.0]
 - indexmap 2.14.0: The indexmap crate developers (https://github.com/indexmap-rs/indexmap) [Apache-2.0 OR MIT]
@@ -61,6 +66,7 @@ license texts preserved inside the archive are the authoritative record.
 - serde_derive 1.0.228: The serde_derive crate developers (https://github.com/serde-rs/serde) [MIT OR Apache-2.0]
 - serde_json 1.0.149: The serde_json crate developers (https://github.com/serde-rs/json) [MIT OR Apache-2.0]
 - serde_spanned 0.6.9: The serde_spanned crate developers (https://github.com/toml-rs/toml) [MIT OR Apache-2.0]
+- sha2 0.10.9: RustCrypto Developers [MIT OR Apache-2.0]
 - simba 0.9.1: sebcrozet [Apache-2.0]
 - sprs 0.7.1: Vincent Barrielle [MIT OR Apache-2.0]
 - statrs 0.18.0: Michael Ma [MIT]
@@ -72,6 +78,7 @@ license texts preserved inside the archive are the authoritative record.
 - toml_edit 0.22.27: The toml_edit crate developers (https://github.com/toml-rs/toml) [MIT OR Apache-2.0]
 - typenum 1.20.0: The typenum crate developers (https://github.com/paholg/typenum) [MIT OR Apache-2.0]
 - unicode-ident 1.0.24: David Tolnay [(MIT OR Apache-2.0) AND Unicode-3.0]
+- version_check 0.9.5: Sergio Benitez [MIT/Apache-2.0]
 - wasi 0.11.1+wasi-snapshot-preview1: The Cranelift Project Developers [Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT]
 - wide 0.7.33: Lokathor [Zlib OR Apache-2.0 OR MIT]
 - winnow 0.7.15: The winnow crate developers (https://github.com/winnow-rs/winnow) [MIT]

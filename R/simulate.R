@@ -155,7 +155,10 @@ mm_simulate_once <- function(fit, target) {
   } else {
     mm_simulate_random_mean(fit)
   }
-  as.numeric(eta + stats::rnorm(nobs(fit), sd = fit$sigma))
+  # Prior weights scale the residual variance: sigma^2 / w (lme4's
+  # simulate.merMod uses sigma / sqrt(weights)).
+  w <- fit$weights %||% rep(1, nobs(fit))
+  as.numeric(eta + stats::rnorm(nobs(fit), sd = fit$sigma / sqrt(w)))
 }
 
 mm_simulate_random_mean <- function(fit) {
@@ -174,7 +177,7 @@ mm_simulate_random_mean <- function(fit) {
       basis_labels <- "(Intercept)"
       basis_values <- list(rep(1, nobs(fit)))
     }
-    Sigma <- mm_random_term_covariance(fit, term_id, basis_labels)
+    Sigma <- mm_random_term_covariance(fit, term_id, basis_labels, group_label)
     draws <- mm_rmvnorm(length(levels), Sigma)
     idx <- as.integer(group)
     for (j in seq_along(basis_values)) {
@@ -184,13 +187,15 @@ mm_simulate_random_mean <- function(fit) {
   eta
 }
 
-mm_random_term_covariance <- function(fit, term_id, basis_labels) {
+mm_random_term_covariance <- function(fit, term_id, basis_labels,
+                                      group_label = NULL) {
   p <- length(basis_labels)
   if (!p) return(matrix(0, 0, 0))
   labels <- ifelse(basis_labels == "(Intercept)", "intercept", basis_labels)
   Sigma <- diag(0, p)
   dimnames(Sigma) <- list(basis_labels, basis_labels)
 
+  seen <- stats::setNames(rep(FALSE, p), basis_labels)
   traces <- fit$artifact$covariance_parameter_traces %||% list()
   traces <- traces[vapply(traces, function(x) identical(x$term_id, term_id), logical(1))]
   entries <- unlist(lapply(traces, function(x) x$varcorr_entries %||% list()),
@@ -204,6 +209,7 @@ mm_random_term_covariance <- function(fit, term_id, basis_labels) {
     if (identical(kind, "standard_deviation") && length(basis) == 1L &&
         basis %in% basis_labels) {
       Sigma[basis, basis] <- value^2
+      seen[[basis]] <- TRUE
     }
   }
   for (entry in entries) {
@@ -221,9 +227,20 @@ mm_random_term_covariance <- function(fit, term_id, basis_labels) {
     }
   }
 
-  missing_diag <- diag(Sigma) <= 0
+  # Fall back to the VarCorr table only for a standard deviation the traces
+  # did not report at all. A reported SD of exactly 0 (a singular fit) is a
+  # real value, and the lookup must stay within this term's grouping factor:
+  # matching on the coefficient name alone would borrow another term's
+  # variance (e.g. the subject intercept for a zero-variance item intercept).
+  missing_diag <- !seen
   if (any(missing_diag)) {
     vc <- fit$varcorr$table
+    if (!is.null(group_label) && "group" %in% names(vc) &&
+        any(vc$group == group_label)) {
+      vc <- vc[vc$group == group_label, , drop = FALSE]
+    } else if (length(unique(vc$group)) > 1L) {
+      vc <- vc[0L, , drop = FALSE]
+    }
     for (j in which(missing_diag)) {
       label <- labels[[j]]
       row <- vc[vc$name %in% c(label, basis_labels[[j]]) &

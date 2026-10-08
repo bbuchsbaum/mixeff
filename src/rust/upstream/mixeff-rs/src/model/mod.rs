@@ -27,6 +27,7 @@ pub mod fixed_design;
 pub mod generalized;
 pub(crate) mod kernel;
 pub mod linear;
+pub(crate) mod snapshot;
 pub mod summary_estimates;
 pub mod traits;
 
@@ -47,8 +48,8 @@ pub use linear::{
     FixedEffectNullBootstrapTarget, FixedEffectNullCovariancePolicy, LinearMixedModel,
     LinearMixedModelBuilder, MixedModelBootstrap, ModelCriterion, NewReLevels, OptimizerChoice,
     OptimizerControl, PredictionVarianceMethod, PredictionVariancePayload, PredictionVarianceRow,
-    PredictionVarianceStatus, TrustBqSampleReuse, TrustBqStartLadder, BOOTSTRAP_RUN_SCHEMA,
-    BOOTSTRAP_RUN_SCHEMA_VERSION,
+    PredictionVarianceStatus, RefitStart, TrustBqGradientOracle, TrustBqSampleReuse,
+    TrustBqStartLadder, BOOTSTRAP_RUN_SCHEMA, BOOTSTRAP_RUN_SCHEMA_VERSION,
 };
 pub use summary_estimates::{ResidualSource, SamplingVarianceScale, SummaryEstimateOptions};
 pub use traits::{Family, LinkFunction, MixedModelFit, RandomEffectTermInfo, WaldConfintRow};

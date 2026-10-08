@@ -4,6 +4,8 @@
 //! `y ~ 1 + x1 + x2 + (1 + x1 | group)`.  The design mirrors the term representation
 //! used by Julia's MixedModels.jl.
 
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt;
 
 use super::transform::DerivedColumn;
@@ -22,7 +24,7 @@ use crate::model::data::DataFrame;
 /// If the fixed terms do not contain an explicit [`FixedTerm::Intercept`] or
 /// [`FixedTerm::NoIntercept`], an intercept is assumed to be present (the
 /// parser inserts one automatically).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Formula {
     /// Name of the response (outcome) variable.
     ///
@@ -46,7 +48,7 @@ pub struct Formula {
 }
 
 /// A single fixed-effect term.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum FixedTerm {
     /// Explicit intercept (`1`).
@@ -61,7 +63,7 @@ pub enum FixedTerm {
 
 /// A random-effect specification, corresponding to `(terms | grouping)` or
 /// `(terms || grouping)` in the formula string.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RandomTerm {
     /// The model terms inside the random-effect parentheses.
     pub terms: Vec<FixedTerm>,
@@ -81,7 +83,7 @@ pub struct RandomTerm {
 }
 
 /// Requested random-effect covariance family.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum RandomCovariance {
     /// Unstructured full lower-Cholesky covariance.
@@ -121,7 +123,7 @@ impl RandomCovariance {
 }
 
 /// The grouping factor for a random-effect term.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum GroupingFactor {
     /// A single grouping variable, e.g. `subject`.
@@ -133,7 +135,7 @@ pub enum GroupingFactor {
 }
 
 /// Source metadata for a parsed random-effect term.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RandomTermSource {
     /// Parenthesized source text exactly as written by the user, modulo
     /// leading/trailing formula whitespace.
@@ -143,7 +145,7 @@ pub struct RandomTermSource {
 }
 
 /// Parser-level canonicalization applied to a random-effect grouping form.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum RandomTermExpansion {
     /// `(b | a/b)` expanded to `(b | a) + (b | a:b)`.
@@ -187,8 +189,19 @@ impl Formula {
     /// accepting a diverging pre-supplied column would recreate the exact
     /// two-implementations-of-the-recipe failure the seam contract forbids.
     pub fn materialize(&self, data: &DataFrame) -> Result<DataFrame> {
+        Ok(self.materialize_cow(data)?.into_owned())
+    }
+
+    /// Borrowing form of [`materialize`](Self::materialize): returns the
+    /// caller's frame untouched (`Cow::Borrowed`) when the formula has no
+    /// derived columns, and an owned frame with the derived columns
+    /// appended otherwise. Model construction uses this so a formula
+    /// without transforms never deep-copies the data (a per-row `String`
+    /// clone for every categorical column, which dominated construction
+    /// time for scalar random-intercept fits).
+    pub fn materialize_cow<'a>(&self, data: &'a DataFrame) -> Result<Cow<'a, DataFrame>> {
         if self.derived.is_empty() {
-            return Ok(data.clone());
+            return Ok(Cow::Borrowed(data));
         }
         let mut out = data.clone();
         for d in &self.derived {
@@ -242,7 +255,7 @@ impl Formula {
                 out.add_numeric(&d.label, engine_values)?;
             }
         }
-        Ok(out)
+        Ok(Cow::Owned(out))
     }
 }
 

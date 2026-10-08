@@ -311,8 +311,19 @@ impl DesignAudit {
 
 /// Run the v0 prefit design audit.
 pub fn audit_design(semantic_model: &SemanticModel, data: &DataFrame) -> DesignAudit {
+    audit_design_with_matrix(semantic_model, data).0
+}
+
+/// [`audit_design`] that also returns the dense fixed-effect matrix the
+/// audit factorized, so a caller building the same design can reuse it
+/// (and the audit's rank pivot) instead of rebuilding and refactorizing.
+pub fn audit_design_with_matrix(
+    semantic_model: &SemanticModel,
+    data: &DataFrame,
+) -> (DesignAudit, DMatrix<f64>, Vec<usize>) {
     let mut diagnostics = Vec::new();
-    let fixed_effects = audit_fixed_effects(semantic_model, data);
+    let (fixed_effects, fixed_matrix, fixed_pivot) =
+        audit_fixed_effects_with_matrix(semantic_model, data);
     diagnostics.extend(fixed_effects.diagnostics.clone());
     let mut random_terms = semantic_model
         .random_terms
@@ -364,7 +375,7 @@ pub fn audit_design(semantic_model: &SemanticModel, data: &DataFrame) -> DesignA
             .map(repeated_unit_unmodeled_diagnostic),
     );
 
-    DesignAudit {
+    let audit = DesignAudit {
         schema_name: DESIGN_AUDIT_SCHEMA.to_string(),
         schema_version: DESIGN_AUDIT_SCHEMA_VERSION,
         fixed_effect_rank: fixed_effects.rank.clone(),
@@ -372,7 +383,8 @@ pub fn audit_design(semantic_model: &SemanticModel, data: &DataFrame) -> DesignA
         random_terms,
         covariance_kernels,
         diagnostics,
-    }
+    };
+    (audit, fixed_matrix, fixed_pivot)
 }
 
 fn fixed_random_redundancy_diagnostics(
@@ -459,6 +471,7 @@ fn scope_note_diagnostics(
         let Some(refs) = grouping_refs(&term.group, data) else {
             continue;
         };
+        let refs = Some(refs);
         for &fixed_effect in &fixed_numeric_terms {
             if group_has_random_slope(semantic_model, &term.group, fixed_effect) {
                 continue;
@@ -466,8 +479,7 @@ fn scope_note_diagnostics(
             let Some(values) = data.numeric(fixed_effect) else {
                 continue;
             };
-            let refs = Some(refs.clone());
-            let basis = audit_values(fixed_effect, "numeric", &refs, values.iter().copied());
+            let basis = audit_values(fixed_effect, "numeric", &refs, values);
             if basis.supported != Some(true) {
                 continue;
             }
@@ -824,8 +836,7 @@ fn marginal_fixed_effect_covers_unit(
 
 fn single_grouping_counts(name: &str, data: &DataFrame) -> Option<Vec<usize>> {
     let cat = data.categorical(name)?;
-    let refs = cat.refs.iter().map(|&r| r as usize).collect::<Vec<_>>();
-    Some(counts_from_refs(cat.n_levels(), &refs))
+    Some(counts_from_u32_refs(cat.n_levels(), &cat.refs))
 }
 
 fn grouping_refs(group: &GroupingFactorIr, data: &DataFrame) -> Option<Vec<usize>> {
@@ -839,42 +850,22 @@ fn grouping_refs(group: &GroupingFactorIr, data: &DataFrame) -> Option<Vec<usize
     }
 }
 
-fn composite_grouping_refs(names: &[String], data: &DataFrame) -> Option<Vec<usize>> {
+fn composite_levels<'a>(names: &[String], data: &'a DataFrame) -> Option<CompositeLevels<'a>> {
     let cats = names
         .iter()
         .map(|name| data.categorical(name))
         .collect::<Option<Vec<_>>>()?;
-    let mut level_map = std::collections::BTreeMap::new();
-    let mut refs = Vec::with_capacity(data.nrow());
-    for row in 0..data.nrow() {
-        let key = cats
-            .iter()
-            .map(|cat| cat.values[row].clone())
-            .collect::<Vec<_>>();
-        let next = level_map.len();
-        let idx = *level_map.entry(key).or_insert(next);
-        refs.push(idx);
-    }
+    Some(CompositeLevels::new(cats))
+}
+
+fn composite_grouping_refs(names: &[String], data: &DataFrame) -> Option<Vec<usize>> {
+    let (refs, _) = composite_levels(names, data)?.first_appearance_refs(data.nrow());
     Some(refs)
 }
 
 fn composite_grouping_counts(names: &[String], data: &DataFrame) -> Option<Vec<usize>> {
-    let cats = names
-        .iter()
-        .map(|name| data.categorical(name))
-        .collect::<Option<Vec<_>>>()?;
-    let mut level_map = std::collections::BTreeMap::new();
-    let mut refs = Vec::with_capacity(data.nrow());
-    for row in 0..data.nrow() {
-        let key = cats
-            .iter()
-            .map(|cat| cat.values[row].clone())
-            .collect::<Vec<_>>();
-        let next = level_map.len();
-        let idx = *level_map.entry(key).or_insert(next);
-        refs.push(idx);
-    }
-    Some(counts_from_refs(level_map.len(), &refs))
+    let (refs, n_levels) = composite_levels(names, data)?.first_appearance_refs(data.nrow());
+    Some(counts_from_refs(n_levels, &refs))
 }
 
 fn is_grouping_like_name(name: &str) -> bool {
@@ -932,8 +923,17 @@ fn is_grouping_like_name(name: &str) -> bool {
         || normalized.ends_with("_unit")
 }
 
-fn audit_fixed_effects(semantic_model: &SemanticModel, data: &DataFrame) -> FixedEffectAudit {
+/// Fixed-effect audit plus the dense design matrix it was computed on and
+/// the column pivot of its rank assessment (`stats_rank` convention: the
+/// identity permutation for a full-rank design), so the model constructor
+/// can reuse the factorization when its own design turns out to be the
+/// same matrix. Neither the matrix nor the pivot is part of the audit.
+fn audit_fixed_effects_with_matrix(
+    semantic_model: &SemanticModel,
+    data: &DataFrame,
+) -> (FixedEffectAudit, DMatrix<f64>, Vec<usize>) {
     let mut builder = FixedDesignBuilder::new(data);
+    builder.full_coded_main_effect = no_intercept_full_coded_main_effect(semantic_model, data);
     for term in &semantic_model.fixed_terms {
         builder.push_term(term);
     }
@@ -946,7 +946,7 @@ fn audit_fixed_effects(semantic_model: &SemanticModel, data: &DataFrame) -> Fixe
         mut diagnostics,
     } = builder.finish();
 
-    let rank = fixed_rank_assessment(&matrix);
+    let (rank, rank_pivot) = fixed_rank_assessment(&matrix);
     let aliased_columns = if rank.status == RankStatus::RankDeficient {
         aliased_columns(&matrix, rank.rank.unwrap_or(0), &columns)
     } else {
@@ -1055,7 +1055,7 @@ fn audit_fixed_effects(semantic_model: &SemanticModel, data: &DataFrame) -> Fixe
         })
         .collect::<Vec<_>>();
 
-    FixedEffectAudit {
+    let audit = FixedEffectAudit {
         n_rows: data.nrow(),
         n_columns: columns.len(),
         rank,
@@ -1065,7 +1065,43 @@ fn audit_fixed_effects(semantic_model: &SemanticModel, data: &DataFrame) -> Fixe
         aliased_columns,
         empty_cells,
         diagnostics,
+    };
+    (audit, matrix, rank_pivot)
+}
+
+/// Mirror of the model's no-intercept coding rule (R's `model.matrix()`):
+/// without an intercept, the first factor found -- terms by increasing
+/// degree, variables by first appearance -- gets full indicator columns.
+/// Returns the factor only when that first factor occurs as a main effect;
+/// the audit's interaction expansion does not model per-term codings.
+fn no_intercept_full_coded_main_effect(
+    semantic_model: &SemanticModel,
+    data: &DataFrame,
+) -> Option<String> {
+    let terms = &semantic_model.fixed_terms;
+    if terms.iter().any(|term| term == "1") {
+        return None;
     }
+    let mut variable_order: Vec<&str> = Vec::new();
+    for term in terms {
+        for name in term.split(':') {
+            if !variable_order.contains(&name) {
+                variable_order.push(name);
+            }
+        }
+    }
+    let mut by_degree = terms.iter().collect::<Vec<_>>();
+    by_degree.sort_by_key(|term| term.split(':').count());
+    let (term, name) = by_degree.into_iter().find_map(|term| {
+        variable_order
+            .iter()
+            .find(|name| {
+                term.split(':').any(|var| var == **name)
+                    && matches!(data.column(name), Some(Column::Categorical(_)))
+            })
+            .map(|name| (term, *name))
+    })?;
+    (term == name).then(|| name.to_string())
 }
 
 fn format_factor_level_assignment(factors: &[String], levels: &[String]) -> String {
@@ -1083,6 +1119,7 @@ struct FixedDesignBuilder<'a> {
     term_ranges: Vec<TermColumnRange>,
     empty_cells: Vec<EmptyCellAudit>,
     diagnostics: Vec<Diagnostic>,
+    full_coded_main_effect: Option<String>,
 }
 
 struct FixedDesignBuild {
@@ -1114,6 +1151,7 @@ impl<'a> FixedDesignBuilder<'a> {
             term_ranges: Vec::new(),
             empty_cells: Vec::new(),
             diagnostics: Vec::new(),
+            full_coded_main_effect: None,
         }
     }
 
@@ -1153,7 +1191,12 @@ impl<'a> FixedDesignBuilder<'a> {
                 values: DVector::from_column_slice(values),
             }),
             Some(Column::Categorical(cat)) => {
-                for encoded in cat.encoded_columns(name, CategoricalCoding::Treatment) {
+                let coding = if self.full_coded_main_effect.as_deref() == Some(name) {
+                    CategoricalCoding::CellMeans
+                } else {
+                    CategoricalCoding::Treatment
+                };
+                for encoded in cat.encoded_columns(name, coding) {
                     self.columns.push(DesignColumn {
                         audit: FixedEffectColumnAudit {
                             name: encoded.name,
@@ -1312,10 +1355,14 @@ fn design_matrix_from_columns(n_rows: usize, columns: &[DesignColumn]) -> DMatri
 /// the reported rank is unchanged in every case.
 const GRAM_RANK_FAST_PATH_MIN_COLS: usize = 32;
 
-fn fixed_rank_assessment(matrix: &DMatrix<f64>) -> RankAssessment {
+/// Rank assessment plus the column pivot that produced it. A full-rank
+/// verdict (from the Gram certificate or the QR) carries the identity
+/// permutation, which is exactly what `stats_rank` returns for full-rank
+/// input, so the pivot is valid for reuse either way.
+fn fixed_rank_assessment(matrix: &DMatrix<f64>) -> (RankAssessment, Vec<usize>) {
     let expected = matrix.ncols();
-    let rank = if expected == 0 {
-        0
+    let (rank, pivot) = if expected == 0 {
+        (0, Vec::new())
     } else if expected >= GRAM_RANK_FAST_PATH_MIN_COLS
         && crate::linalg::gram_full_rank_certificate(
             &matrix.tr_mul(matrix),
@@ -1324,12 +1371,11 @@ fn fixed_rank_assessment(matrix: &DMatrix<f64>) -> RankAssessment {
         )
         .is_certified()
     {
-        expected
+        (expected, (0..expected).collect())
     } else {
-        let (rank, _pivots) = stats_rank_with_tol(matrix, 1e-8);
-        rank
+        stats_rank_with_tol(matrix, 1e-8)
     };
-    RankAssessment {
+    let assessment = RankAssessment {
         rank: Some(rank),
         expected: Some(expected),
         status: if rank == expected {
@@ -1342,7 +1388,8 @@ fn fixed_rank_assessment(matrix: &DMatrix<f64>) -> RankAssessment {
         } else {
             Some("fixed-effect columns are linearly dependent under tolerance 1e-8".to_string())
         },
-    }
+    };
+    (assessment, pivot)
 }
 
 fn aliased_columns(
@@ -1389,47 +1436,57 @@ fn empty_cells_for_interaction(
         return Vec::new();
     }
 
-    let mut observed = std::collections::BTreeSet::new();
-    for row in 0..data.nrow() {
-        let key = categorical
-            .iter()
-            .map(|(_factor, cat)| cat.values[row].clone())
-            .collect::<Vec<_>>();
-        observed.insert(key);
-    }
+    let composite = CompositeLevels::new(categorical.iter().map(|(_factor, cat)| *cat).collect());
+    let observed = (0..data.nrow())
+        .map(|row| composite.row_key(row))
+        .collect::<std::collections::HashSet<_>>();
 
-    let mut expected = Vec::new();
-    append_level_products(&categorical, 0, &mut Vec::new(), &mut expected);
-
-    expected
-        .into_iter()
-        .filter(|levels| !observed.contains(levels))
-        .map(|levels| EmptyCellAudit {
-            term: term.to_string(),
-            factors: categorical
-                .iter()
-                .map(|(factor, _cat)| (*factor).clone())
-                .collect(),
-            levels,
-            reason: "no observations exist for this factor combination".to_string(),
-        })
-        .collect()
+    let factors = categorical
+        .iter()
+        .map(|(factor, _cat)| (*factor).clone())
+        .collect::<Vec<_>>();
+    let mut missing = Vec::new();
+    append_missing_level_products(
+        &composite,
+        &observed,
+        0,
+        &mut Vec::new(),
+        &mut |levels: &[u32]| {
+            missing.push(EmptyCellAudit {
+                term: term.to_string(),
+                factors: factors.clone(),
+                levels: levels
+                    .iter()
+                    .zip(&composite.cats)
+                    .map(|(&level, cat)| cat.levels[level as usize].clone())
+                    .collect(),
+                reason: "no observations exist for this factor combination".to_string(),
+            });
+        },
+    );
+    missing
 }
 
-fn append_level_products(
-    factors: &[(&String, &crate::model::data::CategoricalColumn)],
+/// Enumerate the level product in level order (the same nested order the
+/// audit always reported), invoking `on_missing` for each combination not
+/// present in `observed`.
+fn append_missing_level_products(
+    composite: &CompositeLevels<'_>,
+    observed: &std::collections::HashSet<CompositeKey>,
     index: usize,
-    current: &mut Vec<String>,
-    out: &mut Vec<Vec<String>>,
+    current: &mut Vec<u32>,
+    on_missing: &mut dyn FnMut(&[u32]),
 ) {
-    if index == factors.len() {
-        out.push(current.clone());
+    if index == composite.cats.len() {
+        if !observed.contains(&composite.key_of(current.iter().copied())) {
+            on_missing(current);
+        }
         return;
     }
 
-    for level in &factors[index].1.levels {
-        current.push(level.clone());
-        append_level_products(factors, index + 1, current, out);
+    for level in 0..composite.cats[index].n_levels() as u32 {
+        current.push(level);
+        append_missing_level_products(composite, observed, index + 1, current, on_missing);
         current.pop();
     }
 }
@@ -1596,12 +1653,9 @@ fn expand_single_basis_audit(
     coding: RandomBasisCoding,
 ) -> Vec<BasisAudit> {
     match data.column(&coefficient.source) {
-        Some(Column::Numeric(values)) => vec![audit_values(
-            &coefficient.name,
-            "slope",
-            refs,
-            values.iter().copied(),
-        )],
+        Some(Column::Numeric(values)) => {
+            vec![audit_values(&coefficient.name, "slope", refs, values)]
+        }
         Some(Column::Categorical(cat)) => {
             categorical_basis_audits(&coefficient.source, cat, refs, coding)
         }
@@ -1640,7 +1694,7 @@ fn expand_interaction_basis_audit(
 
     cartesian_audit_columns(&per_var)
         .into_iter()
-        .map(|(name, values)| audit_values(&name, "interaction", refs, values))
+        .map(|(name, values)| audit_values(&name, "interaction", refs, &values))
         .collect()
 }
 
@@ -1663,7 +1717,7 @@ fn categorical_basis_audits(
                     "categorical_cell"
                 },
                 refs,
-                encoded.values,
+                &encoded.values,
             )
         })
         .collect()
@@ -1924,8 +1978,8 @@ fn grouping_audit(
     match group {
         GroupingFactorIr::Single { name } => match data.categorical(name) {
             Some(cat) => {
+                let counts = counts_from_u32_refs(cat.n_levels(), &cat.refs);
                 let refs = cat.refs.iter().map(|&r| r as usize).collect::<Vec<_>>();
-                let counts = counts_from_refs(cat.n_levels(), &refs);
                 (audit_from_counts(name.clone(), counts, None), Some(refs))
             }
             None => {
@@ -1996,20 +2050,8 @@ fn interaction_grouping_audit(
         }
     }
 
-    let mut level_map = std::collections::BTreeMap::new();
-    let mut refs = Vec::with_capacity(data.nrow());
-    for row in 0..data.nrow() {
-        let key = cats
-            .iter()
-            .map(|cat| cat.values[row].as_str())
-            .collect::<Vec<_>>()
-            .join(":");
-        let next = level_map.len();
-        let idx = *level_map.entry(key).or_insert(next);
-        refs.push(idx);
-    }
-
-    let counts = counts_from_refs(level_map.len(), &refs);
+    let (refs, n_levels) = CompositeLevels::new(cats).first_appearance_refs(data.nrow());
+    let counts = counts_from_refs(n_levels, &refs);
     (audit_from_counts(label, counts, None), Some(refs))
 }
 
@@ -2055,10 +2097,135 @@ fn counts_from_refs(n_levels: usize, refs: &[usize]) -> Vec<usize> {
     counts
 }
 
-fn audit_values<I>(name: &str, kind: &str, refs: &Option<Vec<usize>>, values: I) -> BasisAudit
-where
-    I: IntoIterator<Item = f64>,
-{
+fn counts_from_u32_refs(n_levels: usize, refs: &[u32]) -> Vec<usize> {
+    let mut counts = vec![0; n_levels];
+    for &idx in refs {
+        if let Some(count) = counts.get_mut(idx as usize) {
+            *count += 1;
+        }
+    }
+    counts
+}
+
+/// Per-level observation counts and sample standard deviations in two
+/// row-order passes (sums, then centred squares). Within each level the
+/// arithmetic is the same sequential fold `sample_sd` performs on that
+/// level's values in row order, so the results are bit-identical to
+/// collecting the values per level first, without allocating one `Vec` per
+/// level. Levels with fewer than two observations get `None`. Pairs
+/// `refs` with `values` by position and stops at the shorter of the two,
+/// exactly as the per-level collection did.
+fn within_group_sample_sds(
+    refs: &[usize],
+    values: &[f64],
+    n_levels: usize,
+) -> (Vec<usize>, Vec<Option<f64>>) {
+    let mut counts = vec![0usize; n_levels];
+    let mut sums = vec![0.0f64; n_levels];
+    for (&group, &value) in refs.iter().zip(values) {
+        counts[group] += 1;
+        sums[group] += value;
+    }
+    let means = counts
+        .iter()
+        .zip(&sums)
+        .map(
+            |(&count, &sum)| {
+                if count == 0 {
+                    0.0
+                } else {
+                    sum / count as f64
+                }
+            },
+        )
+        .collect::<Vec<_>>();
+    let mut centred_squares = vec![0.0f64; n_levels];
+    for (&group, &value) in refs.iter().zip(values) {
+        let centred = value - means[group];
+        centred_squares[group] += centred * centred;
+    }
+    let sds = counts
+        .iter()
+        .zip(&centred_squares)
+        .map(|(&count, &sum_of_squares)| {
+            (count >= 2).then(|| (sum_of_squares / (count - 1) as f64).sqrt())
+        })
+        .collect();
+    (counts, sds)
+}
+
+/// Row key over several categorical columns built from their integer
+/// level references instead of joined level strings. Within a column the
+/// level strings and references are in bijection, so equality of keys is
+/// exactly equality of the level-string tuples the audit used to build,
+/// without a `String` per row. Packs into one `u64` (mixed radix over the
+/// level counts) whenever that fits, and falls back to the reference
+/// tuple otherwise.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum CompositeKey {
+    Packed(u64),
+    Wide(Vec<u32>),
+}
+
+struct CompositeLevels<'a> {
+    cats: Vec<&'a crate::model::data::CategoricalColumn>,
+    /// Mixed-radix strides when the level-count product fits in `u64`.
+    strides: Option<Vec<u64>>,
+}
+
+impl<'a> CompositeLevels<'a> {
+    fn new(cats: Vec<&'a crate::model::data::CategoricalColumn>) -> Self {
+        let mut strides = Vec::with_capacity(cats.len());
+        let mut stride = 1u64;
+        let mut fits = true;
+        for cat in &cats {
+            strides.push(stride);
+            match stride.checked_mul(cat.n_levels().max(1) as u64) {
+                Some(next) => stride = next,
+                None => {
+                    fits = false;
+                    break;
+                }
+            }
+        }
+        Self {
+            cats,
+            strides: fits.then_some(strides),
+        }
+    }
+
+    fn key_of(&self, level_indices: impl Iterator<Item = u32>) -> CompositeKey {
+        match &self.strides {
+            Some(strides) => CompositeKey::Packed(
+                level_indices
+                    .zip(strides)
+                    .map(|(index, stride)| index as u64 * stride)
+                    .sum(),
+            ),
+            None => CompositeKey::Wide(level_indices.collect()),
+        }
+    }
+
+    fn row_key(&self, row: usize) -> CompositeKey {
+        self.key_of(self.cats.iter().map(|cat| cat.refs[row]))
+    }
+
+    /// First-appearance level references over the composite key, exactly
+    /// the numbering the string-keyed map produced (`next = map.len()` on
+    /// first insertion), plus the number of distinct combinations seen.
+    fn first_appearance_refs(&self, n_rows: usize) -> (Vec<usize>, usize) {
+        let mut level_map = std::collections::HashMap::with_capacity(n_rows.min(4096));
+        let mut refs = Vec::with_capacity(n_rows);
+        for row in 0..n_rows {
+            let next = level_map.len();
+            let idx = *level_map.entry(self.row_key(row)).or_insert(next);
+            refs.push(idx);
+        }
+        (refs, level_map.len())
+    }
+}
+
+fn audit_values(name: &str, kind: &str, refs: &Option<Vec<usize>>, values: &[f64]) -> BasisAudit {
     let Some(refs) = refs else {
         return BasisAudit {
             name: name.to_string(),
@@ -2071,16 +2238,10 @@ where
     };
 
     let n_levels = refs.iter().copied().max().map(|m| m + 1).unwrap_or(0);
-    let mut by_level = vec![Vec::new(); n_levels];
-    for (&group, value) in refs.iter().zip(values) {
-        by_level[group].push(value);
-    }
-
-    let sds = by_level
-        .iter()
-        .filter(|vals| vals.len() >= 2)
-        .map(|vals| sample_sd(vals))
-        .collect::<Vec<_>>();
+    let (_, sds) = within_group_sample_sds(refs, values, n_levels);
+    // Level order, levels with at least two observations only: the same
+    // sequence the per-level collection produced.
+    let sds = sds.into_iter().flatten().collect::<Vec<_>>();
     let min_sd = sds.iter().copied().reduce(f64::min);
     let max_sd = sds.iter().copied().reduce(f64::max);
     let supported = max_sd.map(|sd| sd > 1e-8);
@@ -2097,22 +2258,6 @@ where
             None
         },
     }
-}
-
-fn sample_sd(values: &[f64]) -> f64 {
-    if values.len() < 2 {
-        return 0.0;
-    }
-    let mean = values.iter().sum::<f64>() / values.len() as f64;
-    let var = values
-        .iter()
-        .map(|value| {
-            let centered = value - mean;
-            centered * centered
-        })
-        .sum::<f64>()
-        / (values.len() - 1) as f64;
-    var.sqrt()
 }
 
 fn response_constant_within_group_diagnostic(
@@ -2138,19 +2283,19 @@ fn response_constant_within_group_diagnostic(
     if n_levels == 0 {
         return None;
     }
-    let mut y_by_level = vec![Vec::new(); n_levels];
-    for (&group, &value) in refs.iter().zip(y.iter()) {
-        y_by_level[group].push(value);
-    }
+    let (counts, y_sds) = within_group_sample_sds(refs, y, n_levels);
 
-    let repeated_levels = y_by_level.iter().filter(|values| values.len() >= 2).count();
+    let repeated_levels = counts.iter().filter(|&&count| count >= 2).count();
     if repeated_levels == 0 {
         return None;
     }
-    let constant_response_levels = y_by_level
+    // Levels with at least two observations whose response is constant.
+    let y_constant = counts
         .iter()
-        .filter(|values| values.len() >= 2 && sample_sd(values) <= 1e-8)
-        .count();
+        .zip(&y_sds)
+        .map(|(&count, sd)| count >= 2 && sd.is_some_and(|sd| sd <= 1e-8))
+        .collect::<Vec<_>>();
+    let constant_response_levels = y_constant.iter().filter(|&&constant| constant).count();
     if constant_response_levels == 0 {
         return None;
     }
@@ -2166,7 +2311,7 @@ fn response_constant_within_group_diagnostic(
         .filter(|name| *name != response)
         .filter_map(|name| {
             let values = data.numeric(name)?;
-            numeric_varies_within_constant_response_group(refs, &y_by_level, values)
+            numeric_varies_within_constant_response_group(refs, &y_constant, values)
                 .then(|| name.to_string())
         })
         .collect::<Vec<_>>();
@@ -2213,26 +2358,23 @@ fn response_constant_within_group_diagnostic(
     Some(diagnostic)
 }
 
+/// `y_constant[g]` marks levels with at least two observations whose
+/// response is constant; the predictor "varies" there when its within-level
+/// sample SD exceeds the same threshold.
 fn numeric_varies_within_constant_response_group(
     refs: &[usize],
-    y_by_level: &[Vec<f64>],
+    y_constant: &[bool],
     values: &[f64],
 ) -> bool {
     if refs.len() != values.len() {
         return false;
     }
 
-    let mut x_by_level = vec![Vec::new(); y_by_level.len()];
-    for (&group, &value) in refs.iter().zip(values.iter()) {
-        x_by_level[group].push(value);
-    }
-
-    y_by_level
+    let (_, x_sds) = within_group_sample_sds(refs, values, y_constant.len());
+    y_constant
         .iter()
-        .zip(x_by_level.iter())
-        .any(|(y_values, x_values)| {
-            y_values.len() >= 2 && sample_sd(y_values) <= 1e-8 && sample_sd(x_values) > 1e-8
-        })
+        .zip(&x_sds)
+        .any(|(&constant, sd)| constant && sd.is_some_and(|sd| sd > 1e-8))
 }
 
 fn grouping_factor_label(group: &GroupingFactorIr) -> String {
@@ -3128,6 +3270,7 @@ mod tests {
         certificate.apply_derivative_evidence(
             OptimizerDerivativeEvidence {
                 method: EvidenceMethod::FiniteDifference,
+                hessian_method: EvidenceMethod::FiniteDifference,
                 gradient: vec![17.7, -2.0],
                 hessian: Some(DMatrix::identity(2, 2)),
             },
@@ -3145,6 +3288,62 @@ mod tests {
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.code == DiagnosticCode::OptimizerNonconvergence));
+    }
+
+    #[test]
+    fn unavailable_derivative_probes_do_not_become_nonfinite_measurements() {
+        let mut optsum = OptSummary::new(vec![0.5]);
+        optsum.return_value = "FTOL_REACHED".to_string();
+        optsum.finitial = 5.0;
+        optsum.fmin = 2.0;
+        optsum.feval = 4;
+        for value in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            for (in_hessian, finite_gradient) in [(false, 0.0), (true, 0.0), (true, 0.1)] {
+                let mut certificate =
+                    OptimizerCertificate::from_opt_summary(&optsum, &[0.5], &[0.0]);
+                certificate.apply_derivative_evidence(
+                    OptimizerDerivativeEvidence {
+                        method: EvidenceMethod::FiniteDifference,
+                        hessian_method: EvidenceMethod::FiniteDifference,
+                        gradient: vec![if in_hessian { finite_gradient } else { value }],
+                        hessian: Some(DMatrix::from_element(
+                            1,
+                            1,
+                            if in_hessian { value } else { 1.0 },
+                        )),
+                    },
+                    1e-3,
+                    1e-5,
+                );
+                assert!(certificate.evidence.optimizer_stop.acceptable_stop);
+                assert_eq!(
+                    certificate.free_gradient_norm,
+                    in_hessian.then_some(finite_gradient)
+                );
+                assert_eq!(
+                    certificate.evidence.gradient.raw_gradient_norm,
+                    in_hessian.then_some(finite_gradient)
+                );
+                assert!(certificate.hessian_eigen_min.is_none());
+                assert!(certificate.checks.iter().any(|check| matches!(check,
+                    CertificateCheck::Incomplete { evidence } if evidence.status == IncompleteCheckStatus::Unavailable)));
+                assert!(!certificate.checks.iter().any(|check| matches!(
+                    check,
+                    CertificateCheck::HessianPsdOnActiveSubspace { .. }
+                )));
+                assert_eq!(
+                    certificate
+                        .checks
+                        .iter()
+                        .any(|check| matches!(check, CertificateCheck::FreeGradientOk { .. })),
+                    in_hessian && finite_gradient == 0.0
+                );
+                if in_hessian && finite_gradient > 0.0 {
+                    assert_eq!(certificate.status, FitStatus::NotOptimized);
+                }
+                assert!(crate::model::snapshot::encode_snapshot(&certificate).is_ok());
+            }
+        }
     }
 
     #[test]
@@ -3932,6 +4131,13 @@ pub struct OptimizerCertificate {
     /// populated substitution as "the requested estimator did not certify".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub estimator_substitution: Option<EstimatorSubstitution>,
+    /// Scale-free stationarity evidence: the Newton-decrement estimate of how
+    /// far the objective sits above its local optimum. Populated by
+    /// estimators whose certificate probes carry curvature (currently the
+    /// joint Laplace/AGQ GLMM); absent elsewhere. The raw gradient evidence
+    /// (`free_gradient_norm`, `evidence.gradient`) is reported alongside it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stationarity_decrement: Option<NewtonDecrementEvidence>,
     pub free_gradient_norm: Option<f64>,
     pub projected_gradient_norm: Option<f64>,
     pub hessian_eigen_min: Option<f64>,
@@ -4031,7 +4237,11 @@ pub struct HessianEvidence {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OptimizerDerivativeEvidence {
+    /// How the gradient was obtained.
     pub method: EvidenceMethod,
+    /// How the Hessian was obtained (finite differences of the objective, or
+    /// of an exact gradient).
+    pub hessian_method: EvidenceMethod,
     pub gradient: Vec<f64>,
     pub hessian: Option<DMatrix<f64>>,
 }
@@ -4074,6 +4284,87 @@ pub struct EstimatorSubstitution {
     pub requested_free_gradient_norm: Option<f64>,
     /// Why the substitution happened.
     pub reason: String,
+}
+
+/// Newton-decrement stationarity evidence for a fitted objective.
+///
+/// For a gradient `g` and positive-definite Hessian `H` over the free
+/// parameters, `λ² = gᵀH⁻¹g` and `λ²/2` estimates the objective gap between
+/// the fitted point and the local optimum, in the objective's own units
+/// (deviance for GLMMs). Unlike a gradient norm it does not depend on how the
+/// parameters are scaled, so one tolerance applies to every coordinate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NewtonDecrementEvidence {
+    /// Largest estimated objective gap that counts as stationary.
+    pub gap_tolerance: f64,
+    /// Zero-based indices, into the optimizer's parameter vector, of the free
+    /// coordinates whose gradient readings enter the decrement. Coordinates at
+    /// a bound and coordinates without a determined reading are listed in
+    /// `excluded` instead.
+    pub parameter_indices: Vec<usize>,
+    /// Gradient readings used for the decrement, aligned with
+    /// `parameter_indices`.
+    pub gradient: Vec<f64>,
+    /// Coordinates left out of the decrement, with the reason.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded: Vec<NewtonDecrementExclusion>,
+    /// Estimate available when the fit was certified, from the certificate's
+    /// own finite-difference probes. It decides the stationarity verdict.
+    pub eager: NewtonDecrementEstimate,
+    /// Estimate from the full finite-difference Hessian, recorded when that
+    /// Hessian is computed (joint-Laplace fixed-effect inference). Evidence
+    /// only: it does not revise the fit status decided by `eager`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub full: Option<NewtonDecrementEstimate>,
+}
+
+/// One coordinate left out of a Newton decrement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewtonDecrementExclusion {
+    /// Zero-based parameter index.
+    pub index: usize,
+    /// Stable reason code: `at_lower_bound` (checked by the one-sided
+    /// boundary KKT rule instead), `one_sided_probe`,
+    /// `nonpositive_curvature`, `curvature_ill_determined`,
+    /// `gradient_ill_determined`, or `non_finite_reading`.
+    pub reason: String,
+}
+
+/// One Newton-decrement estimate of the objective gap.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NewtonDecrementEstimate {
+    /// Which curvature the estimate used.
+    pub variant: NewtonDecrementVariant,
+    /// Verdict of `objective_gap` against the gap tolerance.
+    pub verdict: NewtonDecrementVerdict,
+    /// Estimated objective gap `λ²/2`; absent when not assessed.
+    pub objective_gap: Option<f64>,
+    /// Why the estimate is not assessed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Curvature used by a Newton-decrement estimate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NewtonDecrementVariant {
+    /// Diagonal finite-difference curvature: `Σ g_i² / H_ii`.
+    Diagonal,
+    /// Fixed-effect block from the working (penalized least-squares)
+    /// Hessian, diagonal finite-difference curvature for the covariance
+    /// parameters; cross terms between the two blocks are ignored.
+    BetaBlockThetaDiagonal,
+    /// Full finite-difference Hessian over the active parameters.
+    Full,
+}
+
+/// Verdict of a Newton-decrement estimate against its gap tolerance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NewtonDecrementVerdict {
+    WithinTolerance,
+    ExceedsTolerance,
+    NotAssessed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -4135,6 +4426,10 @@ pub enum CertificateCheck {
     NotAssessed {
         reason: String,
     },
+    /// A check without a numerical verdict. This never means a passed check.
+    Incomplete {
+        evidence: IncompleteCheckEvidence,
+    },
     DerivativeMismatch {
         kind: String,
         observed: Option<f64>,
@@ -4148,6 +4443,49 @@ pub enum CertificateCheck {
     },
 }
 
+/// Why a check has no numerical verdict, independently of optimizer stopping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IncompleteCheckStatus {
+    NotAssessed,
+    Skipped,
+    Unavailable,
+    Deferred,
+    TimedOut,
+}
+
+/// Execution evidence supplied by the engine or the host running an audit.
+/// A timeout must come from an observed attempt, never from an absent result.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IncompleteCheckEvidence {
+    pub check_name: String,
+    pub status: IncompleteCheckStatus,
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<String>,
+}
+
+impl IncompleteCheckEvidence {
+    pub fn new(
+        check_name: impl Into<String>,
+        status: IncompleteCheckStatus,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            check_name: check_name.into(),
+            status,
+            reason: reason.into(),
+            elapsed_seconds: None,
+            budget_seconds: None,
+            receipt: None,
+        }
+    }
+}
+
 impl OptimizerCertificate {
     pub fn not_assessed() -> Self {
         Self {
@@ -4159,6 +4497,7 @@ impl OptimizerCertificate {
             optimizer_control: OptimizerControlEvidence::default(),
             verification: None,
             estimator_substitution: None,
+            stationarity_decrement: None,
             free_gradient_norm: None,
             projected_gradient_norm: None,
             hessian_eigen_min: None,
@@ -4207,6 +4546,7 @@ impl OptimizerCertificate {
                 optimizer_control: OptimizerControlEvidence::from_opt_summary(optsum),
                 verification: None,
                 estimator_substitution: None,
+            stationarity_decrement: None,
                 free_gradient_norm: None,
                 projected_gradient_norm: None,
                 hessian_eigen_min: None,
@@ -4406,6 +4746,7 @@ impl OptimizerCertificate {
             optimizer_control: OptimizerControlEvidence::from_opt_summary(optsum),
             verification: None,
             estimator_substitution: None,
+            stationarity_decrement: None,
             free_gradient_norm: None,
             projected_gradient_norm: None,
             hessian_eigen_min: None,
@@ -4418,7 +4759,7 @@ impl OptimizerCertificate {
 
     pub fn apply_derivative_evidence(
         &mut self,
-        derivatives: OptimizerDerivativeEvidence,
+        mut derivatives: OptimizerDerivativeEvidence,
         gradient_tolerance: f64,
         hessian_tolerance: f64,
     ) {
@@ -4426,6 +4767,11 @@ impl OptimizerCertificate {
             return;
         }
 
+        self.mark_derivative_checks_incomplete(IncompleteCheckEvidence::new(
+            "derivative_inspection",
+            IncompleteCheckStatus::Unavailable,
+            "new derivative evidence has not passed dimensional validation",
+        ));
         let n_theta = self.evidence.parameter_space.n_theta;
         if derivatives.gradient.len() != n_theta {
             self.checks.push(CertificateCheck::DerivativeMismatch {
@@ -4438,10 +4784,28 @@ impl OptimizerCertificate {
                     derivatives.gradient.len()
                 ),
             });
-            self.evidence.certification_quality = EvidenceQuality::Approximate {
+            self.evidence.certification_quality = EvidenceQuality::Unavailable {
                 reason: "derivative certificate dimensions did not match theta".to_string(),
             };
             return;
+        }
+
+        if derivatives.gradient.iter().any(|value| !value.is_finite()) {
+            self.mark_derivative_checks_incomplete(IncompleteCheckEvidence::new(
+                "derivative_inspection",
+                IncompleteCheckStatus::Unavailable,
+                "gradient probes returned nonfinite values; stationarity is unavailable",
+            ));
+            return;
+        }
+        // A failed curvature probe does not invalidate a finite gradient.
+        // Keep its stationarity evidence while recording the Hessian as unavailable.
+        if derivatives
+            .hessian
+            .as_ref()
+            .is_some_and(|h| h.iter().any(|value| !value.is_finite()))
+        {
+            derivatives.hessian = None;
         }
 
         remove_derivative_not_assessed_checks(&mut self.checks);
@@ -4538,11 +4902,15 @@ impl OptimizerCertificate {
                 self.hessian_rank = active.rank;
                 self.information_rank = active.rank;
                 self.evidence.hessian = HessianEvidence {
-                    method: derivatives.method.clone(),
+                    method: derivatives.hessian_method.clone(),
                     quality: if active.psd_ok && active.rank_ok {
                         approximate_or_certified_quality(
-                            &derivatives.method,
-                            "finite-difference active-subspace Hessian is positive semidefinite",
+                            &derivatives.hessian_method,
+                            if matches!(derivatives.method, EvidenceMethod::Exact) {
+                                "active-subspace Hessian from finite differences of the analytic gradient is positive semidefinite"
+                            } else {
+                                "finite-difference active-subspace Hessian is positive semidefinite"
+                            },
                         )
                     } else if !active.psd_ok {
                         EvidenceQuality::Approximate {
@@ -4639,14 +5007,38 @@ impl OptimizerCertificate {
                     condition_number: None,
                     rank: None,
                 };
-                self.checks.push(CertificateCheck::NotAssessed { reason });
+                self.checks.push(CertificateCheck::Incomplete {
+                    evidence: IncompleteCheckEvidence::new(
+                        "active_subspace_hessian_psd",
+                        IncompleteCheckStatus::Unavailable,
+                        reason,
+                    ),
+                });
             }
         }
 
-        self.evidence.certification_quality = if failures.is_empty() {
+        // Certification is only as strong as the weaker of the two pieces
+        // of evidence: an exact gradient with a finite-difference Hessian
+        // still certifies approximately.
+        let gradient_exact = matches!(derivatives.method, EvidenceMethod::Exact);
+        let certifying_method = if matches!(derivatives.hessian_method, EvidenceMethod::Exact) {
+            &derivatives.method
+        } else {
+            &derivatives.hessian_method
+        };
+        self.evidence.certification_quality = if matches!(
+            self.evidence.hessian.quality,
+            EvidenceQuality::Unavailable { .. }
+        ) {
+            EvidenceQuality::Unavailable { reason: "Hessian evidence unavailable; gradient checks alone do not complete derivative certification".to_string() }
+        } else if failures.is_empty() {
             approximate_or_certified_quality(
-                &derivatives.method,
-                "finite-difference KKT and Hessian checks passed",
+                certifying_method,
+                if gradient_exact {
+                    "analytic-gradient KKT check and finite-difference-of-gradient Hessian check passed"
+                } else {
+                    "finite-difference KKT and Hessian checks passed"
+                },
             )
         } else {
             EvidenceQuality::Approximate {
@@ -4683,22 +5075,43 @@ impl OptimizerCertificate {
         }
     }
 
+    /// Record genuinely unassessed evidence without calling it a deliberate skip.
     pub fn mark_derivative_checks_not_assessed(&mut self, reason: impl Into<String>) {
-        let reason = reason.into();
-        remove_derivative_not_assessed_checks(&mut self.checks);
-        self.checks.push(CertificateCheck::NotAssessed {
-            reason: format!("free-gradient KKT check skipped: {reason}"),
-        });
-        self.checks.push(CertificateCheck::NotAssessed {
-            reason: format!("projected boundary-gradient KKT check skipped: {reason}"),
-        });
-        self.checks.push(CertificateCheck::NotAssessed {
-            reason: format!("active-subspace Hessian check skipped: {reason}"),
-        });
-        self.evidence.gradient = GradientEvidence {
-            method: EvidenceMethod::NotAssessed {
+        self.mark_derivative_checks_incomplete(IncompleteCheckEvidence::new(
+            "derivative_inspection",
+            IncompleteCheckStatus::NotAssessed,
+            reason,
+        ));
+    }
+
+    /// Replace derivative evidence with an explicit incomplete execution outcome.
+    /// The optimizer stop and boundary classification are preserved. The host may
+    /// attach elapsed time, budget and an attempt receipt when an audit times out.
+    pub fn mark_derivative_checks_incomplete(&mut self, mut evidence: IncompleteCheckEvidence) {
+        remove_derivative_checks(&mut self.checks);
+        evidence.check_name = "derivative_inspection".to_string();
+        let unavailable = matches!(
+            evidence.status,
+            IncompleteCheckStatus::Unavailable | IncompleteCheckStatus::TimedOut
+        );
+        let reason = evidence.reason.clone();
+        let method = if unavailable {
+            EvidenceMethod::NotAvailable {
                 reason: reason.clone(),
-            },
+            }
+        } else {
+            EvidenceMethod::NotAssessed {
+                reason: reason.clone(),
+            }
+        };
+        self.stationarity_decrement = None;
+        self.free_gradient_norm = None;
+        self.projected_gradient_norm = None;
+        self.hessian_eigen_min = None;
+        self.hessian_rank = None;
+        self.information_rank = None;
+        self.evidence.gradient = GradientEvidence {
+            method: method.clone(),
             raw_gradient_norm: None,
             scaled_gradient_norm: None,
             free_gradient_norm: None,
@@ -4706,23 +5119,22 @@ impl OptimizerCertificate {
             kkt_boundary_gradient_max: None,
         };
         self.evidence.hessian = HessianEvidence {
-            method: EvidenceMethod::NotAssessed {
-                reason: reason.clone(),
-            },
-            quality: EvidenceQuality::NotAssessed {
-                reason: reason.clone(),
+            method,
+            quality: if unavailable {
+                EvidenceQuality::Unavailable {
+                    reason: reason.clone(),
+                }
+            } else {
+                EvidenceQuality::NotAssessed {
+                    reason: reason.clone(),
+                }
             },
             min_eigenvalue: None,
             condition_number: None,
             rank: None,
         };
-        if self.evidence.optimizer_stop.acceptable_stop {
-            self.evidence.certification_quality = EvidenceQuality::Approximate {
-                reason: format!(
-                    "optimizer stop accepted; derivative KKT/Hessian inspection skipped: {reason}"
-                ),
-            };
-        }
+        self.evidence.certification_quality = EvidenceQuality::NotAssessed { reason };
+        self.checks.push(CertificateCheck::Incomplete { evidence });
     }
 
     /// Populate gradient and curvature evidence from a passing profiled
@@ -4962,7 +5374,12 @@ impl HessianEvidence {
 fn optimizer_stop_is_acceptable(return_value: &str) -> bool {
     matches!(
         optimizer_final_status_code(return_value),
-        "SUCCESS" | "FTOL_REACHED" | "XTOL_REACHED" | "STOPVAL_REACHED" | "RADIUS_REACHED"
+        "SUCCESS"
+            | "FTOL_REACHED"
+            | "XTOL_REACHED"
+            | "STOPVAL_REACHED"
+            | "RADIUS_REACHED"
+            | "GTOL_REACHED"
     )
 }
 
@@ -5006,12 +5423,39 @@ fn boundary_parameter_indices(
 
 fn remove_derivative_not_assessed_checks(checks: &mut Vec<CertificateCheck>) {
     checks.retain(|check| match check {
+        CertificateCheck::Incomplete { evidence } => !is_derivative_check(&evidence.check_name),
         CertificateCheck::NotAssessed { reason } => {
             !(reason.contains("gradient")
                 || reason.contains("Hessian")
                 || reason.contains("derivative"))
         }
         _ => true,
+    });
+}
+
+fn is_derivative_check(name: &str) -> bool {
+    matches!(
+        name,
+        "derivative_inspection"
+            | "free_gradient_kkt"
+            | "boundary_gradient_kkt"
+            | "active_subspace_hessian_psd"
+            | "active_subspace_hessian_rank"
+    )
+}
+
+fn remove_derivative_checks(checks: &mut Vec<CertificateCheck>) {
+    remove_derivative_not_assessed_checks(checks);
+    checks.retain(|check| {
+        !matches!(check, CertificateCheck::Failed { code, .. } if code == "profiled_optimum")
+            && !matches!(
+                check,
+                CertificateCheck::FreeGradientOk { .. }
+                    | CertificateCheck::BoundaryGradientOk { .. }
+                    | CertificateCheck::HessianPsdOnActiveSubspace { .. }
+                    | CertificateCheck::RankOk { .. }
+                    | CertificateCheck::DerivativeMismatch { .. }
+            )
     });
 }
 

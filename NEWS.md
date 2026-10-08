@@ -48,6 +48,28 @@
 * `summary()`/`inference_table(method = )` compute all coefficient rows in
   one engine call, and engine refits of the same model warm-start from the
   fitted theta.
+* `glmm()` fits every family/link pair the engine supports: `Gamma()` with
+  its default inverse link, `inverse.gaussian()` with `"inverse"`/`"log"`,
+  and `gaussian()` with `"log"`/`"inverse"`/`"sqrt"` (glmer parity tests).
+  Binomial cauchit/log/identity, Poisson identity, and inverse.gaussian's
+  default `1/mu^2` link are refused with a typed condition naming the
+  supported set.
+* Fits, refits, bootstraps and profiles can be interrupted (Ctrl-C/Esc):
+  the engine checks for a pending interrupt between optimizer evaluations
+  without longjmp-ing through Rust frames, and stops with a typed
+  `mm_interrupted` error.
+* New `mm_bootmer()` (`lme4::bootMer()` counterpart; a `boot`-compatible
+  result for `boot::boot.ci()`), `rePCA()`, `mm_lmlist()` (`lmList()`),
+  `mm_allfit()` (`allFit()`), and `mm_control(optCtrl = )` (lme4-style
+  optimizer controls, unknown names refused).
+* `compare(small, big, method = "kenward_roger")` (and `"satterthwaite"`)
+  gives pbkrtest's `KRmodcomp()`/`SATmodcomp()` F test for nested fixed
+  effects; `step()` gives lmerTest-style backward elimination for `mm_lmm`
+  fits (mixeff now exports a `step()` generic whose default is
+  `stats::step()`).
+* Fast examples no longer use `\dontrun{}`; the fit result's
+  per-observation vectors cross the bridge as R doubles instead of JSON and
+  are stored once in the fit object.
 
 ## Compatibility
 

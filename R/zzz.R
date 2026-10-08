@@ -21,6 +21,11 @@ mm_register_external_s3 <- function() {
     action = "append"
   )
   setHook(
+    packageEvent("lmerTest", "onLoad"),
+    function(...) mm_register_lmertest_s3(),
+    action = "append"
+  )
+  setHook(
     packageEvent("emmeans", "onLoad"),
     function(...) mm_register_emmeans_s3(),
     action = "append"
@@ -38,6 +43,9 @@ mm_register_external_s3 <- function() {
   }
   if ("emmeans" %in% loadedNamespaces()) {
     mm_register_emmeans_s3()
+  }
+  if ("lmerTest" %in% loadedNamespaces()) {
+    mm_register_lmertest_s3()
   }
   if ("generics" %in% loadedNamespaces()) {
     mm_register_broom_s3()
@@ -57,6 +65,19 @@ mm_register_lme4_s3 <- function() {
   registerS3method("ngrps", "mm_glmm", ngrps.mm_glmm, envir = ns)
   registerS3method("refit", "mm_lmm", refit.mm_lmm, envir = ns)
   registerS3method("refit", "mm_glmm", refit.mm_glmm, envir = ns)
+  registerS3method("rePCA", "mm_lmm", rePCA.mm_lmm, envir = ns)
+  registerS3method("rePCA", "mm_glmm", rePCA.mm_glmm, envir = ns)
+  invisible(TRUE)
+}
+
+mm_register_lmertest_s3 <- function() {
+  ns <- asNamespace("lmerTest")
+  if (exists("step", envir = ns, inherits = FALSE)) {
+    registerS3method("step", "mm_lmm", step.mm_lmm, envir = ns)
+  }
+  if (exists("get_model", envir = ns)) {
+    registerS3method("get_model", "mm_step", get_model.mm_step, envir = ns)
+  }
   invisible(TRUE)
 }
 

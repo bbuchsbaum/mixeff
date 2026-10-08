@@ -9,8 +9,19 @@
 #' @param ... Additional fitted `mm_lmm` objects.
 #' @param target Comparison target label.
 #' @param method `"auto"` / `"lrt"` for asymptotic likelihood-ratio rows,
-#'   `"aic"` for information criteria only, or `"bootstrap"` for a small
-#'   parametric-bootstrap LRT when `nsim > 0`.
+#'   `"aic"` for information criteria only, `"bootstrap"` for a small
+#'   parametric-bootstrap LRT when `nsim > 0`, or `"kenward_roger"` /
+#'   `"satterthwaite"` for pbkrtest's `KRmodcomp()` / `SATmodcomp()`: an F
+#'   test of the larger model's fixed effects restricted to the smaller
+#'   model's (two models with identical random effects, nested in their fixed
+#'   effects). The restriction matrix is built from the two design matrices
+#'   as pbkrtest does; the test runs on the REML fit of the larger model
+#'   (refitted by REML if it was fitted by ML, as pbkrtest does). The
+#'   engine's Kenward-Roger F is the unscaled statistic (pbkrtest's `FtestU`
+#'   row: same F and denominator df; the KR scaling factor is not applied
+#'   and is reported as `f_scaling = 1`). The F row
+#'   replaces the LRT row (`statistic_name = "F"`, `df` = numerator df,
+#'   `den_df` = denominator df); the full result is in `$fixed_f`.
 #' @param refit_for_comparison How to handle REML fits.
 #' @param nsim Number of bootstrap simulations for `method = "bootstrap"`.
 #' @param seed Optional bootstrap seed.
@@ -28,7 +39,8 @@ compare <- function(object, ...) {
 compare.mm_lmm <- function(object,
                            ...,
                            target = c("fixed_effects", "random_effects", "prediction"),
-                           method = c("auto", "lrt", "bootstrap", "aic"),
+                           method = c("auto", "lrt", "bootstrap", "aic",
+                                      "kenward_roger", "satterthwaite"),
                            refit_for_comparison = c("auto", "error", "ml"),
                            nsim = 0L,
                            seed = NULL) {
@@ -54,9 +66,26 @@ compare.mm_lmm <- function(object,
     )
   }
   mm_assert_comparable_lmm(fits)
+  fixed_f <- NULL
+  if (method %in% c("kenward_roger", "satterthwaite")) {
+    if (length(fits) != 2L) {
+      mm_abort(
+        message = sprintf("`method = \"%s\"` compares exactly two nested models.", method),
+        class = "mm_arg_error",
+        input = length(fits)
+      )
+    }
+    ord <- order(vapply(fits, function(x) length(x$beta), numeric(1)))
+    fixed_f <- mm_compare_fixed_f(fits[[ord[[1L]]]], fits[[ord[[2L]]]], method)
+  }
   prepared <- mm_prepare_comparison_fits(fits, refit_for_comparison)
   fits <- prepared$fits
-  table <- mm_compare_table(fits, method, prepared$refit)
+  table <- mm_compare_table(
+    fits, if (is.null(fixed_f)) method else "auto", prepared$refit
+  )
+  if (!is.null(fixed_f)) {
+    table <- mm_apply_fixed_f_to_table(table, fixed_f, method)
+  }
   bootstrap <- NULL
   if (identical(method, "bootstrap") && nsim > 0L && length(fits) == 2L) {
     bootstrap <- parametric_bootstrap(
@@ -100,7 +129,8 @@ compare.mm_lmm <- function(object,
     target = target,
     method = method,
     refit_for_comparison = refit_for_comparison,
-    bootstrap = bootstrap
+    bootstrap = bootstrap,
+    fixed_f = fixed_f
   )
   class(obj) <- "mm_model_comparison"
   obj

@@ -25,6 +25,8 @@ reference:
   - update.mm
   - refit
   - simulate.mm_lmm
+  - rePCA
+  - mm_lmlist
 - title: Inference
   desc: Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   contents:
@@ -43,6 +45,7 @@ reference:
   - inference_table
   - bootstrap_control
   - parametric_bootstrap
+  - mm_bootmer
 - title: Marginal effects & emmeans
   contents:
   - mm_grid
@@ -52,6 +55,9 @@ reference:
   contents:
   - compare
   - compare_covariance
+  - step
+  - step.mm_lmm
+  - mm_allfit
   - model_report
 - title: Audit-first verbs
   desc: Make the model's design, reductions, and optimizer state explicit.

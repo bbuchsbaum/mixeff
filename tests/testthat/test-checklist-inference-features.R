@@ -190,3 +190,162 @@ test_that("fixef/ranef/VarCorr defaults forward nlme and lme4 objects", {
   expect_equal(mixeff::getME(lm4, "theta"), lme4::getME(lm4, "theta"))
   expect_error(mixeff::fixef(1), class = "mm_arg_error")
 })
+
+test_that("mm_bootmer() is a bootMer()-like parametric bootstrap", {
+  fit <- mm_cif_fit(Reaction ~ Days + (1 | Subject))
+  b1 <- mm_bootmer(fit, fixef, nsim = 8, seed = 4)
+  b2 <- mm_bootmer(fit, fixef, nsim = 8, seed = 4)
+  expect_s3_class(b1, c("mm_bootmer", "boot"))
+  expect_identical(b1$t, b2$t)
+  expect_equal(dim(b1$t), c(8L, 2L))
+  expect_equal(b1$t0, fixef(fit))
+  expect_identical(attr(b1, "bootFail"), 0L)
+  expect_identical(attr(b1$seed, "kind"), as.list(RNGkind()))
+  set.seed(9)
+  b3 <- mm_bootmer(fit, function(m) c(sigma = m$sigma), nsim = 5, use.u = TRUE)
+  expect_true(all(is.finite(b3$t)))
+  skip_if_not_installed("boot")
+  ci <- boot::boot.ci(mm_bootmer(fit, fixef, nsim = 30, seed = 1),
+                      type = "perc", index = 2)
+  expect_true(all(is.finite(ci$percent[4:5])))
+  expect_error(mm_bootmer(fit, fixef, type = "semiparametric"),
+               class = "mm_inference_unavailable")
+})
+
+test_that("mm_bootmer() refuses GLMMs with a pointer to the GLMM bootstrap", {
+  set.seed(1)
+  d <- data.frame(y = rbinom(60, 1, 0.5), x = rnorm(60), g = gl(6, 10))
+  m <- glmm(y ~ x + (1 | g), d, binomial, method = "pirls_profiled",
+            control = mm_control(verbose = -1))
+  expect_error(mm_bootmer(m, fixef, nsim = 2), class = "mm_inference_unavailable")
+})
+
+test_that("rePCA() matches lme4::rePCA singular values", {
+  skip_if_not_installed("lme4")
+  fit <- mm_cif_fit(Reaction ~ Days + (Days | Subject))
+  ref <- lme4::rePCA(lme4::lmer(Reaction ~ Days + (Days | Subject),
+                                mm_cif_sleep()))
+  pc <- rePCA(fit)
+  expect_s3_class(pc, "prcomplist")
+  expect_named(pc, "Subject")
+  expect_equal(pc$Subject$sdev, ref$Subject$sdev, tolerance = 1e-4)
+  expect_type(summary(pc), "list")
+  # Two terms on the same factor are combined, as in lme4.
+  fit2 <- mm_cif_fit(Reaction ~ Days + (1 | Subject) + (0 + Days | Subject))
+  ref2 <- lme4::rePCA(lme4::lmer(Reaction ~ Days + (1 | Subject) +
+                                   (0 + Days | Subject), mm_cif_sleep()))
+  expect_equal(sort(rePCA(fit2)$Subject$sdev), sort(ref2$Subject$sdev),
+               tolerance = 1e-4)
+})
+
+test_that("mm_lmlist() matches lme4::lmList coefficients and intervals", {
+  skip_if_not_installed("lme4")
+  d <- mm_cif_sleep()
+  m <- mm_lmlist(Reaction ~ Days | Subject, d)
+  ref <- lme4::lmList(Reaction ~ Days | Subject, d)
+  expect_equal(as.matrix(coef(m)), as.matrix(coef(ref)),
+               check.attributes = FALSE)
+  expect_equal(sigma(m), sigma(ref))
+  ci <- confint(m, pool = FALSE)
+  expect_equal(unclass(ci)[, , "Days"], unclass(confint(ref))[, , "Days"],
+               check.attributes = FALSE, tolerance = 1e-8)
+  pooled <- confint(m)
+  expect_equal(dim(pooled), c(18L, 2L, 2L))
+  expect_true(all(pooled[, 1, ] < pooled[, 2, ]))
+  expect_equal(fixef(m), colMeans(coef(m)))
+  expect_error(mm_lmlist(Reaction ~ Days, d), class = "mm_formula_error")
+})
+
+test_that("mm_allfit() refits with each optimizer and reports failures", {
+  fit <- mm_cif_fit(Reaction ~ Days + (Days | Subject))
+  af <- mm_allfit(fit, optimizers = c("auto", "pattern_search", "bobyqa"))
+  s <- summary(af)
+  expect_true(s$which.OK[["auto"]])
+  expect_true(s$which.OK[["pattern_search"]])
+  # bobyqa needs the nlopt feature, which the CRAN build omits.
+  expect_false(s$which.OK[["bobyqa"]])
+  expect_match(s$msgs$bobyqa, "nlopt")
+  expect_equal(unname(s$llik[["pattern_search"]]), unname(s$llik[["auto"]]),
+               tolerance = 1e-6)
+  expect_equal(dim(s$fixef), c(2L, 2L))
+  expect_output(print(af), "succeeded")
+})
+
+test_that("mm_control(optCtrl = ) maps lme4 names and refuses unknown ones", {
+  ctl <- mm_control(optCtrl = list(maxfun = 500, xtol_abs = 1e-8, rhobeg = 0.5))
+  expect_identical(ctl$max_feval, 500L)
+  expect_identical(ctl$xtol_abs, 1e-8)
+  expect_identical(ctl$initial_step, 0.5)
+  expect_identical(unclass(mm_validate_control(ctl)), unclass(ctl))
+  expect_error(mm_control(optCtrl = list(check.conv.grad = 1)),
+               class = "mm_arg_error")
+  expect_error(mm_control(optCtrl = list(maxfun = -1)), class = "mm_arg_error")
+  fit <- lmm(Reaction ~ Days + (Days | Subject), mm_cif_sleep(),
+             control = mm_control(verbose = -1, optCtrl = list(maxfun = 5)))
+  expect_identical(fit_status(fit), "not_optimized")
+})
+
+test_that("step() performs lmerTest-style backward elimination", {
+  set.seed(1)
+  d <- data.frame(g = factor(rep(1:10, each = 6)), x = rep(0:5, 10),
+                  z = rnorm(60))
+  d$y <- 1 + 0.5 * d$x + rnorm(10)[d$g] + rnorm(60)
+  fit <- lmm(y ~ x + z + (1 | g) + (0 + x | g), d,
+             control = mm_control(verbose = -1))
+  s <- step(fit)
+  expect_s3_class(s, "mm_step")
+  expect_identical(deparse1(s$model$formula), "y ~ x + (1 | g)")
+  expect_identical(s$random$eliminated[[1L]], 1L)
+  skip_if_not_installed("lmerTest")
+  # lmerTest re-evaluates the fit's call, so inline the data into it.
+  ref_fit <- eval(bquote(lmerTest::lmer(y ~ x + z + (1 | g) + (0 + x | g),
+                                        data = .(d))))
+  ref <- lmerTest::step(ref_fit)
+  zf <- s$fixed[s$fixed$term == "z", ]
+  expect_equal(zf$p_value, ref$fixed["z", "Pr(>F)"], tolerance = 1e-4)
+  expect_equal(zf$F_value, ref$fixed["z", "F value"], tolerance = 1e-3)
+  expect_identical(deparse1(lmerTest::get_model(s)$formula), "y ~ x + (1 | g)")
+})
+
+test_that("interrupt demo uses the longjmp-free check", {
+  expect_identical(mixeff:::mm_interrupt_demo(1000L), 1000L)
+})
+
+test_that("compare(method = 'kenward_roger'/'satterthwaite') matches pbkrtest", {
+  skip_if_not_installed("pbkrtest")
+  d <- mm_cif_sleep()
+  d$g3 <- factor(d$Days %% 3)
+  small <- mm_cif_fit(Reaction ~ 1 + (Days | Subject), d)
+  big <- mm_cif_fit(Reaction ~ Days + g3 + (Days | Subject), d)
+  # pbkrtest re-evaluates the fits' calls: inline the data.
+  A <- eval(bquote(lme4::lmer(Reaction ~ 1 + (Days | Subject), data = .(d))))
+  B <- eval(bquote(lme4::lmer(Reaction ~ Days + g3 + (Days | Subject),
+                              data = .(d))))
+  kr <- compare(small, big, method = "kenward_roger")
+  ref <- pbkrtest::KRmodcomp(B, A)$test
+  expect_equal(kr$fixed_f$num_df, 3)
+  expect_equal(kr$fixed_f$den_df, ref["FtestU", "ddf"], tolerance = 1e-4)
+  # The engine reports the unscaled KR F (f_scaling = 1): pbkrtest's FtestU.
+  expect_equal(kr$fixed_f$statistic, ref["FtestU", "stat"], tolerance = 1e-4)
+  expect_equal(kr$fixed_f$p_value, ref["FtestU", "p.value"], tolerance = 1e-3)
+  last <- kr$table[nrow(kr$table), ]
+  expect_identical(last$statistic_name, "F")
+  expect_identical(last$comparison_method, "kenward_roger_f")
+  # Order of the two models does not matter.
+  kr2 <- compare(big, small, method = "kenward_roger")
+  expect_equal(kr2$fixed_f$statistic, kr$fixed_f$statistic)
+
+  sat <- compare(small, big, method = "satterthwaite")
+  sref <- pbkrtest::SATmodcomp(B, A)$test
+  expect_equal(sat$fixed_f$statistic, sref$statistic, tolerance = 1e-4)
+  expect_equal(sat$fixed_f$den_df, sref$ddf, tolerance = 1e-3)
+
+  # Different random effects or non-nested fixed effects are refused.
+  other <- mm_cif_fit(Reaction ~ Days + (1 | Subject), d)
+  expect_error(compare(small, other, method = "kenward_roger"),
+               class = "mm_inference_unavailable")
+  nn <- mm_cif_fit(Reaction ~ g3 + (Days | Subject), d)
+  nn2 <- mm_cif_fit(Reaction ~ Days + (Days | Subject), d)
+  expect_error(compare(nn, nn2, method = "kenward_roger"),
+               class = "mm_inference_unavailable")
+})

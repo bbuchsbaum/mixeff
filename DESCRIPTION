@@ -39,6 +39,7 @@ Imports:
     rlang,
     stats
 Suggests:
+    boot,
     broom,
     broom.mixed,
     generics,
@@ -52,6 +53,8 @@ Suggests:
     MASS,
     nlme,
     pbkrtest,
+    pkgload,
+    processx,
     rextendr,
     rmarkdown,
     testthat (>= 3.0.0)

@@ -113,8 +113,10 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
 #' Fixed-effect bootstrap control
 #'
 #' @param nsim Requested bootstrap replicate count.
-#' @param seed Optional integer seed. `NULL` leaves the Rust RNG seed
-#'   unspecified and records that state in row details.
+#' @param seed Optional integer seed. `NULL` (the default) draws a seed from
+#'   R's random number generator when the bootstrap runs, so `set.seed()`
+#'   makes the bootstrap reproducible; the seed used is recorded in the
+#'   result.
 #' @param failed_refit_policy How failed refits are accounted for. Stable Rust
 #'   wire labels are `"exclude"`, `"count_extreme"`, and `"abort"`.
 #'
@@ -147,6 +149,17 @@ bootstrap_control <- function(nsim = 999L,
     ),
     class = "mm_bootstrap_control"
   )
+}
+
+# Wire form of a bootstrap control. A NULL seed is resolved from R's RNG at
+# call time (as the GLMM bootstrap does) so `set.seed()` governs the engine's
+# otherwise entropy-seeded StdRng.
+mm_bootstrap_wire <- function(bootstrap) {
+  out <- unclass(bootstrap)
+  if (is.null(out$seed)) {
+    out$seed <- sample.int(.Machine$integer.max, 1L)
+  }
+  out
 }
 
 #' @method print mm_contrast
@@ -460,8 +473,8 @@ mm_match_random_effect_term <- function(terms, term) {
 
 mm_drop_random_term_formula <- function(fit, drop_index) {
   response <- mm_response_name(fit)
-  fixed <- setdiff(mm_fixed_effect_terms(fit), "1")
-  fixed_rhs <- if (length(fixed)) paste(fixed, collapse = " + ") else "1"
+  fixed <- mm_fixed_effect_terms(fit)
+  fixed_rhs <- mm_fixed_rhs_text(fixed, mm_fixed_terms_have_intercept(fixed))
   terms <- fit$artifact$semantic_model$random_terms %||% list()
   random <- vapply(terms, function(x) x$source_syntax$text %||% "", character(1))
   random <- random[nzchar(random)]
@@ -1149,14 +1162,14 @@ mm_inform_bootstrap_scale <- function(fit, bootstrap) {
 }
 
 mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
-  bridge <- mm_rust_fit_bridge_payload(fit)
+  bridge <- mm_rust_fit_bridge_payload(fit, warm_start = TRUE)
   if (identical(method, "bootstrap") && !is.null(bootstrap)) {
     if (!inherits(bootstrap, "mm_bootstrap_control")) {
       bootstrap <- do.call(bootstrap_control, as.list(bootstrap))
     }
     mm_inform_bootstrap_scale(fit, bootstrap)
     bootstrap_json <- jsonlite::toJSON(
-      unclass(bootstrap),
+      mm_bootstrap_wire(bootstrap),
       auto_unbox = TRUE,
       null = "null"
     )
@@ -1221,7 +1234,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
 }
 
 mm_rust_term_table <- function(fit, method, type = "III") {
-  bridge <- mm_rust_fit_bridge_payload(fit)
+  bridge <- mm_rust_fit_bridge_payload(fit, warm_start = TRUE)
   json <- tryCatch(
     mm_fixed_effect_term_json(
       bridge$formula_string,
@@ -1281,20 +1294,34 @@ mm_fixed_effect_term_type_label <- function(type) {
   )
 }
 
-mm_rust_fit_bridge_payload <- function(fit) {
+mm_rust_fit_bridge_payload <- function(fit, warm_start = FALSE) {
   spec_data <- mm_translate_data(fit$model_frame)
   formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- jsonlite::toJSON(
-    unclass(fit$control %||% mm_control()),
-    auto_unbox = TRUE,
-    null = "null"
-  )
   list(
     spec_data = spec_data,
     formula_string = formula_string,
     weights = mm_bridge_weights(fit$weights),
-    control_json = as.character(control_json)
+    control_json = mm_refit_control_json(fit, warm_start = warm_start)
   )
+}
+
+# Control JSON for an engine-side refit of `fit` itself. The user's
+# mm_control() is kept. With `warm_start = TRUE` (LMM refits of the SAME
+# model only) the optimizer starts from the fitted theta unless the user
+# supplied their own `start`, so the refit lands on the stored optimum in a
+# fraction of the evaluations. Callers that refit a DIFFERENT model from the
+# payload (reduced/null models, convergence verification) must not warm
+# start: theta dimensions differ, or a cold start is the point.
+mm_refit_control_json <- function(fit, warm_start = FALSE) {
+  control <- unclass(fit$control %||% mm_control())
+  if (isTRUE(warm_start) && inherits(fit, "mm_lmm") && is.null(control$start)) {
+    theta <- as.numeric(unlist(fit$theta %||% numeric(), use.names = FALSE))
+    if (length(theta) && all(is.finite(theta))) {
+      control$start <- theta
+    }
+  }
+  as.character(jsonlite::toJSON(control, auto_unbox = TRUE, null = "null",
+                                digits = NA))
 }
 
 mm_unavailable_effect_table <- function(term, method) {
@@ -1544,7 +1571,7 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
   L[1L, parameter] <- 1
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -1657,7 +1684,7 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
   mm_inform_bootstrap_scale(fit, bootstrap)
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -1726,7 +1753,7 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
   }
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -2018,7 +2045,7 @@ mm_profile_confint <- function(fit, parm = NULL, level = 0.95) {
 }
 
 mm_profile_confint_payload <- function(fit, level) {
-  bridge <- mm_rust_fit_bridge_payload(fit)
+  bridge <- mm_rust_fit_bridge_payload(fit, warm_start = TRUE)
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_profile_confint_json,

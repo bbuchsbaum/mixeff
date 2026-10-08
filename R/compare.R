@@ -176,7 +176,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
   bootstrap <- bootstrap_control(nsim = nsim, seed = seed)
   bridge <- mm_rust_fit_bridge_payload(alternative)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -949,10 +949,26 @@ mm_lrt_stat <- function(null, alternative) {
   pmax(0, deviance(null) - deviance(alternative))
 }
 
+# Fixed-effect right-hand side that preserves the fit's intercept choice: a
+# no-intercept model stays no-intercept (`0 + ...`) after a term is dropped.
+mm_fixed_terms_have_intercept <- function(terms) {
+  any(c("1", "(Intercept)") %in% terms)
+}
+
+mm_fixed_rhs_text <- function(terms, has_intercept) {
+  terms <- setdiff(terms, c("1", "0", "(Intercept)"))
+  if (has_intercept) {
+    if (length(terms)) paste(terms, collapse = " + ") else "1"
+  } else {
+    paste(c("0", terms), collapse = " + ")
+  }
+}
+
 mm_drop_fixed_term_formula <- function(fit, term) {
   response <- mm_response_name(fit)
-  fixed <- setdiff(mm_fixed_effect_terms(fit), c("1", term))
-  fixed_rhs <- if (length(fixed)) paste(fixed, collapse = " + ") else "1"
+  all_fixed <- mm_fixed_effect_terms(fit)
+  fixed_rhs <- mm_fixed_rhs_text(setdiff(all_fixed, term),
+                                 mm_fixed_terms_have_intercept(all_fixed))
   random <- vapply(
     fit$artifact$semantic_model$random_terms %||% list(),
     function(x) x$source_syntax$text %||% "",

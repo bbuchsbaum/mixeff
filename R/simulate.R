@@ -89,7 +89,9 @@ refit.mm_lmm <- function(object, newresp, ...) {
 #'   effects; `NA` simulates from the population-level mean only.
 #' @param ... Reserved for future methods.
 #'
-#' @return A data frame of simulated responses.
+#' @return A data frame of simulated responses. Following `stats::simulate`,
+#'   attribute `"seed"` is the `.Random.seed` in force before simulation when
+#'   `seed = NULL`, otherwise `seed` with the RNG kind as attribute `"kind"`.
 #'
 #' @importFrom stats simulate
 #' @method simulate mm_lmm
@@ -122,13 +124,17 @@ simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, re.form = NULL, ...) 
     )
   }
 
+  rng_state <- mm_rng_state(seed)
   out <- mm_with_seed(seed, {
     sims <- replicate(nsim, mm_simulate_once(object, target), simplify = FALSE)
     as.data.frame(stats::setNames(sims, paste0("sim_", seq_len(nsim))),
                   check.names = FALSE)
   })
   rownames(out) <- rownames(object$model_frame)
-  attr(out, "seed") <- seed
+  # stats::simulate convention (as in simulate.lm): with `seed = NULL` the
+  # attribute is the `.Random.seed` in force before simulating; otherwise the
+  # seed itself with the RNG kind recorded as attribute `kind`.
+  attr(out, "seed") <- rng_state
   attr(out, "mm_method") <- "r_side_gaussian_parametric"
   out
 }
@@ -267,6 +273,20 @@ mm_rmvnorm <- function(n, Sigma) {
   }
   colnames(out) <- colnames(Sigma)
   out
+}
+
+# The stats::simulate "seed" attribute: `.Random.seed` before simulation when
+# `seed` is NULL (initialising the RNG first, as simulate.lm does), else the
+# seed with `kind = as.list(RNGkind())`.
+mm_rng_state <- function(seed) {
+  if (!exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+    stats::runif(1)
+  }
+  if (is.null(seed)) {
+    get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  } else {
+    structure(seed, kind = as.list(RNGkind()))
+  }
 }
 
 mm_with_seed <- function(seed, expr) {

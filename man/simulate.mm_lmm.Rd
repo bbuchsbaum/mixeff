@@ -22,7 +22,10 @@ effects; \code{NA} simulates from the population-level mean only.}
 \item{...}{Reserved for future methods.}
 }
 \value{
-A data frame of simulated responses.
+A data frame of simulated responses. Following \code{stats::simulate},
+attribute \code{"seed"} is the \code{.Random.seed} in force before
+simulation when \code{seed = NULL}, otherwise \code{seed} with the RNG kind
+as attribute \code{"kind"}.
 }
 \description{
 Draws Gaussian responses from the stored fixed effects, random-effect

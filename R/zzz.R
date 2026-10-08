@@ -61,7 +61,7 @@ mm_register_lme4_s3 <- function() {
 }
 
 mm_register_emmeans_s3 <- function() {
-  emmeans::.emm_register("mm_lmm", "mixeff")
+  emmeans::.emm_register(c("mm_lmm", "mm_glmm"), "mixeff")
   invisible(TRUE)
 }
 

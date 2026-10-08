@@ -95,7 +95,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `getME`, `isSingular` | `getME()`, `is_singular()` | LMM only; `getME()` covers `X`, `Z`, `Zt`, `Lambda`, `Lambdat`, `theta`, `beta`, `y`, `mu`, `flist`, `cnms` |
 | `ngrps` | identical | |
 | `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
-| `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; registered automatically for `mm_lmm`, while `mm_glmm` needs mixeff attached; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a default profiled GLMM refuses inference through emmeans |
+| `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a default profiled GLMM refuses inference through emmeans |
 | `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package |
 
 ## Argument map for `lmm()` / `glmm()`

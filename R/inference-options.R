@@ -119,7 +119,7 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
       } else if (is_nb) {
         "certified Wald is unavailable for negative binomial (no joint route); use the bootstrap"
       } else {
-        "the default profiled estimator withholds Wald inference; the joint route certifies it"
+        "the profiled estimator withholds Wald inference; the joint route (the default) certifies it"
       }
     ),
     list(

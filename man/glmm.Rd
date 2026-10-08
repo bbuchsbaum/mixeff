@@ -14,7 +14,7 @@ glmm(
   subset = NULL,
   na.action = na.omit,
   contrasts = NULL,
-  method = c("pirls_profiled", "joint_laplace"),
+  method = c("joint_laplace", "pirls_profiled"),
   nAGQ = 1L,
   inference = c("auto", "none", "asymptotic", "bootstrap", "working_hessian"),
   control = mm_control(),
@@ -45,26 +45,33 @@ a numeric vector; values must be finite.}
 
 \item{subset, na.action, contrasts}{Reserved for future parity with \code{\link[=lmm]{lmm()}}.}
 
-\item{method}{GLMM estimation method. \code{"pirls_profiled"} is the default
-fast-PIRLS profiled path. \code{"joint_laplace"} requests the labeled joint
-Laplace route and requires \code{nAGQ <= 1}. The joint route tracks the lme4
-joint-Laplace reference far more closely than the profiled path on
-high-baseline models, at a higher optimizer cost; cap that cost with
-\code{mm_control(max_feval = )}. The default profiled path is \strong{not} glmer's
-estimator and its coefficients do not match \code{glmer()} exactly; when
-\code{method} is left at its default, \code{glmm()} emits an informational notice
-to that effect (suppress with \code{mm_control(verbose = -1)}). Use
-\code{method = "joint_laplace"} for glmer-equivalent estimates.}
+\item{method}{GLMM estimation method. \code{"joint_laplace"} (the default)
+is the joint Laplace route, matching \code{glmer()}'s default estimator, and
+requires \code{nAGQ = 1}; it certifies Wald standard errors, tests, and
+intervals. Its optimizer cost is higher than the profiled path's; cap it
+with \code{mm_control(max_feval = )}. \code{"pirls_profiled"} is the fast profiled
+PIRLS path (equivalent to lme4's \code{nAGQ = 0} fast estimate); its
+coefficients do not match \code{glmer(nAGQ = 1)} exactly and Wald inference
+is withheld. When \code{method} is not supplied and the request needs the
+profiled path -- a negative-binomial family (the joint route is not
+available for it yet), \code{nAGQ > 1}, or \code{inference = "working_hessian"} --
+\code{glmm()} uses \code{"pirls_profiled"}
+and says so with an \code{mm_estimator_notice} message (silence with
+\code{mm_control(verbose = -1)}). An explicit \code{method = "joint_laplace"} with a
+negative-binomial family or \code{nAGQ != 1} is refused, never swapped.}
 
-\item{nAGQ}{Number of adaptive Gauss-Hermite quadrature points. \code{1} is the
-Laplace setting. Values above \code{1} are allowed on the profiled path and
-are rejected for \code{method = "joint_laplace"} in the R wrapper.}
+\item{nAGQ}{Number of adaptive Gauss-Hermite quadrature points. \code{1} (the
+default) is the Laplace approximation. \code{0} requests lme4's PIRLS-only
+fast estimate and selects \code{method = "pirls_profiled"} (refused together
+with an explicit \code{method = "joint_laplace"}). Values above \code{1} run on the
+profiled path only and, as in lme4, require a model with a single scalar
+random-effect term (e.g. \code{(1 | g)}); other models are refused.}
 
 \item{inference}{Requested inference posture. The default \code{"auto"} keeps
 the certified contract: Wald standard errors, tests, and intervals are
 available only when the engine certifies them (currently
-\code{method = "joint_laplace"}); the default profiled estimator withholds
-them with a typed refusal. \code{"working_hessian"} is an explicit opt-in
+\code{method = "joint_laplace"}, the default); the profiled estimator
+withholds them with a typed refusal. \code{"working_hessian"} is an explicit opt-in
 that unlocks the UNCERTIFIED profiled working-Hessian approximation on
 every inference route; each resulting row is labelled
 \code{wald_z_working_hessian} with reliability \code{moderate}. Its standard
@@ -85,10 +92,11 @@ An object of class \code{mm_glmm}, also inheriting from \code{mm_fit} and
 \description{
 \code{glmm()} validates the R-side family/link request, compiles the model
 formula, and delegates the numerical fit to the upstream Rust
-\code{GeneralizedLinearMixedModel}. The default \code{method = "pirls_profiled"} is
-the labeled fast-PIRLS path. \code{method = "joint_laplace"} uses the upstream
-labeled joint Laplace route (\code{fast = FALSE}, \code{nAGQ = 1}) backed by the
-native dependency-light optimizer in this vendored build.
+\code{GeneralizedLinearMixedModel}. The default \code{method = "joint_laplace"} is
+the labeled joint Laplace route (\code{fast = FALSE}, \code{nAGQ = 1}), the estimator
+\code{lme4::glmer()} uses by default, backed by the native dependency-light
+optimizer in this vendored build. \code{method = "pirls_profiled"} is the
+labeled fast-PIRLS profiled path (lme4's \code{nAGQ = 0}).
 }
 \details{
 Optimization runs inside a single native call with no progress output: the
@@ -105,13 +113,14 @@ df <- data.frame(
   x = rnorm(120),
   g = factor(rep(seq_len(12), each = 10))
 )
+# Default: glmer-equivalent joint Laplace estimates.
 fit <- glmm(y ~ x + (1 | g), df, family = binomial(),
             control = mm_control(verbose = -1))
 fixef(fit)
-# glmer-equivalent (joint Laplace) estimates:
-fit_joint <- glmm(y ~ x + (1 | g), df, family = binomial(),
-                  method = "joint_laplace",
-                  control = mm_control(verbose = -1))
-fixef(fit_joint)
+# Fast profiled PIRLS path (lme4's nAGQ = 0):
+fit_fast <- glmm(y ~ x + (1 | g), df, family = binomial(),
+                 method = "pirls_profiled",
+                 control = mm_control(verbose = -1))
+fixef(fit_fast)
 
 }

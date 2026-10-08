@@ -96,7 +96,7 @@ test_that("GLMM confint refusal advice is actionable on the fit at hand", {
   d <- mk_ux_lmm_data()
   set.seed(97)
   d$yb <- rbinom(nrow(d), 1, 0.4)
-  fit <- glmm(yb ~ x + (1 | g), d, family = binomial(),
+  fit <- glmm(yb ~ x + (1 | g), d, family = binomial(), method = "pirls_profiled",
               control = mm_control(verbose = -1))
   # On the default profiled fit, "use asymptotic" would fail too; the
   # message must point at the joint_laplace refit instead.

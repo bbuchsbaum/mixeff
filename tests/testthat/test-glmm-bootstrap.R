@@ -11,7 +11,7 @@ mm_boot_binom_fit <- local({
       x <- rnorm(144)
       eta <- -0.3 + 0.8 * x + rep(rnorm(12, sd = 0.5), each = 12)
       d <- data.frame(y = rbinom(144, 1, plogis(eta)), x = x, g = g)
-      cache <<- glmm(y ~ x + (1 | g), d, family = binomial(),
+      cache <<- glmm(y ~ x + (1 | g), d, family = binomial(), method = "pirls_profiled",
                      control = mm_control(verbose = -1))
     }
     cache

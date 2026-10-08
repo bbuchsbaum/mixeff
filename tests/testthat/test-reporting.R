@@ -240,7 +240,7 @@ test_that("reporting_table and model_report work on GLMM fits", {
   utils::data("cbpp", package = "lme4", envir = env)
   g <- glmm(cbind(incidence, size - incidence) ~ period + (1 | herd),
             get("cbpp", envir = env), family = binomial(),
-            control = mm_control(verbose = -1))
+            method = "pirls_profiled", control = mm_control(verbose = -1))
 
   fixed <- rt_tbl(g, "fixed_effects", view = "audit")
   expect_true(all(c("term", "estimate", "method", "status") %in% names(fixed)))

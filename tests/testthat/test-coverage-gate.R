@@ -271,9 +271,16 @@ test_that("glmm validates family and nAGQ", {
          control = mm_control(verbose = -1)),
     class = "mm_arg_error"
   )
+  # nAGQ = 0 (lme4's fast estimate) is now accepted on the profiled path;
+  # negative or fractional nAGQ, and joint_laplace + nAGQ = 0, are refused.
+  expect_error(
+    glmm(y ~ x + (1 | g), df, family = binomial(), nAGQ = -1,
+         control = mm_control(verbose = -1)),
+    class = "mm_arg_error"
+  )
   expect_error(
     glmm(y ~ x + (1 | g), df, family = binomial(), nAGQ = 0,
-         control = mm_control(verbose = -1)),
+         method = "joint_laplace", control = mm_control(verbose = -1)),
     class = "mm_arg_error"
   )
   expect_error(

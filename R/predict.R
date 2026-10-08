@@ -212,7 +212,7 @@ residuals.mm_glmm <- function(object, type = c("response"), ...) {
 #' SEs are the fixed-effect Wald SE mapped through the link by the delta
 #' method; conditional (`re.form = NULL`) SEs and confidence bounds come from
 #' the engine prediction-variance payload. The engine certifies these rows
-#' for `method = "joint_laplace"` fits and for default `pirls_profiled` fits
+#' for `method = "joint_laplace"` fits and for `pirls_profiled` fits
 #' whose post-fit profiled-optimum certificate is issued (per-row status
 #' `"available"`). Uncertified fits (e.g. singular fits, or fits whose
 #' certificate fails) keep status `"degraded"`, and their conditional SEs and

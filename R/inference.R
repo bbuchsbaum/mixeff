@@ -927,7 +927,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' Two routes are available. `method = "asymptotic"` builds Wald intervals
 #' (`estimate +/- z * SE`) from the Rust fixed-effect inference table; it
 #' requires a certified fit (`method = "joint_laplace"`) or the explicit
-#' working-Hessian opt-in, and refuses the default profiled estimator with
+#' working-Hessian opt-in, and refuses the profiled (`pirls_profiled`) estimator with
 #' a typed reason. `method = "bootstrap"` runs a parametric bootstrap —
 #' each replicate simulates a response from the fitted model under fresh
 #' random-effect draws and refits the same (effective) estimator — and

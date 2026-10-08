@@ -21,6 +21,16 @@
   `residuals()`, `anova()`, `getME()`, `isSingular()` and `emmeans` as
   identical to lme4; it lists the actual differences.
 
+## lme4 parity and checklist completion
+
+* **Breaking:** `glmm()` now defaults to `method = "joint_laplace"` (glmer's
+  `nAGQ = 1` estimator, certified Wald inference). `method = "pirls_profiled"`
+  remains available explicitly, and `nAGQ = 0` selects it (lme4's fast
+  estimate). Without an explicit `method`, negative-binomial families,
+  `nAGQ > 1`, and `inference = "working_hessian"` use the profiled path with
+  an `mm_estimator_notice`; explicit `method = "joint_laplace"` requests for
+  them are refused.
+
 ## Compatibility
 
 * Fit-summary parsing accepts the additive `mixedmodels.fit_summary` 1.1.0

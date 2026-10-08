@@ -95,7 +95,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `getME`, `isSingular` | `getME()`, `is_singular()` | LMM only; `getME()` covers `X`, `Z`, `Zt`, `Lambda`, `Lambdat`, `theta`, `beta`, `y`, `mu`, `flist`, `cnms` |
 | `ngrps` | identical | |
 | `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
-| `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a default profiled GLMM refuses inference through emmeans |
+| `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a profiled (`pirls_profiled`) GLMM refuses inference through emmeans |
 | `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package |
 
 ## Argument map for `lmm()` / `glmm()`
@@ -111,7 +111,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | character predictors | converted to factors | sorted levels, as lme4's `factor()` conversion does |
 | numeric/character grouping (accepted silently) | coerced to factor | non-factor grouping columns are coerced to factor, announced via an `mm_grouping_coercion_notice`; silence it with `mm_control(verbose = -1)` |
 | `family = "binomial"` | `family = binomial()` | string families are not accepted |
-| `nAGQ` | `glmm(..., nAGQ=)` | `>1` on the profiled path and only for a single scalar random effect; `nAGQ = 0` is not accepted |
+| `nAGQ` | `glmm(..., nAGQ=)` | `1` (default) is joint Laplace, as in `glmer`; `nAGQ = 0` selects the profiled fast path (`method = "pirls_profiled"`, lme4's PIRLS-only estimate); `>1` runs on the profiled path only and, as in lme4, needs a single scalar random effect (selected with an `mm_estimator_notice` when `method` is not given) |
 | `control = lmerControl(optimizer=, optCtrl=)` | `mm_control(optimizer=, max_feval=, ...)` | the engine picks a default optimizer; `mm_control()` can override it or cap the evaluation budget |
 | `start` | `mm_control(start=)` | theta warm starts |
 
@@ -133,14 +133,18 @@ glmm(cbind(incidence, size - incidence) ~ period + (1 | herd),
      lme4::cbpp, family = binomial())
 ```
 
-**3. The default GLMM estimator is not glmer's.** `glmm()` defaults to a fast
-profiled (PIRLS) estimator whose coefficients do **not** match `glmer()`
-exactly; it prints a notice saying so. For glmer-equivalent (joint Laplace)
-estimates, ask for them:
+**3. The GLMM estimator.** `glmm()` defaults to `method = "joint_laplace"`,
+glmer's joint Laplace (`nAGQ = 1`) estimator, with certified Wald inference.
+The fast profiled (PIRLS) estimator — lme4's `nAGQ = 0` — is opt-in; its
+coefficients do **not** match `glmer(nAGQ = 1)` exactly. Negative-binomial
+families (no joint route yet), `nAGQ > 1`, and
+`inference = "working_hessian"` need the profiled path: without an explicit
+`method`, `glmm()` selects it and prints an `mm_estimator_notice` saying so.
 
 ```{r joint, eval = FALSE}
+glmm(y ~ x + (1 | g), data, family = binomial())   # joint Laplace (glmer)
 glmm(y ~ x + (1 | g), data, family = binomial(),
-     method = "joint_laplace")
+     method = "pirls_profiled")                      # fast path (nAGQ = 0)
 ```
 
 **4. `||` with a factor means full decorrelation.** In mixeff, `||` fixes
@@ -208,7 +212,7 @@ number without comment:
 | Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
 | Satterthwaite df at a boundary | lmerTest prints df anyway | refused with a reason; use bootstrap |
 | Prediction SE for an unseen grouping level | — | `NA` with the reason in `mm_reason` |
-| GLMM `confint()` | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (lowercase; lme4's `method = "Wald"` spelling is not accepted); parametric-bootstrap intervals via `method = "bootstrap"` on profiled-estimator fits (like `bootMer`; refused on `joint_laplace` fits at this engine pin); Wald routes refused on the default `pirls_profiled` fit |
+| GLMM `confint()` | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (lowercase; lme4's `method = "Wald"` spelling is not accepted); parametric-bootstrap intervals via `method = "bootstrap"` on profiled-estimator fits (like `bootMer`; refused on `joint_laplace` fits at this engine pin); Wald routes refused on `pirls_profiled` fits |
 
 Use `inference_options(fit)` to see, before you run anything, which inference
 routes are available on a given fit and why.

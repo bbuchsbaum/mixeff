@@ -2,10 +2,11 @@
 #'
 #' `glmm()` validates the R-side family/link request, compiles the model
 #' formula, and delegates the numerical fit to the upstream Rust
-#' `GeneralizedLinearMixedModel`. The default `method = "pirls_profiled"` is
-#' the labeled fast-PIRLS path. `method = "joint_laplace"` uses the upstream
-#' labeled joint Laplace route (`fast = FALSE`, `nAGQ = 1`) backed by the
-#' native dependency-light optimizer in this vendored build.
+#' `GeneralizedLinearMixedModel`. The default `method = "joint_laplace"` is
+#' the labeled joint Laplace route (`fast = FALSE`, `nAGQ = 1`), the estimator
+#' `lme4::glmer()` uses by default, backed by the native dependency-light
+#' optimizer in this vendored build. `method = "pirls_profiled"` is the
+#' labeled fast-PIRLS profiled path (lme4's `nAGQ = 0`).
 #'
 #' @param formula A two-sided lme4-style formula.
 #' @param data A `data.frame`.
@@ -23,24 +24,31 @@
 #' @param offset Optional fixed linear-predictor offset: a column of `data` or
 #'   a numeric vector; values must be finite.
 #' @param subset,na.action,contrasts Reserved for future parity with [lmm()].
-#' @param method GLMM estimation method. `"pirls_profiled"` is the default
-#'   fast-PIRLS profiled path. `"joint_laplace"` requests the labeled joint
-#'   Laplace route and requires `nAGQ <= 1`. The joint route tracks the lme4
-#'   joint-Laplace reference far more closely than the profiled path on
-#'   high-baseline models, at a higher optimizer cost; cap that cost with
-#'   `mm_control(max_feval = )`. The default profiled path is **not** glmer's
-#'   estimator and its coefficients do not match `glmer()` exactly; when
-#'   `method` is left at its default, `glmm()` emits an informational notice
-#'   to that effect (suppress with `mm_control(verbose = -1)`). Use
-#'   `method = "joint_laplace"` for glmer-equivalent estimates.
-#' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` is the
-#'   Laplace setting. Values above `1` are allowed on the profiled path and
-#'   are rejected for `method = "joint_laplace"` in the R wrapper.
+#' @param method GLMM estimation method. `"joint_laplace"` (the default)
+#'   is the joint Laplace route, matching `glmer()`'s default estimator, and
+#'   requires `nAGQ = 1`; it certifies Wald standard errors, tests, and
+#'   intervals. Its optimizer cost is higher than the profiled path's; cap it
+#'   with `mm_control(max_feval = )`. `"pirls_profiled"` is the fast profiled
+#'   PIRLS path (equivalent to lme4's `nAGQ = 0` fast estimate); its
+#'   coefficients do not match `glmer(nAGQ = 1)` exactly and Wald inference
+#'   is withheld. When `method` is not supplied and the request needs the
+#'   profiled path -- a negative-binomial family (the joint route is not
+#'   available for it yet), `nAGQ > 1`, or `inference = "working_hessian"` --
+#'   `glmm()` uses `"pirls_profiled"`
+#'   and says so with an `mm_estimator_notice` message (silence with
+#'   `mm_control(verbose = -1)`). An explicit `method = "joint_laplace"` with a
+#'   negative-binomial family or `nAGQ != 1` is refused, never swapped.
+#' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` (the
+#'   default) is the Laplace approximation. `0` requests lme4's PIRLS-only
+#'   fast estimate and selects `method = "pirls_profiled"` (refused together
+#'   with an explicit `method = "joint_laplace"`). Values above `1` run on the
+#'   profiled path only and, as in lme4, require a model with a single scalar
+#'   random-effect term (e.g. `(1 | g)`); other models are refused.
 #' @param inference Requested inference posture. The default `"auto"` keeps
 #'   the certified contract: Wald standard errors, tests, and intervals are
 #'   available only when the engine certifies them (currently
-#'   `method = "joint_laplace"`); the default profiled estimator withholds
-#'   them with a typed refusal. `"working_hessian"` is an explicit opt-in
+#'   `method = "joint_laplace"`, the default); the profiled estimator
+#'   withholds them with a typed refusal. `"working_hessian"` is an explicit opt-in
 #'   that unlocks the UNCERTIFIED profiled working-Hessian approximation on
 #'   every inference route; each resulting row is labelled
 #'   `wald_z_working_hessian` with reliability `moderate`. Its standard
@@ -70,14 +78,15 @@
 #'   x = rnorm(120),
 #'   g = factor(rep(seq_len(12), each = 10))
 #' )
+#' # Default: glmer-equivalent joint Laplace estimates.
 #' fit <- glmm(y ~ x + (1 | g), df, family = binomial(),
 #'             control = mm_control(verbose = -1))
 #' fixef(fit)
-#' # glmer-equivalent (joint Laplace) estimates:
-#' fit_joint <- glmm(y ~ x + (1 | g), df, family = binomial(),
-#'                   method = "joint_laplace",
-#'                   control = mm_control(verbose = -1))
-#' fixef(fit_joint)
+#' # Fast profiled PIRLS path (lme4's nAGQ = 0):
+#' fit_fast <- glmm(y ~ x + (1 | g), df, family = binomial(),
+#'                  method = "pirls_profiled",
+#'                  control = mm_control(verbose = -1))
+#' fixef(fit_fast)
 #'
 #' @importFrom stats na.omit
 #' @export
@@ -90,7 +99,7 @@ glmm <- function(formula,
                  subset = NULL,
                  na.action = na.omit,
                  contrasts = NULL,
-                 method = c("pirls_profiled", "joint_laplace"),
+                 method = c("joint_laplace", "pirls_profiled"),
                  nAGQ = 1L,
                  inference = c("auto", "none", "asymptotic", "bootstrap",
                                "working_hessian"),
@@ -106,7 +115,13 @@ glmm <- function(formula,
   inference <- match.arg(inference)
   control <- mm_validate_control(control)
   family_info <- mm_glmm_family_info(family)
-  nAGQ <- mm_glmm_validate_nagq(nAGQ, method)
+  # Default estimator: joint Laplace (glmer nAGQ = 1). Requests the joint
+  # route cannot serve resolve to the profiled path ANNOUNCED, never silently
+  # (see mm_glmm_resolve_method); explicit requests are honoured or refused.
+  resolved <- mm_glmm_resolve_method(method, method_explicit, family_info,
+                                     nAGQ, inference)
+  method <- resolved$method
+  nAGQ <- mm_glmm_validate_nagq(resolved$nAGQ, method)
 
   if (identical(family_info$family, "negative_binomial") &&
       identical(method, "joint_laplace")) {
@@ -115,9 +130,10 @@ glmm <- function(formula,
     # clear message instead of the engine's internal optimizer-guard error.
     mm_abort(
       message = paste0(
-        "Negative-binomial GLMMs support the default profiled method only; ",
+        "Negative-binomial GLMMs support the profiled method only; ",
         "method = \"joint_laplace\" is not yet available for this family. ",
-        "Drop the method argument to use the profiled fit."
+        "Use method = \"pirls_profiled\" (or drop the method argument, which ",
+        "selects it with a notice)."
       ),
       class = "mm_inference_unavailable",
       reason_code = "nb_joint_laplace_unavailable",
@@ -164,8 +180,8 @@ glmm <- function(formula,
     # method, surface that the default profiled path is NOT glmer's estimator
     # and point to the certified glmer-equivalent route. Suppressed by
     # mm_control(verbose = -1) (as used in loops/bootstrap).
-    if (!method_explicit && identical(method, "pirls_profiled")) {
-      mm_inform(mm_glmm_profiled_default_notice(), class = "mm_estimator_notice")
+    if (!is.null(resolved$notice)) {
+      mm_inform(resolved$notice, class = "mm_estimator_notice")
     }
     if (identical(method, "joint_laplace")) {
       # The joint route runs to an engine-chosen evaluation budget inside a
@@ -251,6 +267,9 @@ glmm <- function(formula,
     engine_family  = engine_family,
     method         = as.character(fit_result$method %||% method),
     nAGQ           = as.integer(fit_result$n_agq %||% nAGQ),
+    # lme4's nAGQ = 0 maps to the profiled path with nAGQ = 1 on the wire;
+    # keep the caller's request on record.
+    nAGQ_requested = if (isTRUE(resolved$nagq0)) 0L else as.integer(nAGQ),
     inference_request = inference,
     control        = control,
     vars           = spec$vars,
@@ -318,14 +337,62 @@ mm_glmm_substitution_notice <- function(sub) {
   )
 }
 
-mm_glmm_profiled_default_notice <- function() {
-  paste0(
-    "glmm() is using the default method = \"pirls_profiled\": a fast profiled ",
-    "(PIRLS) approximation whose coefficients do NOT exactly match ",
-    "lme4::glmer(). For glmer-equivalent (joint Laplace) estimates, use ",
-    "method = \"joint_laplace\". Silence this message with ",
-    "mm_control(verbose = -1)."
-  )
+# Resolve the estimator. `method` defaults to "joint_laplace" (glmer's
+# nAGQ = 1 Laplace estimate). When `method` was NOT given and the request
+# needs the profiled path, the profiled path is used and announced (typed
+# `mm_estimator_notice`, silenced by verbose = -1):
+#   * negative-binomial families (the joint route is not wired for NB);
+#   * nAGQ > 1 (adaptive quadrature runs on the profiled path only);
+#   * inference = "working_hessian" (an opt-in for the profiled estimator's
+#     uncertified working-Hessian Wald approximation);
+#   * nAGQ = 0 (lme4's PIRLS-only fast estimate == the profiled path).
+# Explicit method requests are never swapped: joint_laplace with NB or with
+# nAGQ != 1 is refused downstream.
+mm_glmm_resolve_method <- function(method, method_explicit, family_info, nAGQ,
+                                   inference = "auto") {
+  nagq0 <- is.numeric(nAGQ) && length(nAGQ) == 1L && !is.na(nAGQ) &&
+    nAGQ == 0
+  if (nagq0) {
+    if (method_explicit && identical(method, "joint_laplace")) {
+      mm_abort(
+        message = paste0(
+          "`nAGQ = 0` requests lme4's PIRLS-only fast estimate, which is ",
+          "method = \"pirls_profiled\"; it cannot be combined with ",
+          "method = \"joint_laplace\"."
+        ),
+        class = "mm_arg_error",
+        input = nAGQ
+      )
+    }
+    # nAGQ = 0 is a request for the fast path itself, so no notice is needed
+    # beyond the documentation: it is what the user asked for.
+    return(list(method = "pirls_profiled", nAGQ = 1L, notice = NULL,
+                nagq0 = TRUE))
+  }
+  out <- list(method = method, nAGQ = nAGQ, notice = NULL, nagq0 = FALSE)
+  if (method_explicit) return(out)
+  is_nb <- identical(family_info$family, "negative_binomial")
+  agq <- is.numeric(nAGQ) && length(nAGQ) == 1L && !is.na(nAGQ) && nAGQ > 1
+  wh <- identical(inference, "working_hessian")
+  if (is_nb || agq || wh) {
+    out$method <- "pirls_profiled"
+    why <- if (is_nb) {
+      "the joint Laplace route is not yet available for negative-binomial families"
+    } else if (agq) {
+      sprintf("adaptive quadrature (nAGQ = %d) runs on the profiled path only",
+              as.integer(nAGQ))
+    } else {
+      paste0("inference = \"working_hessian\" is the profiled estimator's ",
+             "opt-in approximation")
+    }
+    out$notice <- paste0(
+      "glmm() is using method = \"pirls_profiled\" instead of the default ",
+      "\"joint_laplace\": ", why, ". The profiled (PIRLS) estimate does not ",
+      "exactly match lme4::glmer(). Pass method = \"pirls_profiled\" to make ",
+      "this explicit, or silence this message with mm_control(verbose = -1)."
+    )
+  }
+  out
 }
 
 mm_glmm_family_info <- function(family) {
@@ -563,9 +630,10 @@ mm_glmm_validate_weights <- function(x, data, label, positive = TRUE) {
 }
 
 mm_glmm_validate_nagq <- function(nAGQ, method) {
-  if (!is.numeric(nAGQ) || length(nAGQ) != 1L || is.na(nAGQ) || nAGQ < 1) {
+  if (!is.numeric(nAGQ) || length(nAGQ) != 1L || is.na(nAGQ) || nAGQ < 1 ||
+      nAGQ != round(nAGQ)) {
     mm_abort(
-      message = "`nAGQ` must be a single positive integer.",
+      message = "`nAGQ` must be 0 or a single positive integer.",
       class = "mm_arg_error",
       input = nAGQ
     )
@@ -573,7 +641,11 @@ mm_glmm_validate_nagq <- function(nAGQ, method) {
   nAGQ <- as.integer(nAGQ)
   if (identical(method, "joint_laplace") && nAGQ > 1L) {
     mm_abort(
-      message = "`method = \"joint_laplace\"` requires `nAGQ <= 1`.",
+      message = paste0(
+        "`method = \"joint_laplace\"` requires `nAGQ = 1`; adaptive ",
+        "quadrature (nAGQ > 1) is available with method = \"pirls_profiled\" ",
+        "for a single scalar random effect."
+      ),
       class = "mm_arg_error",
       input = nAGQ
     )

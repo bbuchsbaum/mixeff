@@ -75,7 +75,7 @@ mm_compare_fixed_f <- function(small, big, method) {
   } else {
     big
   }
-  bridge <- mm_rust_fit_bridge_payload(fit_kr, warm_start = TRUE)
+  bridge <- mm_rust_fit_bridge_payload(fit_kr)
   rownames(L) <- paste0("restriction_", seq_len(nrow(L)))
   json <- tryCatch(
     mm_fixed_effect_joint_test_json(

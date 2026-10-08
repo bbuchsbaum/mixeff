@@ -1163,7 +1163,7 @@ mm_inform_bootstrap_scale <- function(fit, bootstrap) {
 }
 
 mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
-  bridge <- mm_rust_fit_bridge_payload(fit, warm_start = TRUE)
+  bridge <- mm_rust_fit_bridge_payload(fit)
   if (identical(method, "bootstrap") && !is.null(bootstrap)) {
     if (!inherits(bootstrap, "mm_bootstrap_control")) {
       bootstrap <- do.call(bootstrap_control, as.list(bootstrap))
@@ -1235,7 +1235,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
 }
 
 mm_rust_term_table <- function(fit, method, type = "III") {
-  bridge <- mm_rust_fit_bridge_payload(fit, warm_start = TRUE)
+  bridge <- mm_rust_fit_bridge_payload(fit)
   json <- tryCatch(
     mm_fixed_effect_term_json(
       bridge$formula_string,
@@ -1307,12 +1307,15 @@ mm_rust_fit_bridge_payload <- function(fit, warm_start = FALSE) {
 }
 
 # Control JSON for an engine-side refit of `fit` itself. The user's
-# mm_control() is kept. With `warm_start = TRUE` (LMM refits of the SAME
-# model only) the optimizer starts from the fitted theta unless the user
-# supplied their own `start`, so the refit lands on the stored optimum in a
-# fraction of the evaluations. Callers that refit a DIFFERENT model from the
-# payload (reduced/null models, convergence verification) must not warm
-# start: theta dimensions differ, or a cold start is the point.
+# mm_control() is kept. Refits that recompute quantities of the stored fit
+# (contrasts, predictions, profiles) deliberately do NOT warm start: a cold
+# start with the same control replays the original optimizer path and lands
+# on the identical optimum, whereas a warm start from the fitted theta stops
+# at a point that differs at the optimizer tolerance (~1e-6 relative), so
+# summary()/predict(newdata) would no longer reproduce fixef()/fitted(); it
+# also saved < 10% of the refit time on the benchmarks. `warm_start = TRUE`
+# (start from the fitted theta unless the user set `start`) is for resampling
+# refits of the same model.
 mm_refit_control_json <- function(fit, warm_start = FALSE) {
   control <- unclass(fit$control %||% mm_control())
   if (isTRUE(warm_start) && inherits(fit, "mm_lmm") && is.null(control$start)) {
@@ -2046,7 +2049,7 @@ mm_profile_confint <- function(fit, parm = NULL, level = 0.95) {
 }
 
 mm_profile_confint_payload <- function(fit, level) {
-  bridge <- mm_rust_fit_bridge_payload(fit, warm_start = TRUE)
+  bridge <- mm_rust_fit_bridge_payload(fit)
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_profile_confint_json,

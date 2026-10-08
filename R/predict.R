@@ -535,7 +535,7 @@ mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
 
   spec_data <- mm_translate_data(fit$model_frame)
   formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- mm_refit_control_json(fit, warm_start = TRUE)
+  control_json <- mm_refit_control_json(fit)
   new_data <- mm_translate_data(newdata)
 
   json <- tryCatch(
@@ -685,7 +685,7 @@ mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
   spec_data <- mm_translate_data(fit$model_frame)
   new_data <- mm_translate_data(se_data)
-  control_json <- mm_refit_control_json(fit, warm_start = TRUE)
+  control_json <- mm_refit_control_json(fit)
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_predict_new_variance_json,
@@ -741,7 +741,7 @@ mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, l
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
   spec_data <- mm_translate_data(fit$model_frame)
   new_data <- mm_translate_data(se_data)
-  control_json <- mm_refit_control_json(fit, warm_start = TRUE)
+  control_json <- mm_refit_control_json(fit)
   json <- tryCatch(
     .Call(
       wrap__mm_glmm_predict_new_variance_json,

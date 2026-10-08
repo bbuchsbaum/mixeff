@@ -80,7 +80,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 |------|--------|-------|
 | `lmer(y ~ x + (x \| g), data)` | `lmm(y ~ x + (x \| g), data)` | same formula language, incl. `(x\|\|g)`, `(1\|g1/g2)`, crossed |
 | `glmer(y ~ ..., family = binomial)` | `glmm(y ~ ..., family = binomial())` | pass a family **object** (`binomial()`), not a string |
-| `lmerControl(...)` / `glmerControl(...)` | `mm_control(optimizer=, max_feval=, verbose=, start=)` | no `optCtrl` / `check.conv.*`; use `verify_convergence()` after the fit |
+| `lmerControl(...)` / `glmerControl(...)` | `mm_control(optimizer=, max_feval=, verbose=, start=, optCtrl=)` | `optCtrl` names `maxfun`/`maxeval`, `ftol_*`, `xtol_*`, `rhobeg` are mapped (others refused); no `check.conv.*` (no post-hoc convergence warnings): use `optimizer_certificate()` / `verify_convergence()` |
 | `fixef`, `sigma`, `vcov` | same generics, same values | |
 | `ranef` | same generic | `condVar = TRUE` is LMM-only |
 | `coef` | same generic, **different shape** | only columns that carry a random effect get fixed + random; fixed-only columns are omitted (lme4 repeats them) |
@@ -97,6 +97,11 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
 | `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4's; mixeff's status/reliability/reason audit columns do not survive the emmeans trip, and a profiled (`pirls_profiled`) GLMM refuses inference through emmeans |
 | `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package |
+| `bootMer(m, FUN, nsim)` | `mm_bootmer(fit, FUN, nsim)` | LMM; a `boot`-compatible result for `boot::boot.ci()`; `type = "semiparametric"` refused |
+| `rePCA`, `lmList`, `allFit` | `rePCA()`, `mm_lmlist()`, `mm_allfit()` | `mm_*` names avoid masking lme4's non-generic functions |
+| `pbkrtest::KRmodcomp(big, small)` | `compare(small, big, method = "kenward_roger")` | also `"satterthwaite"` (`SATmodcomp`); KR F is pbkrtest's unscaled `FtestU` |
+| `lmerTest::step(m)` | `step(fit)` | random terms tested with the boundary-corrected LRT; whole terms only |
+| `nlmer`, `devFunOnly = TRUE` | not provided | nonlinear mixed models are a non-goal; the engine owns the objective |
 
 ## Argument map for `lmm()` / `glmm()`
 
@@ -112,7 +117,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | numeric/character grouping (accepted silently) | coerced to factor | non-factor grouping columns are coerced to factor, announced via an `mm_grouping_coercion_notice`; silence it with `mm_control(verbose = -1)` |
 | `family = "binomial"` | `family = binomial()` | string families are not accepted |
 | `nAGQ` | `glmm(..., nAGQ=)` | `1` (default) is joint Laplace, as in `glmer`; `nAGQ = 0` selects the profiled fast path (`method = "pirls_profiled"`, lme4's PIRLS-only estimate); `>1` runs on the profiled path only and, as in lme4, needs a single scalar random effect (selected with an `mm_estimator_notice` when `method` is not given) |
-| `control = lmerControl(optimizer=, optCtrl=)` | `mm_control(optimizer=, max_feval=, ...)` | the engine picks a default optimizer; `mm_control()` can override it or cap the evaluation budget |
+| `control = lmerControl(optimizer=, optCtrl=)` | `mm_control(optimizer=, max_feval=, optCtrl=, ...)` | the engine picks a default optimizer; `mm_control()` can override it or cap the evaluation budget |
 | `start` | `mm_control(start=)` | theta warm starts |
 
 ## Four differences to check when porting

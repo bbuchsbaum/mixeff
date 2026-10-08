@@ -223,7 +223,7 @@ mm_cond_var_postvars <- function(fit) {
 mm_compute_cond_var_postvars <- function(fit) {
   spec_data <- mm_translate_data(fit$model_frame)
   formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- mm_refit_control_json(fit, warm_start = TRUE)
+  control_json <- mm_refit_control_json(fit)
 
   json <- tryCatch(
     .Call(

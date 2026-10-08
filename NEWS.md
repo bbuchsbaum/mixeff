@@ -46,8 +46,9 @@
   forward nlme (`lme`, `lmList`, `gls`) and lme4 objects to the owning
   package's generic, so attaching mixeff no longer breaks nlme fits.
 * `summary()`/`inference_table(method = )` compute all coefficient rows in
-  one engine call, and engine refits of the same model warm-start from the
-  fitted theta.
+  one engine call instead of one refit per coefficient. Engine refits keep
+  the fit's full `mm_control()` (a user `start` is no longer rounded to 4
+  digits on the wire).
 * `glmm()` fits every family/link pair the engine supports: `Gamma()` with
   its default inverse link, `inverse.gaussian()` with `"inverse"`/`"log"`,
   and `gaussian()` with `"log"`/`"inverse"`/`"sqrt"` (glmer parity tests).

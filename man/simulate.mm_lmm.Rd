@@ -32,7 +32,10 @@ A data frame with one column per simulation (\code{sim_1}, ...), rows
 named like the model frame. For a binomial \code{cbind()} fit each column is a
 two-column matrix. Attributes \code{seed}, \code{mm_method} and \code{mm_re_form} record
 the seed, the simulation route, and the resolved conditioning
-(\code{"unconditional"} or \code{"conditional"}).
+(\code{"unconditional"}, \code{"conditional"} or \code{"partial"}). Following
+\code{stats::simulate}, attribute \code{"seed"} is the \code{.Random.seed} in force
+before simulation when \code{seed = NULL}, otherwise \code{seed} with the RNG kind
+as attribute \code{"kind"}.
 }
 \description{
 Draws responses from a fitted \code{mm_lmm} or \code{mm_glmm} following the

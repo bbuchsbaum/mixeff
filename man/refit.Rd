@@ -39,6 +39,10 @@ output of \code{\link[=simulate]{simulate()}} with \code{nsim = 1}. For binomial
 two-column \verb{(successes, failures)} matrix (the shape \code{simulate()} returns
 for a \code{cbind()} response; the trial counts become the new prior weights),
 a two-level factor, or a logical vector.
+
+As in lme4, \code{newresp} is on the scale of the model's response: for a
+transformed response such as \code{log(y) ~ ...} it replaces \code{log(y)}, and the
+refit's formula names it \code{.mm_refit_response}.
 }
 \examples{
 set.seed(1)

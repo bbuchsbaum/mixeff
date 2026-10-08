@@ -45,8 +45,7 @@ no denominator df or p-values). Supply \code{ddf} or \code{method}, not both.}
 }
 \value{
 A data frame of class \code{c("mm_anova", "anova", "data.frame")} for
-one model, or \code{c("mm_anova_comparison", "anova", "data.frame")} for
-several.
+one model, or \code{c("mm_anova_comparison", "mm_model_comparison", "anova", "data.frame")} for several.
 }
 \description{
 With no extra models, \code{anova()} returns a term-level F-test table for

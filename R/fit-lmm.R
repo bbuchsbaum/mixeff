@@ -36,8 +36,10 @@
 #' @details
 #' Optimization runs inside a single native call with no progress output: the
 #' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
-#' before the fitted result returns, and the call cannot be interrupted from
-#' R. Evaluation budgets are bounded (a bounded budget caps optimizer
+#' before the fitted result returns. The fit checks for a user interrupt
+#' (Ctrl-C / Esc) between optimizer evaluations and stops with a typed
+#' `mm_interrupted` error (the check happens at evaluation boundaries, so a
+#' single very expensive evaluation finishes first). Evaluation budgets are bounded (a bounded budget caps optimizer
 #' iterations; it does not prove every native evaluation terminates); runtime on
 #' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_lmm`, also inheriting from `mm_fit` and
@@ -131,7 +133,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
     mm_abort_from_bridge(json, formula = formula_string)
   }
 
-  fit_result <- mm_json_parse_lmm_fit(json)
+  fit_result <- mm_bridge_fit_result(json, mm_json_parse_lmm_fit)
   fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
   beta <- mm_named_numeric(fit_result$beta, fit_result$beta_names)
@@ -151,7 +153,9 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
     model_frame    = spec$model_frame,
     weights        = weights,
     artifact       = artifact,
-    fit            = fit_result,
+    # Raw payload minus the n-length vectors, which are stored once below.
+    fit            = fit_result[setdiff(names(fit_result),
+                                        c("fitted", "fixed_fitted", "residuals"))],
     fit_summary    = fit_summary,
     schema         = mm_object_schema(artifact),
     rust_handle    = NULL,
@@ -518,6 +522,16 @@ mm_lmm_weights <- function(expr, data, enclos) {
     )
   }
   as.numeric(weights)
+}
+
+# The fit primitives return list(json = <payload>, <n-length doubles>): the
+# per-observation vectors cross as R doubles instead of JSON text. Older
+# engines returned the JSON string alone (vectors inside it); accept both.
+mm_bridge_fit_result <- function(res, parser) {
+  if (is.character(res)) return(parser(res))
+  out <- parser(res$json)
+  for (nm in setdiff(names(res), "json")) out[[nm]] <- res[[nm]]
+  out
 }
 
 mm_bridge_weights <- function(weights) {

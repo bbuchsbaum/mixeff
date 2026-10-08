@@ -187,6 +187,8 @@ mm_glmm_family_from_info <- function(info) {
     binomial = stats::binomial(link = link),
     poisson  = stats::poisson(link = link),
     gamma    = stats::Gamma(link = link),
+    inverse_gaussian = stats::inverse.gaussian(link = link),
+    gaussian = stats::gaussian(link = link),
     # NB carries its theta mode in family_info (see mm_glmm_family_info /
     # glmm()'s post-fit theta record): `nb_theta_estimated` stays TRUE for
     # estimate-mode fits even though `nb_theta` holds the fitted value, so

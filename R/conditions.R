@@ -22,6 +22,10 @@
 #' this", not "you typed it wrong" — so plain argument validation raises
 #' `mm_arg_error`, never the domain-refusal classes.
 #'
+#' `mm_interrupted` is raised when the user interrupts (Ctrl-C / Esc) a
+#' long native computation: fits, refits, bootstraps, and profiles check for
+#' a pending interrupt between optimizer evaluations and stop cleanly.
+#'
 #' @keywords internal
 #' @name mm-conditions
 NULL
@@ -54,6 +58,14 @@ mm_abort <- function(message,
                      ...,
                      call = rlang::caller_env(),
                      parent = NULL) {
+  # A user interrupt (Ctrl-C) observed inside a native fit loop returns as an
+  # engine error ("Operation interrupted: ..."); whatever verb surfaced it,
+  # it carries the `mm_interrupted` class so callers can tell it apart.
+  if (is.character(message) &&
+      any(grepl("Operation interrupted", message, fixed = TRUE)) &&
+      !"mm_interrupted" %in% class) {
+    class <- c("mm_interrupted", class)
+  }
   rlang::abort(
     message = message,
     class = c(class, "mm_condition"),

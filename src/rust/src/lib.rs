@@ -5,8 +5,10 @@ use mixeff_rs::compiler::{
     FixedEffectTestMethod, FIXED_EFFECT_INFERENCE_TABLE_SCHEMA,
     FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION,
 };
+use mixeff_rs::error::MixedModelError;
 use mixeff_rs::formula::parse_formula;
 use mixeff_rs::model::linear::ConvergenceVerificationOptions;
+use mixeff_rs::model::FitProgressCallback;
 use mixeff_rs::model::{
     parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
     BootstrapSeedRecord, BootstrapTarget, Family, FitOptions, FitToleranceOverrides,
@@ -191,28 +193,57 @@ const KNOWN_SCHEMAS: &[(&str, &str)] = &[
 // ---------------------------------------------------------------------------
 // Interrupt bridge
 //
-// extendr_api 0.9 does not wrap R_CheckUserInterrupt; declare the binding
-// directly. Calling it inside a long-running Rust loop gives R a chance to
-// terminate the call when the user presses Ctrl-C. R_CheckUserInterrupt
-// longjmps out to R's error handler when a pending interrupt is observed,
-// so callers do not need to handle a return value.
-//
-// Phase 0 ships only the bridge primitive plus a tiny demo (`mm_interrupt_demo`).
-// Phase 1+ will use the same hook from inside `lmm()` / `glmm()` fit loops
-// so that long PLS / PIRLS optimizations remain interruptible.
+// R_CheckUserInterrupt() longjmps to R's top level when an interrupt is
+// pending. Calling it directly from Rust would unwind through Rust frames
+// without running destructors (undefined behaviour for Rust, and it leaks
+// the engine state). Instead it is called inside R_ToplevelExec(), which
+// catches the jump and reports it as FALSE: the Rust side only ever sees a
+// boolean, and the engine's progress-callback hook turns it into
+// MixedModelError::Interrupted, which returns through normal `Result`
+// propagation. The R layer re-raises it as a typed `mm_interrupted`
+// condition.
 
 extern "C" {
     fn R_CheckUserInterrupt();
+    fn R_ToplevelExec(
+        fun: Option<unsafe extern "C" fn(*mut std::os::raw::c_void)>,
+        data: *mut std::os::raw::c_void,
+    ) -> std::os::raw::c_int;
 }
 
+unsafe extern "C" fn check_interrupt_trampoline(_data: *mut std::os::raw::c_void) {
+    R_CheckUserInterrupt();
+}
+
+/// `true` when the user has requested an interrupt (Ctrl-C / Esc). Never
+/// longjmps. Must be called from the R main thread (the engine runs the fit
+/// loops on the calling thread).
 #[inline]
-fn check_user_interrupt() {
-    // SAFETY: R_CheckUserInterrupt is a stable, side-effect-only R API
-    // function; the only thing it does on a pending interrupt is
-    // longjmp out, which unwinds the Rust stack on the way to R's
-    // error handler. No locals to drop because we're at a clean
-    // suspension point.
-    unsafe { R_CheckUserInterrupt() };
+fn r_interrupt_pending() -> bool {
+    // SAFETY: R_ToplevelExec runs the trampoline in a fresh top-level
+    // context and returns FALSE (0) if it was exited by a longjmp (the
+    // pending interrupt); no Rust frames are inside that context.
+    unsafe { R_ToplevelExec(Some(check_interrupt_trampoline), std::ptr::null_mut()) == 0 }
+}
+
+const INTERRUPT_MESSAGE: &str = "user interrupt (Ctrl-C)";
+
+/// Engine progress callback that stops the active loop when R has a pending
+/// interrupt. Attached to every fit the bridge starts; refits (bootstrap,
+/// profile, comparison) inherit it.
+fn r_interrupt_callback() -> FitProgressCallback {
+    FitProgressCallback::new(|_progress| {
+        if r_interrupt_pending() {
+            Err(MixedModelError::Interrupted(INTERRUPT_MESSAGE.to_string()))
+        } else {
+            Ok(())
+        }
+    })
+}
+
+/// Error text for a bridge-side interrupt check outside an engine loop.
+fn interrupted_error() -> String {
+    format!("mm_interrupted: Operation interrupted: {INTERRUPT_MESSAGE}")
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +484,7 @@ fn mm_fit_lmm_json(
     categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<Robj, String> {
     let _control: Value = serde_json::from_str(control_json)
         .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
     let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
@@ -477,7 +508,8 @@ fn mm_fit_lmm_json(
     } else {
         FitOptions::ml()
     }
-    .with_optimizer_control(optimizer_control);
+    .with_optimizer_control(optimizer_control)
+    .with_progress_callback(r_interrupt_callback());
     model
         .fit_with_options(fit_options)
         .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
@@ -538,9 +570,6 @@ fn mm_fit_lmm_json(
         "df_residual": df_residual,
         "fit_status": fit_status,
         "std_errors": std_errors.iter().copied().collect::<Vec<_>>(),
-        "fixed_fitted": fixed_fitted.iter().copied().collect::<Vec<_>>(),
-        "fitted": model.fitted().iter().copied().collect::<Vec<_>>(),
-        "residuals": model.residuals().iter().copied().collect::<Vec<_>>(),
         "ranef": random_effects_json(&model),
         "varcorr": varcorr_json(&model),
         "fit_summary": fit_summary,
@@ -554,8 +583,17 @@ fn mm_fit_lmm_json(
         }
     });
 
-    serde_json::to_string(&payload)
-        .map_err(|e| format!("mm_schema_error: failed to serialize fit result: {}", e))
+    let json = serde_json::to_string(&payload)
+        .map_err(|e| format!("mm_schema_error: failed to serialize fit result: {}", e))?;
+    // The n-length vectors cross as R doubles, not JSON text: formatting and
+    // re-parsing them dominated the bridge cost on large data.
+    Ok(list!(
+        json = json,
+        fixed_fitted = Doubles::from_values(fixed_fitted.iter().copied()),
+        fitted = Doubles::from_values(model.fitted().iter().copied()),
+        residuals = Doubles::from_values(model.residuals().iter().copied())
+    )
+    .into())
 }
 
 /// Fit a generalized linear mixed-effects model and return the fit payload JSON.
@@ -583,7 +621,7 @@ fn mm_fit_glmm_json(
     weights: Doubles,
     offset: Doubles,
     control_json: &str,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<Robj, String> {
     let _control: Value = serde_json::from_str(control_json)
         .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
     let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
@@ -621,7 +659,8 @@ fn mm_fit_glmm_json(
     }
     .with_n_agq(n_agq)
     .with_verbose(false)
-    .with_optimizer_control(optimizer_control);
+    .with_optimizer_control(optimizer_control)
+    .with_progress_callback(r_interrupt_callback());
     model
         .fit_with_glmm_options(glmm_options)
         .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
@@ -688,8 +727,6 @@ fn mm_fit_glmm_json(
         "df_residual": df_residual,
         "fit_status": fit_status,
         "std_errors": std_errors.iter().copied().collect::<Vec<_>>(),
-        "fitted": model.fitted().iter().copied().collect::<Vec<_>>(),
-        "residuals": model.residuals().iter().copied().collect::<Vec<_>>(),
         "ranef": random_effects_json_glmm(&model),
         "varcorr": varcorr_json_glmm(&model),
         "fit_summary": fit_summary,
@@ -703,12 +740,18 @@ fn mm_fit_glmm_json(
         }
     });
 
-    serde_json::to_string(&payload).map_err(|e| {
+    let json = serde_json::to_string(&payload).map_err(|e| {
         format!(
             "mm_schema_error: failed to serialize GLMM fit result: {}",
             e
         )
-    })
+    })?;
+    Ok(list!(
+        json = json,
+        fitted = Doubles::from_values(model.fitted().iter().copied()),
+        residuals = Doubles::from_values(model.residuals().iter().copied())
+    )
+    .into())
 }
 
 /// Evaluate fixed-effect contrast rows through the Rust inference contract.
@@ -748,6 +791,75 @@ fn mm_fixed_effect_contrast_json(
 
     serde_json::to_string(&model.fixed_effect_contrast_inference_table(hypotheses, method))
         .map_err(|e| format!("mm_schema_error: failed to serialize contrast table: {}", e))
+}
+
+/// Evaluate ONE joint fixed-effect hypothesis `L beta = rhs` (all rows of
+/// `L` together, an F test for Satterthwaite / Kenward-Roger) through the
+/// Rust inference contract. Used for KRmodcomp-style nested model
+/// comparison. Returns a fixed-effect inference table with a single term row.
+///
+/// @noRd
+#[extendr]
+fn mm_fixed_effect_joint_test_json(
+    formula: &str,
+    reml: bool,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    categorical_ordered: Strings,
+    weights: Doubles,
+    control_json: &str,
+    l_values: Doubles,
+    nrow: i32,
+    ncol: i32,
+    label: &str,
+    rhs: Doubles,
+    method: &str,
+) -> std::result::Result<String, String> {
+    let model = fit_lmm_from_bridge_data(
+        formula,
+        reml,
+        &column_order,
+        &numeric_columns,
+        &categorical_values,
+        &categorical_levels,
+        &categorical_ordered,
+        &weights,
+        control_json,
+    )?;
+    let nrow = usize::try_from(nrow)
+        .map_err(|_| "mm_inference_unavailable: contrast row count must be non-negative")?;
+    let ncol = usize::try_from(ncol)
+        .map_err(|_| "mm_inference_unavailable: contrast column count must be non-negative")?;
+    let l_values = l_values.iter().map(|value| value.0).collect::<Vec<_>>();
+    let rhs = rhs.iter().map(|value| value.0).collect::<Vec<_>>();
+    if nrow == 0 || l_values.len() != nrow * ncol || rhs.len() != nrow {
+        return Err(format!(
+            "mm_inference_unavailable: joint contrast has {} value(s) and {} rhs value(s), expected {} and {nrow}",
+            l_values.len(),
+            rhs.len(),
+            nrow * ncol
+        ));
+    }
+    let l = ContrastMatrix::new(DMatrix::from_row_slice(nrow, ncol, &l_values))
+        .map_err(|e| format!("mm_inference_unavailable: {e}"))?;
+    let rhs = ContrastRhs::new(DVector::from_row_slice(&rhs))
+        .map_err(|e| format!("mm_inference_unavailable: {e}"))?;
+    let hypothesis = FixedEffectHypothesis::new(label.to_string(), l, rhs)
+        .map_err(|e| format!("mm_inference_unavailable: {e}"))?;
+    let method = fixed_effect_test_method(method)?;
+    let row = model.fixed_effect_contrast_inference_row(
+        FixedEffectInferenceRowKind::Term,
+        hypothesis,
+        method,
+    );
+    serde_json::to_string(&FixedEffectInferenceTable::new(vec![row])).map_err(|e| {
+        format!(
+            "mm_schema_error: failed to serialize joint test table: {}",
+            e
+        )
+    })
 }
 
 /// Evaluate fixed-effect-null bootstrap contrast rows through Rust.
@@ -1115,6 +1227,9 @@ fn mm_bootstrap_lrt_json(
     let mut replicate_stats: Vec<f64> = Vec::with_capacity(options.requested_replicates);
 
     for _ in 0..options.requested_replicates {
+        if r_interrupt_pending() {
+            return Err(interrupted_error());
+        }
         let y_sim = reduced.simulate(&mut rng);
         let mut work_red = reduced.clone();
         let mut work_alt = alternative.clone();
@@ -1587,7 +1702,8 @@ fn fit_lmm_from_bridge_data(
     } else {
         FitOptions::ml()
     }
-    .with_optimizer_control(optimizer_control);
+    .with_optimizer_control(optimizer_control)
+    .with_progress_callback(r_interrupt_callback());
     model
         .fit_with_options(fit_options)
         .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
@@ -1663,6 +1779,10 @@ fn glmm_family(family: &str) -> std::result::Result<GlmmFamilySpec, String> {
         "binomial" => Family::Binomial,
         "poisson" => Family::Poisson,
         "gamma" => Family::Gamma,
+        "inverse_gaussian" => Family::InverseGaussian,
+        // Non-identity Gaussian links only: the engine refuses
+        // gaussian/identity (that model is an LMM; use lmm()).
+        "gaussian" => Family::Normal,
         other => return Err(format!("mm_fit_error: unsupported GLMM family `{other}`")),
     };
     Ok((fam, None, false))
@@ -2154,22 +2274,21 @@ fn mm_audit_report_json(artifact_json: &str) -> std::result::Result<String, Stri
         .map_err(|e| format!("mm_schema_error: failed to serialize audit report: {}", e))
 }
 
-/// Demo of the interrupt bridge — a no-op loop that yields to R between
-/// iterations so Ctrl-C can terminate it. Returns `iters` on clean
-/// completion.
-///
-/// Used in Phase 0 only as a smoke test that the interrupt FFI binding is
-/// linked correctly. Phase 1+ replaces this with the hook called from
-/// inside fit / inference loops.
+/// Demo of the interrupt bridge — a no-op loop that checks for a pending
+/// R interrupt between iterations (safely, via R_ToplevelExec) and returns
+/// an `mm_interrupted` error when one is seen. Returns `iters` on clean
+/// completion. A smoke test for the check the fit loops use.
 ///
 /// @noRd
 #[extendr]
-fn mm_interrupt_demo(iters: i32) -> i32 {
+fn mm_interrupt_demo(iters: i32) -> std::result::Result<i32, String> {
     let n = iters.max(0);
     for _ in 0..n {
-        check_user_interrupt();
+        if r_interrupt_pending() {
+            return Err(interrupted_error());
+        }
     }
-    n
+    Ok(n)
 }
 
 /// Conditional variance matrices of the random effects, serialized for R.
@@ -2461,7 +2580,8 @@ fn fit_glmm_from_bridge_data(
     }
     .with_n_agq(n_agq)
     .with_verbose(false)
-    .with_optimizer_control(optimizer_control);
+    .with_optimizer_control(optimizer_control)
+    .with_progress_callback(r_interrupt_callback());
     model
         .fit_with_glmm_options(glmm_options)
         .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
@@ -2650,6 +2770,7 @@ extendr_module! {
     fn mm_fit_lmm_json;
     fn mm_fit_glmm_json;
     fn mm_fixed_effect_contrast_json;
+    fn mm_fixed_effect_joint_test_json;
     fn mm_fixed_effect_bootstrap_contrast_json;
     fn mm_full_model_bootstrap_contrast_json;
     fn mm_fixed_effect_bootstrap_term_json;

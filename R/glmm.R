@@ -11,11 +11,19 @@
 #' @param formula A two-sided lme4-style formula.
 #' @param data A `data.frame`.
 #' @param family A supported GLMM family object or family constructor. The
-#'   supported 1.0 surface is: [binomial()] with `"logit"`, `"probit"`, or
-#'   `"cloglog"` links; [poisson()] with `"log"` or `"sqrt"` links;
-#'   [Gamma()] with `"log"` link; and negative binomial (NB2, `"log"` link)
-#'   via [mm_negative_binomial()] (theta estimated, like `lme4::glmer.nb()`)
-#'   or `MASS::negative.binomial(theta)` (fixed theta).
+#'   supported surface (every family/link pair the engine fits) is:
+#'   [binomial()] with `"logit"`, `"probit"`, or `"cloglog"` links;
+#'   [poisson()] with `"log"` or `"sqrt"` links; [Gamma()] with `"inverse"`
+#'   (R's default) or `"log"` links; [inverse.gaussian()] with `"inverse"` or
+#'   `"log"` links (R's default `"1/mu^2"` link is not available and is
+#'   refused); [gaussian()] with non-identity `"log"`, `"inverse"`, or
+#'   `"sqrt"` links (a Gaussian identity-link model is an LMM: use [lmm()]);
+#'   and negative binomial (NB2, `"log"` link) via [mm_negative_binomial()]
+#'   (theta estimated, like `lme4::glmer.nb()`) or
+#'   `MASS::negative.binomial(theta)` (fixed theta). Binomial `"cauchit"`,
+#'   `"log"`, and `"identity"` and Poisson `"identity"` links are not
+#'   available in the engine and are refused with a typed
+#'   `mm_inference_unavailable` error naming the supported set.
 #' @param random Reserved for the native random-effect constructor path.
 #' @param weights Optional prior weights: a column of `data` (as in lme4,
 #'   `weights = trials`) or a numeric vector. For binomial models these are
@@ -64,8 +72,10 @@
 #' @details
 #' Optimization runs inside a single native call with no progress output: the
 #' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
-#' before the fitted result returns, and the call cannot be interrupted from
-#' R. Evaluation budgets are bounded (a bounded budget caps optimizer
+#' before the fitted result returns. The fit checks for a user interrupt
+#' (Ctrl-C / Esc) between optimizer evaluations and stops with a typed
+#' `mm_interrupted` error (the check happens at evaluation boundaries, so a
+#' single very expensive evaluation finishes first). Evaluation budgets are bounded (a bounded budget caps optimizer
 #' iterations; it does not prove every native evaluation terminates); runtime on
 #' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
@@ -237,7 +247,7 @@ glmm <- function(formula,
     )
   }
 
-  fit_result <- mm_json_parse_glmm_fit(json)
+  fit_result <- mm_bridge_fit_result(json, mm_json_parse_glmm_fit)
   fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
   beta <- mm_named_numeric(fit_result$beta, fit_result$beta_names)
@@ -277,7 +287,9 @@ glmm <- function(formula,
     weights        = weights,
     offset         = offset,
     artifact       = artifact,
-    fit            = fit_result,
+    # Raw payload minus the n-length vectors, which are stored once below.
+    fit            = fit_result[setdiff(names(fit_result),
+                                        c("fitted", "fixed_fitted", "residuals"))],
     fit_summary    = fit_summary,
     schema         = mm_object_schema(artifact),
     rust_handle    = NULL,
@@ -444,7 +456,7 @@ mm_glmm_family_info <- function(family) {
     mm_abort_glmm_unsupported_family_link(family_name, link_name)
   }
   list(
-    family = if (identical(family_name, "Gamma")) "gamma" else family_name,
+    family = mm_glmm_engine_family_name(family_name),
     link = link_name,
     nb_theta = nb_theta,
     nb_theta_estimated = nb_theta_estimated
@@ -495,11 +507,25 @@ mm_glmm_nb_engine_spec <- function(family_info) {
   }
 }
 
+# R family name -> engine/family_info name.
+mm_glmm_engine_family_name <- function(family_name) {
+  switch(family_name,
+         Gamma = "gamma",
+         inverse.gaussian = "inverse_gaussian",
+         family_name)
+}
+
+# Every family/link pair the engine fits (mixeff-rs
+# validate_supported_glmm_family_link). gaussian/identity is an LMM (lmm());
+# the engine has no cauchit or 1/mu^2 link, and no binomial log/identity or
+# poisson identity GLMM.
 mm_glmm_supported_family_links <- function() {
   list(
     binomial = c("logit", "probit", "cloglog"),
     poisson = c("log", "sqrt"),
-    Gamma = c("log"),
+    Gamma = c("inverse", "log"),
+    inverse.gaussian = c("inverse", "log"),
+    gaussian = c("log", "inverse", "sqrt"),
     negative_binomial = "log"
   )
 }
@@ -522,13 +548,22 @@ mm_abort_glmm_unsupported_family_link <- function(family, link) {
                       paste, character(1), collapse = "/")
   supported_text <- paste(sprintf("%s (%s)", names(by_family), by_family),
                           collapse = ", ")
+  why <- if (identical(family, "gaussian") && identical(link, "identity")) {
+    "A Gaussian identity-link mixed model is a linear mixed model; fit it with lmm(). "
+  } else if (identical(link, "1/mu^2")) {
+    "The engine has no 1/mu^2 link (inverse.gaussian's default); use link = \"inverse\" or \"log\". "
+  } else if (identical(link, "cauchit")) {
+    "The engine has no cauchit link. "
+  } else {
+    ""
+  }
   mm_abort(
     message = sprintf(
       paste0(
-        "The %s family with link `%s` is not supported by glmm(). Supported ",
+        "The %s family with link `%s` is not supported by glmm(). %sSupported ",
         "families: %s. For other families, use lme4::glmer()."
       ),
-      family, link, supported_text
+      family, link, why, supported_text
     ),
     class = "mm_inference_unavailable",
     reason_code = reason_code,

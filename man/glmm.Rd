@@ -27,11 +27,19 @@ glmm(
 \item{data}{A \code{data.frame}.}
 
 \item{family}{A supported GLMM family object or family constructor. The
-supported 1.0 surface is: \code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or
-\code{"cloglog"} links; \code{\link[=poisson]{poisson()}} with \code{"log"} or \code{"sqrt"} links;
-\code{\link[=Gamma]{Gamma()}} with \code{"log"} link; and negative binomial (NB2, \code{"log"} link)
-via \code{\link[=mm_negative_binomial]{mm_negative_binomial()}} (theta estimated, like \code{lme4::glmer.nb()})
-or \code{MASS::negative.binomial(theta)} (fixed theta).}
+supported surface (every family/link pair the engine fits) is:
+\code{\link[=binomial]{binomial()}} with \code{"logit"}, \code{"probit"}, or \code{"cloglog"} links;
+\code{\link[=poisson]{poisson()}} with \code{"log"} or \code{"sqrt"} links; \code{\link[=Gamma]{Gamma()}} with \code{"inverse"}
+(R's default) or \code{"log"} links; \code{\link[=inverse.gaussian]{inverse.gaussian()}} with \code{"inverse"} or
+\code{"log"} links (R's default \code{"1/mu^2"} link is not available and is
+refused); \code{\link[=gaussian]{gaussian()}} with non-identity \code{"log"}, \code{"inverse"}, or
+\code{"sqrt"} links (a Gaussian identity-link model is an LMM: use \code{\link[=lmm]{lmm()}});
+and negative binomial (NB2, \code{"log"} link) via \code{\link[=mm_negative_binomial]{mm_negative_binomial()}}
+(theta estimated, like \code{lme4::glmer.nb()}) or
+\code{MASS::negative.binomial(theta)} (fixed theta). Binomial \code{"cauchit"},
+\code{"log"}, and \code{"identity"} and Poisson \code{"identity"} links are not
+available in the engine and are refused with a typed
+\code{mm_inference_unavailable} error naming the supported set.}
 
 \item{random}{Reserved for the native random-effect constructor path.}
 
@@ -101,8 +109,10 @@ labeled fast-PIRLS profiled path (lme4's \code{nAGQ = 0}).
 \details{
 Optimization runs inside a single native call with no progress output: the
 pre-fit explanation block (when \code{verbose >= 0}) is the last thing printed
-before the fitted result returns, and the call cannot be interrupted from
-R. Evaluation budgets are bounded (a bounded budget caps optimizer
+before the fitted result returns. The fit checks for a user interrupt
+(Ctrl-C / Esc) between optimizer evaluations and stops with a typed
+\code{mm_interrupted} error (the check happens at evaluation boundaries, so a
+single very expensive evaluation finishes first). Evaluation budgets are bounded (a bounded budget caps optimizer
 iterations; it does not prove every native evaluation terminates); runtime on
 large problems is governed by \code{mm_control(max_feval = )}.
 }

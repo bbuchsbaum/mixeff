@@ -2,6 +2,6 @@
 # Provenance for the bundled src/rust/upstream/mixeff-rs/ snapshot.
 crate        = "mixeff-rs"
 source       = "https://github.com/bbuchsbaum/mixeff-rs.git"
-requested    = "7a203f1b9774a88ee961a263168272b8b8782f71"
-resolved_sha = "7a203f1b9774a88ee961a263168272b8b8782f71"
-vendored_utc = "2026-10-09T20:20:04Z"
+requested    = "5969b3611e9e417b98565da1e2164df3677a33e0"
+resolved_sha = "5969b3611e9e417b98565da1e2164df3677a33e0"
+vendored_utc = "2026-10-09T22:02:30Z"

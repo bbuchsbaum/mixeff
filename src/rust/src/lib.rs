@@ -7,20 +7,23 @@ use mixeff_rs::compiler::{
 };
 use mixeff_rs::error::MixedModelError;
 use mixeff_rs::formula::parse_formula;
-use mixeff_rs::model::linear::ConvergenceVerificationOptions;
+use mixeff_rs::model::linear::{
+    parametricbootstrap_with_options, BootstrapExecutionOptions, ConvergenceVerificationOptions,
+};
 use mixeff_rs::model::FitProgressCallback;
 use mixeff_rs::model::{
-    parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
-    BootstrapSeedRecord, BootstrapTarget, Family, FitOptions, FitToleranceOverrides,
-    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder,
-    GlmmFitOptions, GlmmPredictionScale, LinearMixedModel, LinkFunction, MixedModelBootstrap,
-    MixedModelFit, NewReLevels, OptimizerControl,
+    BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate, BootstrapSeedRecord,
+    BootstrapTarget, Family, FitOptions, FitToleranceOverrides, FixedEffectBootstrapOptions,
+    GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder, GlmmFitOptions,
+    GlmmPredictionScale, LinearMixedModel, LinkFunction, MixedModelBootstrap, MixedModelFit,
+    NewReLevels, OptimizerControl,
 };
+use mixeff_rs::stats::profile::{profile_confint_payload_with_options, ProfileOptions};
 use mixeff_rs::stats::{
-    profile_confint_payload, BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit,
-    ModelComparisonMethod, ModelComparisonOptions, ModelComparisonRefitPolicy,
-    ModelComparisonTable, BOUNDARY_LRT_SCHEMA, BOUNDARY_LRT_SCHEMA_VERSION, FIT_SUMMARY_SCHEMA,
-    FIT_SUMMARY_SCHEMA_VERSION, PROFILE_LIKELIHOOD_CI_SCHEMA, PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION,
+    BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit, ModelComparisonMethod,
+    ModelComparisonOptions, ModelComparisonRefitPolicy, ModelComparisonTable, BOUNDARY_LRT_SCHEMA,
+    BOUNDARY_LRT_SCHEMA_VERSION, FIT_SUMMARY_SCHEMA, FIT_SUMMARY_SCHEMA_VERSION,
+    PROFILE_LIKELIHOOD_CI_SCHEMA, PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION,
 };
 use mixeff_rs::types::Optimizer;
 use nalgebra::{DMatrix, DVector};
@@ -247,8 +250,18 @@ const INTERRUPT_MESSAGE: &str = "user interrupt (Ctrl-C)";
 /// Engine progress callback that stops the active loop when R has a pending
 /// interrupt. Attached to every fit the bridge starts; refits (bootstrap,
 /// profile, comparison) inherit it.
+///
+/// The callback captures the thread that created it (the R main thread: every
+/// bridge entry point runs there) and is a no-op on any other thread, so an
+/// engine worker thread that inherits it through a model clone can never call
+/// into R. The engine's threaded bootstrap/profile drivers already keep the
+/// callback on the calling thread; this guard makes that a hard invariant.
 fn r_interrupt_callback() -> FitProgressCallback {
-    FitProgressCallback::new(|_progress| {
+    let r_thread = std::thread::current().id();
+    FitProgressCallback::new(move |_progress| {
+        if std::thread::current().id() != r_thread {
+            return Ok(());
+        }
         if r_interrupt_pending() {
             Err(MixedModelError::Interrupted(INTERRUPT_MESSAGE.to_string()))
         } else {
@@ -585,6 +598,9 @@ fn mm_fit_lmm_json(
             "reml": reml,
             "beta": beta.iter().copied().collect::<Vec<_>>(),
             "beta_names": beta_names,
+            // Columns pivoted out for rank deficiency (R's rule: the earlier of two
+            // collinear columns is kept); `beta` carries 0 for them.
+            "dropped_coef_names": model.dropped_coef_names(),
             "theta": model.theta(),
             "sigma": model.sigma(),
             "log_likelihood": log_likelihood,
@@ -745,6 +761,9 @@ fn mm_fit_glmm_json(
             "nb_theta_estimated": model.negative_binomial_theta_estimated(),
             "beta": beta.iter().copied().collect::<Vec<_>>(),
             "beta_names": beta_names,
+            // Columns pivoted out for rank deficiency (R's rule: the earlier of two
+            // collinear columns is kept); `beta` carries 0 for them.
+            "dropped_coef_names": model.dropped_coef_names(),
             "theta": model.theta(),
             "dispersion": model.dispersion(false),
             "log_likelihood": log_likelihood,
@@ -1007,7 +1026,15 @@ fn mm_full_model_bootstrap_contrast_json(
             .sum();
 
         let (mut rng, seed_record) = make_bootstrap_rng(options.seed);
-        let bsamp = parametricbootstrap(&mut rng, options.requested_replicates, &model);
+        let bsamp = parametricbootstrap_with_options(
+            &mut rng,
+            options.requested_replicates,
+            &model,
+            &BootstrapExecutionOptions {
+                threads: options.threads,
+            },
+        )
+        .map_err(|e| engine_run_error("parametric bootstrap", e))?;
 
         // Contrast statistic per replicate: L * beta_b.
         let replicate_stats: Vec<f64> = bsamp
@@ -1279,14 +1306,16 @@ fn mm_bootstrap_lrt_json(
         // We still build a MixedModelBootstrap recording the *reduced* refit
         // history so the existing run_metadata_for_model() telemetry path stays
         // intact (boundary counts, failed-refits, mcse).
-        let mut fits: Vec<BootstrapReplicate> = Vec::with_capacity(options.requested_replicates);
-        let mut replicate_stats: Vec<f64> = Vec::with_capacity(options.requested_replicates);
-
-        for _ in 0..options.requested_replicates {
-            if r_interrupt_pending() {
-                return Err(interrupted_error());
-            }
-            let y_sim = reduced.simulate(&mut rng);
+        // Responses are simulated serially on this thread in the serial RNG
+        // order (refits never draw from `rng`), then each replicate refits
+        // fresh clones of both templates -- independently, so the replicates
+        // are identical for every `threads` value.
+        let n_rep = options.requested_replicates;
+        let mut y_sims: Vec<DVector<f64>> = Vec::with_capacity(n_rep);
+        for _ in 0..n_rep {
+            y_sims.push(reduced.simulate(&mut rng));
+        }
+        let one_replicate = |y_sim: &DVector<f64>| -> (f64, BootstrapReplicate) {
             let mut work_red = reduced.clone();
             let mut work_alt = alternative.clone();
             let refit_red = work_red.refit(y_sim.as_slice());
@@ -1303,27 +1332,34 @@ fn mm_bootstrap_lrt_json(
                 }
                 _ => f64::NAN,
             };
-            replicate_stats.push(stat);
 
             let beta = work_red.beta();
-            if refit_red.is_ok() {
-                fits.push(BootstrapReplicate {
+            let replicate = if refit_red.is_ok() {
+                BootstrapReplicate {
                     objective: work_red.objective(),
                     sigma: work_red.sigma(),
                     beta,
                     se: work_red.stderror(),
                     theta: work_red.theta(),
-                });
+                }
             } else {
                 let n_beta = beta.len();
-                fits.push(BootstrapReplicate {
+                BootstrapReplicate {
                     objective: f64::NAN,
                     sigma: f64::NAN,
                     se: DVector::from_element(n_beta, f64::NAN),
                     beta,
                     theta: work_red.theta(),
-                });
-            }
+                }
+            };
+            (stat, replicate)
+        };
+        let results = run_replicates_polled(&y_sims, options.threads, &one_replicate)?;
+        let mut fits: Vec<BootstrapReplicate> = Vec::with_capacity(n_rep);
+        let mut replicate_stats: Vec<f64> = Vec::with_capacity(n_rep);
+        for (stat, replicate) in results {
+            replicate_stats.push(stat);
+            fits.push(replicate);
         }
 
         let bsamp = MixedModelBootstrap { fits };
@@ -1657,16 +1693,17 @@ fn mm_glmm_parametric_bootstrap_json(
             "mm_arg_error: bootstrap seed must be a non-negative integer".to_string()
         })?;
 
+        let threads = bridge_threads(&opts)?;
         let model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
         let beta_names = model.coef_names();
         let mut rng = StdRng::seed_from_u64(seed);
-        let boot = mixeff_rs::stats::bootstrap::parametricbootstrap_glmm(&mut rng, nsim, &model)
-            .map_err(|e| {
-                format!(
-                    "mm_inference_unavailable: GLMM parametric bootstrap failed: {}",
-                    e
-                )
-            })?;
+        let boot = mixeff_rs::stats::bootstrap::parametricbootstrap_glmm_with_options(
+            &mut rng,
+            nsim,
+            &model,
+            &BootstrapExecutionOptions { threads },
+        )
+        .map_err(|e| engine_run_error("GLMM parametric bootstrap", e))?;
 
         let boot_json = serde_json::to_value(&boot).map_err(|e| {
             format!(
@@ -1678,6 +1715,7 @@ fn mm_glmm_parametric_bootstrap_json(
             "beta_names": beta_names,
             "requested": nsim,
             "seed": seed,
+            "threads": threads,
             "bootstrap": boot_json,
         }))
         .map_err(|e| {
@@ -2216,7 +2254,31 @@ fn fixed_effect_bootstrap_options(
         requested_replicates,
         failed_refit_policy,
         seed,
+        threads: bridge_threads(&value)?,
     })
+}
+
+/// Worker-thread count from a bridge options object (`"threads"`, default 1).
+/// The engine's threaded drivers are bit-identical to the serial run for
+/// every count; the R layer validates the value, this re-checks the wire.
+fn bridge_threads(value: &Value) -> std::result::Result<usize, String> {
+    match value.get("threads") {
+        None | Some(Value::Null) => Ok(1),
+        Some(v) => v
+            .as_u64()
+            .filter(|t| *t >= 1)
+            .map(|t| t as usize)
+            .ok_or_else(|| format!("mm_arg_error: `threads` must be a positive integer; got {v}")),
+    }
+}
+
+/// Map an engine error from a threaded bootstrap/profile driver to the bridge
+/// error text (interrupts keep their typed `mm_interrupted` prefix).
+fn engine_run_error(context: &str, e: MixedModelError) -> String {
+    match e {
+        MixedModelError::Interrupted(_) => interrupted_error(),
+        other => format!("mm_inference_unavailable: {context} failed: {other}"),
+    }
 }
 
 fn random_effects_json(model: &LinearMixedModel) -> Value {
@@ -2802,6 +2864,7 @@ fn mm_lmm_profile_confint_json(
     weights: Doubles,
     control_json: &str,
     level: f64,
+    threads: i32,
 ) -> std::result::Result<String, MmBridgeError> {
     (|| -> std::result::Result<String, String> {
         if !(level > 0.0 && level < 1.0) {
@@ -2821,12 +2884,21 @@ fn mm_lmm_profile_confint_json(
             &weights,
             control_json,
         )?;
-        let payload = profile_confint_payload(&mut model, level).map_err(|e| {
-            format!(
-                "mm_inference_unavailable: profile_confint_payload failed: {}",
-                e
-            )
-        })?;
+        if threads < 1 {
+            return Err(format!(
+                "mm_arg_error: `threads` must be a positive integer; got {threads}"
+            ));
+        }
+        // Workers never touch R: the engine polls the host interrupt callback
+        // on this (the R main) thread while the per-parameter profiles run.
+        let payload = profile_confint_payload_with_options(
+            &mut model,
+            level,
+            &ProfileOptions {
+                threads: threads as usize,
+            },
+        )
+        .map_err(|e| engine_run_error("profile_confint_payload", e))?;
         payload.to_json().map_err(|e| {
             format!(
                 "mm_schema_error: failed to serialize profile CI payload: {}",
@@ -2835,6 +2907,92 @@ fn mm_lmm_profile_confint_json(
         })
     })()
     .map_err(MmBridgeError)
+}
+
+/// Run `f` over `inputs`, in order, on `threads` workers (1 = serially on
+/// this thread). The R interrupt is polled only on the calling (R main)
+/// thread: per replicate when serial, every 20 ms while workers run. Workers
+/// never call into R (the bridge interrupt callback is a no-op off the main
+/// thread). Results are returned in input order, so the output is identical
+/// for every thread count.
+fn run_replicates_polled<I, T, F>(
+    inputs: &[I],
+    threads: usize,
+    f: &F,
+) -> std::result::Result<Vec<T>, String>
+where
+    I: Sync,
+    T: Send,
+    F: Fn(&I) -> T + Sync,
+{
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{mpsc, Mutex};
+
+    if threads <= 1 || inputs.len() <= 1 {
+        let mut out = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            if r_interrupt_pending() {
+                return Err(interrupted_error());
+            }
+            out.push(f(input));
+        }
+        return Ok(out);
+    }
+
+    let n = inputs.len();
+    let next = AtomicUsize::new(0);
+    let stop = AtomicBool::new(false);
+    let slots: Mutex<Vec<Option<T>>> = Mutex::new((0..n).map(|_| None).collect());
+    let (done_tx, done_rx) = mpsc::channel::<()>();
+    let mut interrupted = false;
+    std::thread::scope(|scope| {
+        for _ in 0..threads.min(n) {
+            let done_tx = done_tx.clone();
+            let (next, stop, slots) = (&next, &stop, &slots);
+            scope.spawn(move || {
+                loop {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    if i >= n {
+                        break;
+                    }
+                    let value = f(&inputs[i]);
+                    slots.lock().unwrap_or_else(|p| p.into_inner())[i] = Some(value);
+                }
+                let _ = done_tx.send(());
+            });
+        }
+        drop(done_tx);
+        let mut finished = 0usize;
+        let workers = threads.min(n);
+        while finished < workers {
+            match done_rx.recv_timeout(std::time::Duration::from_millis(20)) {
+                Ok(()) => finished += 1,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if !interrupted && r_interrupt_pending() {
+                        interrupted = true;
+                        stop.store(true, Ordering::Relaxed);
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+    });
+    if interrupted {
+        return Err(interrupted_error());
+    }
+    let slots = slots.into_inner().unwrap_or_else(|p| p.into_inner());
+    slots
+        .into_iter()
+        .map(|v| {
+            v.ok_or_else(|| {
+                "mm_inference_unavailable: a bootstrap worker did not return a replicate"
+                    .to_string()
+            })
+        })
+        .collect()
 }
 
 fn make_bootstrap_rng(seed: Option<u64>) -> (StdRng, BootstrapSeedRecord) {

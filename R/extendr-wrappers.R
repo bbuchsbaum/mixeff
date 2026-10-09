@@ -292,7 +292,7 @@ mm_glmm_predict_new_variance_json <- function(formula, family, link, method, n_a
 #' reason rather than fabricating beta CIs.
 #'
 #' @noRd
-mm_lmm_profile_confint_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level) .Call(wrap__mm_lmm_profile_confint_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level)
+mm_lmm_profile_confint_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level, threads) .Call(wrap__mm_lmm_profile_confint_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, level, threads)
 
 #' Demo of the interrupt bridge — a no-op loop that checks for a pending
 #' R interrupt between iterations (safely, via R_ToplevelExec) and returns

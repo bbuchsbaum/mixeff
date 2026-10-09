@@ -116,8 +116,7 @@ mm_compile_model <- function(formula, data, call, for_fit = FALSE) {
   formula_string <- mm_coerce_formula_string(formula)
 
   json <- tryCatch(
-    .Call(
-      if (isTRUE(for_fit)) wrap__mm_compile_model_spec else wrap__mm_compile_model_json,
+    (if (isTRUE(for_fit)) mm_compile_model_spec else mm_compile_model_json)(
       formula_string,
       spec_data$column_order,
       spec_data$numeric_columns,

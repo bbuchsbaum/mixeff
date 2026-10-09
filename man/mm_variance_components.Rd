@@ -51,8 +51,11 @@ insight does).
 \code{pi^2/6} for binomial logit, probit and cloglog links; \code{sigma^2} for
 Gamma; and the log-normal approximation \code{log(1 + V(mu)/mu^2)} for Poisson
 (\code{V(mu) = mu}) and negative-binomial (\code{V(mu) = mu (1 + mu/theta)}) log-link
-models, with \code{mu = exp(b0)} from the intercept of the null model
-(\code{y ~ 1} with the same random effects), which is refitted.
+models, with \code{mu = exp(b0 + v0/2)} from the intercept \code{b0} and the
+random-effect variance \code{v0} (observation-level terms excluded) of the
+null model (\code{y ~ 1} with the same random effects), which is refitted.
+A \code{cbind(successes, failures)} binomial response divides the binomial
+value by the mean number of trials. These follow insight 1.5.
 \item Observation-level random effects (one level per observation) count
 towards the residual variance of a GLMM.
 }

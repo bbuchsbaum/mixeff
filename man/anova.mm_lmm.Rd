@@ -53,7 +53,8 @@ With no extra models, \code{anova()} returns a term-level F-test table for
 columns \verb{Sum Sq}, \verb{Mean Sq}, \code{NumDF}, \code{DenDF}, \verb{F value} and \verb{Pr(>F)}
 (rows named by term; \verb{Mean Sq = F * sigma^2} and \verb{Sum Sq = NumDF * Mean Sq}, as in lmerTest). With further fitted models in \code{...}, it returns
 lme4's likelihood-ratio table (\code{npar}, \code{AIC}, \code{BIC}, \code{logLik},
-\code{deviance}, \code{Chisq}, \code{Df}, \verb{Pr(>Chisq)}, rows named after the arguments),
+\code{-2*log(L)}, \code{Chisq}, \code{Df}, \verb{Pr(>Chisq)}, rows named after the arguments;
+lme4 before 2.0 called the \code{-2*log(L)} column \code{deviance}),
 computed by \code{\link[=compare]{compare()}} (REML fits are refit by ML, as in lme4).
 }
 \details{

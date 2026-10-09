@@ -246,8 +246,8 @@ drop1.mm_glmm <- function(object, scope = NULL, test = c("none", "Chisq"),
 #'
 #' @return A data frame of class `c("mm_anova_comparison",
 #'   "mm_glmm_comparison", "anova", "data.frame")` shaped like `anova(glmer1, glmer2)`: columns `npar`,
-#'   `AIC`, `BIC`, `logLik`, `deviance` (`-2 * logLik`), `Chisq`, `Df`,
-#'   `Pr(>Chisq)`, rows named after the arguments. The underlying comparison
+#'   `AIC`, `BIC`, `logLik`, `-2*log(L)` (lme4 before 2.0 called it
+#'   `deviance`), `Chisq`, `Df`, `Pr(>Chisq)`, rows named after the arguments. The underlying comparison
 #'   (with the model formulas) is reachable as `x$table`.
 #'
 #' @method anova mm_glmm
@@ -290,7 +290,7 @@ mm_glmm_anova_frame <- function(cmp, fits, labels) {
     AIC = tbl$AIC,
     BIC = tbl$BIC,
     logLik = tbl$logLik,
-    deviance = -2 * tbl$logLik,
+    `-2*log(L)` = -2 * tbl$logLik,
     Chisq = tbl$Chisq,
     Df = as.numeric(tbl$Df),
     `Pr(>Chisq)` = tbl$p_value,

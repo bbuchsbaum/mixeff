@@ -23,6 +23,21 @@
 
 ## lme4 parity and checklist completion
 
+* Shapes follow lme4 >= 2.0 and insight >= 1.5:
+  * `confint(method = "profile")` numbers `.sigNN` term by term, each
+    term's standard deviations before its correlations. lme4 1.1 numbered
+    them in lower-triangle order.
+  * `anova(m1, m2)` names its `-2 * logLik` column `-2*log(L)`, where it
+    was `deviance`.
+  * `getME(m, "devcomp")$dims` gains `npar`.
+  * `print(VarCorr(m))` uses `reformulas::formatVC()` when reformulas is
+    installed.
+  * For GLMMs, `mm_r2()` / `mm_icc()` divide the binomial
+    distribution-specific variance of a `cbind()` response by the mean
+    number of trials. For count models, the null-model mean is
+    `exp(b0 + v0/2)`, where `b0` is the null model's intercept and `v0` its
+    random-effect variance.
+
 * `residuals()` follows lme4: LMM `type = "pearson"`/`"deviance"` are
   `sqrt(w) * (y - mu)` (no longer divided by sigma), and `scaled = TRUE`
   divides by `sigma()` exactly once (it divided twice for Pearson). GLMM

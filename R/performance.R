@@ -30,8 +30,11 @@
 #'   `pi^2/6` for binomial logit, probit and cloglog links; `sigma^2` for
 #'   Gamma; and the log-normal approximation `log(1 + V(mu)/mu^2)` for Poisson
 #'   (`V(mu) = mu`) and negative-binomial (`V(mu) = mu (1 + mu/theta)`) log-link
-#'   models, with `mu = exp(b0)` from the intercept of the null model
-#'   (`y ~ 1` with the same random effects), which is refitted.
+#'   models, with `mu = exp(b0 + v0/2)` from the intercept `b0` and the
+#'   random-effect variance `v0` (observation-level terms excluded) of the
+#'   null model (`y ~ 1` with the same random effects), which is refitted.
+#'   A `cbind(successes, failures)` binomial response divides the binomial
+#'   value by the mean number of trials. These follow insight 1.5.
 #' * Observation-level random effects (one level per observation) count
 #'   towards the residual variance of a GLMM.
 #'
@@ -70,7 +73,8 @@ mm_variance_components <- function(fit, tolerance = 1e-5) {
   mm_variance_parts(fit, tolerance)
 }
 
-mm_variance_parts <- function(fit, tolerance = 1e-5, warn = TRUE) {
+mm_variance_parts <- function(fit, tolerance = 1e-5, warn = TRUE,
+                              distribution = TRUE) {
   X <- as.matrix(stats::model.matrix(fit, type = "fixed"))
   # fit$beta keeps a rank-deficiency-dropped column as 0, aligned with X.
   beta <- as.numeric(fit$beta)
@@ -122,7 +126,11 @@ mm_variance_parts <- function(fit, tolerance = 1e-5, warn = TRUE) {
   var_dispersion <- 0
   if (inherits(fit, "mm_glmm")) {
     var_dispersion <- sum(vapply(vc[obs_level], sigma_sum, numeric(1)))
-    var_distribution <- mm_distribution_variance(fit, warn = warn)
+    var_distribution <- if (distribution) {
+      mm_distribution_variance(fit, warn = warn)
+    } else {
+      NA_real_
+    }
   } else {
     var_distribution <- fit$sigma^2
   }
@@ -175,8 +183,10 @@ mm_distribution_variance <- function(fit, warn = TRUE) {
   }
   switch(
     fam,
+    # A cbind(successes, failures) response divides by the mean number of
+    # trials, as insight (>= 1.5) does; `weights = trials` does not.
     binomial = switch(link, logit = pi^2 / 3, probit = 1, cloglog = pi^2 / 6,
-                      bad_link()),
+                      bad_link()) / mm_binomial_trial_factor(fit),
     gamma = fit$dispersion^2,
     poisson = ,
     negative_binomial = {
@@ -184,7 +194,8 @@ mm_distribution_variance <- function(fit, warn = TRUE) {
         if (identical(link, "sqrt")) return(0.25)
         bad_link()
       }
-      mu <- exp(mm_null_model_intercept(fit))
+      null <- mm_null_model_moments(fit)
+      mu <- exp(null$intercept + 0.5 * null$var_random)
       if (warn && mu < 6) {
         warning(sprintf(
           "mu of %0.1f is too close to zero; the distribution-specific variance may be unreliable.",
@@ -202,9 +213,20 @@ mm_distribution_variance <- function(fit, warn = TRUE) {
   )
 }
 
-# Intercept of the null model y ~ 1 + <same random terms>, refitted with the
-# original family, weights, offset and method.
-mm_null_model_intercept <- function(fit) {
+mm_binomial_trial_factor <- function(fit) {
+  if (identical(mm_response_name(fit), ".mm_binomial_response") &&
+      length(fit$weights)) {
+    mean(fit$weights)
+  } else {
+    1
+  }
+}
+
+# Intercept and random-effect variance (observation-level terms excluded) of
+# the null model y ~ 1 + <same random terms>, refitted with the original
+# family, weights, offset and method. insight (>= 1.5) uses
+# mu = exp(b0 + var_random / 2) for the log-normal approximation.
+mm_null_model_moments <- function(fit) {
   terms <- fit$artifact$semantic_model$random_terms %||% list()
   re <- unique(vapply(terms, function(t) {
     mm_scalar_text(t$source_syntax$written %||% t$source_syntax$text)
@@ -222,7 +244,9 @@ mm_null_model_intercept <- function(fit) {
     method = fit$method, nAGQ = fit$nAGQ,
     inference = "none", control = control
   ))
-  unname(fixef(null_fit)[[1L]])
+  parts <- mm_variance_parts(null_fit, warn = FALSE, distribution = FALSE)
+  list(intercept = unname(fixef(null_fit)[[1L]]),
+       var_random = parts$var.random %||% 0)
 }
 
 #' @rdname mm_variance_components

@@ -48,7 +48,8 @@ An \code{mm_confint} matrix of lower/upper bounds.
 \code{"Wald"}) gives Wald intervals for the fixed effects from the stored
 standard errors. \code{method = "profile"} gives profile-likelihood intervals
 with lme4's rows and names: \code{.sig01}, \code{.sig02}, ... (random-effect
-standard deviations and correlations, numbered in lme4's term order),
+standard deviations and correlations, numbered as lme4 >= 2.0 does: term
+by term, each term's standard deviations before its correlations),
 \code{.sigma}, then the fixed effects. As in lme4, every fit is profiled on the
 ML deviance: a REML fit's intervals are those of its ML refit. The
 engine's relative-Cholesky \code{theta1}, ... intervals (on the fit's own

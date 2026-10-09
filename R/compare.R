@@ -313,7 +313,8 @@ print.mm_parametric_bootstrap <- function(x, ...) {
 #' (rows named by term; `Mean Sq = F * sigma^2` and `Sum Sq = NumDF * Mean
 #' Sq`, as in lmerTest). With further fitted models in `...`, it returns
 #' lme4's likelihood-ratio table (`npar`, `AIC`, `BIC`, `logLik`,
-#' `deviance`, `Chisq`, `Df`, `Pr(>Chisq)`, rows named after the arguments),
+#' `-2*log(L)`, `Chisq`, `Df`, `Pr(>Chisq)`, rows named after the arguments;
+#' lme4 before 2.0 called the `-2*log(L)` column `deviance`),
 #' computed by [compare()] (REML fits are refit by ML, as in lme4).
 #'
 #' mixeff's provenance stays on the result: `x$table` is the full
@@ -662,7 +663,7 @@ mm_anova_comparison_frame <- function(cmp, fits, labels) {
     AIC = as.numeric(tbl$AIC),
     BIC = as.numeric(tbl$BIC),
     logLik = loglik,
-    deviance = -2 * loglik,
+    `-2*log(L)` = -2 * loglik,
     Chisq = as.numeric(tbl$LRT),
     Df = as.numeric(tbl$delta_df),
     `Pr(>Chisq)` = as.numeric(tbl$p_value),

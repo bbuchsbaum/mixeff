@@ -578,7 +578,8 @@ mm_compute_pls <- function(fit) {
     dims <- c(N = n, n = n, p = p, nmp = n - p, q = nrow(Zt),
               nth = length(fit$theta), nAGQ = as.integer(fit$nAGQ %||% 1L),
               compDev = 1L, useSc = as.integer(use_sc), reTrms = 1L,
-              spFe = 0L, REML = 0L, GLMM = 1L, NLMM = 0L)
+              spFe = 0L, REML = 0L, GLMM = 1L, NLMM = 0L,
+              npar = length(fit$theta))
   } else {
     reml <- isTRUE(fit$REML)
     cmp <- c(ldL2 = ldL2, ldRX2 = ldRX2, wrss = wrss, ussq = ussq,
@@ -589,7 +590,8 @@ mm_compute_pls <- function(fit) {
              sigmaREML = sqrt(pwrss / (n - p)))
     dims <- c(N = n, n = n, p = p, nmp = n - p, q = nrow(Zt),
               nth = length(fit$theta), useSc = 1L, reTrms = 1L, spFe = 0L,
-              REML = if (reml) p else 0L, GLMM = 0L, NLMM = 0L)
+              REML = if (reml) p else 0L, GLMM = 0L, NLMM = 0L,
+              npar = length(fit$theta))
   }
   storage.mode(dims) <- "integer"
   list(L = L, RZX = RZX, RX = RX, devcomp = list(cmp = cmp, dims = dims),
@@ -973,6 +975,14 @@ mm_varcorr_is_internal <- function(x) {
 }
 
 mm_format_varcorr <- function(x, digits = max(3, getOption("digits") - 2)) {
+  # lme4 (>= 1.1-36) formats with reformulas::formatVC(); use it when it is
+  # installed so the layout tracks the user's lme4 exactly.
+  if (requireNamespace("reformulas", quietly = TRUE) &&
+      "formatVC" %in% getNamespaceExports("reformulas")) {
+    out <- tryCatch(reformulas::formatVC(x, digits = digits),
+                    error = function(cnd) NULL)
+    if (is.matrix(out)) return(out)
+  }
   use_sc <- isTRUE(attr(x, "useSc"))
   sds <- c(lapply(unclass(x), attr, "stddev"),
            if (use_sc) list(Residual = unname(attr(x, "sc"))))

@@ -32,6 +32,10 @@ test_that("mm_r2/mm_icc match performance on an LMM with random slopes", {
 
 test_that("GLMM R2/ICC match performance for binomial and Poisson", {
   perf_ok()
+  # insight 1.5 changed the cbind() binomial and the null-model mean for the
+  # log-normal approximation; mixeff follows the current convention.
+  skip_if(utils::packageVersion("insight") < "1.5.0",
+          "GLMM distribution-specific variance follows insight >= 1.5")
   data("cbpp", package = "lme4", envir = environment())
   f <- glmm(cbind(incidence, size - incidence) ~ period + (1 | herd), cbpp,
             family = binomial(), method = "joint_laplace",

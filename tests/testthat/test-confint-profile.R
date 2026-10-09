@@ -131,6 +131,8 @@ test_that("confint(method='profile') under REML profiles the ML deviance like lm
 test_that("confint(method='profile') matches lme4's profile intervals", {
   skip_on_cran() # three model pairs, profile on both sides
   mm_skip_if_no_lme4_local()
+  skip_if(utils::packageVersion("lme4") < "2.0-0",
+          "profile .sigNN numbering follows lme4 >= 2.0")
   d <- mm_sleepstudy_data()
   for (fo in list(Reaction ~ Days + (Days | Subject),
                   Reaction ~ Days + (1 | Subject),
@@ -166,12 +168,13 @@ test_that("profile .sigNN labels follow lme4's term order and kinds", {
   sig <- tab[grepl("^\\.sig[0-9]+$", tab$parameter), , drop = FALSE]
   expect_identical(sig$parameter, c(".sig01", ".sig02", ".sig03"))
   expect_true(all(sig$parameter_kind == "sd"))
-  # correlated term: .sig02 is a correlation
+  # correlated term (lme4 >= 2.0 numbering): the term's standard deviations
+  # come first, so .sig03 is the correlation
   tab2 <- attr(confint(mm_sleepstudy_fit_ml(), method = "profile"),
                "mm_profile")$table
   expect_identical(tab2$parameter_kind[match(c(".sig01", ".sig02", ".sig03"),
                                              tab2$parameter)],
-                   c("sd", "cor", "sd"))
+                   c("sd", "sd", "cor"))
 })
 
 test_that("profile threads give identical results", {

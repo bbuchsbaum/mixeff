@@ -62,10 +62,12 @@ test_that("GLMM residuals, deviance, sigma, weights match glmer", {
   a4 <- anova(m0, m)
   expect_s3_class(a, "anova")
   expect_s3_class(a, "data.frame")
-  expect_identical(names(a), names(a4))
+  if (utils::packageVersion("lme4") >= "2.0-0") {
+    expect_identical(names(a), names(a4))
+  }
   expect_identical(rownames(a), c("fit0", "fit"))
   expect_equal(a$Chisq[[2L]], a4$Chisq[[2L]], tolerance = 1e-2)
-  expect_equal(a$deviance, -2 * c(fit0$logLik, fit$logLik))
+  expect_equal(a[["-2*log(L)"]], -2 * c(fit0$logLik, fit$logLik))
   expect_true(is.data.frame(a$table))
 })
 
@@ -243,7 +245,13 @@ test_that("getME() components match lme4 for a correlated-slope LMM", {
   dc <- getME(fit, "devcomp")
   dc4 <- getME(m, "devcomp")
   expect_identical(names(dc$cmp), names(dc4$cmp))
-  expect_identical(dc$dims, dc4$dims)
+  # lme4 >= 2.0 appends `npar`; development lme4 appends further entries
+  # after it (refit settings), which mixeff does not carry.
+  common <- intersect(names(dc4$dims), names(dc$dims))
+  expect_identical(dc$dims[common], dc4$dims[common])
+  expect_true(all(setdiff(names(dc$dims), names(dc4$dims)) == "npar"))
+  expect_true(all(setdiff(names(dc4$dims), names(dc$dims)) %in%
+                    c("dispProfile", "maxPhiIter", "qEff")))
   expect_equal(dc$cmp, dc4$cmp, tolerance = 1e-4)
   expect_equal(getME(fit, "Tlist")$Subject, getME(m, "Tlist")[[1L]],
                tolerance = 2e-3, ignore_attr = TRUE)
@@ -360,7 +368,9 @@ test_that("anova() returns lme4/lmerTest-shaped data frames", {
   expect_equal(unname(as.matrix(al)), unname(as.matrix(al4)), tolerance = 1e-3)
   lr <- suppressMessages(anova(fit0, fit))
   lr4 <- suppressMessages(anova(m0, m))
-  expect_identical(names(lr), names(lr4))
+  if (utils::packageVersion("lme4") >= "2.0-0") {
+    expect_identical(names(lr), names(lr4))
+  }
   expect_identical(rownames(lr), c("fit0", "fit"))
   expect_equal(unname(as.matrix(lr)), unname(as.matrix(lr4)), tolerance = 1e-3)
   expect_true(is.data.frame(lr$table))

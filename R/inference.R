@@ -934,7 +934,8 @@ mm_confint_method_spelling <- function(method) {
 #' `"Wald"`) gives Wald intervals for the fixed effects from the stored
 #' standard errors. `method = "profile"` gives profile-likelihood intervals
 #' with lme4's rows and names: `.sig01`, `.sig02`, ... (random-effect
-#' standard deviations and correlations, numbered in lme4's term order),
+#' standard deviations and correlations, numbered as lme4 >= 2.0 does: term
+#' by term, each term's standard deviations before its correlations),
 #' `.sigma`, then the fixed effects. As in lme4, every fit is profiled on the
 #' ML deviance: a REML fit's intervals are those of its ML refit. The
 #' engine's relative-Cholesky `theta1`, ... intervals (on the fit's own
@@ -2272,6 +2273,25 @@ mm_translate_profile_row <- function(row, fit) {
   )
 }
 
+# lme4 (>= 2.0) numbers profile parameters term by term: a term's standard
+# deviations first, then its correlations (lower triangle, column-major).
+# `pos` is the lme4 theta index of the slot.
+mm_profile_sig_slot <- function(st, pos) {
+  offset <- 0L
+  for (tm in st$terms) {
+    cells <- which(tm$Tidx > 0L, arr.ind = TRUE)
+    if (!nrow(cells)) next
+    is_diag <- cells[, 1L] == cells[, 2L]
+    ord <- order(!is_diag, cells[, 2L], cells[, 1L])
+    hit <- match(pos, tm$Tidx[cells[ord, , drop = FALSE]])
+    if (!is.na(hit)) {
+      return(list(index = offset + hit, diag = is_diag[ord][[hit]]))
+    }
+    offset <- offset + nrow(cells)
+  }
+  NULL
+}
+
 mm_map_profile_parameter <- function(upstream, fit) {
   if (upstream %in% c("\u03C3", "<U+03C3>", ".sigma")) {
     return(list(name = ".sigma", kind = "sigma"))
@@ -2289,16 +2309,10 @@ mm_map_profile_parameter <- function(upstream, fit) {
     if (is.null(st)) return(list(name = upstream, kind = "unknown"))
     pos <- match(sig_idx, st$perm)
     if (is.na(pos)) return(list(name = upstream, kind = "unknown"))
-    diag_slot <- FALSE
-    for (tm in st$terms) {
-      cell <- which(tm$Tidx == pos, arr.ind = TRUE)
-      if (nrow(cell)) {
-        diag_slot <- cell[1L, 1L] == cell[1L, 2L]
-        break
-      }
-    }
-    return(list(name = sprintf(".sig%02d", pos),
-                kind = if (diag_slot) "sd" else "cor"))
+    sig <- mm_profile_sig_slot(st, pos)
+    if (is.null(sig)) return(list(name = upstream, kind = "unknown"))
+    return(list(name = sprintf(".sig%02d", sig$index),
+                kind = if (sig$diag) "sd" else "cor"))
   }
   beta_idx <- mm_profile_parameter_index(upstream, c("\u03B2", "<U+03B2>"))
   if (!is.na(beta_idx)) {

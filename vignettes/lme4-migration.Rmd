@@ -98,7 +98,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `hatvalues`, `cooks.distance`, `influence` | same generics | LMM values match lme4; GLMM hat values use the IRLS working weights (as `glm` does), so they differ from lme4's; `influence()` takes `groups=` and `ncores=` and records failed refits instead of stopping |
 | `performance::r2()`, `performance::icc()`, `insight::get_variance()` | same calls, or `mm_r2()`, `mm_icc()`, `mm_variance_components()` | Nakagawa R2/ICC agree with performance on lme4 fits; `by_group = TRUE` is not supported |
 | `update(fit, . ~ . - x)` | same generic | a formula that needs new columns re-evaluates the original `data`, as lme4 does; arguments `lmm()`/`glmm()` cannot carry over (e.g. `subset`, `na.action`) are refused rather than dropped |
-| `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | `anova(m1, m2)` is lme4's data frame (`npar AIC BIC logLik deviance Chisq Df Pr(>Chisq)`); single-model `anova()` is lmerTest's (`Sum Sq Mean Sq NumDF DenDF F value Pr(>F)`, Type I/II/III, Satterthwaite/KR) and LMM-only; mixeff's provenance table is `$table`; a multi-column term such as `poly(x, 2)` is tested as one multi-df row, like lmerTest, unless another term contains it (then per column) |
+| `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | `anova(m1, m2)` is lme4's data frame (`npar AIC BIC logLik -2*log(L) Chisq Df Pr(>Chisq)`, as lme4 >= 2.0); single-model `anova()` is lmerTest's (`Sum Sq Mean Sq NumDF DenDF F value Pr(>F)`, Type I/II/III, Satterthwaite/KR) and LMM-only; mixeff's provenance table is `$table`; a multi-column term such as `poly(x, 2)` is tested as one multi-df row, like lmerTest, unless another term contains it (then per column) |
 | `getME` | `getME()` | LMM and GLMM; lme4's components including `u`, `b`, `L`, `RX`, `RZX`, `devcomp`, `lower`, `Gp`, `Ztlist`, `Tlist`, `ST`, `glmer.nb.theta`, `"ALL"`; `devfun` is refused (the optimizer lives in the engine) |
 | `isSingular` | `is_singular(fit, tol = 1e-4)` | lme4's rule (a zero-bounded theta below `tol`), LMM and GLMM; `lme4::isSingular()` is not a generic, so call `is_singular()` |
 | `ngrps` | identical | interaction/nested groups are named as in lme4 (`a:b`; `b:a` for the nested term of `a/b`) with levels `x:y` |
@@ -201,7 +201,10 @@ translation is exact.
 **6. Profile intervals use lme4's scale and names, but Wald is the
 default.** `confint(fit, method = "profile")` returns lme4's rows
 (`.sig01`, ..., `.sigma`, then the fixed effects) on the
-standard-deviation/correlation scale and, like lme4, profiles a REML fit on
+standard-deviation/correlation scale, numbered as lme4 >= 2.0 numbers them
+(term by term, each term's standard deviations before its correlations;
+lme4 1.1 interleaved them in lower-triangle order), and, like lme4,
+profiles a REML fit on
 the ML deviance. lme4's `confint()` defaults to the profile; mixeff's
 default stays the Wald interval (the profile refits the model many times),
 so pass `method = "profile"` to reproduce lme4's default output.

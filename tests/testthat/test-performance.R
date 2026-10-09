@@ -110,3 +110,67 @@ test_that("singular fits and bad input are announced", {
   expect_true(is.finite(r2$R2_marginal))
   expect_error(mm_r2(lm(y ~ x, d)), class = "mm_arg_error")
 })
+
+mm_perf_live_2_1 <- function() {
+  requireNamespace("lme4", quietly = TRUE) &&
+    requireNamespace("insight", quietly = TRUE) &&
+    requireNamespace("performance", quietly = TRUE) &&
+    utils::packageVersion("lme4") >= "2.1-0" &&
+    utils::packageVersion("insight") >= "1.5.0"
+}
+
+test_that("Gaussian non-identity-link GLMMs use sigma^2, as insight 1.5 does", {
+  for (key in c("fl_gaussian_log", "fl_gaussian_sqrt")) {
+    case <- mm_disp_case(key)
+    d <- case$data()
+    m <- glmm(case$formula, d, family = case$family,
+              control = mm_control(verbose = -1))
+    v <- mm_variance_components(m)
+    expect_equal(v$var.distribution, sigma(m)^2)
+    expect_identical(v$var.dispersion, 0)
+    expect_equal(v$var.residual, sigma(m)^2)
+    r2 <- mm_r2(m)
+    expect_true(all(is.finite(unlist(r2))))
+    if (mm_perf_live_2_1()) {
+      g <- suppressWarnings(lme4::glmer(case$formula, d, family = case$family))
+      vl <- insight::get_variance(g)
+      comps <- intersect(names(vl), names(v))
+      expect_equal(v[comps], vl[comps], tolerance = 1e-4)
+      expect_equal(unlist(r2), unlist(performance::r2_nakagawa(g)),
+                   tolerance = 1e-4)
+      expect_equal(mm_icc(m)$ICC_adjusted, performance::icc(g)$ICC_adjusted,
+                   tolerance = 1e-4)
+      # The registered methods give the same numbers on the mixeff fit.
+      expect_equal(unlist(performance::r2(m)), unlist(r2))
+    }
+  }
+})
+
+test_that("inverse-Gaussian GLMMs are refused: insight's value is not a variance", {
+  case <- mm_disp_case("fl_ig_log")
+  d <- case$data()
+  m <- glmm(case$formula, d, family = case$family,
+            control = mm_control(verbose = -1))
+  for (f in list(mm_variance_components, mm_r2, mm_icc)) {
+    err <- expect_error(f(m), class = "mm_inference_unavailable")
+    expect_identical(err$reason_code, "r2_distribution_variance_undefined")
+  }
+  if (requireNamespace("insight", quietly = TRUE)) {
+    expect_warning(out <- insight::get_variance(m), "not defined")
+    expect_true(is.na(out))
+  }
+  skip_if_not(mm_perf_live_2_1(), "needs lme4 >= 2.1-0 and insight >= 1.5.0")
+  # What insight 1.5 does instead: its catch-all `resid.variance <- sig`,
+  # i.e. sigma() = sqrt(phi) unsquared ...
+  g <- suppressWarnings(lme4::glmer(case$formula, d, family = case$family))
+  expect_equal(insight::get_variance(g)$var.distribution, stats::sigma(g))
+  # ... which changes with the units of y although the log-link fixed and
+  # random variances do not, so R2 / ICC would too.
+  d100 <- transform(d, y = 100 * y)
+  g100 <- suppressWarnings(lme4::glmer(case$formula, d100, family = case$family))
+  v1 <- insight::get_variance(g)
+  v100 <- insight::get_variance(g100)
+  expect_equal(v100$var.fixed, v1$var.fixed, tolerance = 1e-3)
+  expect_equal(v100$var.random, v1$var.random, tolerance = 1e-2)
+  expect_equal(v100$var.distribution, v1$var.distribution / 10, tolerance = 1e-2)
+})

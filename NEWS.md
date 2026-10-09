@@ -26,6 +26,15 @@
 * The Nakagawa distribution-specific variance of a Gamma log-link GLMM is
   now insight 1.5's log-normal approximation `log1p(sigma^2)`, not `sigma^2`.
   `family()` now works for Gaussian non-identity-link GLMMs.
+* `mm_r2()`, `mm_icc()` and `mm_variance_components()` now support Gaussian
+  GLMMs with a non-identity link. As insight 1.5 / performance 0.18 do for
+  `glmer()` fits, the distribution-specific variance is `sigma()^2`, and
+  observation-level terms add no dispersion. This residual variance is on the
+  response scale, so the R2 and ICC depend on the units of the response.
+  Inverse-Gaussian GLMMs are still refused, now with reason code
+  `"r2_distribution_variance_undefined"`. insight 1.5 has no
+  inverse-Gaussian case and falls back to `sigma()` itself, which is not a
+  variance and changes when the response is rescaled.
 * lme4 2.1-0's `glmerControl()` dispersion settings (`disp_method`,
   `disp_dof_correction`, `maxPhiIter`) are not exposed. The engine uses their
   defaults.

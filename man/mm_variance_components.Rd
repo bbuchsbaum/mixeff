@@ -57,7 +57,20 @@ models, with \code{mu = exp(b0 + v0/2)} from the intercept \code{b0} and the
 random-effect variance \code{v0} (observation-level terms excluded) of the
 null model (\code{y ~ 1} with the same random effects), which is refitted.
 A \code{cbind(successes, failures)} binomial response divides the binomial
-value by the mean number of trials. These follow insight 1.5.
+value by the mean number of trials. A Gaussian GLMM with a non-identity
+link uses \code{sigma^2}, as insight does for every Gaussian model: note that
+this is the residual variance on the response scale, while the fixed and
+random variances are on the link scale, so the R2 and ICC of such a fit
+depend on the units of the response. Observation-level terms of a
+Gaussian GLMM do not add to the residual variance (insight treats the
+model as linear). These follow insight 1.5.
+\item Inverse-Gaussian GLMMs are refused (\code{mm_inference_unavailable}, reason
+code \code{"r2_distribution_variance_undefined"}). insight 1.5 has no
+inverse-Gaussian branch and falls back to \code{sigma()} itself (the square
+root of the dispersion, not a variance); since the inverse-Gaussian
+dispersion has units of \code{1/y}, that value, and the R2 and ICC built on
+it, change when the response is rescaled. \code{insight::get_variance()} on a
+mixeff inverse-Gaussian fit therefore returns \code{NA} with a warning.
 \item Observation-level random effects (one level per observation) count
 towards the residual variance of a GLMM.
 }

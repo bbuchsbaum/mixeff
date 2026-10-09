@@ -36,7 +36,20 @@
 #'   random-effect variance `v0` (observation-level terms excluded) of the
 #'   null model (`y ~ 1` with the same random effects), which is refitted.
 #'   A `cbind(successes, failures)` binomial response divides the binomial
-#'   value by the mean number of trials. These follow insight 1.5.
+#'   value by the mean number of trials. A Gaussian GLMM with a non-identity
+#'   link uses `sigma^2`, as insight does for every Gaussian model: note that
+#'   this is the residual variance on the response scale, while the fixed and
+#'   random variances are on the link scale, so the R2 and ICC of such a fit
+#'   depend on the units of the response. Observation-level terms of a
+#'   Gaussian GLMM do not add to the residual variance (insight treats the
+#'   model as linear). These follow insight 1.5.
+#' * Inverse-Gaussian GLMMs are refused (`mm_inference_unavailable`, reason
+#'   code `"r2_distribution_variance_undefined"`). insight 1.5 has no
+#'   inverse-Gaussian branch and falls back to `sigma()` itself (the square
+#'   root of the dispersion, not a variance); since the inverse-Gaussian
+#'   dispersion has units of `1/y`, that value, and the R2 and ICC built on
+#'   it, change when the response is rescaled. `insight::get_variance()` on a
+#'   mixeff inverse-Gaussian fit therefore returns `NA` with a warning.
 #' * Observation-level random effects (one level per observation) count
 #'   towards the residual variance of a GLMM.
 #'
@@ -127,7 +140,11 @@ mm_variance_parts <- function(fit, tolerance = 1e-5, warn = TRUE,
 
   var_dispersion <- 0
   if (inherits(fit, "mm_glmm")) {
-    var_dispersion <- sum(vapply(vc[obs_level], sigma_sum, numeric(1)))
+    # insight treats every Gaussian model as linear: no additive dispersion
+    # from observation-level terms, whatever the link.
+    if (!identical(fit$family$family, "gaussian")) {
+      var_dispersion <- sum(vapply(vc[obs_level], sigma_sum, numeric(1)))
+    }
     var_distribution <- if (distribution) {
       mm_distribution_variance(fit, warn = warn)
     } else {
@@ -197,6 +214,29 @@ mm_distribution_variance <- function(fit, warn = TRUE) {
                    inverse = ,
                    identity = as.numeric(sigma(fit))^2,
                    bad_link()),
+    # insight >= 1.5 classifies every Gaussian model as linear and uses
+    # sigma^2 whatever the link. For a non-identity link this is the
+    # response-scale residual variance next to link-scale fixed and random
+    # variances; mixeff follows insight rather than inventing a link-scale
+    # approximation.
+    gaussian = as.numeric(sigma(fit))^2,
+    # insight 1.5 has no inverse-Gaussian branch: the family falls through to
+    # its catch-all `resid.variance <- sig`, i.e. sigma() = sqrt(phi) itself,
+    # not a variance. Because phi of an inverse Gaussian has units 1/y, that
+    # value (and hence R2 / ICC) changes when the response is rescaled while
+    # the link-scale fixed and random variances of a log-link fit do not.
+    # mixeff refuses rather than reproduce an ill-defined number.
+    inverse_gaussian = mm_abort(
+      message = paste0(
+        "The distribution-specific variance of an inverse-Gaussian GLMM is ",
+        "not defined. insight/performance 1.5 fall back to `sigma()` (not a ",
+        "variance), which depends on the units of the response, so mixeff ",
+        "does not compute R2 or the ICC for this family."
+      ),
+      class = "mm_inference_unavailable",
+      reason_code = "r2_distribution_variance_undefined",
+      input = c(fam, link)
+    ),
     poisson = ,
     negative_binomial = {
       if (!identical(link, "log")) {

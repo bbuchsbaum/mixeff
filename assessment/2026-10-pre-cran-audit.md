@@ -275,8 +275,8 @@ bbuchsbaum/mixeff#4.
 ## 5. Performance
 
 1. [x] **Re-vendor the engine.** This is the largest single win; see §1.
-2. [~] **`summary(fit)` refits once per coefficient.**
-  _(a) done: one bridge call for all coefficients. (b) warm starts used for bootstrap refits only (same-model refits stay cold so summaries reproduce the fit exactly). (c) `rust_handle` cache not implemented._
+2. [x] **`summary(fit)` refits once per coefficient.**
+  _(a) done: one bridge call for all coefficients. (b) warm starts used for bootstrap refits only (same-model refits stay cold so summaries reproduce the fit exactly). (c) done in 4e317d3 (engine mixeff-rs#10, bridge-perf): `fit$rust_handle` keeps the fitted engine model; every follow-on entry point (contrasts, summary/anova term tables, bootstraps, predict and prediction variance, condVar, compare, boundary LRT, profile, verify_convergence) runs on the live model (a clone for the mutating ones), and falls back to the cold refit, with identical results, when the handle is dead after saveRDS()/readRDS() or does not match the requested refit. 200k-row crossed LMM: contrast 0.39 s → 0.002 s, predict(interval) 0.70 s → 0.04 s, summary 5.4 s → 4.8 s (the rest is the Satterthwaite computation itself)._
    - The default resolves to Satterthwaite and then runs
      `mm_inference_table_recompute` (`R/revive.R:998`), which makes one
      `contrast()` call per coefficient.
@@ -299,7 +299,9 @@ bbuchsbaum/mixeff#4.
   without a live engine handle), so the bridge must complete the
   certificate's derivative evidence at fit time; deferring it would ship
   fits whose `optimizer_certificate()` lacks gradient/Hessian evidence.
-  Revisit together with a `rust_handle` cache._
+  Revisit together with a `rust_handle` cache._ The cache landed in
+  4e317d3 but fits must still survive serialization without it, so the
+  certificate stays complete at fit time (as the engine report recommends).
    That adds 16% on InstEval and about 20% on GLMMs.
 5. [x] **GLMM A-block rebuild per PIRLS iteration.**
    - `compute_wtxy_cross_product` and `recompute_*_a_blocks` are
@@ -312,8 +314,8 @@ bbuchsbaum/mixeff#4.
    factorizations, and clones L each time.
 8. [x] **Bootstrap and profile could run in parallel**: 2 threads under
    CRAN, more on user opt-in.
-9. [~] **Bridge overhead.**
-  _Per-observation vectors now cross as R doubles and are stored once (200k rows: 1.19 s to 0.61 s, 50 MB to 11.7 MB). The duplicate compile/audit pass remains (needs an engine API that accepts a compiled artifact)._
+9. [x] **Bridge overhead.**
+  _Per-observation vectors now cross as R doubles and are stored once (200k rows: 1.19 s to 0.61 s, 50 MB to 11.7 MB). The duplicate compile/audit pass and second data translation are gone in 4e317d3: lmm()/glmm() compile once through the engine's `CompiledModelSpec` (mixeff-rs#10) and fit from it (fit time unchanged within noise: 200k rows 0.44 s → 0.43 s, sleepstudy 9 ms → 8 ms)._
    - Data is translated, and the audit run, twice per `lmm()`.
    - Factors cross as character vectors.
    - JSON numeric arrays come back as lists.

@@ -14,7 +14,8 @@
   the last level as reference; the engine always uses the first).
 * `update()` re-evaluates the original `data` when the updated formula needs
   columns the stored model frame lacks (as lme4 does), and refuses arguments
-  it cannot carry over (e.g. `subset`, `na.action`) instead of dropping them.
+  it cannot carry over (e.g. `subset`, `contrasts`) instead of dropping them.
+  It carries the fit's `na.action` over (and accepts a new one).
 * The declared Rust toolchain minimum is now 1.85, the bundled engine's
   actual requirement (some vendored crates use edition 2024).
 * The lme4 migration vignette no longer describes `coef()`, `VarCorr()`,
@@ -23,6 +24,21 @@
 
 ## lme4 parity and checklist completion
 
+* Missing values are handled as in `lmer()`/`glmer()`: `lmm()` and `glmm()`
+  honour `na.action`, whose default is now `getOption("na.action")`
+  (`na.omit` unless changed) instead of refusing `NA`. Only the variables the
+  model uses count (fixed and random terms, evaluated transforms, `weights`,
+  `offset`), so an `NA` in an unused column never drops a row. Dropped rows
+  are announced with a typed `mm_rows_dropped` message giving the number of
+  rows and the variables with missing values (silence with
+  `mm_control(verbose = -1)`), recorded as `na.action(fit)` and
+  `attr(model.frame(fit), "na.action")`, and excluded from `nobs()`.
+  `na.exclude` pads `residuals()`/`fitted()`/`predict()` for both fitters;
+  `na.fail` and `na.pass` are refused with a typed `mm_data_error`.
+  `simulate()`, `refit()`, `update()`, bootstrap and influence measures use
+  the fitted rows, and `compare()`/`anova()` refuse models fitted to
+  different numbers of rows (`reason_code = "different_nobs"`), as lme4's
+  `anova()` does.
 * Shapes follow lme4 >= 2.0 and insight >= 1.5:
   * `confint(method = "profile")` numbers `.sigNN` term by term, each
     term's standard deviations before its correlations. lme4 1.1 numbered

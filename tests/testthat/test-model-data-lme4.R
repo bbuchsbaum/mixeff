@@ -88,9 +88,9 @@ test_that("glmm() honours subset, na.action and contrasts like lmm()", {
   d <- md_data()
   d$x2 <- d$x
   d$x2[5] <- NA
-  # default: NA refused, consistently with lmm()
-  expect_error(glmm(cnt ~ x2 + (1 | g), d, family = poisson, control = quiet),
-               class = "mm_data_error")
+  # default: getOption("na.action") (na.omit), consistently with lmm()
+  expect_equal(nobs(q(glmm(cnt ~ x2 + (1 | g), d, family = poisson,
+                           control = quiet))), nrow(d) - 1L)
   m <- q(glmm(cnt ~ x2 + (1 | g), d, family = poisson, subset = t > 2,
               na.action = na.exclude, method = "joint_laplace",
               contrasts = list(f = "contr.treatment"), control = quiet))

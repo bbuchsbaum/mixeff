@@ -323,8 +323,10 @@ mm_prepare_model_data <- function(formula, data, subset_expr, na.action,
   }
   n0 <- nrow(data)
   if (!is.null(offset_arg)) {
+    # NA offsets are missing values handled by `na.action` below (as in
+    # model.frame()); only non-missing infinite values are refused here.
     if (!is.numeric(offset_arg) || length(offset_arg) != n0 ||
-        any(!is.finite(offset_arg))) {
+        any(!is.finite(offset_arg) & !is.na(offset_arg))) {
       mm_abort(
         message = sprintf(
           "`offset` must be a finite numeric vector with one value per row of `data` (%d).",
@@ -372,16 +374,13 @@ mm_prepare_model_data <- function(formula, data, subset_expr, na.action,
       check[[plan$labels[[i]]]] <- if (is.null(dim(v))) v[rows] else v[rows, , drop = FALSE]
     }
   }
-  na_action <- NULL
-  if (is.null(na.action)) {
-    mm_check_no_na(check, names(check))
-  } else {
-    if (!is.function(na.action)) na.action <- match.fun(na.action)
-    cleaned <- na.action(check)
-    na_action <- attr(cleaned, "na.action")
-    if (!is.null(na_action)) {
-      rows <- rows[-as.integer(na_action)]
-    }
+  # `weights` and `offset` count as model variables, exactly like the
+  # "(weights)" / "(offset)" columns of model.frame().
+  if (!is.null(weights)) check[["(weights)"]] <- weights[rows]
+  if (!is.null(offset_arg)) check[["(offset)"]] <- offset_arg[rows]
+  na_action <- mm_apply_na_action(check, na.action, verbose)
+  if (!is.null(na_action)) {
+    rows <- rows[-as.integer(na_action)]
   }
 
   out <- data[rows, raw_vars, drop = FALSE]
@@ -606,6 +605,126 @@ mm_formula_offset <- function(fit, data) {
 }
 
 # Pad a per-observation vector/matrix for na.exclude fits (lm/lme4 semantics).
+# ---- missing values (lme4 / model.frame() semantics) ------------------------
+
+# Apply `na.action` to the frame of model variables (`check`: the raw formula
+# variables after `subset`, evaluated transforms, "(weights)", "(offset)").
+# `na.action` is a function or function name; NULL resolves to
+# getOption("na.action") as in model.frame(). Rows are only ever dropped
+# announced (typed `mm_rows_dropped` message at verbose >= 0: no silent
+# surgery). na.fail (or any na.action that errors) and actions that keep NA
+# rows (na.pass, or no action configured) are refused with a typed
+# `mm_data_error`: the engine cannot fit missing values. Returns the
+# na.action record (class "omit"/"exclude") or NULL when nothing was dropped.
+mm_apply_na_action <- function(check, na.action, verbose) {
+  .call <- rlang::caller_env()
+  if (is.null(na.action)) na.action <- getOption("na.action")
+  label <- mm_na_action_label(na.action)
+  counts <- mm_na_counts(check)
+  if (!any(counts > 0L)) return(NULL)
+  details <- paste(sprintf("`%s` (%d NA)", names(counts)[counts > 0L],
+                           counts[counts > 0L]), collapse = ", ")
+  refuse <- function(message, reason_code, parent = NULL) {
+    mm_abort(
+      message = message,
+      class = "mm_data_error",
+      reason_code = reason_code,
+      columns = names(counts)[counts > 0L],
+      na_counts = unname(counts[counts > 0L]),
+      na_action = label,
+      call = .call,
+      parent = parent
+    )
+  }
+  if (is.null(na.action)) {
+    refuse(
+      sprintf(paste0(
+        "Missing values in model variable(s): %s, and no `na.action` is set ",
+        "(getOption(\"na.action\") is NULL). Pass `na.action = na.omit` ",
+        "(or `na.exclude`) to drop incomplete rows."
+      ), details),
+      "na_action_unset"
+    )
+  }
+  fun <- if (is.function(na.action)) na.action else match.fun(na.action)
+  cleaned <- tryCatch(fun(check), error = function(cnd) cnd)
+  if (inherits(cleaned, "error")) {
+    refuse(
+      sprintf(paste0(
+        "Missing values in model variable(s): %s; `na.action = %s` refuses ",
+        "them. Use `na.action = na.omit` (or `na.exclude`) to drop incomplete ",
+        "rows, or remove them from `data`."
+      ), details, label),
+      "na_action_failed",
+      parent = cleaned
+    )
+  }
+  record <- attr(cleaned, "na.action")
+  left <- check
+  if (!is.null(record)) left <- check[-as.integer(record), , drop = FALSE]
+  if (anyNA(left)) {
+    refuse(
+      sprintf(paste0(
+        "Missing values in model variable(s): %s; `na.action = %s` keeps ",
+        "incomplete rows, but mixed models cannot be fitted to missing ",
+        "values. Use `na.action = na.omit` (or `na.exclude`) instead."
+      ), details, label),
+      "na_action_keeps_missing"
+    )
+  }
+  if (is.null(record) || !length(record)) return(NULL)
+  if (isTRUE(verbose >= 0L)) {
+    n_drop <- length(record)
+    mm_inform(
+      sprintf(paste0(
+        "Dropped %d of %d row%s with missing values (na.action = %s): %s. ",
+        "%sSilence with mm_control(verbose = -1)."
+      ),
+      n_drop, nrow(check), if (nrow(check) == 1L) "" else "s", label,
+      details,
+      if (inherits(record, "exclude")) {
+        "residuals(), fitted() and predict() are padded with NA for them. "
+      } else {
+        ""
+      }),
+      class = "mm_rows_dropped",
+      n_dropped = n_drop,
+      n_total = nrow(check),
+      columns = names(counts)[counts > 0L],
+      na_counts = unname(counts[counts > 0L]),
+      na_action = record
+    )
+  }
+  record
+}
+
+# Rows with a missing value, per model variable (matrix columns count a row
+# once).
+mm_na_counts <- function(check) {
+  vapply(check, function(v) {
+    m <- is.na(v)
+    if (length(dim(m)) == 2L) sum(rowSums(m) > 0L) else sum(m)
+  }, integer(1))
+}
+
+mm_na_action_label <- function(na.action) {
+  if (is.null(na.action)) return("NULL")
+  if (is.character(na.action)) return(na.action[[1L]])
+  for (nm in c("na.omit", "na.exclude", "na.fail", "na.pass")) {
+    if (identical(na.action, get(nm, envir = asNamespace("stats")))) return(nm)
+  }
+  "<function>"
+}
+
+# Drop na.exclude padding from a per-observation vector (fitted(), predict()
+# without newdata) to get the values for the rows the model was fitted to.
+mm_insample <- function(fit, x) {
+  x <- as.numeric(x)
+  n <- nobs(fit)
+  if (length(x) > n && !is.null(fit$na.action)) x <- x[-fit$na.action]
+  x
+}
+
 mm_napredict <- function(fit, x) {
   na <- fit$na.action
   if (is.null(na)) return(x)

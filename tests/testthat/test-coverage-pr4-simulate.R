@@ -32,10 +32,10 @@ test_that("in-sample simulation drops na.exclude padding", {
              control = cp4sim_ctrl())
   padded <- fitted(fit)
   expect_length(padded, 40L)
-  ins <- mixeff:::mm_simulate_insample(fit, padded)
+  ins <- mixeff:::mm_insample(fit, padded)
   expect_length(ins, 38L)
   expect_false(anyNA(ins))
-  expect_identical(mixeff:::mm_simulate_insample(fit, 1:38), as.numeric(1:38))
+  expect_identical(mixeff:::mm_insample(fit, 1:38), as.numeric(1:38))
 })
 
 test_that("the PSD lower factor handles empty and singular blocks", {

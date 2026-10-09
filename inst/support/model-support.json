@@ -80,7 +80,7 @@
       "feature": "subset / na.action / contrasts",
       "lmm": "supported",
       "glmm": "supported",
-      "notes": "Same data preparation for lmm() and glmm(): the default na.action (NULL) refuses NA; na.omit drops incomplete rows and na.exclude also pads fitted/residuals/predict. Unused factor levels are dropped after subset/NA removal. contrasts = is honoured only when it names the engine coding (contr.treatment / contr.poly)."
+      "notes": "Same data preparation for lmm() and glmm(): na.action defaults to getOption(\"na.action\") (na.omit) as in lme4, applied to the model variables, weights and offset only; dropped rows are announced (typed mm_rows_dropped message) and recorded in na.action(fit); na.exclude also pads fitted/residuals/predict; na.fail and na.pass raise mm_data_error. Unused factor levels are dropped after subset/NA removal. contrasts = is honoured only when it names the engine coding (contr.treatment / contr.poly)."
     },
     {
       "feature": "random = (GLMM)",

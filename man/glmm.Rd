@@ -12,7 +12,7 @@ glmm(
   weights = NULL,
   offset = NULL,
   subset = NULL,
-  na.action = NULL,
+  na.action = getOption("na.action"),
   contrasts = NULL,
   method = c("joint_laplace", "pirls_profiled"),
   nAGQ = 1L,
@@ -53,10 +53,13 @@ a numeric vector; values must be finite. \code{offset()} terms in the formula
 are also supported and are added to it (as in \code{\link[stats:glm]{stats::glm()}}).}
 
 \item{subset, na.action, contrasts}{As in \code{\link[=lmm]{lmm()}}: \code{subset} selects rows
-(evaluated in \code{data}), \code{na.action} controls missing values (the default
-\code{NULL} refuses \code{NA} in a model variable with a typed \code{mm_data_error};
-pass \code{na.omit} for lme4's complete-case behaviour, or \code{na.exclude} to pad
-\code{fitted()}/\code{residuals()}/\code{predict()} back to the original rows), and
+(evaluated in \code{data}), \code{na.action} controls missing values (default
+\code{getOption("na.action")}, i.e. \code{na.omit}, as in \code{glmer()}; only model
+variables, \code{weights} and \code{offset} count; dropped rows are announced with
+a typed \code{mm_rows_dropped} message and recorded in \code{na.action(fit)};
+\code{na.exclude} pads \code{fitted()}/\code{residuals()}/\code{predict()} back to the
+original rows; \code{na.fail} and \code{na.pass} are refused with a typed
+\code{mm_data_error}), and
 \code{contrasts} is honoured only when it names the engine's coding
 (\code{contr.treatment} for unordered, \code{contr.poly} for ordered factors).}
 

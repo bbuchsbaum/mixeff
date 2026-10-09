@@ -874,9 +874,22 @@ print.mm_drop1 <- function(x, ...) {
 mm_assert_comparable_lmm <- function(fits) {
   n <- vapply(fits, nobs, integer(1))
   if (length(unique(n)) != 1L) {
+    # lme4's anova() refuses the same way ("models were not all fitted to
+    # the same size of dataset"); typically different missing-value patterns
+    # dropped different rows under `na.action`.
     mm_abort(
-      message = "Compared models must have the same number of observations.",
+      message = sprintf(
+        paste0(
+          "Models were not all fitted to the same size of dataset ",
+          "(nobs: %s). Likelihood comparisons need the same rows; this usually ",
+          "means `na.action` dropped different incomplete rows for different ",
+          "models. Refit all models to the same complete-case data (e.g. ",
+          "na.omit() over the union of their variables)."
+        ),
+        paste(n, collapse = ", ")
+      ),
       class = "mm_arg_error",
+      reason_code = "different_nobs",
       input = n
     )
   }

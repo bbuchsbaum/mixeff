@@ -792,9 +792,16 @@ test_that("glmm weights/offset and cbind validation", {
   )
   expect_error(
     glmm(y ~ x + (1 | g), df, family = binomial(),
-         offset = c(NA_real_, rep(0, 29)),
+         offset = c(Inf, rep(0, 29)),
          control = mm_control(verbose = -1)),
     class = "mm_arg_error"
+  )
+  # An NA offset is a missing value handled by na.action (model.frame()).
+  expect_error(
+    glmm(y ~ x + (1 | g), df, family = binomial(),
+         offset = c(NA_real_, rep(0, 29)), na.action = na.fail,
+         control = mm_control(verbose = -1)),
+    class = "mm_data_error"
   )
 
   succ <- rbinom(30, 5, 0.4)

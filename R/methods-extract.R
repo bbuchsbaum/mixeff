@@ -1094,5 +1094,7 @@ mm_lme4_model_frame <- function(fit) {
   if (!is.null(fit$weights)) mf[["(weights)"]] <- as.numeric(fit$weights)
   if (!is.null(fit$offset)) mf[["(offset)"]] <- as.numeric(fit$offset)
   rownames(mf) <- rownames(frame)
+  # lme4: the rows dropped by `na.action` ride on the model frame.
+  if (!is.null(fit$na.action)) attr(mf, "na.action") <- fit$na.action
   mf
 }

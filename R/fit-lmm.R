@@ -20,15 +20,24 @@
 #'   one value per row or an expression evaluated in `data`.
 #' @param subset Optional expression selecting rows of `data`, evaluated in
 #'   `data` (as in [stats::lm()]).
-#' @param na.action Optional function controlling missing-value handling,
-#'   applied to the model variables (including evaluated transforms such as
-#'   `log(x)`) after `subset` (e.g. [stats::na.omit]). The default (`NULL`)
-#'   refuses any `NA` in a model variable with a typed `mm_data_error`
-#'   (audit-first: missing-data dropping must be opt-in). Pass
-#'   `na.action = na.omit` for lme4's complete-case behavior, or
-#'   [stats::na.exclude] to also pad [fitted()], [residuals()] and in-sample
-#'   [predict()] back to the rows of `data` with `NA` (as lm/lme4 do). Factor
-#'   levels left unused after `subset`/NA removal are dropped, as
+#' @param na.action A function (or function name) controlling missing-value
+#'   handling, as in [lme4::lmer()] and [stats::lm()]. The default is
+#'   `getOption("na.action")` (`na.omit` unless changed). It is applied after
+#'   `subset` to the variables the model uses only -- the formula variables
+#'   (fixed and random parts, including evaluated transforms such as `log(x)`)
+#'   plus `weights` and `offset` -- so an `NA` in an unused column of `data`
+#'   never drops a row, exactly like `model.frame()`. Dropped rows are never
+#'   silent: a typed `mm_rows_dropped` message reports how many rows were
+#'   dropped and which variables had missing values (silence it with
+#'   `mm_control(verbose = -1)`). The dropped rows are recorded as
+#'   `na.action(fit)` and `attr(model.frame(fit), "na.action")`, and
+#'   [nobs()] counts the rows used. [stats::na.omit] keeps the compact
+#'   shape; [stats::na.exclude] pads [fitted()], [residuals()] and in-sample
+#'   [predict()] back to the rows of `data` with `NA`; [stats::na.fail]
+#'   refuses missing values with a typed `mm_data_error`; [stats::na.pass]
+#'   (or no action configured) is refused with a typed `mm_data_error`, since
+#'   a mixed model cannot be fitted to missing values. Factor levels left
+#'   unused after `subset`/NA removal are dropped, as
 #'   `model.frame(drop.unused.levels = TRUE)` does in lme4.
 #' @param contrasts Optional named list of factor contrasts. The engine codes
 #'   unordered factors with treatment contrasts (`contr.treatment`) and ordered
@@ -83,7 +92,7 @@
 #'
 #' @export
 lmm <- function(formula, data, REML = TRUE, weights = NULL,
-                subset = NULL, na.action = NULL, contrasts = NULL,
+                subset = NULL, na.action = getOption("na.action"), contrasts = NULL,
                 control = mm_control(), offset = NULL) {
   call <- match.call()
   control <- mm_validate_control(control)
@@ -500,8 +509,11 @@ mm_lmm_weights <- function(expr, data, enclos) {
   if (is.null(weights)) {
     return(NULL)
   }
+  # NA weights are missing values handled by `na.action` (model.frame()
+  # semantics); the observed weights must be finite and positive.
+  obs <- weights[!is.na(weights)]
   if (!is.numeric(weights) || length(weights) != nrow(data) ||
-      anyNA(weights) || any(!is.finite(weights)) || any(weights <= 0)) {
+      any(!is.finite(obs)) || any(obs <= 0)) {
     mm_abort(
       message = "`weights` must be a finite positive numeric vector with one value per row in `data`.",
       class = "mm_data_error",

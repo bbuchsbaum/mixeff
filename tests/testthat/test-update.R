@@ -216,7 +216,8 @@ test_that("update() refuses arguments it cannot carry over instead of dropping t
   )
   fit <- lmm(y ~ x + (1 | g), upd_df, control = mm_control(verbose = -1))
   expect_error(update(fit, subset = x > 0), class = "mm_arg_error")
-  expect_error(update(fit, na.action = na.omit), class = "mm_arg_error")
+  expect_error(update(fit, contrasts = list(x = "contr.sum")),
+               class = "mm_arg_error")
 })
 
 test_that("update() refuses unnamed extra arguments", {

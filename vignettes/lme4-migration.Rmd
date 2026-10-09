@@ -97,7 +97,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `plot(fit)`, `dotplot(ranef(fit, condVar = TRUE))`, `qqmath(ranef(...))` | base-graphics `plot()`/`qqnorm()`; lattice methods | `plot(fit)` draws Pearson residuals vs fitted with base graphics (no formula interface); `plot(ranef(fit, condVar = TRUE))` gives a caterpillar plot |
 | `hatvalues`, `cooks.distance`, `influence` | same generics | LMM values match lme4; GLMM hat values use the IRLS working weights (as `glm` does), so they differ from lme4's; `influence()` takes `groups=` and `ncores=` and records failed refits instead of stopping |
 | `performance::r2()`, `performance::icc()`, `insight::get_variance()` | same calls, or `mm_r2()`, `mm_icc()`, `mm_variance_components()` | Nakagawa R2/ICC agree with performance on lme4 fits; `by_group = TRUE` is not supported |
-| `update(fit, . ~ . - x)` | same generic | a formula that needs new columns re-evaluates the original `data`, as lme4 does; arguments `lmm()`/`glmm()` cannot carry over (e.g. `subset`, `na.action`) are refused rather than dropped |
+| `update(fit, . ~ . - x)` | same generic | a formula that needs new columns re-evaluates the original `data`, as lme4 does; arguments `lmm()`/`glmm()` cannot carry over (e.g. `subset`, `contrasts`) are refused rather than dropped; the fit's `na.action` carries over |
 | `anova(m1, m2)`, `drop1` | LRT with automatic ML refit | `anova(m1, m2)` is lme4's data frame (`npar AIC BIC logLik -2*log(L) Chisq Df Pr(>Chisq)`, as lme4 >= 2.0); single-model `anova()` is lmerTest's (`Sum Sq Mean Sq NumDF DenDF F value Pr(>F)`, Type I/II/III, Satterthwaite/KR) and LMM-only; mixeff's provenance table is `$table`; a multi-column term such as `poly(x, 2)` is tested as one multi-df row, like lmerTest, unless another term contains it (then per column) |
 | `getME` | `getME()` | LMM and GLMM; lme4's components including `u`, `b`, `L`, `RX`, `RZX`, `devcomp`, `lower`, `Gp`, `Ztlist`, `Tlist`, `ST`, `glmer.nb.theta`, `"ALL"`; `devfun` is refused (the optimizer lives in the engine) |
 | `isSingular` | `is_singular(fit, tol = 1e-4)` | lme4's rule (a zero-bounded theta below `tol`), LMM and GLMM; `lme4::isSingular()` is not a generic, so call `is_singular()` |
@@ -119,7 +119,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `weights` | `weights=` | a column of `data` or a vector, as in lme4 (LMM and GLMM) |
 | `offset` | `offset=` | a column of `data`, an expression, or a vector (LMM and GLMM); `offset()` formula terms are added to it. LMMs fit `y - offset` and add it back in `fitted()`/`predict()` |
 | `subset` | `subset=` | LMM and GLMM; formula transforms are evaluated before subsetting, as in `model.frame()`; unused factor levels are dropped afterwards |
-| `na.action` | `na.action=` | LMM and GLMM; **default refuses NA**; pass `na.action = na.omit` for lme4's complete-case behavior, or `na.exclude` to pad `fitted()`/`residuals()`/`predict()` |
+| `na.action` | `na.action=` | LMM and GLMM; default `getOption("na.action")` (`na.omit`) as in lme4; only model variables, `weights` and `offset` count; dropped rows are announced (`mm_rows_dropped` message) and recorded in `na.action(fit)`; `na.exclude` pads `fitted()`/`residuals()`/`predict()`; `na.fail`/`na.pass` raise `mm_data_error` |
 | `contrasts` | partial | unordered factors use treatment coding, ordered factors `contr.poly` (both matching R/lme4 defaults). Any other coding is refused with an `mm_arg_error` rather than silently replaced, whether it is requested through `contrasts=`, a contrast attached to the factor (`contrasts(f) <- ...`), or `options(contrasts=)`; use `relevel()` to change the reference level, or build coded columns as numeric predictors |
 | character predictors | converted to factors | sorted levels, as lme4's `factor()` conversion does; logical predictors are coded as factors with levels `FALSE`/`TRUE`, as `model.matrix()` does (e.g. `lFALSE`, `lTRUE` without an intercept) |
 | numeric/character grouping (accepted silently) | coerced to factor | non-factor grouping columns are coerced to factor, announced via an `mm_grouping_coercion_notice`; silence it with `mm_control(verbose = -1)`; an ordered grouping factor is used as an unordered one (grouping needs only its levels) |
@@ -252,7 +252,7 @@ number without comment:
 
 | Situation | lme4 (+lmerTest) | mixeff |
 |-----------|------|--------|
-| `NA` in a model variable | silently dropped | refused unless `na.action = na.omit` (or `na.exclude`) |
+| `NA` in a model variable | silently dropped (`na.omit`) | dropped under the same `na.action`, announced with a typed `mm_rows_dropped` message and recorded in `na.action(fit)` |
 | Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
 | Satterthwaite df at a boundary | lmerTest prints df anyway | refused with a reason; use bootstrap |
 | Prediction SE for an unseen grouping level | — | `NA` with the reason in `mm_reason` |

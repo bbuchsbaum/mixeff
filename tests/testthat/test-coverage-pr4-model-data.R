@@ -88,14 +88,16 @@ test_that("data preparation validates its inputs", {
                    na.action = NULL, offset = NULL, lmm = TRUE) {
     mixeff:::mm_prepare_model_data(formula, data, subset, na.action,
                                    weights = NULL, offset_arg = offset,
-                                   enclos = environment(), verbose = FALSE,
+                                   enclos = environment(), verbose = -1L,
                                    lmm = lmm)
   }
   expect_error(prep(data = as.matrix(d[, 1:2])), class = "mm_data_error")
   expect_error(prep(formula = ~ x + (1 | g)), class = "mm_formula_error")
   expect_error(prep(formula = "y ~ x"), class = "mm_formula_error")
   expect_error(prep(offset = 1:3), class = "mm_arg_error")
-  expect_error(prep(offset = c(NA, rep(0, 59))), class = "mm_arg_error")
+  expect_error(prep(offset = c(Inf, rep(0, 59))), class = "mm_arg_error")
+  # An NA offset is a missing value: dropped under na.action like model.frame().
+  expect_identical(nrow(prep(offset = c(NA, rep(0, 59)))$data), 59L)
   expect_error(prep(subset = quote(c(TRUE, FALSE))), class = "mm_arg_error")
   expect_error(prep(subset = quote("a")), class = "mm_arg_error")
   neg <- prep(subset = quote(-(1:6)))

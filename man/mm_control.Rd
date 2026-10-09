@@ -17,7 +17,9 @@ mm_control(
 }
 \arguments{
 \item{verbose}{Integer verbosity level. Use \code{-1} to suppress the automatic
-model explanation (and the GLMM estimator notice).}
+model explanation and the fit notices (the GLMM estimator notice, the
+\code{mm_rows_dropped} missing-value notice, grouping coercion and scaling
+advisories).}
 
 \item{max_feval}{Optional positive integer capping the optimizer's objective
 evaluations. Most useful for \code{\link[=glmm]{glmm()}} with \code{method = "joint_laplace"},

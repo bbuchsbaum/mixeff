@@ -233,6 +233,14 @@ mm_augment_impl <- function(x, data) {
   fitted_vals <- tryCatch(as.numeric(fitted(x)), error = function(e) NULL)
   resid_vals <- tryCatch(as.numeric(stats::residuals(x)),
                          error = function(e) NULL)
+  # An na.exclude fit pads fitted()/residuals() to the original rows; the
+  # default `data` (the model frame) holds only the fitted rows.
+  if (!is.null(fitted_vals) && length(fitted_vals) != nrow(out)) {
+    fitted_vals <- mm_insample(x, fitted_vals)
+  }
+  if (!is.null(resid_vals) && length(resid_vals) != nrow(out)) {
+    resid_vals <- mm_insample(x, resid_vals)
+  }
   if (!is.null(fitted_vals) && length(fitted_vals) == nrow(out)) {
     out$.fitted <- fitted_vals
   }

@@ -52,10 +52,11 @@ test_that("no-random-effects formula error points to stats::lm()", {
   expect_false(grepl("doTryCatch", conditionMessage(err), fixed = TRUE))
 })
 
-test_that("NA in a model variable is a typed data error by default", {
+test_that("NA in a model variable is a typed data error under na.fail", {
   d <- mk_ux_lmm_data()
   d$x[3] <- NA
-  err <- tryCatch(lmm(y ~ x + (1 | g), d, control = mm_control(verbose = -1)),
+  err <- tryCatch(lmm(y ~ x + (1 | g), d, na.action = na.fail,
+                      control = mm_control(verbose = -1)),
                   condition = function(e) e)
   expect_s3_class(err, "mm_data_error")
   expect_match(conditionMessage(err), "NA", fixed = TRUE)

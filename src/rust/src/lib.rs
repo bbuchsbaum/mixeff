@@ -14,8 +14,8 @@ use mixeff_rs::model::FitProgressCallback;
 use mixeff_rs::model::{
     BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate, BootstrapSeedRecord,
     BootstrapTarget, Family, FitOptions, FitToleranceOverrides, FixedEffectBootstrapOptions,
-    GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder, GlmmFitOptions,
-    GlmmPredictionScale, LinearMixedModel, LinkFunction, MixedModelBootstrap, MixedModelFit,
+    GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder, GlmmDispersionMethod,
+    GlmmFitOptions, GlmmPredictionScale, LinearMixedModel, LinkFunction, MixedModelBootstrap, MixedModelFit,
     NewReLevels, OptimizerControl,
 };
 use mixeff_rs::stats::profile::{profile_confint_payload_with_options, ProfileOptions};
@@ -93,6 +93,51 @@ fn control_f64_vec(value: &Value) -> std::result::Result<Vec<f64>, String> {
                 .ok_or_else(|| "mm_arg_error: control vector entries must be numeric".to_string())
         })
         .collect()
+}
+
+/// Apply lme4 2.1-0's `glmerControl()` dispersion controls from the
+/// mm_control() JSON (`disp_method`, `disp_dof_correction`, `max_phi_iter`)
+/// to a GLMM before it is fitted. Absent fields keep the engine defaults
+/// (moment method, dof correction on, 100 phi iterations, as lme4 2.1-0).
+/// The engine ignores them for families without a free dispersion. The R
+/// side validates the values; malformed ones are refused here too.
+fn apply_glmm_dispersion_control(
+    model: &mut GeneralizedLinearMixedModel,
+    control: &Value,
+) -> std::result::Result<(), String> {
+    let present = |key: &str| control.get(key).filter(|v| !v.is_null());
+    if let Some(v) = present("disp_method") {
+        let method = match v.as_str() {
+            Some("moment") => GlmmDispersionMethod::Moment,
+            Some("old/buggy") => GlmmDispersionMethod::Legacy,
+            _ => {
+                return Err(format!(
+                    "mm_arg_error: disp_method must be \"moment\" or \"old/buggy\", got {}",
+                    v
+                ))
+            }
+        };
+        model.set_dispersion_method(method);
+    }
+    if let Some(v) = present("disp_dof_correction") {
+        let correct = v.as_bool().ok_or_else(|| {
+            format!("mm_arg_error: disp_dof_correction must be TRUE or FALSE, got {}", v)
+        })?;
+        model.set_dispersion_dof_correction(correct);
+    }
+    if let Some(v) = present("max_phi_iter") {
+        let n = v
+            .as_u64()
+            .filter(|n| *n >= 1)
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or_else(|| {
+                format!("mm_arg_error: max_phi_iter must be a positive integer, got {}", v)
+            })?;
+        model
+            .set_max_phi_iter(n)
+            .map_err(|e| format!("mm_arg_error: {}", e))?;
+    }
+    Ok(())
 }
 
 /// Build an engine `OptimizerControl` from the mm_control() JSON. Every field is
@@ -690,6 +735,7 @@ fn mm_fit_glmm_json(
         let weights = optional_case_weights(&weights, df.nrow())?;
         let offset = optional_offset(&offset, df.nrow())?;
         let mut model = build_glmm_model(parsed, &df, family_spec, link, weights, offset)?;
+        apply_glmm_dispersion_control(&mut model, &_control)?;
 
         // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval)
         // route through the GLMM optimizer-control surface; absent fields keep the
@@ -2729,6 +2775,7 @@ fn fit_glmm_from_bridge_data(
     let weights = optional_case_weights(weights, df.nrow())?;
     let offset = optional_offset(offset, df.nrow())?;
     let mut model = build_glmm_model(parsed, &df, family_spec, link, weights, offset)?;
+    apply_glmm_dispersion_control(&mut model, &_control)?;
     let optimizer_control = parse_optimizer_control(&_control)?;
     let glmm_options = if fast {
         GlmmFitOptions::fast_laplace()

@@ -32,8 +32,9 @@ mm_influence_parts <- function(model) {
     }
     # PIRLS working weights: for free-dispersion families (Gamma, inverse
     # Gaussian, Gaussian with a non-identity link) they carry 1/phi, as in
-    # lme4 >= 2.1-0, matching the absolute-scale relative covariance factor.
-    working <- prior * family$mu.eta(eta)^2 / var_mu / dispersion
+    # lme4 >= 2.1-0, matching the absolute-scale relative covariance factor
+    # (not under disp_method = "old/buggy", whose PIRLS used phi = 1).
+    working <- prior * family$mu.eta(eta)^2 / var_mu / mm_glmm_pirls_phi(model)
   } else {
     working <- prior
     pearson <- (y - mu) * sqrt(prior)

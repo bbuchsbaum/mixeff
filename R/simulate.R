@@ -262,6 +262,10 @@ mm_random_term_covariance <- function(fit, term_id, basis_labels,
     }
   }
 
+  # Engine trace SDs -> lme4 2.1-0's scale (see mm_glmm_re_sd_scale()).
+  scale <- mm_glmm_re_sd_scale(fit)
+  if (!identical(scale, 1)) Sigma <- Sigma * scale^2
+
   # Fall back to the VarCorr table only for a standard deviation the traces
   # did not report at all. A reported SD of exactly 0 (a singular fit) is a
   # real value, and the lookup must stay within this term's grouping factor:

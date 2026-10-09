@@ -12,7 +12,10 @@ mm_control(
   ftol_rel = NULL,
   ftol_abs = NULL,
   xtol_rel = NULL,
-  optCtrl = NULL
+  optCtrl = NULL,
+  disp_method = NULL,
+  disp_dof_correction = NULL,
+  max_phi_iter = NULL
 )
 }
 \arguments{
@@ -53,6 +56,24 @@ an \code{mm_arg_error} rather than ignored. lme4's \verb{check.conv.*} options
 have no counterpart: mixeff does not emit post-hoc convergence
 warnings; the fit's convergence status is the engine's typed
 certificate (\code{\link[=optimizer_certificate]{optimizer_certificate()}}, \code{\link[=verify_convergence]{verify_convergence()}}).}
+
+\item{disp_method, disp_dof_correction, max_phi_iter}{lme4 2.1-0's
+\code{glmerControl()} dispersion controls for \code{\link[=glmm]{glmm()}} fits with a free
+dispersion parameter (Gamma, inverse Gaussian, Gaussian with a
+non-identity link). \code{disp_method = "moment"} (the default) profiles the
+dispersion \code{phi} in a damped fixed-point loop around PIRLS, with the
+working weights divided by \code{phi}; \code{"old/buggy"} restores lme4 < 2.1
+(working weights with \code{phi = 1}, theta relative to \code{sigma()}).
+\code{disp_dof_correction} (default \code{TRUE}) divides the deviance by
+\verb{n - rank([X, Z])} rather than \code{n} in the moment estimator, and
+\code{max_phi_iter} (lme4's \code{maxPhiIter}, default 100) caps the \code{phi}
+iterations per objective evaluation. Both only matter for
+\code{"moment"}. \code{NULL} keeps the engine default (the lme4 2.1-0 default).
+Invalid values raise an \code{mm_arg_error}. For families without a free
+dispersion (binomial, Poisson, negative binomial) and for \code{\link[=lmm]{lmm()}} the
+settings have no effect: they are kept on the control, and the fit
+announces that they were ignored with an \code{mm_control_ignored_notice}
+message (silenced by \code{verbose = -1}). lme4 ignores them silently.}
 }
 \value{
 A list of class \code{mm_control}.

@@ -100,7 +100,13 @@ as an exploration and screening tool, not a reporting route; see
 \code{"none"}, \code{"asymptotic"}, and \code{"bootstrap"} are accepted and recorded
 but currently equivalent to \code{"auto"}.}
 
-\item{control}{A list from \code{\link[=mm_control]{mm_control()}}.}
+\item{control}{A list from \code{\link[=mm_control]{mm_control()}}. Besides the optimizer
+settings it carries lme4 2.1-0's \code{glmerControl()} dispersion controls
+(\code{disp_method}, \code{disp_dof_correction}, \code{max_phi_iter} for lme4's
+\code{maxPhiIter}), which affect Gamma, inverse-Gaussian and Gaussian
+non-identity-link fits. The control is stored on the fit and reused by
+\code{refit()}, \code{update()} and the internal refits (bootstrap, profiles,
+predictions).}
 
 \item{...}{Reserved for future use.}
 }

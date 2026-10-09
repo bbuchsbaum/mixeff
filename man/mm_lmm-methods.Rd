@@ -226,7 +226,13 @@ Gaussian with a non-identity link) it is \code{sqrt(phi)} with
 \verb{phi = sum(deviance residuals^2) / (n - rank([X, Z]))}, the dispersion
 profiled during the fit, as in lme4 >= 2.1-0 (\code{glmerControl()} defaults
 \code{disp_method = "moment"}, \code{disp_dof_correction = TRUE}; lme4 < 2.1-0 used
-a different, biased estimate). \code{deviance()} of a GLMM is the sum of squared deviance
+a different, biased estimate). \code{mm_control(disp_dof_correction = FALSE)}
+divides by \code{n} instead, and \code{mm_control(max_phi_iter = )} caps the \code{phi}
+iterations. With \code{mm_control(disp_method = "old/buggy")} the fit
+reproduces lme4 2.1-0's \code{disp_method = "old/buggy"}: PIRLS runs with
+\code{phi = 1}, so \code{weights(fit, "working")} does not carry \code{1/phi}, and
+\code{VarCorr()} reports theta itself as the random-effect SD, as lme4 2.1-0
+does. Under lme4 < 2.1-0 that SD was \code{sigma() * theta}. \code{deviance()} of a GLMM is the sum of squared deviance
 residuals, as \code{lme4::deviance.merMod()}; \code{-2 * logLik()} is the Laplace
 objective reported in \code{anova()}. \code{model.frame()} returns lme4's frame
 (transformed columns such as \code{log(y)}, a \code{terms} attribute, \code{(weights)}

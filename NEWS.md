@@ -47,9 +47,24 @@
   Suggests) with shape `w / phi`. lme4 2.1-0 instead uses `w / sigma()`, so
   its draws have variance `sigma * mu^3` rather than the fitted
   `phi * mu^3`.
-* lme4 2.1-0's `glmerControl()` dispersion settings (`disp_method`,
-  `disp_dof_correction`, `maxPhiIter`) are not exposed. The engine uses their
-  defaults.
+* lme4 2.1-0's `glmerControl()` dispersion settings are now available as
+  `mm_control(disp_method = c("moment", "old/buggy"), disp_dof_correction,
+  max_phi_iter)`. lme4's `maxPhiIter` becomes `max_phi_iter`. They are sent to
+  the engine (`set_dispersion_method()`, `set_dispersion_dof_correction()`,
+  `set_max_phi_iter()`). Invalid values raise `mm_arg_error`, and unset ones
+  keep lme4 2.1-0's defaults (`"moment"`, `TRUE`, `100`). They affect Gamma,
+  inverse-Gaussian and Gaussian non-identity-link GLMMs. For other families and
+  for `lmm()` they have no effect, and the fit says so with an
+  `mm_control_ignored_notice` (lme4 ignores them silently). Because the
+  control is stored on the fit, `refit()`, `update()`, `simulate()`-based
+  refits, bootstraps and the R2 null model reuse it. `getME(fit, "devcomp")`
+  dims `dispProfile`, `maxPhiIter` and `qEff` reflect the settings. Under
+  `"old/buggy"`, the working weights do not carry `1/phi`, and `VarCorr()` /
+  `simulate()` use theta itself as the random-effect SD, as lme4 2.1-0 does.
+  Fits match `glmer(control = glmerControl(...))` from lme4 2.1-0. Under
+  `"old/buggy"` they agree to about 2e-4 in the estimates and 3e-6 relative in
+  `logLik()`, at the same lme4 deviance. The tests compare with stored
+  lme4 2.1-0 values when the installed lme4 is older.
 
 * `confint(method = "profile")` and `profile()` no longer fail when one
   parameter's profile is irregular. The row is kept with a `status`

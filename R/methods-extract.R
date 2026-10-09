@@ -46,7 +46,13 @@
 #' `phi = sum(deviance residuals^2) / (n - rank([X, Z]))`, the dispersion
 #' profiled during the fit, as in lme4 >= 2.1-0 (`glmerControl()` defaults
 #' `disp_method = "moment"`, `disp_dof_correction = TRUE`; lme4 < 2.1-0 used
-#' a different, biased estimate). `deviance()` of a GLMM is the sum of squared deviance
+#' a different, biased estimate). `mm_control(disp_dof_correction = FALSE)`
+#' divides by `n` instead, and `mm_control(max_phi_iter = )` caps the `phi`
+#' iterations. With `mm_control(disp_method = "old/buggy")` the fit
+#' reproduces lme4 2.1-0's `disp_method = "old/buggy"`: PIRLS runs with
+#' `phi = 1`, so `weights(fit, "working")` does not carry `1/phi`, and
+#' `VarCorr()` reports theta itself as the random-effect SD, as lme4 2.1-0
+#' does. Under lme4 < 2.1-0 that SD was `sigma() * theta`. `deviance()` of a GLMM is the sum of squared deviance
 #' residuals, as `lme4::deviance.merMod()`; `-2 * logLik()` is the Laplace
 #' objective reported in `anova()`. `model.frame()` returns lme4's frame
 #' (transformed columns such as `log(y)`, a `terms` attribute, `(weights)`
@@ -560,6 +566,45 @@ mm_glmm_free_dispersion <- function(fit) {
   }
   identical(family, "gaussian") &&
     !identical(as.character(fam$link %||% "identity"), "identity")
+}
+
+# TRUE for a free-dispersion GLMM fitted with mm_control(disp_method =
+# "old/buggy") (lme4 2.1-0 glmerControl(disp_method = "old/buggy")): PIRLS
+# ran with phi = 1, so the working weights do not carry 1/phi.
+mm_glmm_legacy_dispersion <- function(fit) {
+  inherits(fit, "mm_glmm") && mm_glmm_free_dispersion(fit) &&
+    identical(fit$control$disp_method, "old/buggy")
+}
+
+# The dispersion phi dividing a GLMM's PIRLS working weights: sigma()^2 for
+# a free-dispersion family under the (default) moment method, else 1.
+mm_glmm_pirls_phi <- function(fit) {
+  if (mm_glmm_free_dispersion(fit) && !mm_glmm_legacy_dispersion(fit)) {
+    as.numeric(sigma(fit))^2
+  } else {
+    1
+  }
+}
+
+# Scale applied to the engine's random-effect SDs so that they are lme4
+# 2.1-0's: under disp_method = "old/buggy" the engine reports
+# sigma * theta (theta relative to sigma, the lme4 < 2.1 convention) while
+# lme4 2.1-0 reports theta itself, the SD of b = Lambda u; 1 otherwise.
+mm_glmm_re_sd_scale <- function(fit) {
+  if (mm_glmm_legacy_dispersion(fit)) 1 / as.numeric(sigma(fit)) else 1
+}
+
+mm_varcorr_rescale <- function(vc, scale) {
+  if (identical(scale, 1) || is.null(vc)) return(vc)
+  if (!is.null(vc$table) && nrow(vc$table)) {
+    vc$table$std_dev <- vc$table$std_dev * scale
+    vc$table$variance <- vc$table$variance * scale^2
+  }
+  vc$components_raw <- lapply(vc$components_raw, function(cmp) {
+    cmp$std_dev <- cmp$std_dev * scale
+    cmp
+  })
+  vc
 }
 
 # Refuse recognized-but-unsupported lme4 arguments that `...` would otherwise

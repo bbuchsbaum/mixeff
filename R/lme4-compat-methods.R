@@ -134,14 +134,12 @@ mm_glmm_resp <- function(fit) {
 # prior weight * mu.eta(eta)^2 / variance(mu) (lme4's Xwts^2), divided by
 # the dispersion phi = sigma^2 for free-dispersion families (Gamma, inverse
 # Gaussian, Gaussian with a non-identity link), as in lme4 >= 2.1-0, whose
-# PIRLS criterion is deviance / phi + |u|^2.
+# PIRLS criterion is deviance / phi + |u|^2 -- unless the fit used
+# disp_method = "old/buggy", whose PIRLS ran with phi = 1.
 mm_glmm_working_weights <- function(fit) {
   r <- mm_glmm_resp(fit)
   w <- r$wt * r$family$mu.eta(r$eta)^2 / r$family$variance(r$mu)
-  if (mm_glmm_free_dispersion(fit)) {
-    w <- w / as.numeric(sigma(fit))^2
-  }
-  w
+  w / mm_glmm_pirls_phi(fit)
 }
 
 #' @rdname mm_family
@@ -588,11 +586,18 @@ mm_compute_pls <- function(fit) {
               compDev = 1L, useSc = as.integer(use_sc), reTrms = 1L,
               spFe = 0L, REML = 0L, GLMM = 1L, NLMM = 0L,
               npar = length(fit$theta),
-              # lme4 >= 2.1-0 glmerControl() defaults (disp_method =
-              # "moment", maxPhiIter = 100), which the engine uses, and
-              # qEff = rank([X, Z]) for free-dispersion families (else NA).
-              dispProfile = 1L, maxPhiIter = 100L,
-              qEff = if (use_sc) mm_glmm_qeff(X, Zt) else NA_integer_)
+              # lme4 >= 2.1-0 glmerControl() dispersion settings, from
+              # mm_control() (defaults disp_method = "moment",
+              # maxPhiIter = 100); qEff = rank([X, Z]) for free-dispersion
+              # families with disp_dof_correction (else NA), as lme4 2.1-0.
+              dispProfile = as.integer(!identical(fit$control$disp_method,
+                                                  "old/buggy")),
+              maxPhiIter = as.integer(fit$control$max_phi_iter %||% 100L),
+              qEff = if (use_sc && !isFALSE(fit$control$disp_dof_correction)) {
+                mm_glmm_qeff(X, Zt)
+              } else {
+                NA_integer_
+              })
   } else {
     reml <- isTRUE(fit$REML)
     cmp <- c(ldL2 = ldL2, ldRX2 = ldRX2, wrss = wrss, ussq = ussq,

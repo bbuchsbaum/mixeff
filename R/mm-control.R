@@ -45,6 +45,24 @@
 #'   warnings; the fit's convergence status is the engine's typed
 #'   certificate ([optimizer_certificate()], [verify_convergence()]).
 #'
+#' @param disp_method,disp_dof_correction,max_phi_iter lme4 2.1-0's
+#'   `glmerControl()` dispersion controls for [glmm()] fits with a free
+#'   dispersion parameter (Gamma, inverse Gaussian, Gaussian with a
+#'   non-identity link). `disp_method = "moment"` (the default) profiles the
+#'   dispersion `phi` in a damped fixed-point loop around PIRLS, with the
+#'   working weights divided by `phi`; `"old/buggy"` restores lme4 < 2.1
+#'   (working weights with `phi = 1`, theta relative to `sigma()`).
+#'   `disp_dof_correction` (default `TRUE`) divides the deviance by
+#'   `n - rank([X, Z])` rather than `n` in the moment estimator, and
+#'   `max_phi_iter` (lme4's `maxPhiIter`, default 100) caps the `phi`
+#'   iterations per objective evaluation. Both only matter for
+#'   `"moment"`. `NULL` keeps the engine default (the lme4 2.1-0 default).
+#'   Invalid values raise an `mm_arg_error`. For families without a free
+#'   dispersion (binomial, Poisson, negative binomial) and for [lmm()] the
+#'   settings have no effect: they are kept on the control, and the fit
+#'   announces that they were ignored with an `mm_control_ignored_notice`
+#'   message (silenced by `verbose = -1`). lme4 ignores them silently.
+#'
 #' @return A list of class `mm_control`.
 #'
 #' @seealso [optimizer_certificate()] to inspect which optimizer ran and whether
@@ -53,7 +71,9 @@
 #' @export
 mm_control <- function(verbose = 0L, max_feval = NULL, optimizer = NULL,
                        start = NULL, ftol_rel = NULL, ftol_abs = NULL,
-                       xtol_rel = NULL, optCtrl = NULL) {
+                       xtol_rel = NULL, optCtrl = NULL,
+                       disp_method = NULL, disp_dof_correction = NULL,
+                       max_phi_iter = NULL) {
   if (!is.null(optCtrl)) {
     oc <- mm_translate_optctrl(optCtrl)
     if (!is.null(oc$max_feval)) max_feval <- max_feval %||% oc$max_feval
@@ -123,12 +143,84 @@ mm_control <- function(verbose = 0L, max_feval = NULL, optimizer = NULL,
     }
   }
 
+  if (!is.null(disp_method)) {
+    if (!is.character(disp_method) || length(disp_method) != 1L ||
+        is.na(disp_method) || !disp_method %in% mm_disp_methods) {
+      mm_abort(
+        message = sprintf(
+          "`disp_method` must be `NULL`, %s.",
+          paste(sprintf("\"%s\"", mm_disp_methods), collapse = " or ")
+        ),
+        class = "mm_arg_error",
+        input = disp_method
+      )
+    }
+    out$disp_method <- disp_method
+  }
+  if (!is.null(disp_dof_correction)) {
+    if (!is.logical(disp_dof_correction) || length(disp_dof_correction) != 1L ||
+        is.na(disp_dof_correction)) {
+      mm_abort(
+        message = "`disp_dof_correction` must be `NULL`, `TRUE` or `FALSE`.",
+        class = "mm_arg_error",
+        input = disp_dof_correction
+      )
+    }
+    out$disp_dof_correction <- disp_dof_correction
+  }
+  if (!is.null(max_phi_iter)) {
+    if (!is.numeric(max_phi_iter) || length(max_phi_iter) != 1L ||
+        is.na(max_phi_iter) || !is.finite(max_phi_iter) ||
+        max_phi_iter < 1 || max_phi_iter != round(max_phi_iter) ||
+        max_phi_iter > .Machine$integer.max) {
+      mm_abort(
+        message = "`max_phi_iter` must be `NULL` or a single positive integer.",
+        class = "mm_arg_error",
+        input = max_phi_iter
+      )
+    }
+    out$max_phi_iter <- as.integer(max_phi_iter)
+  }
+
   # Engine-only vector controls reachable through optCtrl.
   if (!is.null(oc$xtol_abs)) out$xtol_abs <- oc$xtol_abs
   if (!is.null(oc$initial_step)) out$initial_step <- oc$initial_step
 
   class(out) <- "mm_control"
   out
+}
+
+# lme4 2.1-0 glmerControl(disp_method = ) choices.
+mm_disp_methods <- c("moment", "old/buggy")
+
+mm_disp_control_names <- c("disp_method", "disp_dof_correction", "max_phi_iter")
+
+# The dispersion controls the caller set, or character() if none.
+mm_disp_controls_set <- function(control) {
+  mm_disp_control_names[vapply(mm_disp_control_names, function(nm) {
+    !is.null(control[[nm]])
+  }, logical(1))]
+}
+
+# Dispersion controls only act on GLMMs with a free dispersion. Elsewhere
+# they are kept but have no effect; say so (typed notice, verbose >= 0)
+# rather than ignore them silently.
+mm_disp_control_notice <- function(control, applies, what) {
+  set <- mm_disp_controls_set(control)
+  if (!length(set) || applies || !isTRUE(control$verbose >= 0L)) {
+    return(invisible(NULL))
+  }
+  mm_inform(
+    sprintf(
+      paste0(
+        "mm_control(%s) ignored: the dispersion controls only affect GLMMs ",
+        "with a free dispersion parameter (Gamma, inverse Gaussian, Gaussian ",
+        "with a non-identity link), not %s."
+      ),
+      paste(set, collapse = ", "), what
+    ),
+    class = "mm_control_ignored_notice"
+  )
 }
 
 # lme4/nloptr-style optCtrl -> engine control fields. Every name is mapped or
@@ -194,6 +286,9 @@ mm_validate_control <- function(control) {
     ftol_rel = control$ftol_rel,
     ftol_abs = control$ftol_abs,
     xtol_rel = control$xtol_rel,
+    disp_method = control$disp_method,
+    disp_dof_correction = control$disp_dof_correction,
+    max_phi_iter = control$max_phi_iter,
     optCtrl = c(
       if (!is.null(control$xtol_abs)) list(xtol_abs = control$xtol_abs),
       if (!is.null(control$initial_step)) list(rhobeg = control$initial_step)

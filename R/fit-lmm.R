@@ -143,6 +143,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   spec$expansion <- prep$expansion
   mm_validate_fit_structure(spec)
   mm_scaling_advisory(spec, control$verbose)
+  mm_disp_control_notice(control, applies = FALSE, what = "linear mixed models")
   if (control$verbose >= 0L) {
     mm_inform_explanation(spec)
   }

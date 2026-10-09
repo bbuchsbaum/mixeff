@@ -76,7 +76,13 @@
 #'   `inference_options()`.
 #'   `"none"`, `"asymptotic"`, and `"bootstrap"` are accepted and recorded
 #'   but currently equivalent to `"auto"`.
-#' @param control A list from [mm_control()].
+#' @param control A list from [mm_control()]. Besides the optimizer
+#'   settings it carries lme4 2.1-0's `glmerControl()` dispersion controls
+#'   (`disp_method`, `disp_dof_correction`, `max_phi_iter` for lme4's
+#'   `maxPhiIter`), which affect Gamma, inverse-Gaussian and Gaussian
+#'   non-identity-link fits. The control is stored on the fit and reused by
+#'   `refit()`, `update()` and the internal refits (bootstrap, profiles,
+#'   predictions).
 #' @param ... Reserved for future use.
 #'
 #'
@@ -208,6 +214,11 @@ glmm <- function(formula,
   spec$expansion <- mprep$expansion
   mm_validate_fit_structure(spec, lmm = FALSE)
   mm_scaling_advisory(spec, control$verbose)
+  mm_disp_control_notice(
+    control,
+    applies = mm_glmm_free_dispersion(list(family = family_info)),
+    what = sprintf("family `%s`", family_info$family)
+  )
   if (control$verbose >= 0L) {
     mm_inform_explanation(spec)
     # No silent surgery on the estimator choice: when the user did not pick a
@@ -348,6 +359,9 @@ glmm <- function(formula,
   fit <- mm_apply_lme4_coef_naming(fit)
   fit <- mm_apply_lme4_group_labels(fit)
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
+  # disp_method = "old/buggy": report theta itself as the random-effect SD,
+  # as lme4 2.1-0 does (the engine reports sigma * theta).
+  fit$varcorr <- mm_varcorr_rescale(fit$varcorr, mm_glmm_re_sd_scale(fit))
   # No silent surgery on the estimator that produced the numbers: when the
   # engine substituted a fallback for the requested method (typed
   # `estimator_substitution` record, engine f82c646+), say so at fit time.

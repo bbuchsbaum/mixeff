@@ -25,5 +25,6 @@ out <- list(
   cases = refs
 )
 path <- test_path("fixtures", "lme4-2.1-dispersion-refs.json")
-jsonlite::write_json(out, path, digits = NA, auto_unbox = TRUE, pretty = TRUE)
+jsonlite::write_json(out, path, digits = NA, auto_unbox = TRUE, pretty = TRUE,
+                    na = "null")
 cat("wrote", path, "\n")

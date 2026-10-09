@@ -73,6 +73,13 @@ mm_disp_cases <- function() {
          family = family)
   }
   sim <- function(case) c(case, list(simulate = TRUE))
+  ctrl <- function(family, glmer_control) {
+    list(data = mm_disp_data_scale, formula = y ~ x + (1 | g),
+         family = switch(family,
+                         gamma = stats::Gamma(link = "log"),
+                         ig = stats::inverse.gaussian(link = "log")),
+         glmer_control = glmer_control)
+  }
   list(
     fl_gamma_inverse = sim(fl(stats::Gamma(), function(x, re) {
       mu <- 1 / (2 + 0.3 * x + re)
@@ -103,6 +110,15 @@ mm_disp_cases <- function() {
     scale_ig_log = list(data = mm_disp_data_scale,
                         formula = y ~ x + (1 | g),
                         family = stats::inverse.gaussian(link = "log")),
+    # lme4 2.1-0 glmerControl() dispersion settings (mm_control()
+    # disp_method / disp_dof_correction / max_phi_iter).
+    ctrl_gamma_oldbuggy = ctrl("gamma", list(disp_method = "old/buggy")),
+    ctrl_gamma_nodof = ctrl("gamma", list(disp_dof_correction = FALSE)),
+    ctrl_gamma_maxphi3 = ctrl("gamma", list(maxPhiIter = 3)),
+    ctrl_gamma_nodof_maxphi5 = ctrl("gamma", list(disp_dof_correction = FALSE,
+                                                  maxPhiIter = 5)),
+    ctrl_ig_oldbuggy = ctrl("ig", list(disp_method = "old/buggy")),
+    ctrl_ig_nodof = ctrl("ig", list(disp_dof_correction = FALSE)),
     influence_gamma_log = list(data = mm_disp_data_influence,
                                formula = yg ~ x + (1 | g),
                                family = stats::Gamma(link = "log"),
@@ -111,6 +127,16 @@ mm_disp_cases <- function() {
 }
 
 mm_disp_sim_rows <- 20L
+
+mm_disp_dims <- c("dispProfile", "maxPhiIter", "qEff")
+
+# glmerControl() dispersion arguments -> mm_control() arguments.
+mm_disp_mm_control <- function(case, verbose = -1L) {
+  gc <- case$glmer_control
+  if (is.null(gc)) gc <- list()
+  names(gc)[names(gc) == "maxPhiIter"] <- "max_phi_iter"
+  do.call(mm_control, c(list(verbose = verbose), gc))
+}
 
 mm_disp_case <- function(key) {
   case <- mm_disp_cases()[[key]]
@@ -135,8 +161,13 @@ mm_disp_working_hat <- function(fit) {
 mm_disp_ref_live <- function(key) {
   case <- mm_disp_case(key)
   d <- case$data()
+  control <- if (!is.null(case$glmer_control)) {
+    do.call(lme4::glmerControl, case$glmer_control)
+  } else {
+    lme4::glmerControl()
+  }
   fit <- suppressWarnings(suppressMessages(
-    lme4::glmer(case$formula, d, family = case$family)
+    lme4::glmer(case$formula, d, family = case$family, control = control)
   ))
   ll <- stats::logLik(fit)
   out <- list(
@@ -149,6 +180,12 @@ mm_disp_ref_live <- function(key) {
     sigma = stats::sigma(fit),
     deviance = stats::deviance(fit)
   )
+  if (!is.null(case$glmer_control)) {
+    out$varcorr_sd <- unname(as.data.frame(lme4::VarCorr(fit))$sdcor)
+    dims <- lme4::getME(fit, "devcomp")$dims
+    # dispProfile, maxPhiIter, qEff (NA stored as null).
+    out$dims <- unname(as.numeric(dims[mm_disp_dims]))
+  }
   if (isTRUE(case$simulate)) {
     # lme4 2.1-0 simulate.merMod() draws (first rows of nsim = 2, seed 7):
     # new random effects (re.form = NA) and conditional on the BLUPs.

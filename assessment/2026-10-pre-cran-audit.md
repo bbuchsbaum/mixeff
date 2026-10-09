@@ -14,8 +14,9 @@ reproduced with a probe program or a test.
 Paths are relative to each repository. In mixeff, `upstream/` means
 `src/rust/upstream/mixeff-rs/`.
 
-Status key: `[ ]` open, `[~]` in progress, `[x]` fixed (with the commit or
-PR).
+Status key: `[ ]` open, `[~]` partial, `[x]` fixed or decided (with the commit,
+PR or decision). Engine fixes are in bbuchsbaum/mixeff-rs#7; R fixes in
+bbuchsbaum/mixeff#4.
 
 ## 1. Release blockers
 
@@ -88,7 +89,8 @@ PR).
     LMM-only and ignores weights.
   - The verb map at line 84 says optimizer knobs are "engine-chosen", which
     contradicts `mm_control()`.
-- [ ] **The default GLMM estimator differs from glmer's (decision needed).**
+- [x] **The default GLMM estimator differs from glmer's (decision needed).**
+  _Decided: `glmm()` now defaults to `method = "joint_laplace"`; NB, `nAGQ > 1` and `working_hessian` fall back to the profiled path with a notice._
   - `glmm()` defaults to profiled or fast PIRLS.
   - On OSF that is 5.7 log-likelihood units and about 0.35 on the logit
     scale from lme4. You need `method = "joint_laplace"` to match.
@@ -96,12 +98,12 @@ PR).
 
 ## 2. Correctness: engine (mixeff-rs)
 
-- [ ] **High: LMM model comparison never checks random-effect nesting.**
+- [x] **High: LMM model comparison never checks random-effect nesting.**
   - `random_effect_terms()` is not implemented for `LinearMixedModel`
     (`model/traits.rs:277`).
   - So `random_effect_comparison` (`stats/lrt.rs:1347`) always returns
     `Same`, and non-nested random structures get a "valid" LRT.
-- [ ] **High: the boundary LRT applies the 50:50 χ² mixture to correlation
+- [x] **High: the boundary LRT applies the 50:50 χ² mixture to correlation
   tests** **[repro]** (`stats/lrt.rs:576-663`).
   - `||` vs `|` halves the p-value.
   - A correlation of 0 is interior; only an added variance lies on the
@@ -119,158 +121,162 @@ PR).
 - [x] **Medium: weighted-LMM simulation and parametric bootstrap draw
   ε ~ N(0, σ²)** instead of N(0, σ²/w) (`linear/mod.rs:3753`). _Fixed in
   mixeff-rs `accd4b1`._
-- [ ] **Medium: `||` with a factor creates a different model from lme4**
+- [x] **Medium: `||` with a factor creates a different model from lme4**
   (`linear/mod.rs:4937`).
   - It is not documented in `docs/guide/05_what_is_supported.md`.
   - Separately, `(0+f+h|g)` codes every factor as cell means, so Z is
     rank-deficient.
-- [ ] **Medium: Gamma and inverse-Gaussian scale conventions are
+- [x] **Medium: Gamma and inverse-Gaussian scale conventions are
   inconsistent.**
   - The objective, the residual SD and the vcov rescale use different φ.
   - Verify against lme4, or mark these families experimental.
-- [ ] **Medium: GLMM `stderror()` and the bootstrap replicate SEs fall back to
+- [x] **Medium: GLMM `stderror()` and the bootstrap replicate SEs fall back to
   the unscaled working-LMM SEs** (`generalized/mod.rs:1775`, `:465`).
-- [ ] **Medium: profile intervals are on θ, not the SD or correlation
+- [x] **Medium: profile intervals are on θ, not the SD or correlation
   scale.** Check how the R side labels them.
-- [ ] **Low: the bootstrap interval helpers can panic.**
+- [x] **Low: the bootstrap interval helpers can panic.**
   - `quantile_sorted` and `shortest_interval` panic on an empty finite set.
   - `shortest_cov_int` asserts on the level.
-- [ ] **Low: a collinear X drops the earlier column (R drops the later one),
+- [x] **Low: a collinear X drops the earlier column (R drops the later one),
   and dropped coefficients report 0.0 rather than NA.**
-- [ ] **Low: the REML log-determinant skips non-positive diagonals
+- [x] **Low: the REML log-determinant skips non-positive diagonals
   silently** (`linear/mod.rs:2204`).
-- [ ] **Low: term removal is order-sensitive** (`a*b - b:a`).
-- [ ] **Low: unused grouping levels are kept** (this affects `ngrps`,
+- [x] **Low: term removal is order-sensitive** (`a*b - b:a`).
+- [x] **Low: unused grouping levels are kept** (this affects `ngrps`,
   `ranef` and `condVar`).
-- [ ] **Low: `cluster_resample` merges implicitly nested ids across duplicate
+- [x] **Low: `cluster_resample` merges implicitly nested ids across duplicate
   draws.**
-- [ ] **Low: the design audit's interaction expansion ignores marginality**,
+- [x] **Low: the design audit's interaction expansion ignores marginality**,
   so its rank and columns can differ from the fitted design.
 
 ## 3. Correctness: R layer (mixeff)
 
-- [ ] **`na.exclude` is accepted, but `residuals`/`fitted`/`predict` are not
+- [x] **`na.exclude` is accepted, but `residuals`/`fitted`/`predict` are not
   padded.**
   - `R/fit-lmm.R:449-461` discards the `na.action` attribute, and
     `R/emmeans.R` reads an attribute that is never set.
-- [ ] **Unused factor levels are kept after `subset` or NA removal**
+- [x] **Unused factor levels are kept after `subset` or NA removal**
   (`R/data-translate.R:83`).
   - Unordered factors get NA coefficients.
   - Ordered factors get a different `contr.poly`.
   - Grouping factors inflate `ngrps`.
-- [ ] **`predict(newdata)` is fragile** (`R/predict.R:540,688,745`).
+- [x] **`predict(newdata)` is fragile** (`R/predict.R:540,688,745`).
   - An integer or character grouping column fails, because it is not
     coerced the way it is at fit time.
   - Any unused Date column fails.
   - An NA in any column fails.
-- [ ] **`(1|a:b)` labels differ from lme4.**
+- [x] **`(1|a:b)` labels differ from lme4.**
   - Groups are named `"a & b"` with levels `x_y`.
   - GLMM `predict(newdata)` then aborts (`R/predict.R:427`).
 - [x] **`simulate.mm_lmm` on singular crossed fits** draws a zero-variance
   term with another term's variance (`R/simulate.R:224-233`). _Fixed in
   `f934dff`._
 - [x] **`simulate.mm_lmm` ignores weights.** _Fixed in `f934dff`._
-- [ ] **`simulate.mm_lmm`'s `attr(, "seed")` does not follow the
+- [x] **`simulate.mm_lmm`'s `attr(, "seed")` does not follow the
   `stats::simulate` convention.**
-- [ ] **LMM bootstraps ignore `set.seed()`.**
+- [x] **LMM bootstraps ignore `set.seed()`.**
   - `bootstrap_control(seed = NULL)` leads to `StdRng::from_entropy()`.
   - Draw the seed from R's RNG, as the GLMM path already does.
 - [x] **`update(fit, . ~ . + z)` fails, because it reuses the narrowed model
   frame.** Unknown arguments are silently dropped (`R/update.R`). _Fixed: it
   re-evaluates `data` and refuses unknown arguments._
-- [ ] **`glmm()` argument handling differs from `lmm()`.**
+- [x] **`glmm()` argument handling differs from `lmm()`.**
   - [x] `weights = col` and `offset = col` are not evaluated in `data`.
     _Fixed._
-  - [ ] The `na.action = na.omit` default is never applied.
+  - [x] The `na.action = na.omit` default is never applied.
+  _Decided: the default is now `NULL` (NA refused with a typed error naming the columns), as for `lmm()`; `na.omit`/`na.exclude` are opt-in._
   - [x] `subset` is forced before it is refused. _Fixed: it is no longer
     forced._
-- [ ] **Residuals:**
+- [x] **Residuals:**
   - LMM Pearson residuals divide by σ and ignore weights, and
     `scaled = TRUE` divides by σ twice (`R/predict.R:175-181`).
   - GLMM residuals are response-only and default to response residuals;
     lme4 defaults to deviance residuals.
-- [ ] **Low: `sigma()` returns θ for negative binomial fits** (lme4 returns
+- [x] **Low: `sigma()` returns θ for negative binomial fits** (lme4 returns
   1).
-- [ ] **Low: GLMM `deviance()` is −2·logLik**, not the sum of squared
+- [x] **Low: GLMM `deviance()` is −2·logLik**, not the sum of squared
   deviance residuals.
-- [ ] **Low: `drop1` and random-term LRTs re-add the intercept on
+- [x] **Low: `drop1` and random-term LRTs re-add the intercept on
   no-intercept models** (`R/compare.R:952`, `R/inference.R:461`).
-- [ ] **Low: `refit.mm_lmm` with a transformed response** such as `log(y)`
+- [x] **Low: `refit.mm_lmm` with a transformed response** such as `log(y)`
   likely returns the original fit.
-- [ ] **Low: ordered grouping factors get a dense k×k `contr.poly`**
+- [x] **Low: ordered grouping factors get a dense k×k `contr.poly`**
   (overflow or O(k³) for large k).
-- [ ] **Low: internal refits pass `weights = fit$weights` through the data
+- [x] **Low: internal refits pass `weights = fit$weights` through the data
   mask**, so a data column named `fit`, `full` or `object` hijacks it.
-- [ ] **Low: REML→ML refits in `compare`/`anova` drop the user's
+- [x] **Low: REML→ML refits in `compare`/`anova` drop the user's
   `mm_control()`.**
-- [ ] **Low: the exported `fixef`/`ranef`/`VarCorr` mask nlme's**, and
+- [x] **Low: the exported `fixef`/`ranef`/`VarCorr` mask nlme's**, and
   `fixef.default` only forwards `merMod`.
-- [ ] **Low: emmeans registration covers `mm_lmm` only** (`R/zzz.R:64`).
-- [ ] **Low: fits cannot be interrupted.** `R_CheckUserInterrupt` longjmps
+- [x] **Low: emmeans registration covers `mm_lmm` only** (`R/zzz.R:64`).
+- [x] **Low: fits cannot be interrupted.** `R_CheckUserInterrupt` longjmps
   through Rust frames in the demo.
-- [ ] **Low: in the no-intercept case, a logical predictor is a factor in
+- [x] **Low: in the no-intercept case, a logical predictor is a factor in
   R's `model.matrix` (`xFALSE`, `xTRUE`) but numeric in the engine.**
   Check the name map.
 
 ## 4. lme4 functionality gaps (ranked by user impact)
 
-1. [ ] **High: stateful formula terms are refused** (`formula/parser.rs:381-446`).
+1. [x] **High: stateful formula terms are refused** (`formula/parser.rs:381-446`).
    - `factor()`, `scale()`, `poly()`, `ns()`/`bs()`, `offset()`, `^`,
      `%in%`.
    - Parenthesised fixed groups such as `(a+b)^2` and `a*(b+c)`.
-2. [ ] **High: missing-data and argument handling.**
+2. [x] **High: missing-data and argument handling.**
    - `lmm()` refuses NA by default.
    - `glmm()` cannot drop NA, and refuses `subset=` and `contrasts=`.
    - LMMs have no `offset`.
-3. [ ] **High: accessor shapes differ from lme4.**
+3. [x] **High: accessor shapes differ from lme4.**
    - `coef()` omits fixed effects that have no random term.
    - `VarCorr(m)$Subject` is NULL, and there are no `sc`/`stddev`
      attributes.
    - `AIC(m1, m2)` is refused.
    - `anova()` and `summary()` are not lme4/lmerTest-shaped.
    - lmerTest's `ddf=` is silently ignored by `summary()`.
-4. [ ] **High: GLMM methods are thin.**
+4. [x] **High: GLMM methods are thin.**
    - `residuals()` is response-only, which breaks DHARMa and performance.
    - `simulate`, `refit`, `getME`, `is_singular` and `profile` are
      LMM-only.
    - `ranef(condVar = TRUE)` returns NA for GLMMs.
-5. [ ] **Medium: no diagnostic plots or influence measures.**
+5. [x] **Medium: no diagnostic plots or influence measures.**
    - No `plot()` residual method.
    - No ranef `dotplot`/`qqmath`.
    - No `hatvalues`, `cooks.distance` or `influence`.
-6. [ ] **Medium: missing resampling tools.**
+6. [x] **Medium: missing resampling tools.**
    - No `bootMer(FUN=)`.
    - No `rePCA`.
    - No GLMM parametric bootstrap through `simulate`.
-7. [ ] **Medium: families and links.**
+7. [x] **Medium: families and links.**
    - Gamma's default inverse link is refused.
    - inverse.gaussian and binomial cauchit/log/identity are missing.
    - `nAGQ > 1` is profiled-only and needs a single scalar random effect,
      which is not stated in the docs.
    - `nAGQ = 0` is refused.
-8. [ ] **Medium: no `performance::icc`/`r2` or insight support.**
+8. [x] **Medium: no `performance::icc`/`r2` or insight support.**
    - `model.frame()` lacks `terms` and transformed columns.
    - `weights()` returns NULL when the fit is unweighted.
-9. [ ] **Medium: `getME` is missing many components.**
+9. [x] **Medium: `getME` is missing many components.**
    - Missing: u, b, sigma, Gp, L, RX, RZX, devcomp, lower, offset, weights,
      Ztlist, glmer.nb.theta, …
    - There is no GLMM method.
-10. [ ] **Medium: `confint` differs from lme4.**
+10. [x] **Medium: `confint` differs from lme4.**
+  _Profile intervals are now on lme4's `.sig01`/`.sigma` scale with lme4 names (REML fits profiled on the ML deviance, as lme4); `"Wald"`/`"boot"` spellings accepted. Wald stays the default (documented) because profiling cost grows with model size._
     - It defaults to Wald where lme4 defaults to profile.
     - It rejects the `"Wald"` and `"boot"` spellings.
     - There is no GLMM profile.
-11. [ ] **Low: `predict` and `simulate` limits.**
+11. [x] **Low: `predict` and `simulate` limits.**
     - Partial `re.form` formulas such as `~(1|g)` are refused.
     - GLMM `predict(newdata)` is refused when the fit has an offset.
-12. [ ] **Low: `nlmer`, `lmList`, `allFit`, `REMLcrit`, the modular
+12. [~] **Low: `nlmer`, `lmList`, `allFit`, `REMLcrit`, the modular
+  _Done: `mm_lmlist()`, `mm_allfit()`, `REMLcrit()`, `mm_control(optCtrl =)`. Declined: `nlmer` (non-goal), `devFunOnly` (the engine owns the objective), `check.conv.*` (convergence is reported as a typed certificate)._
     `devFunOnly` API, `optCtrl` and `check.conv.*` are missing.**
-13. [ ] **Low: pbkrtest's KRmodcomp model-comparison form and lmerTest's
+13. [x] **Low: pbkrtest's KRmodcomp model-comparison form and lmerTest's
     `step()` are missing.**
 
 ## 5. Performance
 
-1. [ ] **Re-vendor the engine.** This is the largest single win; see §1.
-2. [ ] **`summary(fit)` refits once per coefficient.**
+1. [x] **Re-vendor the engine.** This is the largest single win; see §1.
+2. [~] **`summary(fit)` refits once per coefficient.**
+  _(a) done: one bridge call for all coefficients. (b) warm starts used for bootstrap refits only (same-model refits stay cold so summaries reproduce the fit exactly). (c) `rust_handle` cache not implemented._
    - The default resolves to Satterthwaite and then runs
      `mm_inference_table_recompute` (`R/revive.R:998`), which makes one
      `contrast()` call per coefficient.
@@ -280,7 +286,7 @@ PR).
      - (b) pass `start = fit$theta` on every bridge refit;
      - (c) implement the `rust_handle` cache, which is always NULL today.
    - About 20 `lib.rs` entry points refit cold.
-3. [ ] **The dense Cholesky is unblocked and cache-hostile**
+3. [x] **The dense Cholesky is unblocked and cache-hostile**
    (`model/linear/blocks.rs:2816`).
    - A crossed model with 2000 second-factor levels takes 7.8 s per
      evaluation; InstEval takes about 28 s.
@@ -288,35 +294,41 @@ PR).
      7.5 s → 0.19 s at n=2000, and agrees to about 1e-13.
    - The same stride problem affects `rdiv_lower_transpose`;
      `rank_k_downdate` should be a symmetric rank-k update.
-4. [ ] **The fit forces the deferred certificate** (`lib.rs:485`, `:629`).
+4. [x] **The fit forces the deferred certificate** (`lib.rs:485`, `:629`).
+  _Declined: mixeff fits are self-contained R objects (saved and revived
+  without a live engine handle), so the bridge must complete the
+  certificate's derivative evidence at fit time; deferring it would ship
+  fits whose `optimizer_certificate()` lacks gradient/Hessian evidence.
+  Revisit together with a `rust_handle` cache._
    That adds 16% on InstEval and about 20% on GLMMs.
-5. [ ] **GLMM A-block rebuild per PIRLS iteration.**
+5. [x] **GLMM A-block rebuild per PIRLS iteration.**
    - `compute_wtxy_cross_product` and `recompute_*_a_blocks` are
      latency-bound and allocate on every iteration.
    - Estimated −25–35% on verbagg and contraception.
-6. [ ] **Kenward-Roger materializes dense n×n matrices**
+6. [x] **Kenward-Roger materializes dense n×n matrices**
    (`linear/mod.rs:2683-2990`). A Woodbury formulation through L would
    avoid them.
-7. [ ] **The Satterthwaite Jacobian is finite-difference** with 2(d+1)
+7. [x] **The Satterthwaite Jacobian is finite-difference** with 2(d+1)
    factorizations, and clones L each time.
-8. [ ] **Bootstrap and profile could run in parallel**: 2 threads under
+8. [x] **Bootstrap and profile could run in parallel**: 2 threads under
    CRAN, more on user opt-in.
-9. [ ] **Bridge overhead.**
+9. [~] **Bridge overhead.**
+  _Per-observation vectors now cross as R doubles and are stored once (200k rows: 1.19 s to 0.61 s, 50 MB to 11.7 MB). The duplicate compile/audit pass remains (needs an engine API that accepts a compiled artifact)._
    - Data is translated, and the audit run, twice per `lmm()`.
    - Factors cross as character vectors.
    - JSON numeric arrays come back as lists.
    - Each observation is stored about three times in the fit object.
-10. [ ] **Small GLMM allocation items.** The L-block clones, the u clone, b
+10. [x] **Small GLMM allocation items.** The L-block clones, the u clone, b
     reallocation, and the AGQ Xβ recompute.
 
 ## 6. CRAN cosmetics
 
-- [ ] `\dontrun` on fast examples (`audit`, `compile_model`,
+- [x] `\dontrun` on fast examples (`audit`, `compile_model`,
   `explain_model`).
-- [ ] The `mm_json_negotiate` error example should use `try()`.
-- [ ] The `mm_lincomb` example is stale: it uses engine-style names and a
+- [x] The `mm_json_negotiate` error example should use `try()`.
+- [x] The `mm_lincomb` example is stale: it uses engine-style names and a
   nonexistent `fit$data`.
-- [ ] `src/Makevars.win.in` does not add `~/.cargo/bin` to `PATH`.
+- [x] `src/Makevars.win.in` does not add `~/.cargo/bin` to `PATH`.
 
 Already fine:
 

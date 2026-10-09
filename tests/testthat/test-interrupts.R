@@ -41,13 +41,21 @@ test_that("a running fit stops cleanly with mm_interrupted on SIGINT", {
   skip_if_not_installed("processx")
   skip_if_not_installed("pkgload")
   skip_on_os("windows")
-  pkg <- normalizePath(test_path("..", ".."), mustWork = FALSE)
-  skip_if_not(file.exists(file.path(pkg, "DESCRIPTION")),
-              "package source tree is not available")
+  # Load mixeff in the child the way this session did: an installed copy
+  # (R CMD check, covr) from the same library, else the source tree.
+  ns_path <- getNamespaceInfo("mixeff", "path")
+  load_line <- if (dir.exists(file.path(ns_path, "Meta"))) {
+    sprintf(".libPaths(c(%s, .libPaths())); suppressMessages(library(mixeff))",
+            deparse(dirname(ns_path)))
+  } else {
+    skip_if_not(file.exists(file.path(ns_path, "DESCRIPTION")),
+                "package source tree is not available")
+    sprintf("suppressMessages(pkgload::load_all(%s, compile = FALSE, quiet = TRUE))",
+            deparse(ns_path))
+  }
   script <- tempfile(fileext = ".R")
   writeLines(c(
-    sprintf("suppressMessages(pkgload::load_all(%s, compile = FALSE, quiet = TRUE))",
-            deparse(pkg)),
+    load_line,
     "set.seed(1)",
     "n <- 40000; d <- data.frame(s = factor(sample(800, n, TRUE)),",
     "  it = factor(sample(400, n, TRUE)), x = rnorm(n))",

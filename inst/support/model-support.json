@@ -105,9 +105,9 @@
     },
     {
       "feature": "double-bar || with factor terms",
-      "lmm": "mixeff semantics",
-      "glmm": "mixeff semantics",
-      "notes": "mixeff fixes every covariance in the block at zero, including among a factor's level contrasts (matching MixedModels.jl zerocorr()); lme4's || leaves factor terms intact. Announced at compile time (covariance_assumption / double_bar_factor_term); the migration vignette gives the lme4-equivalent expansion."
+      "lmm": "supported",
+      "glmm": "supported",
+      "notes": "Expanded like lme4: (1 + x + f || g) is (1 | g) + (0 + x | g) + (0 + f | g), the factor keeping its own block (model.matrix() coding); VarCorr() lists g, g.1, ... as lme4. diag(1 + f | g) fixes every covariance at zero (MixedModels.jl zerocorr()). Noted at compile time (covariance_assumption / double_bar_factor_term)."
     }
   ],
   "non_goals": [

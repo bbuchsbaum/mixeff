@@ -526,10 +526,11 @@ stopifnot(grepl("covariance_assumption", split_text, fixed = TRUE))
 stopifnot(grepl("covariance_assumption", double_text, fixed = TRUE))
 ```
 
-One caveat: when a **factor** appears inside `||`, mixeff's expansion
-differs from lme4's — `vignette("lme4-migration", package =
-"mixeff")` states the exact semantics and the explicit spelling that
-reproduces lme4's model family.
+A **factor** inside `||` expands as in lme4: `(1 + x + f || g)` is
+`(1 | g) + (0 + x | g) + (0 + f | g)`, so the factor keeps its own
+correlated block. To fix every covariance at zero, factor columns included
+(MixedModels.jl's `zerocorr()`), write `diag(1 + x + f | g)`;
+`vignette("lme4-migration", package = "mixeff")` has the details.
 
 ### Nested and crossed grouping
 

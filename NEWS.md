@@ -170,6 +170,44 @@
   column name with `%s`) reach R verbatim: extendr passed the message to
   `Rf_error()` as a printf format string, which garbled them and could read
   out of bounds.
+* Engine re-pinned to mixeff-rs 2873312. `||` with a factor now expands
+  like lme4 (`(1 + x + f || g)` is `(1 | g) + (0 + x | g) + (0 + f | g)`),
+  so parameter counts, `df`, AIC and estimates match lme4 (they used to
+  differ when a factor sat inside `||`); random-effect factor bases use
+  `model.matrix()` coding. `diag(1 + f | g)` gives MixedModels.jl
+  `zerocorr()` semantics.
+* `VarCorr()`, `as.data.frame(VarCorr())`, `ranef()`, `ngrps()` and
+  `getME()` (`theta`, `Lambdat`, `Lind`, `Zt`, `cnms`, ...) present
+  random-effect terms in lme4's `mkReTrms` order, with `||` pieces as
+  separate entries `g`, `g.1`, ...; `getME(fit, "theta")` is permuted to
+  lme4's order. `getME()` handles factor random-effect bases.
+  `as.data.frame(VarCorr())` lists covariance rows in lme4's order.
+* `confint(fit, method = "profile")` / `profile()` return lme4's rows
+  (`.sig01`, ..., `.sigma`, fixed effects) on the SD/correlation scale and
+  profile REML fits on the ML deviance, as lme4 does, so fixed-effect
+  profile intervals are now available for REML fits (the
+  `profile_beta_unavailable_under_reml` refusal is gone). Theta-scale rows
+  stay in `attr(ci, "mm_profile")$table`. The LMM default remains Wald.
+* New `threads` argument for bootstraps and profiles
+  (`bootstrap_control(threads = )`, `parametric_bootstrap()`,
+  `compare(method = "bootstrap")`, GLMM `confint(method = "bootstrap",
+  threads = )`, LMM `confint()`/`profile()`): results are identical for
+  every thread count; default 1 (CRAN's two-thread policy); workers never
+  call into R and Ctrl-C still interrupts.
+* Rank-deficient fixed effects keep the earlier of two collinear columns
+  (R's rule). `fixef()` omits dropped coefficients (`add.dropped = TRUE`
+  gives `NA`), and `vcov()` / `summary()` cover the estimable coefficients,
+  matching lme4. Fixed: a dropped coefficient's missing standard error
+  shifted every later standard error by one position.
+* Gamma and inverse-Gaussian GLMMs: `logLik()`, `AIC()`, `BIC()` and
+  anova tables report glmer's values (the engine's density is 1 higher
+  because glmer includes the family `aic()`'s `+2`); estimates, `sigma()`
+  and SEs match glmer. Inverse-Gaussian fits now have `sigma()`,
+  `family()` and a residual `VarCorr()` row. Negative-binomial theta now
+  maximizes the GLMM likelihood like `glmer.nb()`.
+* `test_random_effect()` labels a correlation-only comparison (e.g. `||`
+  versus `|`) as an ordinary chi-square test; the 50:50 boundary mixture
+  is used only when exactly one variance is added.
 
 ## Compatibility
 

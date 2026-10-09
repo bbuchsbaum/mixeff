@@ -14,7 +14,8 @@ compare(object, ...)
   method = c("auto", "lrt", "bootstrap", "aic", "kenward_roger", "satterthwaite"),
   refit_for_comparison = c("auto", "error", "ml"),
   nsim = 0L,
-  seed = NULL
+  seed = NULL,
+  threads = 1L
 )
 }
 \arguments{
@@ -44,6 +45,9 @@ replaces the LRT row (\code{statistic_name = "F"}, \code{df} = numerator df,
 \item{nsim}{Number of bootstrap simulations for \code{method = "bootstrap"}.}
 
 \item{seed}{Optional bootstrap seed.}
+
+\item{threads}{Worker threads for the bootstrap refits (default 1; see
+\code{\link[=bootstrap_control]{bootstrap_control()}}). The result is identical for every value.}
 }
 \value{
 An \code{mm_model_comparison} object with a data-frame \code{table}.

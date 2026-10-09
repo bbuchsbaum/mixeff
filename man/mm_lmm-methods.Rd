@@ -54,9 +54,9 @@ fixef(object, ...)
 
 \method{fixef}{default}(object, ...)
 
-\method{fixef}{mm_lmm}(object, ...)
+\method{fixef}{mm_lmm}(object, add.dropped = FALSE, ...)
 
-\method{fixef}{mm_glmm}(object, ...)
+\method{fixef}{mm_glmm}(object, add.dropped = FALSE, ...)
 
 ranef(object, ...)
 
@@ -149,6 +149,10 @@ ngrps(object, ...)
 further fitted models: with several models the result is the data frame
 \code{stats::AIC()} returns (\code{df} and \code{AIC}/\code{BIC}, rows named after the
 arguments).}
+
+\item{add.dropped}{For \code{fixef()}: if \code{TRUE}, coefficients dropped for
+rank deficiency are included as \code{NA} (lme4's \code{add.dropped}); by default
+they are omitted, as in lme4.}
 
 \item{condVar}{Logical; when \code{TRUE}, attach a \code{postVar} array of conditional
 variances to each random-effects table. Gaussian \code{\link[=lmm]{lmm()}} fits receive the

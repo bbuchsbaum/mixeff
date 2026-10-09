@@ -522,7 +522,10 @@ because variances cannot be negative. In the simplest one-component case, the
 `0.5 * chi-square(0) + 0.5 * chi-square(1)`. In finite samples the true
 null distribution puts more mass at zero than the mixture, so the test
 runs conservative (Crainiceanu and Ruppert 2004); with 18 subjects here,
-read a marginal mixture p-value with that in mind.
+read a marginal mixture p-value with that in mind. A comparison that adds
+only correlation parameters — `(x || g)` against `(x | g)` — has no
+boundary (a zero correlation is interior), so it is referred to the
+ordinary chi-square, as `anova()` does.
 
 Fit a simpler random-intercept model by ML:
 
@@ -1001,7 +1004,9 @@ attr(V, "mm_method")
 attr(V, "mm_status")
 ```
 
-For rank-deficient or otherwise uncertified fits, `vcov()` returns an
+For a rank-deficient design, `vcov()` covers the estimable coefficients
+only, as lme4's does (the dropped coefficient is omitted from `fixef()`
+too). For otherwise uncertified fits, `vcov()` returns an
 `NA` matrix carrying an `mm_unavailable_reason` attribute instead of
 fabricated numbers — the same available/unavailable/typed-error
 contract as every other surface in this vignette. Prediction standard

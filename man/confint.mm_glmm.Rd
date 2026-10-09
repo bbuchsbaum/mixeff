@@ -23,14 +23,16 @@
 closed-form Wald interval), its synonyms \code{"wald"} and lme4's \code{"Wald"}, or
 \code{"bootstrap"} (lme4's spelling \code{"boot"} is accepted). lme4 defaults to
 \code{"profile"}; mixeff keeps the Wald default because profile intervals are
-refused for GLMMs. The same spellings are accepted by the LMM method,
-whose \code{"profile"} intervals are on the theta scale (\code{theta1}, ...,
-\code{sigma}) rather than lme4's \code{.sig01} standard-deviation/correlation
-scale.}
+refused for GLMMs. The same spellings are accepted by the LMM method
+(\code{\link[=confint.mm_lmm]{confint.mm_lmm()}}), whose \code{"profile"} intervals use lme4's \code{.sig01},
+..., \code{.sigma} rows.}
 
 \item{...}{For \code{method = "bootstrap"}: \code{nsim} (number of replicates,
-default 999) and \code{seed} (non-negative integer; when omitted one is
-drawn from R's RNG so \code{set.seed()} governs reproducibility).}
+default 999), \code{seed} (non-negative integer; when omitted one is
+drawn from R's RNG so \code{set.seed()} governs reproducibility), and
+\code{threads} (worker threads for the replicate refits, default 1; the
+result is identical for every value -- see \code{\link[=bootstrap_control]{bootstrap_control()}} for
+the threading contract and CRAN's two-thread default policy).}
 }
 \value{
 An \code{mm_confint} matrix of lower/upper bounds (\code{"asymptotic"}), or

@@ -7,7 +7,8 @@
 bootstrap_control(
   nsim = 999L,
   seed = NULL,
-  failed_refit_policy = c("exclude", "count_extreme", "abort")
+  failed_refit_policy = c("exclude", "count_extreme", "abort"),
+  threads = 1L
 )
 }
 \arguments{
@@ -20,10 +21,30 @@ result.}
 
 \item{failed_refit_policy}{How failed refits are accounted for. Stable Rust
 wire labels are \code{"exclude"}, \code{"count_extreme"}, and \code{"abort"}.}
+
+\item{threads}{Number of worker threads for the replicate refits
+(default \code{1}, serial). See the "Threads" section.}
 }
 \value{
-A list used by \code{contrast(..., method = "bootstrap")}.
+A list used by \code{contrast(..., method = "bootstrap")},
+\code{test_effect()}, and \code{confint(..., method = "bootstrap")}.
 }
 \description{
 Fixed-effect bootstrap control
+}
+\section{Threads}{
+
+The engine simulates every replicate's response serially, in the serial
+random-number order, and refits the replicates on \code{threads} worker
+threads. The result is identical for every \code{threads} value; only the
+wall-clock time changes. Workers never call into R: the R thread alone
+polls for interrupts, so Ctrl-C / Esc still stops the run. The default is
+\code{1} because CRAN policy limits packages to at most two threads unless the
+user explicitly asks for more; passing \code{threads} is that request (for
+example \code{threads = parallel::detectCores()}).
+}
+
+\examples{
+bootstrap_control(nsim = 199, seed = 1, threads = 2)
+
 }

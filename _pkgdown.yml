@@ -46,6 +46,7 @@ reference:
   - anova.mm_glmm
   - drop1.mm_lmm
   - drop1.mm_glmm
+  - confint.mm_lmm
   - confint.mm_glmm
   - profile.mm_lmm
   - df_for_contrast

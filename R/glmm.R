@@ -67,9 +67,10 @@
 #'   that unlocks the UNCERTIFIED profiled working-Hessian approximation on
 #'   every inference route; each resulting row is labelled
 #'   `wald_z_working_hessian` with reliability `moderate`. Its standard
-#'   errors ran about 11% smaller than `glmer()`'s on the package's
-#'   reference dataset (anti-conservative), so treat it as an exploration
-#'   and screening tool, not a reporting route; see `inference_options()`.
+#'   errors came within 1% of `glmer()`'s on the package's reference
+#'   dataset, but nothing certifies that agreement in general, so treat it
+#'   as an exploration and screening tool, not a reporting route; see
+#'   `inference_options()`.
 #'   `"none"`, `"asymptotic"`, and `"bootstrap"` are accepted and recorded
 #'   but currently equivalent to `"auto"`.
 #' @param control A list from [mm_control()].

@@ -208,6 +208,13 @@
 * `test_random_effect()` labels a correlation-only comparison (e.g. `||`
   versus `|`) as an ordinary chi-square test; the 50:50 boundary mixture
   is used only when exactly one variance is added.
+* The aphantasia reproduction (`MIXEFF_RUN_APHANTASIA=true`) now reaches
+  strict lme4 parity on every case with lme4's `||` expansion: primary,
+  intact and combined run the default joint-Laplace estimator, and the
+  parity-ledger exemptions for the primary DiD estimate/SE, intact AIC and
+  combined fixed effects are retired. The `inference = "working_hessian"`
+  documentation no longer says its SEs run ~11% below glmer's (that gap came
+  from the old `||` family; they now agree within 1% on this dataset).
 
 ## Compatibility
 

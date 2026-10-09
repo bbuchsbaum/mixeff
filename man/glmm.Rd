@@ -90,9 +90,10 @@ withholds them with a typed refusal. \code{"working_hessian"} is an explicit opt
 that unlocks the UNCERTIFIED profiled working-Hessian approximation on
 every inference route; each resulting row is labelled
 \code{wald_z_working_hessian} with reliability \code{moderate}. Its standard
-errors ran about 11\% smaller than \code{glmer()}'s on the package's
-reference dataset (anti-conservative), so treat it as an exploration
-and screening tool, not a reporting route; see \code{inference_options()}.
+errors came within 1\% of \code{glmer()}'s on the package's reference
+dataset, but nothing certifies that agreement in general, so treat it
+as an exploration and screening tool, not a reporting route; see
+\code{inference_options()}.
 \code{"none"}, \code{"asymptotic"}, and \code{"bootstrap"} are accepted and recorded
 but currently equivalent to \code{"auto"}.}
 

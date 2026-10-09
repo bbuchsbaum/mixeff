@@ -142,9 +142,10 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
       r_verb = "glmm(..., inference = \"working_hessian\")",
       approx_cost = "immediate",
       notes = paste0(
-        "UNCERTIFIED approximation, reliability moderate; SEs ran ~11% ",
-        "smaller than glmer on the package's reference data ",
-        "(anti-conservative). Exploration and screening, not reporting."
+        "UNCERTIFIED approximation, reliability moderate; SEs came within ",
+        "1% of glmer on the package's reference data, but that agreement ",
+        "is not certified in general. Exploration and screening, not ",
+        "reporting."
       )
     )
   )

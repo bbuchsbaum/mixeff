@@ -60,13 +60,25 @@ family-aware: binomial draws use the prior weights as trial counts and
 return proportions (\code{y / w}, 0/1 values for Bernoulli fits), or a
 two-column \verb{(successes, failures)} matrix per simulation when the model was
 fitted with a \code{cbind()} response, as lme4 does; Poisson and
-negative-binomial (fitted \code{theta}) draws return counts; Gamma draws use
-shape \code{w / phi} with dispersion \code{phi = sigma(object)^2} and random effects
-on their fitted (absolute) scale. (lme4 1.1 uses shape \code{sigma(object)}
-for Gamma and draws Gamma random effects from the unscaled relative factor;
-mixeff deliberately uses the model's own variance function instead.) A
-binomial fit whose response was a factor is simulated as 0/1 numeric
-(lme4 returns a factor).
+negative-binomial (fitted \code{theta}) draws return counts. For the families
+with a free dispersion \code{phi = sigma(object)^2} the draws follow the
+fitted variance function: Gamma draws use shape \code{w / phi}
+(\verb{Var(y) = phi mu^2 / w}), inverse-Gaussian draws use
+\code{statmod::rinvgauss()} with shape \code{w / phi} (\verb{Var(y) = phi mu^3 / w};
+needs the statmod package), and Gaussian non-identity-link draws have
+standard deviation \code{sigma / sqrt(w)}. New random effects are drawn on the
+absolute scale of \code{VarCorr()}, as lme4 >= 2.1-0 does (its theta is the
+absolute random-effect SD for every GLMM).
+
+Compared with lme4 2.1-0's \code{simulate.merMod()}: Gamma draws and Gaussian
+draws without prior weights agree draw for draw (same RNG use) when the
+estimates agree. lme4 ignores prior weights for Gaussian responses (with a
+warning); mixeff uses them, as for LMMs. For the inverse Gaussian lme4
+passes shape \code{w / sigma(object)} -- \code{sqrt(phi)}, not \code{phi} -- so its draws
+have variance \verb{sigma mu^3 / w} rather than the fitted \verb{phi mu^3 / w};
+mixeff uses the fitted variance, as \code{stats::inverse.gaussian()$simulate}
+does. A binomial fit whose response was a factor is simulated as 0/1
+numeric (lme4 returns a factor).
 
 The random-number stream is consumed in lme4's order (all random-effect
 draws first, terms in lme4's internal order, then the response draws), so

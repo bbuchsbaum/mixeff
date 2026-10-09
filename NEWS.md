@@ -35,6 +35,18 @@
   `"r2_distribution_variance_undefined"`. insight 1.5 has no
   inverse-Gaussian case and falls back to `sigma()` itself, which is not a
   variance and changes when the response is rescaled.
+* `simulate()` (and so `refit()`-based bootstraps) now works for inverse
+  Gaussian and Gaussian non-identity-link GLMMs. Previously these were
+  refused with `"simulate_family_unavailable"`. Draws follow the fitted
+  variance function with `phi = sigma()^2`, and new random effects are drawn
+  on lme4 2.1-0's absolute scale. Gamma draws and unweighted Gaussian draws
+  match lme4 2.1-0's `simulate()` draw for draw. The tests compare seeded
+  draws with live `glmer()` or with stored lme4 2.1-0 draws. Gaussian draws
+  use prior weights (`sd = sigma / sqrt(w)`), which lme4 ignores.
+  Inverse-Gaussian draws use `statmod::rinvgauss()` (statmod is now in
+  Suggests) with shape `w / phi`. lme4 2.1-0 instead uses `w / sigma()`, so
+  its draws have variance `sigma * mu^3` rather than the fitted
+  `phi * mu^3`.
 * lme4 2.1-0's `glmerControl()` dispersion settings (`disp_method`,
   `disp_dof_correction`, `maxPhiIter`) are not exposed. The engine uses their
   defaults.

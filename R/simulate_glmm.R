@@ -232,6 +232,13 @@ simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
     )
   }
 
+  # Dispersion phi = sigma()^2 (lme4 >= 2.1-0 convention); 1 for families
+  # without a free dispersion parameter.
+  phi <- as.numeric(sigma(object))^2
+  if (identical(fam_info$family, "inverse_gaussian")) {
+    mm_simulate_require_statmod()
+  }
+
   resolved <- mm_simulate_resolve_partial(object, target, re.form)
   target <- resolved$target
   rng_state <- mm_rng_state(seed)
@@ -264,11 +271,27 @@ simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
         gl(nsim, n)
       ),
       gamma = {
-        # Var(y) = phi * mu^2 with phi = sigma^2; prior weights scale the
-        # shape (phi / w), as glm's Gamma()$simulate does.
-        shape <- wts / object$dispersion^2
+        # Var(y) = phi * mu^2 / w with phi = sigma()^2: shape w / phi, as
+        # lme4 2.1-0's Gamma_simfun (shape = wts / sigma^2) and glm's
+        # Gamma()$simulate.
+        shape <- wts / phi
         split(stats::rgamma(ntot, shape = shape, rate = shape / ftd),
               gl(nsim, n))
+      },
+      inverse_gaussian = {
+        # Var(y) = phi * mu^3 / w: shape w / phi, the model's own variance
+        # (as stats::inverse.gaussian()$simulate). lme4 2.1-0's
+        # inverse.gaussian_simfun passes shape = wts / sigma(), i.e.
+        # sqrt(phi) unsquared, whose draws have variance sigma * mu^3 / w.
+        # Same sampler (statmod::rinvgauss) and RNG use as lme4.
+        mm_simulate_require_statmod()
+        split(statmod::rinvgauss(ntot, mean = ftd, shape = wts / phi),
+              gl(nsim, n))
+      },
+      gaussian = {
+        # Gaussian non-identity link: Var(y) = phi / w. lme4 ignores prior
+        # weights here (with a warning); mixeff uses them, as for LMMs.
+        split(stats::rnorm(ntot, ftd, sd = sqrt(phi / wts)), gl(nsim, n))
       },
       mm_abort(
         message = sprintf("Simulation is not implemented for GLMM family `%s`.",
@@ -290,6 +313,18 @@ simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
   attr(out, "mm_method") <- "r_side_glmm_parametric"
   attr(out, "mm_re_form") <- target
   out
+}
+
+mm_simulate_require_statmod <- function() {
+  if (!requireNamespace("statmod", quietly = TRUE)) {
+    mm_abort(
+      message = "Simulating inverse-Gaussian responses needs the statmod package (statmod::rinvgauss(), as lme4 uses); install it.",
+      class = "mm_inference_unavailable",
+      reason_code = "simulate_needs_statmod",
+      input = "statmod"
+    )
+  }
+  invisible(TRUE)
 }
 
 #' @rdname refit

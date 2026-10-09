@@ -72,20 +72,21 @@ mm_disp_cases <- function() {
     list(data = function() mm_fl_data(gen), formula = y ~ x + (1 | g),
          family = family)
   }
+  sim <- function(case) c(case, list(simulate = TRUE))
   list(
-    fl_gamma_inverse = fl(stats::Gamma(), function(x, re) {
+    fl_gamma_inverse = sim(fl(stats::Gamma(), function(x, re) {
       mu <- 1 / (2 + 0.3 * x + re)
       rgamma(length(x), shape = 15, rate = 15 / mu)
-    }),
+    })),
     fl_ig_log = fl(stats::inverse.gaussian("log"), function(x, re) {
       mm_fl_rig(length(x), exp(0.5 + 0.3 * x + re), 20)
     }),
     fl_ig_inverse = fl(stats::inverse.gaussian("inverse"), function(x, re) {
       mm_fl_rig(length(x), 1 / (2 + 0.2 * x + re), 20)
     }),
-    fl_gaussian_log = fl(stats::gaussian("log"), function(x, re) {
+    fl_gaussian_log = sim(fl(stats::gaussian("log"), function(x, re) {
       exp(1 + 0.3 * x + re) + rnorm(length(x), sd = 0.3)
-    }),
+    })),
     fl_gaussian_sqrt = fl(stats::gaussian("sqrt"), function(x, re) {
       (2 + 0.3 * x + re)^2 + rnorm(length(x), sd = 0.3)
     }),
@@ -94,7 +95,8 @@ mm_disp_cases <- function() {
     }),
     cells_gamma_log = list(data = mm_disp_data_cells_gamma,
                            formula = y ~ x + (1 | g),
-                           family = stats::Gamma(link = "log")),
+                           family = stats::Gamma(link = "log"),
+                           simulate = TRUE),
     scale_gamma_log = list(data = mm_disp_data_scale,
                            formula = y ~ x + (1 | g),
                            family = stats::Gamma(link = "log")),
@@ -107,6 +109,8 @@ mm_disp_cases <- function() {
                                hat = TRUE)
   )
 }
+
+mm_disp_sim_rows <- 20L
 
 mm_disp_case <- function(key) {
   case <- mm_disp_cases()[[key]]
@@ -145,6 +149,15 @@ mm_disp_ref_live <- function(key) {
     sigma = stats::sigma(fit),
     deviance = stats::deviance(fit)
   )
+  if (isTRUE(case$simulate)) {
+    # lme4 2.1-0 simulate.merMod() draws (first rows of nsim = 2, seed 7):
+    # new random effects (re.form = NA) and conditional on the BLUPs.
+    rows <- seq_len(mm_disp_sim_rows)
+    sim_new <- stats::simulate(fit, nsim = 2, seed = 7)
+    sim_cond <- stats::simulate(fit, nsim = 2, seed = 7, use.u = TRUE)
+    out$sim_new <- unname(c(sim_new[[1]][rows], sim_new[[2]][rows]))
+    out$sim_cond <- unname(c(sim_cond[[1]][rows], sim_cond[[2]][rows]))
+  }
   if (isTRUE(case$hat)) {
     h <- mm_disp_working_hat(fit)
     r <- stats::residuals(fit, type = "pearson")

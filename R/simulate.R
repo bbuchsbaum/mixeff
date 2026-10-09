@@ -120,13 +120,25 @@ refit.mm_lmm <- function(object, newresp, ...) {
 #' return proportions (`y / w`, 0/1 values for Bernoulli fits), or a
 #' two-column `(successes, failures)` matrix per simulation when the model was
 #' fitted with a `cbind()` response, as lme4 does; Poisson and
-#' negative-binomial (fitted `theta`) draws return counts; Gamma draws use
-#' shape `w / phi` with dispersion `phi = sigma(object)^2` and random effects
-#' on their fitted (absolute) scale. (lme4 1.1 uses shape `sigma(object)`
-#' for Gamma and draws Gamma random effects from the unscaled relative factor;
-#' mixeff deliberately uses the model's own variance function instead.) A
-#' binomial fit whose response was a factor is simulated as 0/1 numeric
-#' (lme4 returns a factor).
+#' negative-binomial (fitted `theta`) draws return counts. For the families
+#' with a free dispersion `phi = sigma(object)^2` the draws follow the
+#' fitted variance function: Gamma draws use shape `w / phi`
+#' (`Var(y) = phi mu^2 / w`), inverse-Gaussian draws use
+#' `statmod::rinvgauss()` with shape `w / phi` (`Var(y) = phi mu^3 / w`;
+#' needs the statmod package), and Gaussian non-identity-link draws have
+#' standard deviation `sigma / sqrt(w)`. New random effects are drawn on the
+#' absolute scale of `VarCorr()`, as lme4 >= 2.1-0 does (its theta is the
+#' absolute random-effect SD for every GLMM).
+#'
+#' Compared with lme4 2.1-0's `simulate.merMod()`: Gamma draws and Gaussian
+#' draws without prior weights agree draw for draw (same RNG use) when the
+#' estimates agree. lme4 ignores prior weights for Gaussian responses (with a
+#' warning); mixeff uses them, as for LMMs. For the inverse Gaussian lme4
+#' passes shape `w / sigma(object)` -- `sqrt(phi)`, not `phi` -- so its draws
+#' have variance `sigma mu^3 / w` rather than the fitted `phi mu^3 / w`;
+#' mixeff uses the fitted variance, as `stats::inverse.gaussian()$simulate`
+#' does. A binomial fit whose response was a factor is simulated as 0/1
+#' numeric (lme4 returns a factor).
 #'
 #' The random-number stream is consumed in lme4's order (all random-effect
 #' draws first, terms in lme4's internal order, then the response draws), so

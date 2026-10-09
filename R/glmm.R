@@ -651,6 +651,24 @@ mm_glmm_binomial_prep <- function(formula, data, family_info, weights) {
     weights <- as.numeric(n)
     formula[[2L]] <- as.name(respname)
   } else {
+    if (!is.name(lhs)) {
+      # A computed response such as I(y > 300) or as.numeric(f == "a"):
+      # evaluate it into a column, as model.frame() would.
+      env <- environment(formula) %||% parent.frame()
+      value <- eval(lhs, data, env)
+      if (length(value) != nrow(data)) {
+        mm_abort(
+          message = sprintf(
+            "The response `%s` must have one value per row of `data` (%d).",
+            deparse1(lhs), nrow(data)
+          ),
+          class = "mm_data_error"
+        )
+      }
+      data[[".mm_binomial_response"]] <- value
+      formula[[2L]] <- as.name(".mm_binomial_response")
+      lhs <- formula[[2L]]
+    }
     response_name <- as.character(lhs)
     col <- data[[response_name]]
     if (is.factor(col)) {

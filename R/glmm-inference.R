@@ -300,7 +300,7 @@ mm_glmm_anova_frame <- function(cmp, fits, labels) {
   data_expr <- fits[[1L]]$call$data
   structure(
     out,
-    heading = c(if (!is.null(data_expr)) paste("Data:", deparse1(data_expr)),
+    heading = c(mm_anova_data_line(data_expr),
                 "Models:", paste(row_labels, tbl$model, sep = ": ")),
     mm_comparison = cmp,
     class = c("mm_anova_comparison", "mm_glmm_comparison", "anova",

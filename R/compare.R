@@ -672,7 +672,7 @@ mm_anova_comparison_frame <- function(cmp, fits, labels) {
   row.names(out) <- row_labels
   data_expr <- fits[[1L]]$call$data
   heading <- c(
-    if (!is.null(data_expr)) paste("Data:", deparse1(data_expr)),
+    mm_anova_data_line(data_expr),
     "Models:",
     paste(row_labels, formulas, sep = ": ")
   )
@@ -685,6 +685,16 @@ mm_anova_comparison_frame <- function(cmp, fits, labels) {
     class = c("mm_anova_comparison", "mm_model_comparison", "anova",
               "data.frame")
   )
+}
+
+# lme4's "Data: <expr>" heading line. A call holding literal data (as
+# update() leaves after refitting the stored model frame) is not shown.
+mm_anova_data_line <- function(data_expr) {
+  if (is.null(data_expr)) return(NULL)
+  if (!is.name(data_expr) && !is.call(data_expr)) return(NULL)
+  text <- deparse1(data_expr)
+  if (nchar(text) > 80L) return(NULL)
+  paste("Data:", text)
 }
 
 mm_compare_formula_label <- function(fit) {

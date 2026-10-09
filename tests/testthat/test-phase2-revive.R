@@ -118,7 +118,10 @@ test_that("vcov() falls back to stored standard errors when covariance artifact 
                    "fixed_effect_covariance_payload_unavailable")
 })
 
-test_that("rank-deficient fixed-effect covariance is explicitly unavailable", {
+test_that("rank-deficient fixed-effect covariance covers the estimable coefficients", {
+  # The engine withholds its covariance payload for a rank-deficient design
+  # (typed unavailable record); vcov() follows lme4 and returns the
+  # covariance of the estimable coefficients, rebuilt from the PLS factor.
   set.seed(21)
   subject <- factor(rep(seq_len(8L), each = 4L))
   x <- rep(0:3, 8L)
@@ -130,17 +133,23 @@ test_that("rank-deficient fixed-effect covariance is explicitly unavailable", {
     control = mm_control(verbose = -1)
   )
 
-  V <- stats::vcov(fit)
-  details <- attr(V, "mm_details")
-
-  expect_equal(dim(V), c(length(fixef(fit)), length(fixef(fit))))
-  expect_true(all(is.na(V)))
-  expect_identical(attr(V, "mm_schema_name"),
+  payload <- fit$fixed_effect_vcov
+  details <- attr(payload, "mm_details")
+  expect_true(all(is.na(payload)))
+  expect_identical(attr(payload, "mm_schema_name"),
                    "mixedmodels.fixed_effect_covariance_matrix")
-  expect_identical(attr(V, "mm_status"), "unavailable")
-  expect_match(attr(V, "mm_unavailable_reason"), "rank_deficient")
+  expect_identical(attr(payload, "mm_status"), "unavailable")
+  expect_match(attr(payload, "mm_unavailable_reason"), "rank_deficient")
   expect_equal(details$rank, 2)
   expect_equal(unlist(details$aliased, use.names = FALSE), "x2")
+
+  V <- stats::vcov(fit)
+  expect_identical(names(fixef(fit)), c("(Intercept)", "x"))
+  expect_equal(dimnames(V), list(names(fixef(fit)), names(fixef(fit))))
+  expect_true(all(is.finite(V)))
+  expect_identical(attr(V, "mm_method"), "pls_rebuild_rank_deficient")
+  expect_equal(sqrt(diag(V)), fit$std_errors[c("(Intercept)", "x")],
+               tolerance = 1e-4, ignore_attr = TRUE)
 })
 
 test_that("fixed-effect covariance payload parser rejects contract drift", {

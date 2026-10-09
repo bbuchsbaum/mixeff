@@ -501,7 +501,7 @@ test_that("profile() print and confint.mm_profile edges", {
 
   mat <- confint(pr)
   expect_true(is.matrix(mat) && ncol(mat) == 2L)
-  mat2 <- confint(pr, parm = "sigma")
+  mat2 <- confint(pr, parm = ".sigma")  # lme4 row name
   expect_equal(nrow(mat2), 1L)
   expect_error(confint(pr, level = 0.5), class = "mm_arg_error")
 })

@@ -254,8 +254,9 @@ test_that("df_for_contrast / estimability / confint bootstrap print edges", {
   expect_s3_class(pr, "mm_profile")
   out_pr <- capture.output(print(pr))
   expect_true(any(grepl("Profile-likelihood", out_pr, fixed = TRUE)))
-  # REML profile appends typed refusal rows for beta; print may note them.
-  expect_true(is.matrix(confint(pr, parm = "sigma")))
+  # REML fits are profiled on the ML deviance (lme4); rows use lme4 names.
+  expect_true(is.matrix(confint(pr, parm = ".sigma")))
+  expect_equal(nrow(confint(pr, parm = ".sigma")), 1L)
 })
 
 test_that("mm_lincomb LMM/GLMM and bad weights", {

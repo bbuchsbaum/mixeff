@@ -218,14 +218,12 @@ test_that("compile_model() preserves input column order through the FFI", {
 })
 
 test_that("a factor inside || emits the double_bar_factor_term diagnostic", {
-  # Contract for the || factor-term semantics decision (upstream
-  # bd-01KTRQRZKB): mixeff's || fully decorrelates the block, INCLUDING a
-  # factor's level contrasts (each treatment-coded contrast gets an
-  # independent variance; no within-factor covariances). lme4's || instead
-  # leaves factor terms intact with a full within-factor covariance block,
-  # so the same formula fits a smaller model family here. The compatibility
-  # bridge is this Info diagnostic naming the divergence and the
-  # correlated-block rewrite -- a pin bump that drops it should fail here.
+  # Contract for the || factor-term semantics (mixeff-rs 2873312): `||`
+  # with a factor expands like lme4 -- the factor keeps its own correlated
+  # block `(0 + f | g)`; only the intercept and numeric columns get
+  # independent variances. The Info diagnostic names that expansion (so a
+  # MixedModels.jl user expecting zerocorr() is told); a pin bump that
+  # drops it should fail here.
   set.seed(3)
   df <- data.frame(
     y = rnorm(120), x = rnorm(120),
@@ -240,7 +238,9 @@ test_that("a factor inside || emits the double_bar_factor_term diagnostic", {
   expect_length(hit, 1L)
   d <- hit[[1L]]
   expect_identical(d$severity, "info")
-  expect_match(d$message, "fully decorrelates factor 'f'")
+  # mixeff-rs 2873312: `||` with a factor expands like lme4 (the factor
+  # keeps its own correlated block); the diagnostic now says so.
+  expect_match(d$message, "expands like lme4", fixed = TRUE)
   expect_identical(d$payload$factor, "f")
   expect_identical(d$payload$group, "g")
   expect_identical(d$payload$correlated_block_equivalent, "(0 + f | g)")
@@ -283,7 +283,9 @@ test_that("a factor inside || emits the double_bar_factor_term diagnostic", {
   expect_length(error_diags(spec3), 0L)
 })
 
-test_that("factor || and explicit correlated expansion fit different covariance families", {
+test_that("factor || fits the same covariance family as lme4's explicit expansion", {
+  # mixeff-rs 2873312 expands `||` like lme4 (formerly: full
+  # decorrelation, 4 theta here instead of lme4's 8).
   set.seed(4)
   n_group <- 24L
   df <- expand.grid(
@@ -315,14 +317,15 @@ test_that("factor || and explicit correlated expansion fit different covariance 
   native_f <- native_theta[native_theta$source_syntax == "(0 + f | g)", ]
   expanded_f <- expanded_theta[expanded_theta$source_syntax == "(0 + f | g)", ]
 
-  expect_identical(length(native$theta), 4L)
+  expect_identical(length(native$theta), 8L)
   expect_identical(length(expanded$theta), 8L)
+  expect_equal(native$logLik, expanded$logLik, tolerance = 1e-6)
+  expect_identical(native$dof, expanded$dof)
 
-  expect_equal(nrow(native_f), 2L)
-  expect_true(all(native_f$covariance_family == "diagonal"))
-  expect_true(all(native_f$lambda_row == native_f$lambda_col))
-  expect_setequal(native_f$lambda_row_basis, c("f: b", "f: c"))
-  expect_false(any(grepl("correlation[", native_f$varcorr_entries, fixed = TRUE)))
+  expect_equal(nrow(native_f), 6L)
+  expect_true(all(native_f$covariance_family == "full_cholesky"))
+  expect_setequal(native_f$lambda_row_basis, c("f: a", "f: b", "f: c"))
+  expect_true(any(grepl("correlation[", native_f$varcorr_entries, fixed = TRUE)))
 
   expect_equal(nrow(expanded_f), 6L)
   expect_true(all(expanded_f$covariance_family == "full_cholesky"))

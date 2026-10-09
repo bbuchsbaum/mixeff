@@ -668,7 +668,10 @@ test_that("bootstrap scale notice, term L, profile map, empty profile", {
   expect_true(nzchar(mixeff:::regex_escape("a.b+(c)")))
 
   mapped_sigma <- mixeff:::mm_map_profile_parameter("\u03C3", fit)
-  expect_identical(mapped_sigma$name, "sigma")
+  expect_identical(mapped_sigma$name, ".sigma")  # lme4 row name
+  mapped_sig <- mixeff:::mm_map_profile_parameter(".sig01", fit)
+  expect_identical(mapped_sig$name, ".sig01")
+  expect_identical(mapped_sig$kind, "sd")
   mapped_beta <- mixeff:::mm_map_profile_parameter("\u03B21", fit)
   expect_true(is.null(mapped_beta) || identical(mapped_beta$kind, "beta") ||
                 identical(mapped_beta$name, names(fit$beta)[[1L]]) ||

@@ -461,7 +461,8 @@ test_that("profile.mm_lmm returns a usable mm_profile object", {
   expect_s3_class(prof, "mm_profile")
   expect_true(all(c("parameter", "estimate", "lower", "upper") %in%
                     names(prof$table)))
-  expect_true(all(c("(Intercept)", "Days", "sigma") %in% prof$table$parameter))
+  expect_true(all(c("(Intercept)", "Days", ".sigma", ".sig01") %in%
+                    prof$table$parameter))
   # confint on the profile reproduces confint(fit, method = "profile")
   direct <- confint(fit, method = "profile")
   via_prof <- confint(prof)

@@ -577,34 +577,35 @@ stopifnot(identical(fixed_boundary$table$reason_code,
 
 ## Profile confidence intervals
 
-Profile-likelihood intervals are available for variance parameters
-under both fitting criteria, but fixed-effect (beta) profile intervals
-require an ML fit: under the REML default, the beta rows are recorded
-as unavailable with the reason code
-`profile_beta_unavailable_under_reml`, not silently approximated.
+`confint(fit, method = "profile")` returns lme4's rows: `.sig01`, ...
+(random-effect standard deviations and correlations, numbered in lme4's
+term order), `.sigma`, then the fixed effects. As in lme4, the profile is
+of the ML deviance, so a REML fit's intervals are those of its ML refit,
+fixed effects included. The engine's relative-Cholesky `theta` rows
+(profiled on the fit's own criterion) stay in the attached table. Large
+models can pass `threads =`; the intervals are identical for every thread
+count.
 
 ```{r profile-ci}
 prof <- confint(fit, method = "profile")
 prof
 attr(prof, "mm_profile")$table[
   ,
-  c("parameter", "parameter_kind", "lower", "upper", "reason_code")
+  c("parameter", "parameter_kind", "lower", "upper", "profiled_criterion")
 ]
 ```
 
 ```{r profile-checks, include = FALSE}
 ptab <- attr(prof, "mm_profile")$table
-beta_rows <- ptab$parameter_kind == "beta"
-stopifnot(any(beta_rows), any(!beta_rows))
-stopifnot(all(is.na(ptab$lower[beta_rows])))
-stopifnot(all(ptab$reason_code[beta_rows] ==
-                "profile_beta_unavailable_under_reml"))
-stopifnot(all(is.finite(ptab$lower[!beta_rows])),
-          all(is.finite(ptab$upper[!beta_rows])))
+stopifnot(identical(rownames(prof)[1:2], c(".sig01", ".sigma")))
+lme4_rows <- ptab$parameter_kind %in% c("sd", "cor", "sigma", "beta")
+stopifnot(any(ptab$parameter_kind == "beta"))
+stopifnot(all(is.finite(ptab$lower[lme4_rows])),
+          all(is.finite(ptab$upper[lme4_rows])))
+stopifnot(all(ptab$profiled_criterion[lme4_rows] == "ML"))
 ```
 
-Refit with `REML = FALSE` when you want beta profile intervals. On
-boundary fits, profile intervals are refused outright
+On boundary fits, profile intervals are refused outright
 (`profile_ci_unavailable_at_boundary`), as the route map above showed.
 
 ## GLMM inference: the three-route contract

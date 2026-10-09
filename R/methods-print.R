@@ -174,7 +174,14 @@ print.mm_varcorr <- function(x, digits = max(3, getOption("digits") - 2),
   tbl <- x$table
   marks <- character(nrow(formatted))
   boundary <- FALSE
-  if (is.data.frame(tbl) && nrow(tbl) && !is.null(tbl$boundary)) {
+  lme4_boundary <- attr(x, "mm_boundary")
+  if (!is.null(lme4_boundary)) {
+    hit <- which(lme4_boundary %in% TRUE)
+    if (length(hit) && length(lme4_boundary) <= length(marks)) {
+      marks[hit] <- "[boundary]"
+      boundary <- TRUE
+    }
+  } else if (is.data.frame(tbl) && nrow(tbl) && !is.null(tbl$boundary)) {
     n_re <- nrow(tbl)
     hit <- which(tbl$boundary %in% TRUE)
     if (length(hit) && n_re <= length(marks)) {

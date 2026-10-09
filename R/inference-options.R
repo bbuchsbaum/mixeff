@@ -309,11 +309,11 @@ mm_inference_options_row_cluster_bootstrap <- function(n_groups_max, nsim) {
 }
 
 mm_inference_options_row_profile_ci <- function(fit, is_boundary, is_reml) {
-  refused <- is_boundary || is_reml
+  # REML fits are profiled on the ML deviance (as lme4's confint() does), so
+  # REML is no longer a refusal reason.
+  refused <- is_boundary
   reason <- if (is_boundary) {
     "profile_ci_unavailable_at_boundary"
-  } else if (is_reml) {
-    "profile_beta_unavailable_under_reml"
   } else {
     "profile_likelihood_ci"
   }
@@ -326,7 +326,7 @@ mm_inference_options_row_profile_ci <- function(fit, is_boundary, is_reml) {
     notes = if (is_boundary) {
       "profile intervals are not certified for boundary or reduced-rank fits"
     } else if (is_reml) {
-      "REML profile payloads omit fixed-effect beta intervals; refit ML for beta profile CIs"
+      "profile-likelihood intervals on the ML deviance (REML fits are refitted by ML, as in lme4); slower than Wald"
     } else {
       "profile-likelihood confidence intervals; slower than Wald"
     }

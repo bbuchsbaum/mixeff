@@ -81,9 +81,10 @@ test_that("profile_ci route follows ML and REML profile contracts", {
 
   reml_row <- inference_options(fit_reml)$table
   reml_row <- reml_row[reml_row$method == "profile_ci", , drop = FALSE]
-  expect_identical(reml_row$expected_status, "not_assessed")
+  # REML fits are profiled on the ML deviance, as lme4's confint() does.
+  expect_identical(reml_row$expected_status, "available")
   expect_identical(reml_row$expected_reliability_reason,
-                   "profile_beta_unavailable_under_reml")
+                   "profile_likelihood_ci")
 
   ml_row <- inference_options(fit_ml)$table
   ml_row <- ml_row[ml_row$method == "profile_ci", , drop = FALSE]

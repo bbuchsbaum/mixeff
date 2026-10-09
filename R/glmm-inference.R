@@ -440,7 +440,9 @@ mm_grid.mm_glmm <- function(fit, specs, ...) {
 ## dropped. Deterministic given `seed`; when `seed` is NULL one is drawn
 ## from R's RNG so set.seed() governs reproducibility.
 mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
-                                                 nsim = 999L, seed = NULL) {
+                                                 nsim = 999L, seed = NULL,
+                                                 threads = 1L) {
+  threads <- mm_check_threads(threads)
   if (identical(mm_glmm_effective_method(object), "joint_laplace")) {
     # Engine limitation at pin f82c646: GeneralizedLinearMixedModel::refit
     # hardcodes the fast path (generalized/optimizer.rs:19-23) and the
@@ -483,7 +485,8 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
 
   payload <- mm_rust_glmm_refit_payload(object, mm_glmm_effective_method(object))
   options_json <- jsonlite::toJSON(
-    list(nsim = as.integer(nsim), seed = as.numeric(seed)),
+    list(nsim = as.integer(nsim), seed = as.numeric(seed),
+         threads = threads),
     auto_unbox = TRUE
   )
   json <- tryCatch(
@@ -548,6 +551,7 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
     successful = successful,
     failed = failed,
     seed = as.numeric(seed),
+    threads = threads,
     std_errors = se,
     mcse = mcse,
     reliability = mm_bootstrap_reliability(TRUE, successful, mcse)

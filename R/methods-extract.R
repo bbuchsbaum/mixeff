@@ -144,6 +144,7 @@ ranef.default <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ranef.mm_lmm <- function(object, condVar = FALSE, ...) {
+  object$random_effects <- mm_ranef_lme4_order(object, object$random_effects)
   if (isTRUE(condVar)) {
     postvars <- tryCatch(
       mm_cond_var_postvars(object),
@@ -167,6 +168,7 @@ ranef.mm_lmm <- function(object, condVar = FALSE, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ranef.mm_glmm <- function(object, condVar = FALSE, ...) {
+  object$random_effects <- mm_ranef_lme4_order(object, object$random_effects)
   if (isTRUE(condVar)) {
     # Conditional variances from the Laplace approximation at the fitted
     # modes: sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda' with the
@@ -188,6 +190,31 @@ ranef.mm_glmm <- function(object, condVar = FALSE, ...) {
     return(out)
   }
   object$random_effects
+}
+
+# lme4's ranef() layout: one data frame per grouping factor in the order the
+# factors first appear among the (lme4-ordered) random-effect terms, columns
+# in term order (`(0 + x | g) + (1 | g)` gives `x`, `(Intercept)`). The
+# engine stores its own (decreasing-size) order; values are unchanged.
+mm_ranef_lme4_order <- function(fit, re) {
+  st <- tryCatch(mm_re_structure(fit), error = function(cnd) NULL)
+  if (is.null(st) || !length(re)) return(re)
+  groups <- unique(vapply(st$terms, `[[`, character(1), "group"))
+  if (!setequal(groups, names(re))) return(re)
+  out <- lapply(groups, function(g) {
+    df <- re[[g]]
+    cols <- unique(unlist(lapply(st$terms, function(tm) {
+      if (identical(tm$group, g)) tm$cnames
+    }), use.names = FALSE))
+    if (setequal(cols, names(df)) && !identical(cols, names(df))) {
+      df <- df[, cols, drop = FALSE]
+    }
+    df
+  })
+  names(out) <- groups
+  attributes(out) <- c(attributes(out),
+                       attributes(re)[setdiff(names(attributes(re)), "names")])
+  out
 }
 
 # Fallback postvar attachment used when the Rust cond_var() bridge fails
@@ -659,7 +686,7 @@ ngrps.default <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ngrps.mm_lmm <- function(object, ...) {
-  re <- object$random_effects %||% list()
+  re <- mm_ranef_lme4_order(object, object$random_effects %||% list())
   vapply(re, nrow, integer(1L))
 }
 
@@ -735,11 +762,12 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
       vcov <- c(vcov, sd[i]^2)
       sdcor <- c(sdcor, sd[i])
     }
-    # Covariance (off-diagonal) rows; correlations are stored row-major in the
-    # strict lower triangle (see mm_varcorr_correlation_values()).
-    for (i in seq_len(p)) {
-      offset <- (i - 1L) * (i - 2L) / 2L
-      for (j in seq_len(i - 1L)) {
+    # Covariance (off-diagonal) rows in lme4's order (var1 outer, var2
+    # inner); correlations are stored row-major in the strict lower triangle
+    # (see mm_varcorr_correlation_values()).
+    for (j in seq_len(max(p - 1L, 0L))) {
+      for (i in seq.int(j + 1L, p)) {
+        offset <- (i - 1L) * (i - 2L) / 2L
         r <- corr[offset + j]
         grp <- c(grp, comp$group)
         var1 <- c(var1, nm[j])

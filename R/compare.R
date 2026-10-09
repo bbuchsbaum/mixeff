@@ -25,6 +25,8 @@
 #' @param refit_for_comparison How to handle REML fits.
 #' @param nsim Number of bootstrap simulations for `method = "bootstrap"`.
 #' @param seed Optional bootstrap seed.
+#' @param threads Worker threads for the bootstrap refits (default 1; see
+#'   [bootstrap_control()]). The result is identical for every value.
 #'
 #' @return An `mm_model_comparison` object with a data-frame `table`.
 #'
@@ -43,7 +45,8 @@ compare.mm_lmm <- function(object,
                                       "kenward_roger", "satterthwaite"),
                            refit_for_comparison = c("auto", "error", "ml"),
                            nsim = 0L,
-                           seed = NULL) {
+                           seed = NULL,
+                           threads = 1L) {
   target <- match.arg(target)
   method <- match.arg(method)
   refit_for_comparison <- match.arg(refit_for_comparison)
@@ -92,7 +95,8 @@ compare.mm_lmm <- function(object,
       fits[[1L]],
       fits[[2L]],
       nsim = nsim,
-      seed = seed
+      seed = seed,
+      threads = threads
     )
     last <- nrow(table)
     table$p_value[last] <- bootstrap$p_value
@@ -162,12 +166,17 @@ print.mm_model_comparison <- function(x, ...) {
 #'   model with fewer parameters is treated as the reduced model.
 #' @param nsim Number of bootstrap replicates.
 #' @param seed Optional bootstrap seed.
+#' @param threads Worker threads for the replicate refits (default 1). The
+#'   responses are simulated serially and each replicate refits fresh copies
+#'   of both models, so the result is identical for every value; see
+#'   [bootstrap_control()] for the threading contract.
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_parametric_bootstrap` object.
 #'
 #' @export
-parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ...) {
+parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL,
+                                 threads = 1L, ...) {
   if (!inherits(null, "mm_lmm") || !inherits(alternative, "mm_lmm")) {
     mm_abort(
       message = "`parametric_bootstrap()` requires two fitted `mm_lmm` objects.",
@@ -203,7 +212,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
     )
   }
   mm_assert_bootstrap_lrt_pair(null, alternative)
-  bootstrap <- bootstrap_control(nsim = nsim, seed = seed)
+  bootstrap <- bootstrap_control(nsim = nsim, seed = seed, threads = threads)
   bridge <- mm_rust_fit_bridge_payload(alternative)
   bootstrap_json <- jsonlite::toJSON(
     mm_bootstrap_wire(bootstrap),
@@ -244,6 +253,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL, ..
     simulated = simulated,
     p_value = parsed$p_value %||% NA_real_,
     nsim = nsim,
+    threads = bootstrap$threads,
     successful_replicates = meta$successful_replicates %||% NA_integer_,
     completed_replicates = meta$completed_replicates %||% NA_integer_,
     boundary_count = meta$boundary_count %||% NA_integer_,

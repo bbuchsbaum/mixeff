@@ -119,14 +119,32 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
 #'   result.
 #' @param failed_refit_policy How failed refits are accounted for. Stable Rust
 #'   wire labels are `"exclude"`, `"count_extreme"`, and `"abort"`.
+#' @param threads Number of worker threads for the replicate refits
+#'   (default `1`, serial). See the "Threads" section.
 #'
-#' @return A list used by `contrast(..., method = "bootstrap")`.
+#' @section Threads:
+#' The engine simulates every replicate's response serially, in the serial
+#' random-number order, and refits the replicates on `threads` worker
+#' threads. The result is identical for every `threads` value; only the
+#' wall-clock time changes. Workers never call into R: the R thread alone
+#' polls for interrupts, so Ctrl-C / Esc still stops the run. The default is
+#' `1` because CRAN policy limits packages to at most two threads unless the
+#' user explicitly asks for more; passing `threads` is that request (for
+#' example `threads = parallel::detectCores()`).
+#'
+#' @return A list used by `contrast(..., method = "bootstrap")`,
+#'   `test_effect()`, and `confint(..., method = "bootstrap")`.
+#'
+#' @examples
+#' bootstrap_control(nsim = 199, seed = 1, threads = 2)
 #'
 #' @export
 bootstrap_control <- function(nsim = 999L,
                               seed = NULL,
-                              failed_refit_policy = c("exclude", "count_extreme", "abort")) {
+                              failed_refit_policy = c("exclude", "count_extreme", "abort"),
+                              threads = 1L) {
   failed_refit_policy <- match.arg(failed_refit_policy)
+  threads <- mm_check_threads(threads)
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 1) {
     mm_abort(
       message = "`nsim` must be a positive integer.",
@@ -145,10 +163,27 @@ bootstrap_control <- function(nsim = 999L,
     list(
       requested_replicates = as.integer(nsim),
       seed = if (is.null(seed)) NULL else as.integer(seed),
-      failed_refit_policy = failed_refit_policy
+      failed_refit_policy = failed_refit_policy,
+      threads = threads
     ),
     class = "mm_bootstrap_control"
   )
+}
+
+# Validate a worker-thread count (bootstrap_control(), confint()/profile()
+# `threads`). Any positive whole number is honoured as asked: the default is
+# 1 and a larger value is the user's explicit opt-in (CRAN policy: <= 2
+# unless the user asks for more).
+mm_check_threads <- function(threads) {
+  if (!is.numeric(threads) || length(threads) != 1L || is.na(threads) ||
+      threads < 1 || threads != round(threads) || !is.finite(threads)) {
+    mm_abort(
+      message = "`threads` must be a single positive whole number.",
+      class = "mm_arg_error",
+      input = threads
+    )
+  }
+  as.integer(threads)
 }
 
 # Wire form of a bootstrap control. A NULL seed is resolved from R's RNG at
@@ -156,6 +191,7 @@ bootstrap_control <- function(nsim = 999L,
 # otherwise entropy-seeded StdRng.
 mm_bootstrap_wire <- function(bootstrap) {
   out <- unclass(bootstrap)
+  out$threads <- out$threads %||% 1L
   if (is.null(out$seed)) {
     out$seed <- sample.int(.Machine$integer.max, 1L)
   }
@@ -875,6 +911,54 @@ mm_confint_method_spelling <- function(method) {
   switch(method, Wald = "wald", boot = "bootstrap", method)
 }
 
+#' Confidence intervals for a mixeff LMM
+#'
+#' `method = "asymptotic"` (the default; synonyms `"wald"` and lme4's
+#' `"Wald"`) gives Wald intervals for the fixed effects from the stored
+#' standard errors. `method = "profile"` gives profile-likelihood intervals
+#' with lme4's rows and names: `.sig01`, `.sig02`, ... (random-effect
+#' standard deviations and correlations, numbered in lme4's term order),
+#' `.sigma`, then the fixed effects. As in lme4, every fit is profiled on the
+#' ML deviance: a REML fit's intervals are those of its ML refit. The
+#' engine's relative-Cholesky `theta1`, ... intervals (on the fit's own
+#' criterion) are kept in `attr(ci, "mm_profile")$table` and can be
+#' requested by name through `parm`. `method = "bootstrap"` (lme4's
+#' `"boot"`) gives parametric-bootstrap intervals for the fixed effects,
+#' controlled by [bootstrap_control()].
+#'
+#' lme4's `confint.merMod()` defaults to `method = "profile"`; mixeff keeps
+#' the Wald default because the profile refits the model many times
+#' (about the cost of lme4's profile; several seconds for a modest model)
+#' and can refuse on near-singular fits, while the Wald route is free.
+#' Request `method = "profile"` to reproduce lme4's default output.
+#'
+#' @param object A fitted `mm_lmm`.
+#' @param parm Parameters to report: names (fixed-effect names, and for
+#'   `"profile"` also `".sig01"`, ..., `".sigma"`, `"theta1"`, ...), lme4's
+#'   `"theta_"` / `"beta_"` shortcuts (`"profile"` only), or indices.
+#'   Defaults to all fixed effects (all lme4 rows for `"profile"`).
+#' @param level Confidence level.
+#' @param method `"asymptotic"`, `"wald"`, `"bootstrap"`, or `"profile"`.
+#' @param bootstrap Optional [bootstrap_control()] for `method = "bootstrap"`
+#'   (its `threads` field sets the bootstrap's worker threads).
+#' @param interval Bootstrap interval type, `"percentile"` or `"basic"`.
+#' @param threads Worker threads for `method = "profile"` (default 1). The
+#'   per-parameter profiles run concurrently; the result is identical for
+#'   every value. The default is 1 because CRAN policy limits packages to at
+#'   most two threads unless the user explicitly asks for more; passing
+#'   `threads` is that request.
+#' @param ... Unused.
+#'
+#' @return An `mm_confint` matrix of lower/upper bounds.
+#'
+#' @examples
+#' set.seed(1)
+#' d <- data.frame(g = factor(rep(1:10, each = 6)), x = rnorm(60))
+#' d$y <- 1 + 0.5 * d$x + rnorm(10)[d$g] + rnorm(60)
+#' fit <- lmm(y ~ x + (1 | g), d, control = mm_control(verbose = -1))
+#' confint(fit)
+#' confint(fit, method = "profile")
+#'
 #' @method confint mm_lmm
 #' @importFrom stats confint
 #' @export
@@ -882,7 +966,8 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
                            method = c("asymptotic", "wald", "bootstrap",
                                       "profile"),
                            bootstrap = NULL,
-                           interval = c("percentile", "basic"), ...) {
+                           interval = c("percentile", "basic"),
+                           threads = 1L, ...) {
   method <- match.arg(mm_confint_method_spelling(method),
                       c("asymptotic", "wald", "bootstrap", "profile"))
   # `"asymptotic"` is the package-wide canonical name for the closed-form
@@ -900,7 +985,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
   }
   if (identical(method, "profile")) {
     return(mm_profile_confint(object, if (missing(parm)) NULL else parm,
-                              level))
+                              level, threads = threads))
   }
   terms <- names(object$beta)
   if (missing(parm)) {
@@ -962,13 +1047,15 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #'   closed-form Wald interval), its synonyms `"wald"` and lme4's `"Wald"`, or
 #'   `"bootstrap"` (lme4's spelling `"boot"` is accepted). lme4 defaults to
 #'   `"profile"`; mixeff keeps the Wald default because profile intervals are
-#'   refused for GLMMs. The same spellings are accepted by the LMM method,
-#'   whose `"profile"` intervals are on the theta scale (`theta1`, ...,
-#'   `sigma`) rather than lme4's `.sig01` standard-deviation/correlation
-#'   scale.
+#'   refused for GLMMs. The same spellings are accepted by the LMM method
+#'   ([confint.mm_lmm()]), whose `"profile"` intervals use lme4's `.sig01`,
+#'   ..., `.sigma` rows.
 #' @param ... For `method = "bootstrap"`: `nsim` (number of replicates,
-#'   default 999) and `seed` (non-negative integer; when omitted one is
-#'   drawn from R's RNG so `set.seed()` governs reproducibility).
+#'   default 999), `seed` (non-negative integer; when omitted one is
+#'   drawn from R's RNG so `set.seed()` governs reproducibility), and
+#'   `threads` (worker threads for the replicate refits, default 1; the
+#'   result is identical for every value -- see [bootstrap_control()] for
+#'   the threading contract and CRAN's two-thread default policy).
 #'
 #' @return An `mm_confint` matrix of lower/upper bounds (`"asymptotic"`), or
 #'   a plain matrix of percentile bounds with bootstrap-accounting
@@ -1922,23 +2009,28 @@ mm_inference_row_unavailable <- function(term, method, reason, reason_code = NA_
 #' Computes profile-likelihood intervals for the model's parameters via the
 #' engine's certified profile payload and returns them as an `mm_profile`
 #' object: `$table` has one row per profiled parameter (`parameter`,
-#' `estimate`, `lower`, `upper`, `regularity`, `reason_code`). Under REML,
-#' fixed-effect coefficients are not profiled (upstream contract); their rows
-#' carry `reason_code = "profile_beta_unavailable_under_reml"` rather than
-#' being silently dropped. Use [confint()] with `method = "profile"` for the
-#' matrix form.
+#' `parameter_kind`, `estimate`, `lower`, `upper`, `regularity`,
+#' `reason_code`, `profiled_criterion`). Rows use lme4's names: `.sig01`,
+#' ... (kind `"sd"` or `"cor"`, numbered in lme4's term order), `.sigma`,
+#' and the fixed effects, all profiled on the ML deviance as lme4 does (a
+#' REML fit is refitted by ML); the engine's relative-Cholesky `theta1`, ...
+#' rows follow, profiled on the fit's own criterion. Use [confint()] with
+#' `method = "profile"` for the matrix form.
 #'
 #' @param fitted A fitted `mm_lmm`.
 #' @param which Optional character vector of parameter names to keep
-#'   (coefficient names, `"sigma"`, `"theta1"`, ...).
+#'   (coefficient names, `".sig01"`, `".sigma"`, `"theta1"`, ...).
 #' @param level Confidence level for the reported interval endpoints.
+#' @param threads Worker threads (default 1); see [confint.mm_lmm()].
 #' @param ... Unused; for generic consistency.
 #' @return An `mm_profile` object with `$table`, `$level`, `$fit_criterion`,
 #'   and `$notes`.
 #' @seealso [confint()] with `method = "profile"` for the matrix form.
 #' @export
-profile.mm_lmm <- function(fitted, which = NULL, level = 0.95, ...) {
-  ci <- mm_profile_confint(fitted, parm = which, level = level)
+profile.mm_lmm <- function(fitted, which = NULL, level = 0.95,
+                           threads = 1L, ...) {
+  ci <- mm_profile_confint(fitted, parm = which, level = level,
+                           threads = threads)
   prof <- attr(ci, "mm_profile")
   out <- list(
     table = prof$table,
@@ -1997,60 +2089,87 @@ confint.mm_profile <- function(object, parm, level = NULL, ...) {
 # (no persistent Rust handle), parses the schema-versioned JSON, and
 # returns a list with the rendered confint matrix plus the raw payload.
 
-mm_profile_confint <- function(fit, parm = NULL, level = 0.95) {
-  payload <- mm_profile_confint_payload(fit, level)
+mm_profile_confint <- function(fit, parm = NULL, level = 0.95, threads = 1L) {
+  threads <- mm_check_threads(threads)
+  reml <- isTRUE(fit$REML)
+  # lme4 profiles every fit on the ML deviance (a REML fit's confint()
+  # equals its ML refit's), so the lme4-scale rows (.sigNN, .sigma, beta)
+  # come from the ML profile. The relative-Cholesky theta rows stay on the
+  # fit's own criterion.
+  payload_ml <- mm_profile_confint_payload(fit, level, threads, reml = FALSE)
+  payload <- if (reml) {
+    mm_profile_confint_payload(fit, level, threads, reml = TRUE)
+  } else {
+    payload_ml
+  }
   fit_criterion <- as.character(payload$fit_criterion %||% "")
 
-  intervals <- payload$intervals %||% list()
-  rows <- lapply(intervals, mm_translate_profile_row, fit = fit)
-  rows <- Filter(Negate(is.null), rows)
-  table <- if (length(rows)) {
-    do.call(rbind, rows)
-  } else {
-    mm_empty_profile_table()
+  translate <- function(p) {
+    rows <- lapply(p$intervals %||% list(), mm_translate_profile_row, fit = fit)
+    rows <- Filter(Negate(is.null), rows)
+    if (length(rows)) do.call(rbind, rows) else mm_empty_profile_table()
   }
+  tab_ml <- translate(payload_ml)
+  tab_fit <- if (reml) translate(payload) else tab_ml
+  lme4_kinds <- c("sd", "cor", "sigma", "beta")
+  sig <- tab_ml[tab_ml$parameter_kind %in% c("sd", "cor"), , drop = FALSE]
+  sig <- sig[order(sig$parameter), , drop = FALSE]
+  sigma_row <- tab_ml[tab_ml$parameter_kind == "sigma", , drop = FALSE]
+  beta <- tab_ml[tab_ml$parameter_kind == "beta", , drop = FALSE]
+  beta <- beta[order(match(beta$parameter, names(fit$beta))), , drop = FALSE]
+  other <- tab_fit[!tab_fit$parameter_kind %in% lme4_kinds, , drop = FALSE]
+  table <- rbind(sig, sigma_row, beta, other)
+  table$profiled_criterion <- c(rep("ML", nrow(sig) + nrow(sigma_row) + nrow(beta)),
+                                rep(fit_criterion, nrow(other)))
 
-  # Under REML, beta is not profiled upstream by contract. Append explicit
-  # typed-refusal rows so the caller can see WHICH beta were requested but
-  # not certified, mirroring the bootstrap CI's "available" / refusal
-  # distinction. Any beta name in `parm` (or every beta when parm is the
-  # default) gets one row with reason_code = profile_beta_unavailable_under_reml.
-  if (identical(fit_criterion, "REML")) {
-    beta_names_requested <- mm_profile_beta_subset(fit, parm)
-    if (length(beta_names_requested)) {
-      missing_rows <- lapply(beta_names_requested, function(nm) {
-        data.frame(
-          parameter = nm,
-          parameter_kind = "beta",
-          estimate = unname(fit$beta[nm]),
-          lower = NA_real_,
-          upper = NA_real_,
-          method = "profile_likelihood",
-          regularity = "profile_beta_unavailable_under_reml",
-          boundary_clamped_lower = FALSE,
-          reason_code = "profile_beta_unavailable_under_reml",
-          stringsAsFactors = FALSE
-        )
-      })
-      table <- rbind(table, do.call(rbind, missing_rows))
-    }
-  }
-
+  # parm: names (lme4's ".sig01", ".sigma", coefficient names, or the theta
+  # rows "theta1", ...), lme4's "theta_" (all variance parameters) and
+  # "beta_" (all fixed effects), or indices into the lme4 rows.
+  is_lme4 <- table$parameter_kind %in% lme4_kinds
   if (!is.null(parm)) {
-    parm <- as.character(parm)
-    keep <- table$parameter %in% parm
-    table <- table[keep, , drop = FALSE]
+    if (is.numeric(parm)) {
+      keep <- table$parameter[is_lme4][parm]
+    } else {
+      parm <- as.character(parm)
+      keep <- c(
+        setdiff(parm, c("theta_", "beta_")),
+        if ("theta_" %in% parm) {
+          table$parameter[table$parameter_kind %in% c("sd", "cor", "sigma")]
+        },
+        if ("beta_" %in% parm) table$parameter[table$parameter_kind == "beta"]
+      )
+    }
+    table <- table[table$parameter %in% keep, , drop = FALSE]
   }
 
   rownames(table) <- NULL
-  mat <- as.matrix(table[, c("lower", "upper"), drop = FALSE])
-  rownames(mat) <- table$parameter
+  shown <- if (is.null(parm)) {
+    table[table$parameter_kind %in% lme4_kinds, , drop = FALSE]
+  } else {
+    table
+  }
+  mat <- as.matrix(shown[, c("lower", "upper"), drop = FALSE])
+  rownames(mat) <- shown$parameter
   alpha <- 1 - level
   colnames(mat) <- c(sprintf("%.1f %%", 100 * alpha / 2),
                      sprintf("%.1f %%", 100 * (1 - alpha / 2)))
   attr(mat, "method") <- "profile_likelihood"
   attr(mat, "status") <- "available"
   attr(mat, "fit_criterion") <- fit_criterion
+  notes <- unique(c(
+    as.character(unlist(payload$notes %||% list(), use.names = FALSE)),
+    as.character(unlist(payload_ml$notes %||% list(), use.names = FALSE))
+  ))
+  # The engine's REML-payload note on beta no longer applies: the beta rows
+  # come from the ML profile, as in lme4.
+  notes <- notes[!grepl("omit fixed-effect beta profiles", notes, fixed = TRUE)]
+  if (reml) {
+    notes <- c(notes, paste0(
+      "REML fit: the .sigNN, .sigma and fixed-effect intervals profile the ",
+      "ML deviance (the model refitted by ML), as lme4's confint() does; ",
+      "theta rows profile the REML criterion."
+    ))
+  }
   attr(mat, "mm_profile") <- list(
     schema = list(
       schema_name = as.character(payload$schema_name %||% NA_character_),
@@ -2058,20 +2177,21 @@ mm_profile_confint <- function(fit, parm = NULL, level = 0.95) {
     ),
     fit_criterion = fit_criterion,
     level = as.numeric(payload$level %||% level),
-    notes = as.character(unlist(payload$notes %||% list(),
-                                use.names = FALSE)),
+    threads = threads,
+    notes = notes,
     table = table
   )
   mm_new_confint(mat)
 }
 
-mm_profile_confint_payload <- function(fit, level) {
+mm_profile_confint_payload <- function(fit, level, threads = 1L,
+                                       reml = isTRUE(fit$REML)) {
   bridge <- mm_rust_fit_bridge_payload(fit)
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_profile_confint_json,
       bridge$formula_string,
-      isTRUE(fit$REML),
+      isTRUE(reml),
       bridge$spec_data$column_order,
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
@@ -2079,7 +2199,8 @@ mm_profile_confint_payload <- function(fit, level) {
       bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.numeric(level)
+      as.numeric(level),
+      as.integer(threads)
     ),
     error = function(cnd) cnd
   )
@@ -2135,8 +2256,32 @@ mm_translate_profile_row <- function(row, fit) {
 }
 
 mm_map_profile_parameter <- function(upstream, fit) {
-  if (upstream %in% c("\u03C3", "<U+03C3>")) {
-    return(list(name = "sigma", kind = "sigma"))
+  if (upstream %in% c("\u03C3", "<U+03C3>", ".sigma")) {
+    return(list(name = ".sigma", kind = "sigma"))
+  }
+  sig_idx <- if (grepl("^\\.sig[0-9]+$", upstream)) {
+    as.integer(sub("^\\.sig", "", upstream))
+  } else {
+    NA_integer_
+  }
+  if (!is.na(sig_idx)) {
+    # Engine `.sigNN` = theta slot NN in ENGINE theta order (SD for a
+    # diagonal slot, correlation otherwise); lme4 numbers the same
+    # quantities in its own term order (mm_re_structure()$perm).
+    st <- tryCatch(mm_re_structure(fit), error = function(cnd) NULL)
+    if (is.null(st)) return(list(name = upstream, kind = "unknown"))
+    pos <- match(sig_idx, st$perm)
+    if (is.na(pos)) return(list(name = upstream, kind = "unknown"))
+    diag_slot <- FALSE
+    for (tm in st$terms) {
+      cell <- which(tm$Tidx == pos, arr.ind = TRUE)
+      if (nrow(cell)) {
+        diag_slot <- cell[1L, 1L] == cell[1L, 2L]
+        break
+      }
+    }
+    return(list(name = sprintf(".sig%02d", pos),
+                kind = if (diag_slot) "sd" else "cor"))
   }
   beta_idx <- mm_profile_parameter_index(upstream, c("\u03B2", "<U+03B2>"))
   if (!is.na(beta_idx)) {

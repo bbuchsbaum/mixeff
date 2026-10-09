@@ -229,11 +229,20 @@ REMLcrit <- function(object) {
 
 # ---- random-effect structure from the theta map ----------------------------
 
-# One record per random-effect term in ENGINE (theta) order, which is lme4's
-# order: grouping label, lme4-named basis columns, the level order used by
-# ranef(), the relative-covariance template (theta index per Lambda cell) and
-# theta lower bounds. Built from the stored theta map, so Lambda/Z/u/b are
-# mutually consistent with fit$theta.
+# One record per random-effect term in lme4's mkReTrms order: grouping
+# label, lme4-named basis columns, the level order used by ranef(), the
+# relative-covariance template (theta index per Lambda cell, indexing the
+# lme4-ordered theta `$theta`) and theta lower bounds. Built from the stored
+# theta map, so Lambda/Z/u/b are mutually consistent with fit$theta.
+#
+# The engine (like MixedModels.jl) orders its terms by decreasing number of
+# random effects and keeps a `||` term as one diagonal block; lme4 splits
+# `||` into scalar terms (the engine's theta map already has one entry per
+# such piece, `term_id` = its formula position) and reorders the formula's
+# terms by decreasing number of levels only when some later term has more
+# levels than an earlier one (`rev(order(nl))`, so ties come out reversed).
+# `$perm` maps lme4 theta positions to engine positions:
+# `$theta == fit$theta[$perm]`.
 mm_re_structure <- function(fit) {
   .mm_lazy(fit, "re_structure", mm_compute_re_structure)
 }
@@ -253,6 +262,16 @@ mm_compute_re_structure <- function(fit) {
   terms <- lapply(seq_along(maps), function(k) {
     map <- maps[[k]]$map %||% maps[[k]]
     group <- mm_group_lme4_label(map$group, fallback = as.character(map$group))
+    # Nested groups the R layer relabelled (`a/h` -> lme4's `h:a`).
+    gm <- fit$group_map %||% list()
+    if (length(gm)) {
+      keys <- vapply(names(gm), mm_group_lme4_label, character(1),
+                     fallback = "")
+      hit <- match(group, c(keys, names(gm)))
+      if (!is.na(hit)) {
+        group <- as.character(gm[[(hit - 1L) %% length(gm) + 1L]]$label %||% group)
+      }
+    }
     raw_basis <- as.character(unlist(map$user_basis %||% map$optimizer_basis,
                                      use.names = FALSE))
     if (!length(raw_basis)) raw_basis <- "intercept"
@@ -262,11 +281,7 @@ mm_compute_re_structure <- function(fit) {
     if (any(!is_int)) {
       cnames[!is_int] <- mm_re_colnames_lme4(raw_basis[!is_int], frame)
     }
-    p <- length(cnames)
     slots <- map$theta_slots %||% list()
-    Tidx <- matrix(0L, p, p)
-    gidx <- integer(length(slots))
-    lower <- numeric(length(slots))
     rows <- vapply(slots, function(sl) {
       as.integer(sl$lambda_row %||% sl$basis_row)
     }, integer(1))
@@ -276,6 +291,17 @@ mm_compute_re_structure <- function(fit) {
     # A `||` term split into scalar pieces reports Lambda positions relative
     # to the original block; re-base them on this term.
     base <- if (length(rows)) min(c(rows, cols)) else 0L
+    basis_matrix <- NULL
+    if (length(rows) && max(c(rows, cols)) - base + 1L > length(cnames)) {
+      # A factor in the basis spans several columns; the engine codes them
+      # like R's model.matrix() (lme4's coding), so rebuild them that way.
+      basis_matrix <- mm_re_factor_basis_matrix(raw_basis, is_int, frame)
+      if (!is.null(basis_matrix)) cnames <- colnames(basis_matrix)
+    }
+    p <- length(cnames)
+    Tidx <- matrix(0L, p, p)
+    gidx <- integer(length(slots))
+    lower <- numeric(length(slots))
     if (length(rows) && max(c(rows, cols)) - base >= p) {
       mm_abort(
         message = "The theta map's Lambda positions do not fit the term's basis.",
@@ -304,14 +330,76 @@ mm_compute_re_structure <- function(fit) {
     }
     gf <- mm_group_factor(frame, group)
     levels <- if (!is.null(re[[group]])) rownames(re[[group]]) else levels(gf)
+    term_id <- as.character(map$term_id %||% "")
+    semantic <- suppressWarnings(as.integer(sub("^r", "", term_id)))
     list(group = group, raw_basis = raw_basis, cnames = cnames, p = p,
-         Tidx = Tidx, theta_index = gidx, lower = lower,
+         basis_matrix = basis_matrix, Tidx = Tidx, theta_index = gidx, lower = lower,
          factor = factor(as.character(gf), levels = levels),
-         levels = levels)
+         levels = levels,
+         semantic = if (is.na(semantic)) k - 1L else semantic)
   })
-  lower <- rep(-Inf, length(theta))
-  for (tm in terms) lower[tm$theta_index] <- tm$lower
-  list(terms = terms, lower = lower)
+  # lme4 term order: formula order, then mkReTrms' reordering.
+  terms <- terms[order(vapply(terms, `[[`, integer(1), "semantic"))]
+  nl <- vapply(terms, function(tm) length(tm$levels), integer(1))
+  if (length(nl) > 1L && any(diff(nl) > 0)) {
+    terms <- terms[rev(order(nl))]
+  }
+  # Renumber theta in lme4 order: term by term, lower-triangle cells in
+  # column-major order within a term (lme4's theta layout).
+  perm <- integer()
+  lower <- numeric()
+  for (k in seq_along(terms)) {
+    tm <- terms[[k]]
+    cells <- which(tm$Tidx > 0L, arr.ind = TRUE)
+    cells <- cells[order(cells[, 2L], cells[, 1L]), , drop = FALSE]
+    engine_idx <- tm$Tidx[cells]
+    new_idx <- length(perm) + seq_along(engine_idx)
+    tm$lower <- tm$lower[match(engine_idx, tm$theta_index)]
+    tm$Tidx[cells] <- new_idx
+    tm$engine_theta_index <- engine_idx
+    tm$theta_index <- new_idx
+    perm <- c(perm, engine_idx)
+    lower <- c(lower, tm$lower)
+    terms[[k]] <- tm
+  }
+  if (length(perm) != length(theta) || anyDuplicated(perm)) {
+    mm_abort(
+      message = "The theta map does not cover the fitted theta vector exactly once.",
+      class = "mm_schema_error"
+    )
+  }
+  list(terms = terms, lower = lower, perm = perm, theta = theta[perm])
+}
+
+# R model.matrix() columns of a random-effect basis given as variable labels
+# (`(0 + f | g)` -> `fp`, `fq`, `fr`; `(1 + f | g)` -> intercept + contrasts).
+mm_re_factor_basis_matrix <- function(raw_basis, is_int, frame) {
+  vars <- raw_basis[!is_int]
+  if (!length(vars)) return(NULL)
+  labels <- vapply(vars, function(v) {
+    if (v %in% names(frame)) sprintf("`%s`", v) else v
+  }, character(1))
+  fo <- tryCatch(
+    stats::as.formula(paste("~", paste(labels, collapse = " + "),
+                            if (any(is_int)) "" else "- 1")),
+    error = function(cnd) NULL
+  )
+  if (is.null(fo)) return(NULL)
+  mm <- tryCatch(stats::model.matrix(fo, data = frame),
+                 error = function(cnd) NULL)
+  if (is.null(mm)) return(NULL)
+  attr(mm, "assign") <- NULL
+  attr(mm, "contrasts") <- NULL
+  mm
+}
+
+# Columns of a term's basis as a list of numeric vectors.
+mm_re_term_values <- function(tm, frame) {
+  if (!is.null(tm$basis_matrix)) {
+    return(lapply(seq_len(ncol(tm$basis_matrix)),
+                  function(j) as.numeric(tm$basis_matrix[, j])))
+  }
+  lapply(tm$raw_basis, mm_re_basis_values, frame = frame)
 }
 
 mm_re_basis_values <- function(label, frame) {
@@ -348,7 +436,7 @@ mm_re_basis_values <- function(label, frame) {
 mm_re_term_zt <- function(fit, tm) {
   frame <- fit$model_frame
   n <- nrow(frame)
-  vals <- lapply(tm$raw_basis, mm_re_basis_values, frame = frame)
+  vals <- mm_re_term_values(tm, frame)
   lev <- as.integer(tm$factor)
   nl <- length(tm$levels)
   ok <- !is.na(lev)
@@ -392,7 +480,7 @@ mm_re_lambdat <- function(fit) {
                                  dims = c(offset, offset))
     Lind <- as.integer(tmpl@x)
     Lt <- tmpl
-    Lt@x <- as.numeric(fit$theta)[Lind]
+    Lt@x <- st$theta[Lind]
     list(Lambdat = Lt, Lind = Lind)
   })
 }
@@ -410,7 +498,7 @@ mm_pinv <- function(A, tol = sqrt(.Machine$double.eps)) {
 mm_re_bu <- function(fit) {
   .mm_lazy(fit, "re_bu", function(fit) {
     st <- mm_re_structure(fit)
-    theta <- as.numeric(fit$theta)
+    theta <- st$theta
     re <- fit$random_effects
     b <- list()
     u <- list()
@@ -603,8 +691,7 @@ mm_getme_one <- function(object, one) {
     },
     mmList = {
       out <- lapply(st()$terms, function(tm) {
-        m <- do.call(cbind, lapply(tm$raw_basis, mm_re_basis_values,
-                                   frame = object$model_frame))
+        m <- do.call(cbind, mm_re_term_values(tm, object$model_frame))
         colnames(m) <- tm$cnames
         m
       })
@@ -638,7 +725,7 @@ mm_getme_one <- function(object, one) {
     Tlist = {
       out <- lapply(st()$terms, function(tm) {
         Tm <- matrix(0, tm$p, tm$p, dimnames = list(tm$cnames, tm$cnames))
-        Tm[tm$Tidx > 0] <- as.numeric(object$theta)[tm$Tidx[tm$Tidx > 0]]
+        Tm[tm$Tidx > 0] <- st()$theta[tm$Tidx[tm$Tidx > 0]]
         Tm
       })
       names(out) <- tnames()
@@ -647,7 +734,7 @@ mm_getme_one <- function(object, one) {
     ST = {
       out <- lapply(st()$terms, function(tm) {
         Tm <- matrix(0, tm$p, tm$p, dimnames = list(tm$cnames, tm$cnames))
-        Tm[tm$Tidx > 0] <- as.numeric(object$theta)[tm$Tidx[tm$Tidx > 0]]
+        Tm[tm$Tidx > 0] <- st()$theta[tm$Tidx[tm$Tidx > 0]]
         S <- diag(Tm)
         ST <- Tm
         if (tm$p > 1L) {
@@ -677,7 +764,7 @@ mm_getme_one <- function(object, one) {
     },
     fixef = object$beta,
     beta = unname(object$beta),
-    theta = stats::setNames(as.numeric(object$theta), theta_names()),
+    theta = stats::setNames(st()$theta, theta_names()),
     REML = if (glmm) 0L else if (isTRUE(object$REML)) length(object$beta) else 0L,
     is_REML = !glmm && isTRUE(object$REML),
     n_rtrms = length(st()$terms),
@@ -761,8 +848,7 @@ mm_getme <- function(object, name) {
 mm_is_singular_theta <- function(x, tol) {
   st <- tryCatch(mm_re_structure(x), error = function(cnd) NULL)
   if (is.null(st)) return(NA)
-  theta <- as.numeric(x$theta)
-  any(theta[st$lower == 0] < tol)
+  any(st$theta[st$lower == 0] < tol)
 }
 
 # ---- VarCorr --------------------------------------------------------------
@@ -798,7 +884,27 @@ mm_varcorr_lme4 <- function(vc, fit) {
   })
   groups <- vapply(comps, function(comp) as.character(comp$group),
                    character(1))
+  # lme4 layout: one entry per lme4 random-effect term, in mkReTrms order,
+  # named make.unique(group) -- a `||` term gives `g`, `g.1`, ... -- cut
+  # from the engine's per-block matrices (a diagonal block's off-diagonal
+  # cells are structural zeros).
+  lme4_mats <- mm_varcorr_lme4_terms(mats, groups, fit)
+  if (!is.null(lme4_mats)) {
+    mats <- lme4_mats
+    groups <- attr(lme4_mats, "groups")
+    attr(mats, "groups") <- NULL
+  }
   names(mats) <- make.unique(groups, sep = ".")
+  comps <- lapply(seq_along(mats), function(i) {
+    S <- mats[[i]]
+    R <- attr(S, "correlation")
+    list(group = names(mats)[[i]], names = colnames(S),
+         std_dev = unname(attr(S, "stddev")),
+         correlations = if (ncol(S) > 1L) {
+           unlist(lapply(2:ncol(S), function(r) R[r, seq_len(r - 1L)]),
+                  use.names = FALSE)
+         } else numeric())
+  })
   glmm <- inherits(fit, "mm_glmm")
   use_sc <- if (glmm) identical(fit$family$family, "gamma") else TRUE
   sc <- if (use_sc) as.numeric(sigma(fit)) else 1
@@ -807,10 +913,47 @@ mm_varcorr_lme4 <- function(vc, fit) {
   attr(mats, "mm_table") <- vc$table
   attr(mats, "mm_residual_sd") <- vc$residual_sd
   attr(mats, "mm_components_raw") <- comps
+  attr(mats, "mm_boundary") <- mm_varcorr_boundary_flag(
+    unlist(lapply(comps, `[[`, "std_dev"), use.names = FALSE),
+    as.numeric(vc$residual_sd %||% NA_real_)
+  )
   attr(mats, "mm_design_weak_identifiability_groups") <-
     attr(vc, "mm_design_weak_identifiability_groups")
   class(mats) <- c("mm_varcorr", "VarCorr.merMod")
   mats
+}
+
+# Re-cut per-block VarCorr matrices into lme4's terms (see mm_re_structure);
+# NULL when the structure cannot be matched (the engine layout is kept).
+mm_varcorr_lme4_terms <- function(mats, groups, fit) {
+  st <- tryCatch(mm_re_structure(fit), error = function(cnd) NULL)
+  if (is.null(st) || !length(mats)) return(NULL)
+  used <- list()
+  out <- list()
+  out_groups <- character()
+  for (tm in st$terms) {
+    hit <- which(groups == tm$group & vapply(mats, function(S) {
+      all(tm$cnames %in% colnames(S))
+    }, logical(1)))
+    if (!length(hit)) return(NULL)
+    S <- mats[[hit[[1L]]]]
+    keep <- match(tm$cnames, colnames(S))
+    sub <- S[keep, keep, drop = FALSE]
+    attributes(sub) <- list(dim = dim(sub), dimnames = dimnames(sub))
+    attr(sub, "stddev") <- attr(S, "stddev")[keep]
+    attr(sub, "correlation") <- attr(S, "correlation")[keep, keep, drop = FALSE]
+    out[[length(out) + 1L]] <- sub
+    out_groups <- c(out_groups, tm$group)
+    used[[length(used) + 1L]] <- paste(hit[[1L]], keep)
+  }
+  # Every engine column must be accounted for exactly once.
+  total <- sum(vapply(mats, ncol, integer(1)))
+  if (length(unique(unlist(used))) != total ||
+      length(unlist(used)) != total) {
+    return(NULL)
+  }
+  attr(out, "groups") <- out_groups
+  out
 }
 
 mm_varcorr_is_internal <- function(x) {

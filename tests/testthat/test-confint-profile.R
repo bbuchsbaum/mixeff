@@ -3,7 +3,9 @@
 #
 # Done condition from the bead: (a) ML full-rank LMM returns beta/sigma/theta
 # rows, all finite and monotonic; (b) REML full-rank LMM omits beta with a
-# documented reason_code, sigma/theta still present; (c) beta profile CI
+# documented reason_code, sigma/theta still present [superseded: REML fits
+# are now profiled on the ML deviance like lme4, so beta rows are
+# available]; (c) beta profile CI
 # agrees with the Wald CI on a well-behaved model to within stated
 # tolerance; (d) boundary fit raises a typed refusal rather than fabricating.
 
@@ -57,7 +59,9 @@ test_that("confint(method='profile') under ML returns beta/sigma/theta rows", {
   expect_identical(attr(ci, "fit_criterion"), "ML")
   expect_true("(Intercept)" %in% rownames(ci))
   expect_true("Days" %in% rownames(ci))
-  expect_true("sigma" %in% rownames(ci))
+  # lme4's row names and order: .sigNN (lme4 term order), .sigma, beta.
+  expect_identical(rownames(ci),
+                   c(".sig01", ".sig02", ".sig03", ".sigma", "(Intercept)", "Days"))
 
   payload <- attr(ci, "mm_profile")
   expect_true(is.list(payload))
@@ -101,8 +105,8 @@ test_that("confint(method='profile') under ML returns beta/sigma/theta rows", {
   }
 })
 
-test_that("confint(method='profile') under REML omits beta with reason_code", {
-  skip_on_cran() # full profile-likelihood computation, ~1.5s locally
+test_that("confint(method='profile') under REML profiles the ML deviance like lme4", {
+  skip_on_cran() # full profile-likelihood computation, ~3s locally
   fit <- mm_sleepstudy_fit_reml()
   ci <- confint(fit, method = "profile", level = 0.95)
 
@@ -111,16 +115,74 @@ test_that("confint(method='profile') under REML omits beta with reason_code", {
   table <- payload$table
 
   beta_rows <- table[table$parameter_kind == "beta", , drop = FALSE]
-  expect_true(nrow(beta_rows) >= 1L,
-              info = "REML profile payload should still surface refusal rows for beta")
-  expect_true(all(beta_rows$reason_code == "profile_beta_unavailable_under_reml"))
-  expect_true(all(is.na(beta_rows$lower)))
-  expect_true(all(is.na(beta_rows$upper)))
+  expect_identical(beta_rows$parameter, c("(Intercept)", "Days"))
+  expect_true(all(is.finite(beta_rows$lower) & is.finite(beta_rows$upper)))
+  expect_true(all(beta_rows$profiled_criterion == "ML"))
+  theta_rows <- table[table$parameter_kind == "theta", , drop = FALSE]
+  expect_true(nrow(theta_rows) >= 1L)
+  expect_true(all(theta_rows$profiled_criterion == "REML"))
+  expect_true(any(grepl("ML deviance", payload$notes, fixed = TRUE)))
+  # lme4: the REML fit's profile intervals equal the ML fit's.
+  ci_ml <- confint(mm_sleepstudy_fit_ml(), method = "profile", level = 0.95)
+  expect_equal(unclass(ci)[, 1:2], unclass(ci_ml)[, 1:2], tolerance = 1e-6,
+               ignore_attr = TRUE)
+})
 
-  non_beta <- table[table$parameter_kind != "beta", , drop = FALSE]
-  expect_true(nrow(non_beta) >= 1L,
-              info = "REML profile payload must keep sigma/theta intervals")
-  expect_true(all(non_beta$reason_code %in% c(NA_character_, "")))
+test_that("confint(method='profile') matches lme4's profile intervals", {
+  skip_on_cran() # three model pairs, profile on both sides
+  mm_skip_if_no_lme4_local()
+  d <- mm_sleepstudy_data()
+  for (fo in list(Reaction ~ Days + (Days | Subject),
+                  Reaction ~ Days + (1 | Subject),
+                  Reaction ~ Days + (Days || Subject))) {
+    fit <- lmm(fo, d, control = mm_control(verbose = -1))
+    ref <- suppressMessages(confint(lme4::lmer(fo, d)))
+    ci <- confint(fit, method = "profile")
+    expect_identical(rownames(ci), rownames(ref), label = deparse1(fo))
+    expect_equal(unclass(ci)[, 1:2], ref, tolerance = 1e-4,
+                 ignore_attr = TRUE, label = deparse1(fo))
+  }
+})
+
+test_that("profile .sigNN labels follow lme4's term order and kinds", {
+  skip_on_cran()
+  mm_skip_if_no_lme4_local()
+  set.seed(11)
+  d <- data.frame(a = factor(rep(1:6, each = 20)), g = factor(rep(1:15, 8)),
+                  x = rnorm(120))
+  d$y <- 1 + d$x + rnorm(6)[d$a] + rnorm(15, sd = 0.7)[d$g] +
+    d$x * rnorm(15, sd = 0.4)[d$g] + rnorm(120)
+  # The engine orders terms g, a (decreasing size); lme4 orders
+  # (1 | a) + (x || g) as g.x, g.(Intercept), a (ties reversed).
+  fit <- lmm(y ~ x + (1 | a) + (x || g), d, REML = FALSE,
+             control = mm_control(verbose = -1))
+  ref <- lme4::lmer(y ~ x + (1 | a) + (x || g), d, REML = FALSE)
+  ci <- confint(fit, method = "profile")
+  ref_ci <- suppressMessages(confint(ref, method = "profile"))
+  expect_identical(rownames(ci), rownames(ref_ci))
+  expect_equal(unclass(ci)[, 1:2], ref_ci, tolerance = 2e-3,
+               ignore_attr = TRUE)
+  tab <- attr(ci, "mm_profile")$table
+  sig <- tab[grepl("^\\.sig[0-9]+$", tab$parameter), , drop = FALSE]
+  expect_identical(sig$parameter, c(".sig01", ".sig02", ".sig03"))
+  expect_true(all(sig$parameter_kind == "sd"))
+  # correlated term: .sig02 is a correlation
+  tab2 <- attr(confint(mm_sleepstudy_fit_ml(), method = "profile"),
+               "mm_profile")$table
+  expect_identical(tab2$parameter_kind[match(c(".sig01", ".sig02", ".sig03"),
+                                             tab2$parameter)],
+                   c("sd", "cor", "sd"))
+})
+
+test_that("profile threads give identical results", {
+  skip_on_cran()
+  fit <- mm_sleepstudy_fit_ml()
+  ci1 <- confint(fit, method = "profile", threads = 1)
+  ci2 <- confint(fit, method = "profile", threads = 2)
+  expect_identical(unclass(ci1)[, 1:2], unclass(ci2)[, 1:2])
+  expect_identical(attr(ci2, "mm_profile")$threads, 2L)
+  expect_error(confint(fit, method = "profile", threads = 0),
+               class = "mm_arg_error")
 })
 
 test_that("profile CI for beta agrees with Wald CI on a well-behaved ML fit", {

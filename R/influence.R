@@ -8,7 +8,7 @@
 mm_influence_parts <- function(model) {
   n <- nobs(model)
   y <- as.numeric(mm_response_vector(model))
-  mu <- as.numeric(fitted(model))
+  mu <- mm_insample(model, fitted(model))
   prior <- as.numeric(model$weights %||% rep(1, n))
   if (inherits(model, "mm_glmm")) {
     nb <- identical(model$family$family, "negative_binomial")

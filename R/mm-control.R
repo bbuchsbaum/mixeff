@@ -14,7 +14,9 @@
 #' recorded in the optimizer certificate, so the fit stays auditable.
 #'
 #' @param verbose Integer verbosity level. Use `-1` to suppress the automatic
-#'   model explanation (and the GLMM estimator notice).
+#'   model explanation and the fit notices (the GLMM estimator notice, the
+#'   `mm_rows_dropped` missing-value notice, grouping coercion and scaling
+#'   advisories).
 #' @param max_feval Optional positive integer capping the optimizer's objective
 #'   evaluations. Most useful for [glmm()] with `method = "joint_laplace"`,
 #'   whose native joint optimizer otherwise runs to an engine-chosen budget.

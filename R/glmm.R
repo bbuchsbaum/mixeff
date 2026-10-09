@@ -33,10 +33,13 @@
 #'   a numeric vector; values must be finite. `offset()` terms in the formula
 #'   are also supported and are added to it (as in [stats::glm()]).
 #' @param subset,na.action,contrasts As in [lmm()]: `subset` selects rows
-#'   (evaluated in `data`), `na.action` controls missing values (the default
-#'   `NULL` refuses `NA` in a model variable with a typed `mm_data_error`;
-#'   pass `na.omit` for lme4's complete-case behaviour, or `na.exclude` to pad
-#'   `fitted()`/`residuals()`/`predict()` back to the original rows), and
+#'   (evaluated in `data`), `na.action` controls missing values (default
+#'   `getOption("na.action")`, i.e. `na.omit`, as in `glmer()`; only model
+#'   variables, `weights` and `offset` count; dropped rows are announced with
+#'   a typed `mm_rows_dropped` message and recorded in `na.action(fit)`;
+#'   `na.exclude` pads `fitted()`/`residuals()`/`predict()` back to the
+#'   original rows; `na.fail` and `na.pass` are refused with a typed
+#'   `mm_data_error`), and
 #'   `contrasts` is honoured only when it names the engine's coding
 #'   (`contr.treatment` for unordered, `contr.poly` for ordered factors).
 #' @param method GLMM estimation method. `"joint_laplace"` (the default)
@@ -115,7 +118,7 @@ glmm <- function(formula,
                  weights = NULL,
                  offset = NULL,
                  subset = NULL,
-                 na.action = NULL,
+                 na.action = getOption("na.action"),
                  contrasts = NULL,
                  method = c("joint_laplace", "pirls_profiled"),
                  nAGQ = 1L,
@@ -648,6 +651,24 @@ mm_glmm_binomial_prep <- function(formula, data, family_info, weights) {
     weights <- as.numeric(n)
     formula[[2L]] <- as.name(respname)
   } else {
+    if (!is.name(lhs)) {
+      # A computed response such as I(y > 300) or as.numeric(f == "a"):
+      # evaluate it into a column, as model.frame() would.
+      env <- environment(formula) %||% parent.frame()
+      value <- eval(lhs, data, env)
+      if (length(value) != nrow(data)) {
+        mm_abort(
+          message = sprintf(
+            "The response `%s` must have one value per row of `data` (%d).",
+            deparse1(lhs), nrow(data)
+          ),
+          class = "mm_data_error"
+        )
+      }
+      data[[".mm_binomial_response"]] <- value
+      formula[[2L]] <- as.name(".mm_binomial_response")
+      lhs <- formula[[2L]]
+    }
     response_name <- as.character(lhs)
     col <- data[[response_name]]
     if (is.factor(col)) {
@@ -683,8 +704,11 @@ mm_glmm_binomial_prep <- function(formula, data, family_info, weights) {
 # positive; offsets need only be finite.
 mm_glmm_validate_weights <- function(x, data, label, positive = TRUE) {
   if (is.null(x)) return(NULL)
-  if (!is.numeric(x) || length(x) != nrow(data) || anyNA(x) ||
-      any(!is.finite(x)) || (positive && any(x <= 0))) {
+  # NA values are missing values handled by `na.action` (model.frame()
+  # semantics); the observed values must be finite (and positive).
+  obs <- x[!is.na(x)]
+  if (!is.numeric(x) || length(x) != nrow(data) ||
+      any(!is.finite(obs)) || (positive && any(obs <= 0))) {
     mm_abort(
       message = sprintf(
         "`%s` must be a %s numeric vector with one value per row of `data` (%d).",

@@ -33,13 +33,14 @@ test_that("subset accepts a numeric index and keeps weights aligned", {
   expect_equal(length(weights(fit)), 48L)
 })
 
-test_that("na.action = na.omit drops incomplete rows; default refuses NA", {
+test_that("na.action = na.omit drops incomplete rows; default is getOption(\"na.action\")", {
   df <- mm_dh_data()
   df$x[c(3, 17, 40)] <- NA
-  expect_error(lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1)),
-               class = "mm_data_error")
+  dflt <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+  expect_equal(nobs(dflt), nrow(df) - 3L)
   fit <- lmm(y ~ x + (1 | g), df, na.action = na.omit,
              control = mm_control(verbose = -1))
+  expect_equal(fixef(dflt), fixef(fit))
   expect_equal(nobs(fit), nrow(df) - 3L)
   manual <- lmm(y ~ x + (1 | g), na.omit(df[c("y", "x", "g")]),
                 control = mm_control(verbose = -1))
@@ -50,7 +51,8 @@ test_that("na.action = na.fail errors on missing data", {
   df <- mm_dh_data()
   df$y[5] <- NA
   expect_error(lmm(y ~ x + (1 | g), df, na.action = na.fail,
-                   control = mm_control(verbose = -1)))
+                   control = mm_control(verbose = -1)),
+               class = "mm_data_error")
 })
 
 test_that("contrasts refuses non-treatment coding but accepts treatment", {

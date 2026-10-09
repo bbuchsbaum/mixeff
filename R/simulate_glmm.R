@@ -58,19 +58,11 @@ mm_simulate_resolve_partial <- function(fit, target, re.form) {
   list(target = "partial", formula = re.form, condition_on = labels)
 }
 
-# In-sample values for the fitted rows (drops na.exclude padding).
-mm_simulate_insample <- function(fit, x) {
-  x <- as.numeric(x)
-  n <- nobs(fit)
-  if (length(x) > n && !is.null(fit$na.action)) x <- x[-fit$na.action]
-  x
-}
-
 # Linear predictor conditioned on the BLUPs of the `re.form` terms plus new
 # random effects for the remaining terms.
 mm_simulate_partial_eta <- function(fit, resolved, nsim) {
   n <- nobs(fit)
-  cond <- mm_simulate_insample(
+  cond <- mm_insample(
     fit, stats::predict(fit, re.form = resolved$formula,
                         type = if (inherits(fit, "mm_glmm")) "link" else NULL)
   )
@@ -182,7 +174,7 @@ mm_simulate_new_re <- function(fit, nsim, exclude = character()) {
 # Linear predictor without random effects (fixed part + offset).
 mm_simulate_fixed_eta <- function(fit) {
   if (inherits(fit, "mm_glmm")) {
-    as.numeric(stats::predict(fit, re.form = NA, type = "link"))
+    mm_insample(fit, stats::predict(fit, re.form = NA, type = "link"))
   } else {
     as.numeric(fit$fixed_fitted)
   }
@@ -245,7 +237,7 @@ simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
   rng_state <- mm_rng_state(seed)
   out <- mm_with_seed(seed, {
     mu <- if (identical(target, "conditional")) {
-      matrix(as.numeric(fitted(object)), n, nsim)
+      matrix(mm_insample(object, fitted(object)), n, nsim)
     } else if (identical(target, "partial")) {
       family$linkinv(mm_simulate_partial_eta(object, resolved, nsim))
     } else {

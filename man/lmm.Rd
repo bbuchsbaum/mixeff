@@ -10,7 +10,7 @@ lmm(
   REML = TRUE,
   weights = NULL,
   subset = NULL,
-  na.action = NULL,
+  na.action = getOption("na.action"),
   contrasts = NULL,
   control = mm_control(),
   offset = NULL
@@ -30,15 +30,24 @@ one value per row or an expression evaluated in \code{data}.}
 \item{subset}{Optional expression selecting rows of \code{data}, evaluated in
 \code{data} (as in \code{\link[stats:lm]{stats::lm()}}).}
 
-\item{na.action}{Optional function controlling missing-value handling,
-applied to the model variables (including evaluated transforms such as
-\code{log(x)}) after \code{subset} (e.g. \link[stats:na.fail]{stats::na.omit}). The default (\code{NULL})
-refuses any \code{NA} in a model variable with a typed \code{mm_data_error}
-(audit-first: missing-data dropping must be opt-in). Pass
-\code{na.action = na.omit} for lme4's complete-case behavior, or
-\link[stats:na.fail]{stats::na.exclude} to also pad \code{\link[=fitted]{fitted()}}, \code{\link[=residuals]{residuals()}} and in-sample
-\code{\link[=predict]{predict()}} back to the rows of \code{data} with \code{NA} (as lm/lme4 do). Factor
-levels left unused after \code{subset}/NA removal are dropped, as
+\item{na.action}{A function (or function name) controlling missing-value
+handling, as in \code{\link[lme4:lmer]{lme4::lmer()}} and \code{\link[stats:lm]{stats::lm()}}. The default is
+\code{getOption("na.action")} (\code{na.omit} unless changed). It is applied after
+\code{subset} to the variables the model uses only -- the formula variables
+(fixed and random parts, including evaluated transforms such as \code{log(x)})
+plus \code{weights} and \code{offset} -- so an \code{NA} in an unused column of \code{data}
+never drops a row, exactly like \code{model.frame()}. Dropped rows are never
+silent: a typed \code{mm_rows_dropped} message reports how many rows were
+dropped and which variables had missing values (silence it with
+\code{mm_control(verbose = -1)}). The dropped rows are recorded as
+\code{na.action(fit)} and \code{attr(model.frame(fit), "na.action")}, and
+\code{\link[=nobs]{nobs()}} counts the rows used. \link[stats:na.fail]{stats::na.omit} keeps the compact
+shape; \link[stats:na.fail]{stats::na.exclude} pads \code{\link[=fitted]{fitted()}}, \code{\link[=residuals]{residuals()}} and in-sample
+\code{\link[=predict]{predict()}} back to the rows of \code{data} with \code{NA}; \link[stats:na.fail]{stats::na.fail}
+refuses missing values with a typed \code{mm_data_error}; \link[stats:na.fail]{stats::na.pass}
+(or no action configured) is refused with a typed \code{mm_data_error}, since
+a mixed model cannot be fitted to missing values. Factor levels left
+unused after \code{subset}/NA removal are dropped, as
 \code{model.frame(drop.unused.levels = TRUE)} does in lme4.}
 
 \item{contrasts}{Optional named list of factor contrasts. The engine codes

@@ -255,12 +255,11 @@ mm_assert_unordered_contrast_policy <- function(nm, col, .call = rlang::caller_e
 
 #' Refuse compilation when a design variable contains NA
 #'
-#' mixeff is no-silent-surgery: it does not silently drop rows with NA
-#' in design variables. Users must `na.omit()` (or more carefully select
-#' complete cases) explicitly before handing data to `compile_model()` /
-#' `lmm()`. This helper enumerates the offending columns and raises one
-#' typed `mm_data_error` listing all of them rather than failing on the
-#' first.
+#' `compile_model()` audits the data exactly as given and never drops rows.
+#' (`lmm()`/`glmm()` apply `na.action` first, announcing any dropped rows;
+#' see `mm_apply_na_action()`.) This helper enumerates the offending columns
+#' and raises one typed `mm_data_error` listing all of them rather than
+#' failing on the first.
 #'
 #' @keywords internal
 #' @noRd
@@ -280,7 +279,7 @@ mm_check_no_na <- function(data, vars, .call = rlang::caller_env()) {
   )
   mm_abort(
     message = sprintf(
-      "Missing values in design variable(s): %s. mixeff requires complete cases by default; pass `na.action = na.omit` (or `na.exclude`) to lmm()/glmm(), or na.omit(data), to drop incomplete rows.",
+      "Missing values in design variable(s): %s. compile_model() audits complete cases only; lmm()/glmm() drop incomplete rows under `na.action` (default getOption(\"na.action\"), i.e. na.omit), or pass na.omit(data).",
       details
     ),
     class = "mm_data_error",

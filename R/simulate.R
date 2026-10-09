@@ -190,7 +190,7 @@ simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
   rng_state <- mm_rng_state(seed)
   out <- mm_with_seed(seed, {
     eta <- if (identical(target, "conditional")) {
-      matrix(as.numeric(fitted(object)), n, nsim)
+      matrix(mm_insample(object, fitted(object)), n, nsim)
     } else if (identical(target, "partial")) {
       mm_simulate_partial_eta(object, resolved, nsim)
     } else {

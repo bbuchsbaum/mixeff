@@ -76,3 +76,25 @@ test_that("dfbeta() on a do.coef = FALSE influence result is a typed error", {
   inf <- influence(fit, groups = "g", do.coef = FALSE)
   expect_error(dfbeta(inf), class = "mm_arg_error")
 })
+
+test_that("glmm() accepts a computed binomial response such as I(y > c)", {
+  skip_if_not_installed("lme4")
+  data("sleepstudy", package = "lme4", envir = environment())
+  fit <- glmm(I(Reaction > 300) ~ Days + (1 | Subject), sleepstudy,
+              family = binomial(), control = mm_control(verbose = -1))
+  ref <- lme4::glmer(I(Reaction > 300) ~ Days + (1 | Subject), sleepstudy,
+                     family = binomial())
+  expect_equal(unname(fixef(fit)), unname(lme4::fixef(ref)), tolerance = 1e-4)
+  expect_equal(as.numeric(logLik(fit)), as.numeric(logLik(ref)),
+               tolerance = 1e-6)
+  expect_length(predict(fit, newdata = sleepstudy[1:3, ], type = "response"), 3)
+})
+
+test_that("anova() heading omits a Data: line holding literal data", {
+  expect_identical(mixeff:::mm_anova_data_line(quote(sleepstudy)),
+                   "Data: sleepstudy")
+  expect_null(mixeff:::mm_anova_data_line(NULL))
+  big <- as.call(c(as.name("structure"), list(as.list(seq_len(100)))))
+  expect_null(mixeff:::mm_anova_data_line(big))
+  expect_null(mixeff:::mm_anova_data_line(data.frame(x = 1)))
+})

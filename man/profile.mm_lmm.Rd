@@ -26,13 +26,26 @@ and \verb{$notes}.
 Computes profile-likelihood intervals for the model's parameters via the
 engine's certified profile payload and returns them as an \code{mm_profile}
 object: \verb{$table} has one row per profiled parameter (\code{parameter},
-\code{parameter_kind}, \code{estimate}, \code{lower}, \code{upper}, \code{regularity},
-\code{reason_code}, \code{profiled_criterion}). Rows use lme4's names: \code{.sig01},
+\code{parameter_kind}, \code{estimate}, \code{lower}, \code{upper}, \code{regularity}, \code{status},
+\code{reason_code}, \code{reason}, \code{profiled_criterion}). Rows use lme4's names: \code{.sig01},
 ... (kind \code{"sd"} or \code{"cor"}, numbered in lme4's term order), \code{.sigma},
 and the fixed effects, all profiled on the ML deviance as lme4 does (a
 REML fit is refitted by ML); the engine's relative-Cholesky \code{theta1}, ...
 rows follow, profiled on the fit's own criterion. Use \code{\link[=confint]{confint()}} with
 \code{method = "profile"} for the matrix form.
+}
+\details{
+A parameter whose profile is irregular keeps its row: \code{status} is
+\code{"non_monotone"} (the signed-root deviance is not monotone),
+\code{"not_bracketing"} (the profile does not reach the cutoff on one side),
+or \code{"failed"} (a constrained refit failed); \code{reason_code} holds the
+matching \code{regularity} code (\code{"non_monotone_profile"},
+\code{"profile_not_bracketing"}, \code{"profile_failed"}) and \code{reason} the engine's
+explanation. Bounds the profile cannot determine are \code{NA}; a bound inside
+the regular part of the profile is still reported. lme4 instead warns
+and falls back to linear interpolation (often giving \verb{[-1, 1]} for a
+correlation); mixeff reports \code{NA} plus the reason rather than an
+interpolated bound. The other parameters' intervals are unaffected.
 }
 \seealso{
 \code{\link[=confint]{confint()}} with \code{method = "profile"} for the matrix form.

@@ -940,7 +940,13 @@ mm_confint_method_spelling <- function(method) {
 #' ML deviance: a REML fit's intervals are those of its ML refit. The
 #' engine's relative-Cholesky `theta1`, ... intervals (on the fit's own
 #' criterion) are kept in `attr(ci, "mm_profile")$table` and can be
-#' requested by name through `parm`. `method = "bootstrap"` (lme4's
+#' requested by name through `parm`. When one parameter's profile is
+#' irregular (non-monotone, not bracketing the estimate, or a failed refit),
+#' its undetermined bounds are `NA` -- lme4 would warn and interpolate
+#' linearly, often reporting `[-1, 1]` for a correlation -- and the reason is
+#' in `attr(ci, "mm_profile")$table` (`status`, `reason_code`, `reason`);
+#' printing the result adds a note. See [profile.mm_lmm()].
+#' `method = "bootstrap"` (lme4's
 #' `"boot"`) gives parametric-bootstrap intervals for the fixed effects,
 #' controlled by [bootstrap_control()].
 #'
@@ -1209,6 +1215,7 @@ print.mm_confint <- function(x, ...) {
     status
   }
   cat(sprintf("status: %s\n", status_shown))
+  mm_print_profile_irregular_note(x)
 
   bootstrap <- attr(x, "bootstrap")
   if (length(bootstrap)) {
@@ -1664,6 +1671,39 @@ mm_bootstrap_confint <- function(fit, parm, level, bootstrap, interval) {
   mm_new_confint(out)
 }
 
+# Rows of a profile interval matrix whose per-parameter profile was
+# irregular (engine status non_monotone / not_bracketing / failed). Their
+# undetermined bounds are NA; the reason is in attr(x, "mm_profile")$table.
+mm_profile_irregular_rows <- function(x) {
+  tab <- attr(x, "mm_profile")$table
+  if (is.null(tab) || !"status" %in% names(tab)) return(NULL)
+  tab <- tab[tab$parameter %in% rownames(x), , drop = FALSE]
+  tab[!is.na(tab$status) & tab$status != "ok", , drop = FALSE]
+}
+
+mm_print_profile_irregular_note <- function(x) {
+  bad <- mm_profile_irregular_rows(x)
+  if (is.null(bad) || !nrow(bad)) return(invisible(NULL))
+  na_rows <- is.na(bad$lower) | is.na(bad$upper)
+  what <- sprintf("%s (%s)", bad$parameter, gsub("_", " ", bad$reason_code,
+                                                 fixed = TRUE))
+  cat(strwrap(
+    paste0(
+      "Note: irregular profile for ", paste(what, collapse = ", "), ". ",
+      if (any(na_rows)) {
+        paste0("Bounds the profile could not determine are reported as NA ",
+               "(lme4 instead falls back to linear interpolation, often ",
+               "giving [-1, 1] for a correlation). ")
+      } else {
+        "The reported bounds come from the regular part of the profile. "
+      },
+      "Reasons: attr(x, \"mm_profile\")$table$reason."
+    ),
+    width = 78, exdent = 2
+  ), sep = "\n")
+  invisible(NULL)
+}
+
 mm_new_confint <- function(x) {
   class(x) <- c("mm_confint", "matrix")
   x
@@ -2027,13 +2067,25 @@ mm_inference_row_unavailable <- function(term, method, reason, reason_code = NA_
 #' Computes profile-likelihood intervals for the model's parameters via the
 #' engine's certified profile payload and returns them as an `mm_profile`
 #' object: `$table` has one row per profiled parameter (`parameter`,
-#' `parameter_kind`, `estimate`, `lower`, `upper`, `regularity`,
-#' `reason_code`, `profiled_criterion`). Rows use lme4's names: `.sig01`,
+#' `parameter_kind`, `estimate`, `lower`, `upper`, `regularity`, `status`,
+#' `reason_code`, `reason`, `profiled_criterion`). Rows use lme4's names: `.sig01`,
 #' ... (kind `"sd"` or `"cor"`, numbered in lme4's term order), `.sigma`,
 #' and the fixed effects, all profiled on the ML deviance as lme4 does (a
 #' REML fit is refitted by ML); the engine's relative-Cholesky `theta1`, ...
 #' rows follow, profiled on the fit's own criterion. Use [confint()] with
 #' `method = "profile"` for the matrix form.
+#'
+#' A parameter whose profile is irregular keeps its row: `status` is
+#' `"non_monotone"` (the signed-root deviance is not monotone),
+#' `"not_bracketing"` (the profile does not reach the cutoff on one side),
+#' or `"failed"` (a constrained refit failed); `reason_code` holds the
+#' matching `regularity` code (`"non_monotone_profile"`,
+#' `"profile_not_bracketing"`, `"profile_failed"`) and `reason` the engine's
+#' explanation. Bounds the profile cannot determine are `NA`; a bound inside
+#' the regular part of the profile is still reported. lme4 instead warns
+#' and falls back to linear interpolation (often giving `[-1, 1]` for a
+#' correlation); mixeff reports `NA` plus the reason rather than an
+#' interpolated bound. The other parameters' intervals are unaffected.
 #'
 #' @param fitted A fitted `mm_lmm`.
 #' @param which Optional character vector of parameter names to keep
@@ -2070,9 +2122,10 @@ print.mm_profile <- function(x, ...) {
   print(format(show, digits = 4), row.names = FALSE)
   unavailable <- tbl[!is.na(tbl$reason_code), , drop = FALSE]
   if (nrow(unavailable)) {
-    cat(sprintf("Not profiled: %s (%s).\n",
-                paste(unavailable$parameter, collapse = ", "),
-                paste(unique(unavailable$reason_code), collapse = "; ")))
+    cat(sprintf("Irregular profile: %s.\n",
+                paste(sprintf("%s (%s)", unavailable$parameter,
+                              unavailable$reason_code),
+                      collapse = ", ")))
   }
   for (note in x$notes) cat("Note:", note, "\n")
   invisible(x)
@@ -2259,6 +2312,16 @@ mm_translate_profile_row <- function(row, fit) {
   upstream <- as.character(row$parameter %||% "")
   mapped <- mm_map_profile_parameter(upstream, fit)
   if (is.null(mapped)) return(NULL)
+  # Irregular per-parameter profiles (engine 26f9690+) arrive as rows with
+  # `status` != "ok", a `reason`, and JSON-null (-> NA) bounds that could not
+  # be determined; they are reported, never dropped.
+  status <- as.character(row$status %||% "ok")
+  regularity <- as.character(
+    row$regularity %||%
+      mm_profile_status_regularity[status] %||%
+      "regular_profile_likelihood"
+  )
+  if (is.na(regularity)) regularity <- "regular_profile_likelihood"
   data.frame(
     parameter = mapped$name,
     parameter_kind = mapped$kind,
@@ -2266,12 +2329,37 @@ mm_translate_profile_row <- function(row, fit) {
     lower = as.numeric(row$lower %||% NA_real_),
     upper = as.numeric(row$upper %||% NA_real_),
     method = as.character(row$method %||% "profile_likelihood"),
-    regularity = as.character(row$regularity %||% "regular_profile_likelihood"),
+    regularity = regularity,
     boundary_clamped_lower = isTRUE(row$boundary_clamped_lower),
-    reason_code = NA_character_,
+    status = status,
+    reason_code = if (identical(status, "ok")) NA_character_ else regularity,
+    reason = mm_profile_reason_text(row$reason, upstream, mapped$name),
     stringsAsFactors = FALSE
   )
 }
+
+# The engine prefixes a failed profile's reason with its own parameter name
+# ("profile_.sig02: ..."; engine theta order). Relabel that prefix with the
+# lme4 name the row carries so the reason matches the row.
+mm_profile_reason_text <- function(reason, upstream, mapped) {
+  reason <- mm_optional_text(reason)
+  if (is.na(reason) || identical(upstream, mapped)) return(reason)
+  prefix <- paste0("profile_", upstream, ":")
+  if (startsWith(reason, prefix)) {
+    reason <- paste0("profile_", mapped, ":",
+                     substr(reason, nchar(prefix) + 1L, nchar(reason)))
+  }
+  reason
+}
+
+# Engine (mixeff-rs 26f9690+) per-parameter profile status -> the closed
+# `regularity` code it travels with. A payload from an older engine has no
+# `status`; its rows are all regular.
+mm_profile_status_regularity <- c(
+  non_monotone = "non_monotone_profile",
+  not_bracketing = "profile_not_bracketing",
+  failed = "profile_failed"
+)
 
 # lme4 (>= 2.0) numbers profile parameters term by term: a term's standard
 # deviations first, then its correlations (lower triangle, column-major).
@@ -2363,7 +2451,9 @@ mm_empty_profile_table <- function() {
     method = character(),
     regularity = character(),
     boundary_clamped_lower = logical(),
+    status = character(),
     reason_code = character(),
+    reason = character(),
     stringsAsFactors = FALSE
   )
 }

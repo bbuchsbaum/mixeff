@@ -232,7 +232,42 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
 
 #' @rdname mm_lmm-methods
 #' @export
-vcov.mm_glmm <- vcov.mm_lmm
+vcov.mm_glmm <- function(object, type = c("fixed", "theta"),
+                         correlation = FALSE, ...) {
+  V <- vcov.mm_lmm(object, type = type, correlation = correlation, ...)
+  if (mm_glmm_is_rx_fallback(attr(V, "mm_method"))) {
+    # glmer (use.hessian = TRUE) warns and falls back to RX in this
+    # situation; say the same thing, with the engine's own notes.
+    rlang::warn(
+      mm_glmm_rx_fallback_message(attr(V, "mm_notes")),
+      class = c("mm_vcov_rx_fallback", "mm_condition")
+    )
+  }
+  V
+}
+
+# Engine afc7c36+: a joint-Laplace fit whose active Hessian is unusable gets
+# fixed-effect covariance from RX conditional on theta.
+mm_glmm_rx_fallback_method <- "laplace_rx_conditional_on_theta"
+mm_glmm_rx_fallback_reason <- "glmm_laplace_rx_conditional_on_theta_wald"
+
+mm_glmm_is_rx_fallback <- function(method) {
+  identical(as.character(method %||% NA_character_)[1L],
+            mm_glmm_rx_fallback_method)
+}
+
+mm_glmm_rx_fallback_message <- function(notes = character()) {
+  notes <- as.character(notes %||% character())
+  notes <- notes[!is.na(notes) & nzchar(notes)]
+  paste0(
+    "The joint-Laplace Hessian is not usable for the fixed-effect ",
+    "covariance (not positive definite or unavailable); falling back to ",
+    "var-cov estimated from RX conditional on the covariance parameters, ",
+    "as glmer's vcov(use.hessian = FALSE). These standard errors ignore ",
+    "uncertainty in theta (reliability low).",
+    if (length(notes)) paste0(" Engine notes: ", paste(notes, collapse = " "))
+  )
+}
 
 mm_rank_deficient_vcov <- function(object, kept) {
   RX <- mm_pls(object)$RX

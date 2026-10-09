@@ -34,9 +34,14 @@ model's (two models with identical random effects, nested in their fixed
 effects). The restriction matrix is built from the two design matrices
 as pbkrtest does; the test runs on the REML fit of the larger model
 (refitted by REML if it was fitted by ML, as pbkrtest does). The
-engine's Kenward-Roger F is the unscaled statistic (pbkrtest's \code{FtestU}
-row: same F and denominator df; the KR scaling factor is not applied
-and is reported as \code{f_scaling = 1}). The F row
+Kenward-Roger F is pbkrtest's scaled statistic (the main \code{Ftest} row of
+\code{KRmodcomp()}, which lmerTest's \code{anova(ddf = "Kenward-Roger")} also
+reports): \eqn{F = \lambda F_U}{F = lambda * F_U} referred to
+\eqn{F(q, \nu)}{F(q, ddf)} with the KR denominator df, where
+\eqn{\lambda}{lambda} is the KR scaling factor (\code{f_scaling}; 1 for a
+single restriction). The unscaled statistic and its p-value (pbkrtest's
+\code{FtestU} row) are kept as \code{unscaled_statistic} / \code{unscaled_p_value}.
+The F row
 replaces the LRT row (\code{statistic_name = "F"}, \code{df} = numerator df,
 \code{den_df} = denominator df); the full result is in \verb{$fixed_f}.}
 

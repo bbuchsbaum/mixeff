@@ -54,7 +54,13 @@ by term, each term's standard deviations before its correlations),
 ML deviance: a REML fit's intervals are those of its ML refit. The
 engine's relative-Cholesky \code{theta1}, ... intervals (on the fit's own
 criterion) are kept in \code{attr(ci, "mm_profile")$table} and can be
-requested by name through \code{parm}. \code{method = "bootstrap"} (lme4's
+requested by name through \code{parm}. When one parameter's profile is
+irregular (non-monotone, not bracketing the estimate, or a failed refit),
+its undetermined bounds are \code{NA} -- lme4 would warn and interpolate
+linearly, often reporting \verb{[-1, 1]} for a correlation -- and the reason is
+in \code{attr(ci, "mm_profile")$table} (\code{status}, \code{reason_code}, \code{reason});
+printing the result adds a note. See \code{\link[=profile.mm_lmm]{profile.mm_lmm()}}.
+\code{method = "bootstrap"} (lme4's
 \code{"boot"}) gives parametric-bootstrap intervals for the fixed effects,
 controlled by \code{\link[=bootstrap_control]{bootstrap_control()}}.
 }

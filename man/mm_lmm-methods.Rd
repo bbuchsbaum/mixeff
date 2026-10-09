@@ -227,6 +227,19 @@ objective reported in \code{anova()}. \code{model.frame()} returns lme4's frame
 (transformed columns such as \code{log(y)}, a \code{terms} attribute, \code{(weights)}
 and \code{(offset)} columns); the raw variables the engine used are in
 \code{fit$model_frame}.
+
+\code{vcov()} of a joint-Laplace GLMM is the inverse of the finite-difference
+Hessian over the fixed effects and covariance parameters, glmer's default
+(\code{use.hessian = TRUE}). When that Hessian is not positive definite (or
+unavailable) the engine falls back to the fixed-effect block RX of the
+Laplace penalized least-squares factorization at the optimum,
+conditional on the covariance parameters -- glmer's
+\code{vcov(fit, use.hessian = FALSE)}, which glmer also falls back to with a
+warning. mixeff does the same: the matrix carries
+\code{attr(, "mm_method") == "laplace_rx_conditional_on_theta"}, reliability
+\code{"low"} and the engine's notes (\code{attr(, "mm_notes")}), and \code{vcov()} warns
+(class \code{mm_vcov_rx_fallback}). Such standard errors ignore the
+uncertainty in the covariance parameters.
 }
 \examples{
 set.seed(1)

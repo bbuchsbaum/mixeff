@@ -269,3 +269,131 @@ test_that("profile CI surfaces a typed refusal on a boundary singular fit", {
     expect_true(all(is.finite(table$lower)) && all(is.finite(table$upper)))
   }
 })
+
+# Engine 26f9690: an irregular per-parameter profile no longer aborts the
+# payload. The row is kept with a typed status / reason and NA for the bound
+# the profile cannot determine (lme4 warns and interpolates linearly).
+mm_profile_irregular_data <- function(seed = 6L) {
+  set.seed(seed)
+  ng <- 6L + seed %% 5L
+  pg <- 4L + seed %% 3L
+  slope_sd <- c(0.05, 0.2, 0.5, 1)[seed %% 4L + 1L]
+  g <- factor(rep(seq_len(ng), each = pg))
+  x <- rnorm(ng * pg)
+  u0 <- rnorm(ng)
+  u1 <- slope_sd * rnorm(ng)
+  y <- 1 + 0.5 * x + u0[g] + u1[g] * x + 0.7 * rnorm(ng * pg)
+  data.frame(y = y, x = x, g = g)
+}
+
+test_that("a non-monotone correlation profile gives NA plus a reason, not an abort", {
+  d <- mm_profile_irregular_data(6L)
+  fit <- lmm(y ~ x + (1 + x | g), d, REML = FALSE,
+             control = mm_control(verbose = -1))
+  ci <- confint(fit, method = "profile")
+  tab <- attr(ci, "mm_profile")$table
+  expect_true(all(c("status", "reason_code", "reason") %in% names(tab)))
+  cor_row <- tab[tab$parameter == ".sig03", , drop = FALSE]
+  expect_identical(nrow(cor_row), 1L)
+  expect_identical(cor_row$parameter_kind, "cor")
+  expect_identical(cor_row$status, "non_monotone")
+  expect_identical(cor_row$regularity, "non_monotone_profile")
+  expect_identical(cor_row$reason_code, "non_monotone_profile")
+  expect_match(cor_row$reason, "not strictly monotone", fixed = TRUE)
+  # The reason is relabelled with the row's lme4 name.
+  expect_match(cor_row$reason, "^profile_\\.sig03:")
+  # The lower bound sits in the regular part of the profile; the upper one
+  # does not and is NA (lme4 1.1.35 reports an interpolated 1.0 here).
+  expect_true(is.finite(ci[".sig03", 1L]))
+  expect_true(is.na(ci[".sig03", 2L]))
+  # Every other lme4 row is regular and finite.
+  ok <- tab[tab$parameter != ".sig03" &
+              tab$parameter_kind %in% c("sd", "sigma", "beta"), , drop = FALSE]
+  expect_true(all(ok$status == "ok"))
+  expect_true(all(is.na(ok$reason_code)))
+  expect_true(all(is.finite(ok$lower) & is.finite(ok$upper)))
+  out <- capture.output(print(ci))
+  expect_true(any(grepl("irregular profile for .sig03", out, fixed = TRUE)))
+  expect_true(any(grepl("reported as NA", out, fixed = TRUE)))
+  # profile() keeps the same rows and says so when printed.
+  pr_out <- capture.output(print(profile(fit)))
+  expect_true(any(grepl("Irregular profile: .sig03 (non_monotone_profile)",
+                        pr_out, fixed = TRUE)))
+
+  skip_if_not_installed("lme4")
+  m <- lme4::lmer(y ~ x + (1 + x | g), d, REML = FALSE)
+  ref <- suppressWarnings(suppressMessages(
+    stats::confint(m, method = "profile")
+  ))
+  # lme4 < 2.0 numbers the correlation .sig02 (term order sd, cor, sd);
+  # lme4 >= 2.0, like mixeff, puts it last (.sig03). lme4 interpolates the
+  # upper bound linearly (1.0 here); mixeff reports NA.
+  ref_cor <- if (utils::packageVersion("lme4") >= "2.0") ".sig03" else ".sig02"
+  # The regular lower bound agrees to ~2% (-0.434 vs lme4 1.1.35's -0.426:
+  # lme4's spline also sees the non-monotone tail).
+  expect_equal(ci[".sig03", 1L], ref[ref_cor, 1L], tolerance = 0.03)
+  for (p in c(".sig01", ".sigma", "(Intercept)", "x")) {
+    expect_equal(unname(ci[p, ]), unname(ref[p, ]), tolerance = 5e-3,
+                 info = p)
+  }
+})
+
+test_that("profile payload rows map status, reason and JSON-null bounds", {
+  fit <- mm_sleepstudy_fit_ml()
+  json <- paste0(
+    '{"parameter": "σ", "estimate": 25.6, "lower": null, "upper": null,',
+    ' "level": 0.95, "method": "profile_likelihood",',
+    ' "regularity": "profile_failed", "boundary_clamped_lower": false,',
+    ' "status": "failed", "reason": "profile_σ: refit failed"}'
+  )
+  row <- jsonlite::fromJSON(json, simplifyVector = FALSE)
+  out <- mixeff:::mm_translate_profile_row(row, fit)
+  expect_identical(out$parameter, ".sigma")
+  expect_true(is.na(out$lower) && is.na(out$upper))
+  expect_identical(out$status, "failed")
+  expect_identical(out$reason_code, "profile_failed")
+  expect_identical(out$reason, "profile_.sigma: refit failed")
+
+  # Each irregular status maps to its regularity code even when the
+  # payload omits `regularity`; a pre-26f9690 row (no status) is regular.
+  for (st in c("non_monotone", "not_bracketing", "failed")) {
+    r <- row
+    r$regularity <- NULL
+    r$status <- st
+    got <- mixeff:::mm_translate_profile_row(r, fit)
+    expect_identical(got$reason_code,
+                     unname(mixeff:::mm_profile_status_regularity[[st]]))
+  }
+  legacy <- row[c("parameter", "estimate", "level", "method",
+                  "boundary_clamped_lower")]
+  legacy$lower <- 20
+  legacy$upper <- 30
+  got <- mixeff:::mm_translate_profile_row(legacy, fit)
+  expect_identical(got$status, "ok")
+  expect_identical(got$regularity, "regular_profile_likelihood")
+  expect_true(is.na(got$reason_code) && is.na(got$reason))
+})
+
+test_that("profile CI schema accepts irregular rows (status, reason, null bounds)", {
+  skip_on_cran()
+  skip_if_not_installed("jsonvalidate")
+  schema_file <- c(
+    system.file("schemas", "mixedmodels.profile_likelihood_ci.schema.json",
+                package = "mixeff"),
+    testthat::test_path("..", "..", "inst", "schemas",
+                        "mixedmodels.profile_likelihood_ci.schema.json")
+  )
+  schema_file <- schema_file[nzchar(schema_file) & file.exists(schema_file)][1L]
+  if (is.na(schema_file)) skip("profile CI schema is not installed")
+  d <- mm_profile_irregular_data(6L)
+  fit <- lmm(y ~ x + (1 + x | g), d, REML = FALSE,
+             control = mm_control(verbose = -1))
+  payload <- mixeff:::mm_profile_confint_payload(fit, 0.95)
+  expect_true(any(vapply(payload$intervals, function(r) {
+    !identical(r$status %||% "ok", "ok")
+  }, logical(1))))
+  json <- jsonlite::toJSON(payload, auto_unbox = TRUE, null = "null",
+                           digits = NA)
+  validator <- jsonvalidate::json_validator(schema_file, engine = "ajv")
+  expect_true(isTRUE(validator(json, verbose = TRUE)))
+})

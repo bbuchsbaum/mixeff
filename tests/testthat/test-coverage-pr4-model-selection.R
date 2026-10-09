@@ -29,9 +29,11 @@ test_that("Kenward-Roger comparison of ML fits refits the larger model by REML",
   rb <- eval(bquote(lme4::lmer(y ~ x + z + w + (1 | g), data = .(d))))
   rs <- eval(bquote(lme4::lmer(y ~ x + (1 | g), data = .(d))))
   kr <- pbkrtest::KRmodcomp(rb, rs)$test
-  expect_equal(cmp$fixed_f$statistic, kr["FtestU", "stat"], tolerance = 1e-4)
-  expect_equal(cmp$fixed_f$den_df, kr["FtestU", "ddf"], tolerance = 1e-3)
-  expect_equal(last$p_value, kr["FtestU", "p.value"], tolerance = 1e-3)
+  expect_equal(cmp$fixed_f$statistic, kr["Ftest", "stat"], tolerance = 1e-4)
+  expect_equal(cmp$fixed_f$den_df, kr["Ftest", "ddf"], tolerance = 1e-3)
+  expect_equal(last$p_value, kr["Ftest", "p.value"], tolerance = 1e-3)
+  expect_equal(cmp$fixed_f$unscaled_statistic, kr["FtestU", "stat"],
+               tolerance = 1e-4)
 })
 
 test_that("F comparisons refuse models fitted to different data", {

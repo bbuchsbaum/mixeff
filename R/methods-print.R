@@ -41,7 +41,9 @@ print.mm_glmm <- function(x, ...) {
   cat(sprintf("Formula: %s\n", deparse1(x$formula)))
   cat(sprintf("Family/link: %s/%s\n", x$family$family, x$family$link))
   cat(sprintf("Method: %s (nAGQ = %d)\n", x$method, x$nAGQ))
-  cat(sprintf("Fit status: %s\n", x$fit_status))
+  cat(sprintf("Fit status: %s\n",
+              mm_fit_status_display(x$fit_status,
+                                    mm_glmm_convergence_assessment(x))))
   cat(mm_print_optimizer_line(x))
   # Artifact/crate provenance is developer metadata, not model output;
   # reproducibility(fit) reports it (UX bar: print() shows nothing lme4's

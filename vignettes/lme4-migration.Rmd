@@ -107,7 +107,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `lmerTest` p-values in `summary()` | built in | Satterthwaite/Kenward-Roger native, no extra package; `summary()$coefficients` is lmerTest's matrix (per-row method labels in `summary()$coef_table`); lmerTest's `ddf = "Satterthwaite"`/`"Kenward-Roger"`/`"lme4"` is accepted by `summary()` and `anova()` |
 | `bootMer(m, FUN, nsim)` | `mm_bootmer(fit, FUN, nsim)` | LMM; a `boot`-compatible result for `boot::boot.ci()`; `type = "semiparametric"` refused |
 | `rePCA`, `lmList`, `allFit` | `rePCA()`, `mm_lmlist()`, `mm_allfit()` | `mm_*` names avoid masking lme4's non-generic functions |
-| `pbkrtest::KRmodcomp(big, small)` | `compare(small, big, method = "kenward_roger")` | also `"satterthwaite"` (`SATmodcomp`); KR F is pbkrtest's unscaled `FtestU` |
+| `pbkrtest::KRmodcomp(big, small)` | `compare(small, big, method = "kenward_roger")` | also `"satterthwaite"` (`SATmodcomp`); KR F is pbkrtest's scaled `Ftest` row (unscaled `FtestU` in `$fixed_f$unscaled_statistic`) |
 | `lmerTest::step(m)` | `step(fit)` | random terms tested with the boundary-corrected LRT; whole terms only |
 | `nlmer`, `devFunOnly = TRUE` | not provided | nonlinear mixed models are a non-goal; the engine owns the objective |
 

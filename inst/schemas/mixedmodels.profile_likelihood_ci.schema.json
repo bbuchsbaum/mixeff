@@ -22,10 +22,16 @@
       "const": "1.0.0"
     },
     "crate_version": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "package_version": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "level": {
       "type": "number",
@@ -34,7 +40,10 @@
       "description": "Nominal confidence level used to construct the intervals (e.g., 0.95)."
     },
     "fit_criterion": {
-      "enum": ["ML", "REML"],
+      "enum": [
+        "ML",
+        "REML"
+      ],
       "description": "Criterion under which the profile was built. ML profiles cover beta, sigma, and theta; REML profiles omit beta with a documented note."
     },
     "intervals": {
@@ -49,22 +58,35 @@
       "items": {
         "$ref": "#/$defs/profile_row"
       },
-      "description": "Flat array of conditional profile evaluations. Each row is one constrained fit at a profile point, with the full parameter state at that fit and the signed-root deviance value. The profiled parameter is identified by the `p` field; rows for different parameters are interleaved in this single array. Profile rows must carry finite numeric values for `zeta`, `sigma`, `beta`, and `theta`; partial-failure situations are represented at the interval-row or notes level, never by half-populated profile rows."
+      "description": "Flat array of conditional profile evaluations. Each row is one constrained fit at a profile point, with the full parameter state at that fit and the signed-root deviance value. The profiled parameter is identified by the `p` field; rows for different parameters are interleaved in this single array. Non-finite values (NaN on the Rust side) travel as null; partial-failure situations are reported at the interval-row level (`status`, `reason`) and in the notes array."
     },
     "notes": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/note"
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/$defs/note"
+          }
+        ]
       },
-      "description": "Structured notes about the construction of the intervals. Each note carries a stable code, a severity, and an optional payload."
+      "description": "Notes about the construction of the intervals: plain reader-facing strings (as emitted by mixeff-rs) or structured notes carrying a stable code, a severity, and an optional payload."
     }
   },
   "$defs": {
     "string_or_null": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "number_or_null": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "interval_row": {
       "type": "object",
@@ -85,16 +107,16 @@
           "description": "Canonical parameter name, e.g., \"beta[0]\", \"sigma\", \"theta[0,0]\"."
         },
         "estimate": {
-          "type": "number",
-          "description": "Point estimate at the maximum-likelihood (or REML) solution."
+          "$ref": "#/$defs/number_or_null",
+          "description": "Point estimate at the maximum-likelihood (or REML) solution. Null only if the engine could not evaluate it (NaN on the Rust side)."
         },
         "lower": {
           "$ref": "#/$defs/number_or_null",
-          "description": "Lower endpoint of the profile-likelihood interval. Null when the lower endpoint is unavailable (e.g., variance parameter clamped at zero)."
+          "description": "Lower endpoint of the profile-likelihood interval. Null when the lower endpoint is unavailable (e.g., the profile is irregular on that side: see `status`/`reason`)."
         },
         "upper": {
           "$ref": "#/$defs/number_or_null",
-          "description": "Upper endpoint of the profile-likelihood interval. Null when unavailable."
+          "description": "Upper endpoint of the profile-likelihood interval. Null when unavailable (e.g., an irregular profile: see `status`/`reason`)."
         },
         "level": {
           "type": "number",
@@ -108,42 +130,61 @@
         },
         "regularity": {
           "type": "string",
-          "description": "Closed-enum tag describing the regularity of the interval (e.g., \"regular\", \"boundary_clamped\", \"singular_skipped\"). Enumeration pending lock with Rust side."
+          "description": "Tag describing the regularity of the interval. Codes emitted by mixeff-rs include \"regular_profile_likelihood\" for a regular profile and, for an irregular per-parameter profile, \"non_monotone_profile\", \"profile_not_bracketing\", and \"profile_failed\" (matching `status`)."
         },
         "boundary_clamped_lower": {
           "type": "boolean",
           "description": "True when the lower endpoint was clamped at the parameter-space boundary (e.g., zero for variance parameters)."
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "non_monotone",
+            "not_bracketing",
+            "failed"
+          ],
+          "description": "Per-parameter profile status (mixeff-rs 26f9690+; absent from older payloads, meaning \"ok\"). A non-ok row keeps the bounds the regular part of the profile supports and reports the others as null."
+        },
+        "reason": {
+          "$ref": "#/$defs/string_or_null",
+          "description": "Engine explanation for a non-ok `status` (e.g. the zeta table is not strictly monotone, or the refit error text)."
         }
       }
     },
     "profile_row": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["p", "zeta", "sigma", "beta", "theta"],
+      "required": [
+        "p",
+        "zeta",
+        "sigma",
+        "beta",
+        "theta"
+      ],
       "properties": {
         "p": {
           "type": "string",
           "description": "Profiled parameter identifier for this row. Opaque string for v1.0.0 — examples emitted by the current Rust side include \"σ\" for the residual SD profile, \"β1\", \"β2\", … for active fixed-effect coefficient profiles, and \"θ1\", \"θ2\", … for theta parameter profiles. R may add display helpers that parse these labels; schema validity does not require parsing."
         },
         "zeta": {
-          "type": "number",
-          "description": "Signed-root deviance value at this conditional fit. Must be finite."
+          "$ref": "#/$defs/number_or_null",
+          "description": "Signed-root deviance value at this conditional fit. NaN travels as null."
         },
         "sigma": {
-          "type": "number",
-          "description": "Residual SD at this conditional fit. Must be finite."
+          "$ref": "#/$defs/number_or_null",
+          "description": "Residual SD at this conditional fit. NaN travels as null."
         },
         "beta": {
           "type": "array",
           "items": {
-            "type": "number"
+            "$ref": "#/$defs/number_or_null"
           },
           "description": "Full active fixed-effect coefficient vector at this conditional fit. Length equals the active fixed-effect coefficient count of the model."
         },
         "theta": {
           "type": "array",
           "items": {
-            "type": "number"
+            "$ref": "#/$defs/number_or_null"
           },
           "description": "Full theta parameter vector at this conditional fit. Length equals the theta parameter count of the model."
         }
@@ -152,14 +193,22 @@
     "note": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["code", "severity", "message"],
+      "required": [
+        "code",
+        "severity",
+        "message"
+      ],
       "properties": {
         "code": {
           "type": "string",
           "description": "Stable closed-enum identifier for the note (e.g., \"profile_beta_unavailable_under_reml\", \"profile_lower_boundary_clamped\")."
         },
         "severity": {
-          "enum": ["info", "warning", "error"]
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
         },
         "message": {
           "type": "string"

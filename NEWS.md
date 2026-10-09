@@ -1,5 +1,43 @@
 # mixeff 0.2.0
 
+## Engine follow-ups (mixeff-rs engine-followups)
+
+* `confint(method = "profile")` and `profile()` no longer fail when one
+  parameter's profile is irregular. The row is kept with a `status`
+  (`"non_monotone"`, `"not_bracketing"` or `"failed"`), a `reason_code`
+  (`"non_monotone_profile"`, `"profile_not_bracketing"`,
+  `"profile_failed"`) and the engine's `reason` in
+  `attr(ci, "mm_profile")$table`. Bounds the profile cannot determine are
+  `NA`, and printing the intervals adds a note. Failed `.sigNN` rows now
+  appear; previously they were dropped. lme4 instead warns and falls back
+  to linear interpolation, which often gives `[-1, 1]` for a correlation.
+  The profile CI JSON schema accepts the new fields, null bounds and the
+  engine's string notes.
+* The multi-df Kenward-Roger F is now pbkrtest's scaled `Ftest` statistic
+  (`F = lambda * F_U` with KR denominator df). Previously it was the unscaled
+  `FtestU`. This affects `compare(method = "kenward_roger")` and
+  `anova(ddf = "Kenward-Roger")`, which matches lmerTest: the F value is
+  scaled and `Mean Sq` comes from the unscaled F. `$fixed_f` gains
+  `statistic_scale`, `unscaled_statistic` and `unscaled_p_value`;
+  `f_scaling` is lambda.
+* When a joint-Laplace GLMM's Hessian is not positive definite, mixeff now
+  reports Wald inference instead of withholding it, as glmer does. The
+  fixed-effect covariance falls back to RX conditional on theta, as in
+  glmer's `vcov(use.hessian = FALSE)`, with reliability `"low"`.
+  `summary()` explains the fallback and prints the engine's notes, `vcov()`
+  warns (class `mm_vcov_rx_fallback`), and `inference_options()` labels the
+  route `glmm_laplace_rx_conditional_on_theta_wald`. These standard errors
+  ignore uncertainty in theta.
+* A joint-Laplace fit that the engine labels `not_optimized` is now shown
+  as "convergence not certified" when the optimizer stopped normally
+  within its budget and the estimated objective gap is at most `1e-2`
+  deviance units. The engine certifies only at `1e-6`. This is a
+  warning-level label, like lme4's convergence warnings, and does not
+  refuse the fit. `fit_status()` still returns the engine's label.
+* `inference_options()` on joint-Laplace GLMMs no longer describes withheld
+  Wald rows as "uncertified for the profiled estimator". It also reports the
+  parametric bootstrap as refused, matching `confint()`.
+
 ## Correctness fixes (pre-release audit)
 
 * Character fixed-effect predictors (e.g. columns from `read.csv()`) are now

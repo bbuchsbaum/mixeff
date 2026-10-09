@@ -93,14 +93,27 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
 
   is_nb <- identical(as.character(fit$family$family %||% ""),
                      "negative_binomial")
+  joint <- identical(mm_glmm_effective_method(fit), "joint_laplace")
+  wald_rows <- mm_glmm_coefficient_inference_rows(fit)
+  row_reasons <- unique(stats::na.omit(wald_rows$reliability_reason))
+  row_notes <- unique(unlist(wald_rows$notes, use.names = FALSE))
+  rx <- certified && mm_glmm_rx_fallback_reason %in% row_reasons
+  convergence <- mm_glmm_convergence_assessment(fit)
   rows <- list(
     list(
       method = "asymptotic_wald_z",
       expected_status = if (certified) "available" else "not_assessed",
-      expected_reliability_reason = if (certified) {
+      expected_reliability_reason = if (rx) {
+        mm_glmm_rx_fallback_reason
+      } else if (certified) {
         "glmm_certified_wald"
       } else if (is_nb) {
         "nb_joint_laplace_unavailable"
+      } else if (joint) {
+        # A joint-Laplace fit whose rows the engine withheld: report the
+        # engine's own warrant, never the profiled-estimator label.
+        if (length(row_reasons)) row_reasons[[1L]] else
+          "glmm_joint_laplace_wald_withheld"
       } else {
         "glmm_wald_uncertified_for_profiled_estimator"
       },
@@ -110,31 +123,73 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
         # The joint route refuses NB, so advising it here would be a dead
         # end; the bootstrap row below is NB's interval path.
         "confint(fit, method = \"bootstrap\")"
+      } else if (joint) {
+        "verify_convergence(fit)"
       } else {
         "glmm(..., method = \"joint_laplace\")"
       },
-      approx_cost = if (certified) "immediate" else "one refit (slower estimator)",
-      notes = if (certified) {
-        "certified Wald z from the engine inference table"
-      } else if (is_nb) {
-        "certified Wald is unavailable for negative binomial (no joint route); use the bootstrap"
+      approx_cost = if (certified) {
+        "immediate"
+      } else if (joint) {
+        "-"
       } else {
-        "the profiled estimator withholds Wald inference; the joint route (the default) certifies it"
-      }
+        "one refit (slower estimator)"
+      },
+      notes = paste(c(
+        if (rx) {
+          paste0(
+            "Wald z from RX conditional on theta (reliability low): the ",
+            "joint-Laplace Hessian was not usable; glmer's default ",
+            "(use.hessian = TRUE) falls back to the same RX covariance ",
+            "with a warning"
+          )
+        } else if (certified) {
+          "certified Wald z from the engine inference table"
+        } else if (is_nb) {
+          "certified Wald is unavailable for negative binomial (no joint route); use the bootstrap"
+        } else if (joint) {
+          paste0("the engine withheld Wald inference for this joint-Laplace fit: ",
+                 cap$reason %||% "no reason recorded")
+        } else {
+          "the profiled estimator withholds Wald inference; the joint route (the default) certifies it"
+        },
+        if (rx || (joint && !certified)) row_notes,
+        if (isTRUE(convergence$not_certified_small_gap)) {
+          sprintf(paste0("convergence not certified (objective gap %s > ",
+                         "tolerance %s); a warning, not a refusal"),
+                  format(signif(convergence$objective_gap, 2)),
+                  format(convergence$gap_tolerance))
+        }
+      ), collapse = "; ")
     ),
-    list(
-      method = "glmm_parametric_bootstrap",
-      expected_status = "available",
-      expected_reliability_reason = "bootstrap_monte_carlo_replicates",
-      r_verb = "confint(fit, method = \"bootstrap\", nsim = 999)",
-      approx_cost = "nsim model refits",
-      notes = paste0(
-        "percentile intervals from simulate-and-refit replicates of the ",
-        "effective estimator; every supported family incl. negative ",
-        "binomial; fixed-theta NB conditions replicates on that theta, ",
-        "accounting and MCSE attached to the result"
+    if (joint) {
+      list(
+        method = "glmm_parametric_bootstrap",
+        expected_status = "not_assessed",
+        expected_reliability_reason = "glmm_bootstrap_joint_laplace_unavailable",
+        r_verb = "confint(fit, method = \"bootstrap\", nsim = 999)",
+        approx_cost = "-",
+        notes = paste0(
+          "replicate refits cannot re-run the joint estimator at this ",
+          "engine pin; bootstrap the profiled estimator ",
+          "(method = \"pirls_profiled\") instead"
+        )
       )
-    ),
+    } else {
+      list(
+        method = "glmm_parametric_bootstrap",
+        expected_status = "available",
+        expected_reliability_reason = "bootstrap_monte_carlo_replicates",
+        r_verb = "confint(fit, method = \"bootstrap\", nsim = 999)",
+        approx_cost = "nsim model refits",
+        notes = paste0(
+          "percentile intervals from simulate-and-refit replicates of the ",
+          "effective estimator; every supported family incl. negative ",
+          "binomial; fixed-theta NB conditions replicates on that theta, ",
+          "accounting and MCSE attached to the result"
+        )
+      )
+    },
     list(
       method = "wald_z_working_hessian",
       expected_status = if (opted_in) "available" else "opt_in",
@@ -156,7 +211,8 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
 
   obj <- list(
     table = tab,
-    fit_status = fit$fit_status %||% "unknown",
+    fit_status = mm_fit_status_display(fit$fit_status %||% "unknown",
+                                       convergence),
     is_reml = FALSE,
     n_groups_max = mm_inference_options_n_groups_max(fit),
     term = term
@@ -401,6 +457,13 @@ mm_inference_options_display_reason <- function(reason, status, method) {
       "fixed-effect profile intervals require an ML fit",
     profile_ci_unavailable_at_boundary =
       "profile intervals are not certified at the boundary",
+    glmm_certified_wald = "certified Wald z",
+    glmm_laplace_rx_conditional_on_theta_wald =
+      "Hessian not usable: SEs from RX given theta (as glmer's fallback); low reliability",
+    glmm_bootstrap_joint_laplace_unavailable =
+      "replicate refits cannot re-run the joint estimator",
+    glmm_joint_laplace_wald_withheld =
+      "the engine withheld Wald inference for this joint-Laplace fit",
     gsub("_", " ", reason, fixed = TRUE)
   )
 }
@@ -420,6 +483,12 @@ mm_inference_options_next_step <- function(method, status, reason, r_verb) {
   if (identical(reason, "bootstrap_cluster_resample_p_value_unavailable")) {
     return("Use bootstrap or bootstrap_lrt for fixed-effect p-values")
   }
+  if (identical(reason, "glmm_bootstrap_joint_laplace_unavailable")) {
+    return("Refit with glmm(..., method = \"pirls_profiled\") to bootstrap the profiled estimator")
+  }
+  if (identical(method, "asymptotic_wald_z") && identical(r_verb, "verify_convergence(fit)")) {
+    return("Run verify_convergence(fit); see inference_table(fit) for the engine's reason")
+  }
   if (identical(reason, "profile_beta_unavailable_under_reml")) {
     return("Refit with lmm(..., REML = FALSE), then run confint(fit, method = 'profile')")
   }
@@ -438,4 +507,17 @@ mm_inference_options_format_cost <- function(fit, nsim, factor = 1) {
   refits <- as.integer(round(nsim * factor))
   sprintf("%s model refits (nsim = %d)",
           format(refits, big.mark = ","), as.integer(nsim))
+}
+
+# Coefficient rows of a GLMM's engine inference table (empty when absent).
+mm_glmm_coefficient_inference_rows <- function(fit) {
+  parsed <- mm_json_parse_fixed_effect_inference_table(
+    fit$artifact$fixed_effect_inference_table %||% NULL
+  )
+  rows <- if (is.null(parsed)) NULL else parsed$table
+  if (is.null(rows)) return(mm_fixed_effect_inference_empty_table())
+  if ("kind" %in% names(rows)) {
+    rows <- rows[rows$kind == "coefficient", , drop = FALSE]
+  }
+  rows
 }

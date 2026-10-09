@@ -118,7 +118,13 @@ mm_compare_fixed_f <- function(small, big, method) {
     statistic = statistic,
     num_df = num_df,
     den_df = as.numeric(pull("denominator_df", pull("df", NA_real_))),
+    # Kenward-Roger (engine 535132e+): `statistic`/`p_value` are pbkrtest's
+    # scaled Ftest row (F = f_scaling * F_U); the unscaled FtestU values are
+    # kept alongside. NA for Satterthwaite and for a single restriction.
     f_scaling = as.numeric(kr$f_scaling %||% NA_real_),
+    statistic_scale = as.character(kr$statistic_scale %||% NA_character_),
+    unscaled_statistic = as.numeric(kr$unscaled_statistic %||% NA_real_),
+    unscaled_p_value = as.numeric(kr$unscaled_p_value %||% NA_real_),
     p_value = as.numeric(pull("p_value", NA_real_)),
     method = as.character(pull("method", method)),
     status = as.character(pull("status", "not_assessed")),

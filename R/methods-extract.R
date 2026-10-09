@@ -48,6 +48,19 @@
 #' and `(offset)` columns); the raw variables the engine used are in
 #' `fit$model_frame`.
 #'
+#' `vcov()` of a joint-Laplace GLMM is the inverse of the finite-difference
+#' Hessian over the fixed effects and covariance parameters, glmer's default
+#' (`use.hessian = TRUE`). When that Hessian is not positive definite (or
+#' unavailable) the engine falls back to the fixed-effect block RX of the
+#' Laplace penalized least-squares factorization at the optimum,
+#' conditional on the covariance parameters -- glmer's
+#' `vcov(fit, use.hessian = FALSE)`, which glmer also falls back to with a
+#' warning. mixeff does the same: the matrix carries
+#' `attr(, "mm_method") == "laplace_rx_conditional_on_theta"`, reliability
+#' `"low"` and the engine's notes (`attr(, "mm_notes")`), and `vcov()` warns
+#' (class `mm_vcov_rx_fallback`). Such standard errors ignore the
+#' uncertainty in the covariance parameters.
+#'
 #' @examples
 #' set.seed(1)
 #' df <- data.frame(

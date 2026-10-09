@@ -17,9 +17,14 @@
 #'   effects). The restriction matrix is built from the two design matrices
 #'   as pbkrtest does; the test runs on the REML fit of the larger model
 #'   (refitted by REML if it was fitted by ML, as pbkrtest does). The
-#'   engine's Kenward-Roger F is the unscaled statistic (pbkrtest's `FtestU`
-#'   row: same F and denominator df; the KR scaling factor is not applied
-#'   and is reported as `f_scaling = 1`). The F row
+#'   Kenward-Roger F is pbkrtest's scaled statistic (the main `Ftest` row of
+#'   `KRmodcomp()`, which lmerTest's `anova(ddf = "Kenward-Roger")` also
+#'   reports): \eqn{F = \lambda F_U}{F = lambda * F_U} referred to
+#'   \eqn{F(q, \nu)}{F(q, ddf)} with the KR denominator df, where
+#'   \eqn{\lambda}{lambda} is the KR scaling factor (`f_scaling`; 1 for a
+#'   single restriction). The unscaled statistic and its p-value (pbkrtest's
+#'   `FtestU` row) are kept as `unscaled_statistic` / `unscaled_p_value`.
+#'   The F row
 #'   replaces the LRT row (`statistic_name = "F"`, `df` = numerator df,
 #'   `den_df` = denominator df); the full result is in `$fixed_f`.
 #' @param refit_for_comparison How to handle REML fits.
@@ -471,6 +476,7 @@ mm_anova_group_expanded_terms <- function(fit, table, type) {
     row$statistic_name <- "f"
     row$p_value <- joint$p_value
     row$status <- joint$status
+    if ("details" %in% names(row)) row$details <- I(list(joint$details))
     table <- rbind(table[seq_len(pieces[[1L]] - 1L), , drop = FALSE], row,
                    table[-seq_len(max(pieces)), , drop = FALSE])
   }
@@ -504,7 +510,8 @@ mm_anova_joint_f <- function(fit, L, method, label) {
     num_df = as.numeric(row$numerator_df),
     den_df = as.numeric(row$denominator_df),
     p_value = as.numeric(row$p_value),
-    status = as.character(row$status)
+    status = as.character(row$status),
+    details = row$details[[1L]]
   )
 }
 
@@ -575,7 +582,9 @@ mm_anova_frame <- function(object, table, type, method, refit_for_comparison) {
   F[!(table$statistic_name %in% "f")] <- NA_real_
   num <- as.numeric(table$num_df)
   s2 <- as.numeric(sigma(object))^2
-  ms <- F * s2
+  # lmerTest (Kenward-Roger): `F value` is pbkrtest's scaled Ftest statistic
+  # while `Mean Sq` is built from the unscaled FtestU statistic; mirror that.
+  ms <- mm_anova_unscaled_f(table, F) * s2
   out <- data.frame(
     `Sum Sq` = ms * num,
     `Mean Sq` = ms,
@@ -597,6 +606,22 @@ mm_anova_frame <- function(object, table, type, method, refit_for_comparison) {
     mm_refit_for_comparison = refit_for_comparison,
     class = c("mm_anova", "anova", "data.frame")
   )
+}
+
+# The unscaled F of each row: the Kenward-Roger multi-df rows carry it in
+# details$kenward_roger$unscaled_statistic (engine 535132e+); every other
+# row's F is already unscaled.
+mm_anova_unscaled_f <- function(table, F) {
+  details <- if ("details" %in% names(table)) table$details else NULL
+  if (is.null(details)) return(F)
+  vapply(seq_along(F), function(i) {
+    u <- details[[i]]$kenward_roger$unscaled_statistic
+    if (is.na(F[[i]]) || is.null(u) || !is.numeric(u) || !is.finite(u)) {
+      F[[i]]
+    } else {
+      as.numeric(u)
+    }
+  }, numeric(1))
 }
 
 # lme4::anova(<lmerMod>) with one model (lmerTest's ddf = "lme4"): sequential

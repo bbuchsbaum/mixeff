@@ -311,6 +311,60 @@ test_that("interrupt demo uses the longjmp-free check", {
   expect_identical(mixeff:::mm_interrupt_demo(1000L), 1000L)
 })
 
+test_that("multi-df Kenward-Roger F is pbkrtest's scaled Ftest (lambda != 1)", {
+  # Engine 535132e: F = lambda * F_U on F(q, ddf), as pbkrtest's KRmodcomp
+  # Ftest row and lmerTest's anova(ddf = "Kenward-Roger"). The 4-level
+  # `phase` factor on sleepstudy gives lambda ~ 0.991.
+  d <- mm_cif_sleep()
+  d$phase <- factor(ifelse(d$Days <= 1, "a", ifelse(d$Days <= 4, "b",
+                    ifelse(d$Days <= 7, "c", "d"))))
+  small <- mm_cif_fit(Reaction ~ 1 + (Days | Subject), d)
+  big <- mm_cif_fit(Reaction ~ phase + (Days | Subject), d)
+  kr <- compare(small, big, method = "kenward_roger")
+  expect_identical(kr$fixed_f$statistic_scale, "kenward_roger_scaled")
+  expect_lt(abs(kr$fixed_f$f_scaling - 1), 0.05)
+  expect_gt(abs(kr$fixed_f$f_scaling - 1), 1e-4)
+  expect_equal(kr$fixed_f$statistic,
+               kr$fixed_f$f_scaling * kr$fixed_f$unscaled_statistic,
+               tolerance = 1e-10)
+  expect_equal(kr$fixed_f$p_value,
+               stats::pf(kr$fixed_f$statistic, kr$fixed_f$num_df,
+                         kr$fixed_f$den_df, lower.tail = FALSE),
+               tolerance = 1e-8)
+
+  av <- anova(big, ddf = "Kenward-Roger")
+  det <- attr(av, "mm_table")$details[[1L]]$kenward_roger
+  expect_equal(det$f_scaling, kr$fixed_f$f_scaling, tolerance = 1e-6)
+  expect_equal(av[["F value"]], kr$fixed_f$statistic, tolerance = 1e-6)
+  # lmerTest: `F value` scaled, `Mean Sq` from the unscaled F_U.
+  expect_equal(av[["Mean Sq"]],
+               det$unscaled_statistic * sigma(big)^2, tolerance = 1e-10)
+
+  skip_if_not_installed("pbkrtest")
+  A <- eval(bquote(lme4::lmer(Reaction ~ 1 + (Days | Subject), data = .(d))))
+  B <- eval(bquote(lme4::lmer(Reaction ~ phase + (Days | Subject),
+                              data = .(d))))
+  ref <- pbkrtest::KRmodcomp(B, A)$test
+  expect_equal(kr$fixed_f$statistic, ref["Ftest", "stat"], tolerance = 1e-4)
+  expect_equal(kr$fixed_f$f_scaling, ref["Ftest", "F.scaling"],
+               tolerance = 1e-4)
+  expect_equal(kr$fixed_f$den_df, ref["Ftest", "ddf"], tolerance = 1e-4)
+  expect_equal(kr$fixed_f$p_value, ref["Ftest", "p.value"], tolerance = 1e-3)
+  expect_equal(kr$fixed_f$unscaled_statistic, ref["FtestU", "stat"],
+               tolerance = 1e-4)
+  expect_equal(kr$fixed_f$unscaled_p_value, ref["FtestU", "p.value"],
+               tolerance = 1e-3)
+
+  skip_if_not_installed("lmerTest")
+  lt <- eval(bquote(lmerTest::lmer(Reaction ~ phase + (Days | Subject),
+                                   data = .(d))))
+  lref <- stats::anova(lt, ddf = "Kenward-Roger")
+  expect_equal(av[["F value"]], lref[["F value"]], tolerance = 1e-4)
+  expect_equal(av[["Mean Sq"]], lref[["Mean Sq"]], tolerance = 1e-4)
+  expect_equal(av[["DenDF"]], lref[["DenDF"]], tolerance = 1e-4)
+  expect_equal(av[["Pr(>F)"]], lref[["Pr(>F)"]], tolerance = 1e-3)
+})
+
 test_that("compare(method = 'kenward_roger'/'satterthwaite') matches pbkrtest", {
   skip_if_not_installed("pbkrtest")
   d <- mm_cif_sleep()
@@ -324,10 +378,17 @@ test_that("compare(method = 'kenward_roger'/'satterthwaite') matches pbkrtest", 
   kr <- compare(small, big, method = "kenward_roger")
   ref <- pbkrtest::KRmodcomp(B, A)$test
   expect_equal(kr$fixed_f$num_df, 3)
-  expect_equal(kr$fixed_f$den_df, ref["FtestU", "ddf"], tolerance = 1e-4)
-  # The engine reports the unscaled KR F (f_scaling = 1): pbkrtest's FtestU.
-  expect_equal(kr$fixed_f$statistic, ref["FtestU", "stat"], tolerance = 1e-4)
-  expect_equal(kr$fixed_f$p_value, ref["FtestU", "p.value"], tolerance = 1e-3)
+  expect_equal(kr$fixed_f$den_df, ref["Ftest", "ddf"], tolerance = 1e-4)
+  # The KR F is pbkrtest's scaled Ftest row (engine 535132e+); the unscaled
+  # FtestU statistic and p-value ride along.
+  expect_equal(kr$fixed_f$statistic, ref["Ftest", "stat"], tolerance = 1e-4)
+  expect_equal(kr$fixed_f$p_value, ref["Ftest", "p.value"], tolerance = 1e-3)
+  expect_equal(kr$fixed_f$f_scaling, ref["Ftest", "F.scaling"], tolerance = 1e-4)
+  expect_identical(kr$fixed_f$statistic_scale, "kenward_roger_scaled")
+  expect_equal(kr$fixed_f$unscaled_statistic, ref["FtestU", "stat"],
+               tolerance = 1e-4)
+  expect_equal(kr$fixed_f$unscaled_p_value, ref["FtestU", "p.value"],
+               tolerance = 1e-3)
   last <- kr$table[nrow(kr$table), ]
   expect_identical(last$statistic_name, "F")
   expect_identical(last$comparison_method, "kenward_roger_f")

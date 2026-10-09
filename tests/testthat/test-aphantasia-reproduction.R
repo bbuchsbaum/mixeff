@@ -358,6 +358,27 @@ test_that("aphantasia core fit-side reproduction matches cached lme4 references 
         label = "aphantasia primary DiD estimate (default route)",
         mode = "absolute"
       )
+      # Engine afc7c36: the active Hessian is not positive definite here
+      # (participant mask block, corr ~0.98), so the Wald rows fall back to
+      # RX conditional on theta -- glmer's vcov(use.hessian = FALSE) -- and
+      # are labelled as such (reliability low, notes naming the Hessian).
+      rows <- mixeff:::mm_glmm_coefficient_inference_rows(fit)
+      expect_true(all(rows$status == "available"))
+      expect_true(all(rows$reliability == "low"))
+      expect_true(all(rows$reliability_reason ==
+                        "glmm_laplace_rx_conditional_on_theta_wald"))
+      expect_warning(stats::vcov(fit), class = "mm_vcov_rx_fallback")
+      out <- paste(capture.output(print(suppressWarnings(summary(fit)))),
+                   collapse = "\n")
+      expect_match(out, "fixed-effect block RX", fixed = TRUE)
+      # The joint stop is FTOL with an eager objective gap of ~4e-4 deviance
+      # units (> the 1e-6 certification policy; logLik 0.001 above glmer):
+      # presented as "convergence not certified", a warning, not a failure.
+      if (identical(fit$fit_status, "not_optimized")) {
+        conv <- mixeff:::mm_glmm_convergence_assessment(fit)
+        expect_true(conv$not_certified_small_gap)
+        expect_match(out, "convergence not certified", fixed = TRUE)
+      }
     }
   }
 })
@@ -501,10 +522,11 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
   # point is to pin how far the profiled DiD estimates and SEs sit from
   # glmer on real data (the evidence behind the opt-in's documented caveat).
   # Without the opt-in mm_lincomb() refuses SEs here: the profiled
-  # covariance is uncertified, and on this dataset the default joint fit's
-  # certification also withholds Wald (its Hessian is not positive definite
-  # on the active parameter space: the fitted mask block sits near a
-  # boundary, corr ~0.98). ~10s per fit (measured 2026-10-09).
+  # covariance is uncertified. (On this dataset the default joint fit's
+  # Hessian is not positive definite on the active parameter space -- the
+  # fitted mask block sits near a boundary, corr ~0.98 -- so since engine
+  # afc7c36 its Wald rows come from RX conditional on theta, graded low.)
+  # ~10s per fit (measured 2026-10-09).
   fit <- mixeff::glmm(
     stats::as.formula(primary_ref$formula),
     data_sets$primary,

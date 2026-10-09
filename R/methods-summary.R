@@ -84,6 +84,7 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
     nobs = object$nobs,
     df_residual = object$df_residual,
     fit_status = object$fit_status,
+    convergence = mm_glmm_convergence_assessment(object),
     varcorr = VarCorr(object),
     tests = tests,
     inference = inference,
@@ -171,6 +172,7 @@ summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...) {
     nobs = object$nobs,
     df_residual = object$df_residual,
     fit_status = object$fit_status,
+    convergence = mm_glmm_convergence_assessment(object),
     varcorr = VarCorr(object),
     tests = tests,
     inference = inference,
@@ -338,7 +340,8 @@ print.summary.mm_glmm <- function(x, ...) {
   cat(sprintf("Formula: %s\n", deparse1(x$formula)))
   cat(sprintf("Family/link: %s/%s\n", x$family$family, x$family$link))
   cat(sprintf("Method: %s (nAGQ = %d)\n", x$method, x$nAGQ))
-  cat(sprintf("Fit status: %s\n\n", x$fit_status))
+  cat(sprintf("Fit status: %s\n\n",
+              mm_fit_status_display(x$fit_status, x$convergence)))
   print(x$varcorr)
   cat("\nFixed effects:\n")
   print(mm_summary_format_coef(x$coef_table %||% x$coefficients))
@@ -368,12 +371,43 @@ print.summary.mm_glmm <- function(x, ...) {
     # on the fallback must not suppress the fact that a different estimator
     # than requested produced these numbers (no silent surgery).
     mm_estimator_substitution_note(x$estimator_substitution),
-    mm_fit_status_note(x$fit_status, x$method),
+    mm_fit_status_note(x$fit_status, x$method, x$convergence),
+    mm_glmm_rx_fallback_note(x),
     mm_glmm_working_hessian_note(x),
     mm_glmm_withheld_inference_note(x, include_reason = !reason_printed)
   )
   mm_summary_print_notes(notes)
   invisible(x)
+}
+
+## Joint-Laplace fits whose active Hessian was unusable (engine afc7c36+)
+## report Wald rows from RX conditional on theta, graded low: say so in words
+## (glmer warns and falls back to RX in the same situation) and print the
+## engine's row notes, which name the Hessian failure.
+mm_glmm_rx_fallback_note <- function(x) {
+  tab <- x$inference$table
+  if (is.null(tab) || !nrow(tab)) return(character())
+  rx <- (if ("reliability_reason" %in% names(tab)) {
+    tab$reliability_reason %in% mm_glmm_rx_fallback_reason
+  } else {
+    FALSE
+  })
+  if (!any(rx)) return(character())
+  notes <- if ("notes" %in% names(tab)) {
+    unique(unlist(tab$notes[rx], use.names = FALSE))
+  } else {
+    character()
+  }
+  c(
+    paste0(
+      "Std. Errors (and z, p) use the fixed-effect block RX of the Laplace ",
+      "factorization, conditional on the covariance parameters ",
+      "(reliability low): the joint-Laplace Hessian was not usable. glmer's ",
+      "default (use.hessian = TRUE) warns and falls back to the same RX ",
+      "covariance here; it ignores uncertainty in theta."
+    ),
+    as.character(notes)
+  )
 }
 
 ## Permanent caveat whenever any printed Wald column comes from the
@@ -453,9 +487,12 @@ mm_summary_verbose <- function(...) {
 # A non-converged optimum is model state the user must not read past: repeat
 # it as a plain-language note next to the tests, not only in the header line.
 # Reports what happened; prescribes nothing (PRD R9).
-mm_fit_status_note <- function(fit_status, method = NULL) {
+mm_fit_status_note <- function(fit_status, method = NULL, convergence = NULL) {
   status <- as.character(fit_status %||% "")
   if (!nzchar(status) || startsWith(status, "converged")) return(character())
+  if (isTRUE(convergence$not_certified_small_gap)) {
+    return(mm_convergence_not_certified_note(convergence))
+  }
   if (identical(method, "joint_laplace") &&
       status %in% c("not_assessed", "not_optimized")) {
     # The joint route's engine labels are known not to track solution quality
@@ -479,6 +516,75 @@ mm_fit_status_note <- function(fit_status, method = NULL) {
       "the last accepted iterate."
     ),
     status
+  )
+}
+
+## ---- joint-Laplace "convergence not certified" (warning-level) -----------
+##
+## The engine certifies a joint-Laplace GLMM's stationarity by the eager
+## Newton-decrement estimate of the objective gap (deviance units) against a
+## 1e-6 tolerance (JOINT_STATIONARITY_GAP_TOLERANCE); a gap above it labels
+## the fit `not_optimized`. That tolerance is a certification policy, not a
+## usability bound: e.g. the aphantasia primary model stops at FTOL with an
+## estimated gap of ~4e-4 deviance units and a logLik 0.001 above glmer's.
+## Such a fit is presented like lme4's convergence warnings ("convergence
+## not certified"), not as a failed fit, when ALL of the following hold:
+##   * the effective estimator is joint_laplace (no estimator substitution);
+##   * optimizer_certificate$status == "not_optimized";
+##   * the optimizer stop was acceptable and not budget-exhausted
+##     (evidence$optimizer_stop$acceptable_stop, !budget_exhausted);
+##   * stationarity_decrement$eager$objective_gap is finite and
+##     <= mm_joint_gap_warning_limit (1e-2 deviance units: such a gap moves
+##     any likelihood-ratio statistic by at most 0.01).
+## fit$fit_status keeps the engine's raw label; only the presentation changes.
+mm_joint_gap_warning_limit <- 1e-2
+
+mm_glmm_convergence_assessment <- function(fit) {
+  cert <- tryCatch(mm_compiled_artifact(fit)$optimizer_certificate,
+                   error = function(cnd) NULL) %||% list()
+  status <- as.character(cert$status %||% fit$fit_status %||% "")
+  if (!identical(status, "not_optimized")) return(NULL)
+  if (!identical(mm_glmm_effective_method(fit), "joint_laplace")) return(NULL)
+  if (!is.null(mm_estimator_substitution(fit))) return(NULL)
+  stop_ev <- cert$evidence$optimizer_stop %||% list()
+  dec <- cert$stationarity_decrement %||% list()
+  gap <- suppressWarnings(as.numeric(dec$eager$objective_gap %||% NA_real_))
+  tolerance <- suppressWarnings(as.numeric(dec$gap_tolerance %||% NA_real_))
+  small <- isTRUE(stop_ev$acceptable_stop) &&
+    !isTRUE(stop_ev$budget_exhausted) &&
+    length(gap) == 1L && is.finite(gap) && gap >= 0 &&
+    gap <= mm_joint_gap_warning_limit
+  list(
+    not_certified_small_gap = small,
+    objective_gap = gap,
+    gap_tolerance = tolerance,
+    gap_warning_limit = mm_joint_gap_warning_limit,
+    return_code = as.character(stop_ev$return_code %||% NA_character_)
+  )
+}
+
+mm_fit_status_display <- function(fit_status, convergence = NULL) {
+  if (isTRUE(convergence$not_certified_small_gap)) {
+    return(sprintf("%s (convergence not certified; warning)", fit_status))
+  }
+  fit_status
+}
+
+mm_convergence_not_certified_note <- function(convergence) {
+  sprintf(
+    paste0(
+      "Warning: convergence not certified. The joint-Laplace optimizer ",
+      "stopped normally (%s), but its estimated distance to a stationary ",
+      "point (objective gap %s deviance units) exceeds the engine's ",
+      "certification tolerance (%s). As with lme4's convergence warnings, ",
+      "the estimates and tests are reported; the optimum is unverified, ",
+      "not known to be wrong. Check it with verify_convergence(fit)."
+    ),
+    if (is.na(convergence$return_code)) "acceptable stop" else
+      convergence$return_code,
+    format(signif(convergence$objective_gap, 2)),
+    if (is.na(convergence$gap_tolerance)) "1e-06" else
+      format(convergence$gap_tolerance)
   )
 }
 

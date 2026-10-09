@@ -317,8 +317,11 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
 #'
 #' `test_random_effect()` exposes the boundary-aware likelihood-ratio route for
 #' random-effect variance components. The v1 certified route is a nested ML
-#' comparison that adds exactly one variance/covariance parameter and reports
-#' the Self-Liang 50:50 mixture reference distribution. It is intentionally
+#' comparison that adds exactly one variance parameter and reports the
+#' Self-Liang 50:50 mixture reference distribution; a comparison that adds
+#' only correlation parameters (e.g. `||` versus `|`) is referred to the
+#' ordinary chi-square, since a zero correlation is interior to the
+#' parameter space (`method = "boundary_lrt_ordinary_chisq"`). It is intentionally
 #' separate from [test_effect()], which tests fixed effects.
 #'
 #' @param fit A fitted `mm_lmm`.
@@ -557,6 +560,14 @@ mm_boundary_lrt_table <- function(payload, term, reduced_formula, full, reduced,
   status <- as.character(payload$status %||% "not_assessed")
   available <- identical(status, "available")
   reference_distribution <- mm_boundary_lrt_reference_label(payload$mixture)
+  # The engine uses the 50:50 boundary mixture only when exactly one
+  # variance is added; a comparison adding only correlations (`||` vs `|`)
+  # is referred to the ordinary chi-square (a single weight-1 component).
+  mixture <- payload$mixture %||% list()
+  is_mixture <- any(vapply(mixture, function(component) {
+    !is.null(component$point_mass_at) ||
+      !isTRUE(all.equal(as.numeric(component$weight %||% NA_real_), 1))
+  }, logical(1)))
   reason <- payload$reason %||% if (available) NA_character_ else
     "boundary LRT did not certify a p-value"
   reason_code <- payload$reason_code %||% if (available) NA_character_ else
@@ -586,10 +597,16 @@ mm_boundary_lrt_table <- function(payload, term, reduced_formula, full, reduced,
     group = term$group,
     theta_parameters = term$theta_parameters,
     statistic = payload$statistic %||% NA_real_,
-    statistic_name = "chi_bar_square",
+    statistic_name = if (is_mixture || !available) "chi_bar_square" else "chi_square",
     ordinary_chisq_dof = payload$ordinary_chisq_dof %||% NA_integer_,
     p_value = payload$pvalue %||% NA_real_,
-    method = if (available) "boundary_lrt_self_liang_mixture" else "boundary_lrt",
+    method = if (!available) {
+      "boundary_lrt"
+    } else if (is_mixture) {
+      "boundary_lrt_self_liang_mixture"
+    } else {
+      "boundary_lrt_ordinary_chisq"
+    },
     requested_method = "boundary_lrt",
     status = status,
     reason = reason,

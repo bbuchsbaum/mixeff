@@ -20,7 +20,7 @@ mm_influence_parts <- function(model) {
     }
     working <- prior * family$mu.eta(eta)^2 / var_mu
     pearson <- (y - mu) * sqrt(prior) / sqrt(var_mu)
-    dispersion <- if (model$family$family %in% c("gamma")) {
+    dispersion <- if (model$family$family %in% c("gamma", "inverse_gaussian")) {
       model$dispersion^2
     } else {
       1
@@ -268,7 +268,7 @@ influence.mm_glmm <- influence.mm_lmm
 mm_influence_vc <- function(fit) {
   terms <- fit$artifact$semantic_model$random_terms %||% list()
   vc <- if (inherits(fit, "mm_glmm") &&
-            !identical(fit$family$family, "gamma")) 1 else fit$sigma^2
+            !fit$family$family %in% c("gamma", "inverse_gaussian")) 1 else fit$sigma^2
   names(vc) <- "sigma^2"
   labels <- make.unique(vapply(seq_along(terms), function(i) {
     mm_random_term_group_label(fit, terms[[i]], i)

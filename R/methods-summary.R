@@ -556,19 +556,31 @@ mm_summary_coefficients <- function(object, inference) {
   )
   coef[[stat_col]] <- rows$statistic
   coef[[p_col]] <- rows$p_value
-  # Aliased (rank-deficiency-pivoted) coefficients are stored as hard zeros
-  # so predictions stay correct; display them as NA (lm() convention) so a
-  # zero never reads as "no effect".
+  # Coefficients dropped for rank deficiency (stored as hard zeros so
+  # predictions stay correct) are omitted, as in lme4's summary(); the
+  # dropped names travel in attr(, "mm_aliased") for the printed note. The
+  # engine withholds its inference rows for a rank-deficient design, so the
+  # kept rows carry lme4's Estimate / Std. Error / statistic (no p-value).
   aliased <- intersect(mm_aliased_coefficients(object), beta_names)
   if (length(aliased)) {
-    hit <- beta_names %in% aliased
-    coef$Estimate[hit] <- NA_real_
-    coef[["Std. Error"]][hit] <- NA_real_
-    coef[[stat_col]][hit] <- NA_real_
-    coef[[p_col]][hit] <- NA_real_
-    coef$method[hit] <- "aliased"
+    keep <- !(beta_names %in% aliased)
+    fill <- keep & is.na(coef[["Std. Error"]]) & is.finite(se)
+    coef[["Std. Error"]][fill] <- se[fill]
+    coef[[stat_col]][fill] <- coef$Estimate[fill] / se[fill]
+    coef$method[fill] <- "estimate_se_rank_deficient"
+    if (inherits(object, "mm_lmm") && any(fill) && all(fill[keep]) &&
+        !identical(stat_col, "t value")) {
+      # Every kept row is lme4's Estimate / Std. Error ratio: a t value.
+      names(coef)[names(coef) == stat_col] <- "t value"
+      names(coef)[names(coef) == p_col] <- "Pr(>|t|)"
+      stat_col <- "t value"
+      p_col <- "Pr(>|t|)"
+    }
+    coef <- coef[keep, , drop = FALSE]
+    rows <- rows[keep, , drop = FALSE]
     attr(coef, "mm_aliased") <- aliased
   }
+  aliased_attr <- attr(coef, "mm_aliased")
   cols <- c("Estimate", "Std. Error", "df", stat_col, p_col, "method")
   if (all(is.na(coef$df))) {
     # df is undefined for every row (e.g. asymptotic Wald z); an all-NA
@@ -577,6 +589,7 @@ mm_summary_coefficients <- function(object, inference) {
   }
   coef <- coef[, cols, drop = FALSE]
   rownames(coef) <- rows$label
+  attr(coef, "mm_aliased") <- aliased_attr
   coef
 }
 

@@ -584,7 +584,15 @@ mm_json_parse_fit_summary <- function(fit_summary) {
 }
 
 mm_named_numeric <- function(values, names) {
-  out <- as.numeric(unlist(values, use.names = FALSE))
+  # JSON null (a non-finite engine value, e.g. the NaN standard error of a
+  # coefficient dropped for rank deficiency) must stay in place as NA:
+  # unlist() would silently drop it and shift every later value.
+  if (is.list(values)) {
+    values <- lapply(values, function(v) {
+      if (is.null(v) || !length(v)) NA_real_ else suppressWarnings(as.numeric(v))
+    })
+  }
+  out <- suppressWarnings(as.numeric(unlist(values, use.names = FALSE)))
   nm <- as.character(unlist(names, use.names = FALSE))
   if (length(out) == length(nm)) {
     names(out) <- nm

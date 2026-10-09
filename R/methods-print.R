@@ -13,7 +13,7 @@ print.mm_lmm <- function(x, ...) {
     x$nobs, x$sigma, x$logLik
   ))
   cat("Fixed effects:\n")
-  beta_shown <- fixef(x)
+  beta_shown <- fixef(x, add.dropped = TRUE)
   aliased <- mm_aliased_coefficients(x)
   aliased <- intersect(aliased, names(beta_shown))
   if (length(aliased)) beta_shown[aliased] <- NA_real_
@@ -51,7 +51,7 @@ print.mm_glmm <- function(x, ...) {
     x$nobs, x$dispersion, x$logLik
   ))
   cat("Fixed effects:\n")
-  beta_shown <- fixef(x)
+  beta_shown <- fixef(x, add.dropped = TRUE)
   aliased <- mm_aliased_coefficients(x)
   aliased <- intersect(aliased, names(beta_shown))
   if (length(aliased)) beta_shown[aliased] <- NA_real_

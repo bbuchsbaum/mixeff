@@ -286,6 +286,15 @@ mm_apply_lme4_coef_naming <- function(fit) {
 # zero reads as "no effect" — the opposite of "not separately estimable".
 # Display surfaces show these as NA (R's lm() convention for aliased terms).
 mm_aliased_coefficients <- function(fit) {
+  # The engine's own list (mixeff-rs >= 2873312: R's rule, the earlier of
+  # two collinear columns is kept) is authoritative; the design audit is the
+  # fallback for fits saved by older versions.
+  dropped <- fit$fit$dropped_coef_names
+  if (!is.null(dropped)) {
+    dropped <- as.character(unlist(dropped, use.names = FALSE))
+    if (!length(dropped)) return(character())
+    return(mm_coef_engine_to_lme4(dropped, fit$coef_map))
+  }
   cols <- unlist(
     fit$artifact$design_audit$fixed_effects$aliased_columns %||% list(),
     use.names = FALSE

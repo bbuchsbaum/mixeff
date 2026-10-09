@@ -113,10 +113,23 @@ fixef.default <- function(object, ...) {
   )
 }
 
+#' @param add.dropped For `fixef()`: if `TRUE`, coefficients dropped for
+#'   rank deficiency are included as `NA` (lme4's `add.dropped`); by default
+#'   they are omitted, as in lme4.
 #' @rdname mm_lmm-methods
 #' @export
-fixef.mm_lmm <- function(object, ...) {
-  object$beta
+fixef.mm_lmm <- function(object, add.dropped = FALSE, ...) {
+  # lme4: coefficients dropped for rank deficiency are omitted, or NA with
+  # add.dropped = TRUE. (The fit stores them as 0 in `$beta` so contrasts
+  # and predictions over the full design stay correct.)
+  beta <- object$beta
+  dropped <- intersect(mm_aliased_coefficients(object), names(beta))
+  if (!length(dropped)) return(beta)
+  if (isTRUE(add.dropped)) {
+    beta[dropped] <- NA_real_
+    return(beta)
+  }
+  beta[setdiff(names(beta), dropped)]
 }
 
 #' @rdname mm_lmm-methods
@@ -495,9 +508,10 @@ sigma.mm_lmm <- function(object, ...) {
 #' @export
 sigma.mm_glmm <- function(object, ...) {
   # lme4: sigma() is the residual scale only for families with a free scale
-  # parameter (Gamma); binomial, Poisson and negative-binomial fits return 1.
+  # parameter (Gamma, inverse Gaussian); binomial, Poisson and
+  # negative-binomial fits return 1.
   # The negative-binomial theta is getME(fit, "glmer.nb.theta").
-  if (identical(object$family$family, "gamma")) {
+  if (object$family$family %in% c("gamma", "inverse_gaussian")) {
     return(object$sigma)
   }
   1

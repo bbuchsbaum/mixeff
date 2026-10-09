@@ -209,6 +209,20 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
       object$std_errors,
       coef_map = object$coef_map
     )
+  dropped <- intersect(mm_aliased_coefficients(object), names(object$beta))
+  if (length(dropped)) {
+    # lme4: the covariance of the estimable coefficients only. The engine
+    # withholds its matrix for a rank-deficient design, so rebuild it from
+    # the penalized least-squares factor on the kept columns,
+    # sigma^2 (RX'RX)^-1, exactly as lme4's vcov.merMod does.
+    kept <- setdiff(names(object$beta), dropped)
+    Vk <- V[kept, kept, drop = FALSE]
+    if (anyNA(Vk)) {
+      Vk <- tryCatch(mm_rank_deficient_vcov(object, kept),
+                     error = function(cnd) Vk)
+    }
+    V <- Vk
+  }
   if (isTRUE(correlation)) {
     # Match lme4: attach the correlation matrix as a "correlation" attribute.
     attr(V, "correlation") <- stats::cov2cor(V)
@@ -219,6 +233,22 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
 #' @rdname mm_lmm-methods
 #' @export
 vcov.mm_glmm <- vcov.mm_lmm
+
+mm_rank_deficient_vcov <- function(object, kept) {
+  RX <- mm_pls(object)$RX
+  V <- as.numeric(sigma(object))^2 * chol2inv(RX)
+  dimnames(V) <- list(colnames(RX), colnames(RX))
+  V <- V[kept, kept, drop = FALSE]
+  # Cross-check against the engine's own standard errors.
+  se <- object$std_errors[kept]
+  if (any(is.finite(se)) &&
+      !isTRUE(all.equal(sqrt(diag(V))[is.finite(se)], se[is.finite(se)],
+                        tolerance = 1e-3, check.attributes = FALSE))) {
+    stop("rebuilt covariance does not match the engine standard errors")
+  }
+  attr(V, "mm_method") <- "pls_rebuild_rank_deficient"
+  V
+}
 
 mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors,
                                               coef_map = NULL) {

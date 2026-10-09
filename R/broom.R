@@ -80,6 +80,9 @@ mm_tidy_impl <- function(x, effects, conf.int, conf.level, glmm) {
 mm_tidy_fixed <- function(x, conf.int, conf.level, glmm) {
   beta <- fixef(x)
   se <- x$std_errors
+  if (!is.null(se) && !is.null(names(se)) && all(names(beta) %in% names(se))) {
+    se <- se[names(beta)]
+  }
   if (is.null(se) || length(se) != length(beta)) {
     se <- rep(NA_real_, length(beta))
   }

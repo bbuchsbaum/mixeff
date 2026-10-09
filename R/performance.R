@@ -72,7 +72,8 @@ mm_variance_components <- function(fit, tolerance = 1e-5) {
 
 mm_variance_parts <- function(fit, tolerance = 1e-5, warn = TRUE) {
   X <- as.matrix(stats::model.matrix(fit, type = "fixed"))
-  beta <- as.numeric(fixef(fit))
+  # fit$beta keeps a rank-deficiency-dropped column as 0, aligned with X.
+  beta <- as.numeric(fit$beta)
   n <- nrow(X)
   var_fixed <- stats::var(as.vector(X %*% beta))
 

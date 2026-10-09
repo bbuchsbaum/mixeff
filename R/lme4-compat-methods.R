@@ -59,6 +59,7 @@ mm_glmm_family_object <- function(fit) {
     poisson = stats::poisson(link = link),
     gamma = stats::Gamma(link = link),
     Gamma = stats::Gamma(link = link),
+    inverse_gaussian = stats::inverse.gaussian(link = link),
     negative_binomial = mm_nb_family(as.numeric(info$nb_theta), link),
     mm_abort(
       message = sprintf("No R family object is known for GLMM family `%s`.",
@@ -535,7 +536,8 @@ mm_pls <- function(fit) {
 mm_compute_pls <- function(fit) {
   glmm <- inherits(fit, "mm_glmm")
   X <- stats::model.matrix(fit, type = "fixed")
-  X <- X[, names(fit$beta), drop = FALSE]
+  # Columns dropped for rank deficiency are not part of lme4's X.
+  X <- X[, setdiff(names(fit$beta), mm_aliased_coefficients(fit)), drop = FALSE]
   Zt <- mm_re_zt(fit)
   Lt <- mm_re_lambdat(fit)$Lambdat
   w <- if (glmm) mm_glmm_working_weights(fit) else mm_prior_weights(fit)
@@ -567,7 +569,7 @@ mm_compute_pls <- function(fit) {
   pwrss <- wrss + ussq
   st <- mm_re_structure(fit)
   if (glmm) {
-    use_sc <- identical(fit$family$family, "gamma")
+    use_sc <- fit$family$family %in% c("gamma", "inverse_gaussian")
     cmp <- c(ldL2 = ldL2, ldRX2 = ldRX2, wrss = wrss, ussq = ussq,
              pwrss = pwrss, drsum = drsum, REML = NA_real_,
              dev = -2 * as.numeric(fit$logLik),
@@ -906,7 +908,7 @@ mm_varcorr_lme4 <- function(vc, fit) {
          } else numeric())
   })
   glmm <- inherits(fit, "mm_glmm")
-  use_sc <- if (glmm) identical(fit$family$family, "gamma") else TRUE
+  use_sc <- if (glmm) fit$family$family %in% c("gamma", "inverse_gaussian") else TRUE
   sc <- if (use_sc) as.numeric(sigma(fit)) else 1
   attr(mats, "sc") <- sc
   attr(mats, "useSc") <- use_sc

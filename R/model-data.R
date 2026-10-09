@@ -120,9 +120,12 @@ mm_synthetic_base <- function(label, taken) {
   # A base must not equal or prefix-collide with any other name in play, so
   # the "var + level" coefficient names decode unambiguously.
   clash <- function(nm) any(startsWith(taken, nm) | startsWith(nm, taken))
+  # Vary the head of the name, not its tail: a suffix cannot get out of a
+  # clash with a taken name that is a prefix of `base` (`.pmax_x_0` vs
+  # `.pmax_x_0_5`), but a fresh `.vK_` head eventually prefixes nothing.
   while (clash(out)) {
     k <- k + 1L
-    out <- paste0(base, "_", k)
+    out <- paste0(".v", k, "_", substring(base, 2L))
   }
   out
 }

@@ -11,9 +11,15 @@ mm_influence_parts <- function(model) {
   mu <- as.numeric(fitted(model))
   prior <- as.numeric(model$weights %||% rep(1, n))
   if (inherits(model, "mm_glmm")) {
-    family <- mm_glmm_family_from_info(model$family)
+    nb <- identical(model$family$family, "negative_binomial")
+    # mm_negative_binomial() carries no link functions; take them from R.
+    family <- if (nb) {
+      stats::make.link(model$family$link %||% "log")
+    } else {
+      mm_glmm_family_from_info(model$family)
+    }
     eta <- family$linkfun(mu)
-    var_mu <- if (identical(model$family$family, "negative_binomial")) {
+    var_mu <- if (nb) {
       mu + mu^2 / model$family$nb_theta
     } else {
       family$variance(mu)
@@ -321,7 +327,9 @@ dfbeta.mm_influence <- function(model, which = c("fixed", "var.cov"), ...) {
   which <- match.arg(which)
   key <- if (identical(which, "fixed")) "fixed.effects" else "var.cov.comps"
   b0 <- model[[key]]
-  b <- model[[sprintf("%s[-%s]", key, model$groups)]]
+  b <- if (length(model$groups)) {
+    model[[sprintf("%s[-%s]", key, model$groups)]]
+  }
   if (is.null(b)) {
     mm_abort(
       message = "This influence result has no deletion refits (`do.coef = FALSE`).",

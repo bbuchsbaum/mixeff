@@ -33,8 +33,8 @@ test_that("synthetic column names avoid collisions", {
   expect_identical(sb("!!", character()), ".term")
   expect_identical(sb("log(x)", character()), ".log_x")
   # A name in play that extends the base forces a numbered variant.
-  expect_identical(sb("log(x)", ".log_x_extra"), ".log_x_2")
-  expect_identical(sb("log(x)", c(".log_x_extra", ".log_x_2_b")), ".log_x_3")
+  expect_identical(sb("log(x)", ".log_x_extra"), ".v2_log_x")
+  expect_identical(sb("log(x)", c(".log_x_extra", ".v2_log_x_b")), ".v3_log_x")
   sfx <- mixeff:::mm_numeric_component_suffixes
   expect_identical(sfx(1:3), "")
   expect_identical(sfx(matrix(1:3, ncol = 1)), "")

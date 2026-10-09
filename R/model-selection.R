@@ -107,9 +107,16 @@ mm_compare_fixed_f <- function(small, big, method) {
     if (col %in% names(row)) row[[col]][[1L]] else default
   }
   kr <- pull("details", NULL)$kenward_roger %||% list()
+  statistic <- as.numeric(pull("statistic", NA_real_))
+  num_df <- as.numeric(pull("numerator_df", NA_real_))
+  if (is.na(num_df) && nrow(L) == 1L) {
+    # A single restriction comes back in t form; pbkrtest reports F = t^2.
+    statistic <- statistic^2
+    num_df <- 1
+  }
   list(
-    statistic = as.numeric(pull("statistic", NA_real_)),
-    num_df = as.numeric(pull("numerator_df", NA_real_)),
+    statistic = statistic,
+    num_df = num_df,
     den_df = as.numeric(pull("denominator_df", pull("df", NA_real_))),
     f_scaling = as.numeric(kr$f_scaling %||% NA_real_),
     p_value = as.numeric(pull("p_value", NA_real_)),

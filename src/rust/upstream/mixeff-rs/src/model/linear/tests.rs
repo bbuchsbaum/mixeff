@@ -1,7 +1,7 @@
 use super::*;
 use approx::assert_relative_eq;
 use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -950,7 +950,7 @@ fn test_random_effect_no_intercept_factor_uses_cell_means_with_explicit_contrast
 }
 
 #[test]
-fn test_random_effect_categorical_cell_means_preserves_zero_correlation_map() {
+fn test_random_effect_factor_in_double_bar_gets_full_covariance_like_lme4() {
     let mut data = DataFrame::new();
     data.add_numeric("y", vec![1.0, 2.0, 3.0, 1.5, 2.5, 3.5])
         .unwrap();
@@ -971,6 +971,8 @@ fn test_random_effect_categorical_cell_means_preserves_zero_correlation_map() {
     )
     .unwrap();
 
+    // lme4 expands `(0 + cond || subj)` to `(0 + cond | subj)`: a factor
+    // inside `||` keeps an unstructured covariance among its indicators.
     let formula = parse_formula("y ~ cond + (0 + cond || subj)").unwrap();
     let model = LinearMixedModel::new(formula, &data, None).unwrap();
 
@@ -978,12 +980,12 @@ fn test_random_effect_categorical_cell_means_preserves_zero_correlation_map() {
         model.reterms[0].cnames,
         vec!["cond: A", "cond: B", "cond: C"]
     );
-    assert_eq!(model.theta().len(), 3);
-    assert!(matches!(
+    assert_eq!(model.theta().len(), 6);
+    assert!(!matches!(
         model.compiler_artifact().theta_maps[0],
         ThetaMap::Diagonal(_)
     ));
-    assert_eq!(model.compiler_artifact().theta_maps[0].n_free(), 3);
+    assert_eq!(model.compiler_artifact().theta_maps[0].n_free(), 6);
 }
 
 #[test]
@@ -1045,10 +1047,25 @@ fn test_zerocorr_factor_split_terms_record_no_error_diagnostics() {
     data.add_categorical("g", (0..n).map(|i| format!("g{}", i / 6)).collect())
         .unwrap();
 
+    // lme4: (1 + f + x || g) -> (1 | g) + (0 + f | g) + (0 + x | g). The
+    // engine keeps the intercept and x as one diagonal block.
     let formula = parse_formula("y ~ x + f + (1 + f + x || g)").unwrap();
     let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
 
-    assert_eq!(model.reterms[0].cnames, vec!["(Intercept)", "f: b", "x"]);
+    let mut bases = model
+        .reterms
+        .iter()
+        .map(|term| term.cnames.clone())
+        .collect::<Vec<_>>();
+    bases.sort();
+    assert_eq!(
+        bases,
+        vec![
+            vec!["(Intercept)".to_string(), "x".to_string()],
+            vec!["f: a".to_string(), "f: b".to_string()],
+        ]
+    );
+    assert_eq!(model.theta().len(), 2 + 3);
     let artifact = model.compiler_artifact();
     let errors = artifact
         .diagnostics
@@ -1060,10 +1077,18 @@ fn test_zerocorr_factor_split_terms_record_no_error_diagnostics() {
         errors.is_empty(),
         "||-with-factor construction should not record error diagnostics: {errors:?}"
     );
+    // Two scalar maps for the diagonal (Intercept, x) block plus one
+    // unstructured map for the factor block.
     assert_eq!(artifact.theta_maps.len(), 3);
-    let factor_map = &artifact.theta_maps[1];
+    let factor_map = &artifact.theta_maps[2];
+    assert!(matches!(factor_map, ThetaMap::FullCholesky(_)));
     assert_eq!(factor_map.block().user_basis, vec!["f".to_string()]);
-    assert_eq!(factor_map.block().theta_slots[0].lambda_row, 1);
+    assert_eq!(
+        factor_map.block().optimizer_basis,
+        vec!["f: a".to_string(), "f: b".to_string()]
+    );
+    assert_eq!(factor_map.n_free(), 3);
+    assert_eq!(factor_map.block().theta_slots[0].lambda_row, 0);
     let total_free: usize = artifact.theta_maps.iter().map(|map| map.n_free()).sum();
     assert_eq!(total_free, model.theta().len());
 
@@ -4544,6 +4569,86 @@ fn test_jac_vcov_beta_varpar_returns_symmetric_matrices_and_sigma_derivative() {
 }
 
 #[test]
+fn test_analytic_jac_vcov_beta_varpar_matches_central_differences() {
+    let mut rng = StdRng::seed_from_u64(91);
+    let n = 240;
+    let mut synthetic = DataFrame::new();
+    let g: Vec<String> = (0..n).map(|i| format!("g{}", i % 12)).collect();
+    let h: Vec<String> = (0..n)
+        .map(|_| format!("h{}", rng.gen_range(0..9)))
+        .collect();
+    let x: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+    let z: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| {
+            1.0 + 0.5 * x[i] - 0.3 * z[i]
+                + 0.4 * ((i % 12) as f64 - 6.0) / 6.0 * (1.0 + x[i])
+                + rng.gen_range(-1.0..1.0)
+        })
+        .collect();
+    let weights: Vec<f64> = (0..n).map(|_| rng.gen_range(0.5..2.0)).collect();
+    synthetic.add_categorical("g", g).unwrap();
+    synthetic.add_categorical("h", h).unwrap();
+    synthetic.add_numeric("x", x).unwrap();
+    synthetic.add_numeric("z", z).unwrap();
+    synthetic.add_numeric("y", y).unwrap();
+
+    let cases: Vec<(DataFrame, &str, Option<Vec<f64>>)> = vec![
+        (
+            sleepstudy_fixture(),
+            "reaction ~ 1 + days + (1 + days | subj)",
+            None,
+        ),
+        (
+            sleepstudy_fixture(),
+            "reaction ~ 1 + days + (1 | subj)",
+            None,
+        ),
+        (
+            pastes_fixture(),
+            "strength ~ 1 + (1 | batch) + (1 | batch_cask)",
+            None,
+        ),
+        (
+            synthetic.clone(),
+            "y ~ 1 + x + z + (1 + x | g) + (1 | h)",
+            None,
+        ),
+        (
+            synthetic,
+            "y ~ 1 + x + z + (1 + x | g) + (1 | h)",
+            Some(weights),
+        ),
+    ];
+    for (data, formula, weights) in cases {
+        let mut model =
+            LinearMixedModel::new(parse_formula(formula).unwrap(), &data, weights.as_deref())
+                .unwrap();
+        model.fit(true).unwrap();
+        let fitted = fitted_varpar(&model);
+        // At the optimum and at a nearby interior point.
+        let perturbed: Vec<f64> = fitted.iter().map(|v| v * 1.07 + 0.01).collect();
+        for varpar in [fitted, perturbed] {
+            let theta_before = model.theta();
+            let analytic = model.jac_vcov_beta_varpar(&varpar).unwrap();
+            let numeric = model
+                .jac_vcov_beta_varpar_finite_difference(&varpar)
+                .unwrap();
+            assert_eq!(model.theta(), theta_before);
+            assert_eq!(analytic.len(), numeric.len());
+            for (index, (a, b)) in analytic.iter().zip(&numeric).enumerate() {
+                let scale = b.amax().max(1e-12);
+                let diff = (a - b).amax() / scale;
+                assert!(
+                    diff < 1e-6,
+                    "{formula} varpar[{index}]: relative diff {diff:e}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn test_vcov_varpar_estimate_returns_hessian_diagnostics_and_restores_state() {
     let data = sleepstudy_fixture();
     let formula = parse_formula("reaction ~ 1 + days + (1 + days | subj)").unwrap();
@@ -4681,6 +4786,97 @@ fn test_kenward_roger_sigma_g_vector_random_effect_components() {
         residual_variance,
         epsilon = 1e-6
     );
+}
+
+/// The Woodbury (no `n x n`) Kenward-Roger ingredients and adjusted
+/// covariance must match the original dense formulation.
+#[test]
+fn test_kenward_roger_low_rank_matches_dense_reference() {
+    let mut rng = StdRng::seed_from_u64(1234);
+    let n = 150;
+    let mut synthetic = DataFrame::new();
+    let g: Vec<String> = (0..n).map(|i| format!("g{}", i % 10)).collect();
+    let h: Vec<String> = (0..n)
+        .map(|_| format!("h{}", rng.gen_range(0..7)))
+        .collect();
+    let x: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| {
+            2.0 + 0.7 * x[i]
+                + ((i % 10) as f64 - 4.5) * 0.4 * (1.0 + 0.5 * x[i])
+                + rng.gen_range(-1.0..1.0)
+        })
+        .collect();
+    synthetic.add_categorical("g", g).unwrap();
+    synthetic.add_categorical("h", h).unwrap();
+    synthetic.add_numeric("x", x).unwrap();
+    synthetic.add_numeric("y", y).unwrap();
+
+    let cases: Vec<(DataFrame, &str)> = vec![
+        (
+            sleepstudy_fixture(),
+            "reaction ~ 1 + days + (1 + days | subj)",
+        ),
+        (sleepstudy_fixture(), "reaction ~ 1 + days + (1 | subj)"),
+        (
+            pastes_fixture(),
+            "strength ~ 1 + (1 | batch) + (1 | batch_cask)",
+        ),
+        (
+            penicillin_fixture(),
+            "diameter ~ 1 + (1 | plate) + (1 | sample)",
+        ),
+        (synthetic.clone(), "y ~ 1 + x + (1 + x | g) + (1 | h)"),
+        (synthetic, "y ~ 1 + x + (1 | g) + (0 + x | g) + (1 | h)"),
+    ];
+    let rel = |a: &DMatrix<f64>, b: &DMatrix<f64>| (a - b).amax() / b.amax().max(1e-300);
+    for (data, formula) in cases {
+        let mut model =
+            LinearMixedModel::new(parse_formula(formula).unwrap(), &data, None).unwrap();
+        model.fit(true).unwrap();
+        let x = model.feterm.full_rank_x().into_owned();
+        let low = model.kenward_roger_ingredients(&x).unwrap();
+        let dense = model.kenward_roger_ingredients_dense(&x).unwrap();
+        assert_eq!(low.component_labels, dense.component_labels, "{formula}");
+        assert!(rel(&low.ktrace, &dense.ktrace) < 1e-9, "{formula}: ktrace");
+        for (a, b) in low.p_matrices.iter().zip(&dense.p_matrices) {
+            assert!(rel(a, b) < 1e-9, "{formula}: P {:e}", rel(a, b));
+        }
+        assert_eq!(low.q_matrices.len(), dense.q_matrices.len());
+        for (a, b) in low.q_matrices.iter().zip(&dense.q_matrices) {
+            assert!(rel(a, b) < 1e-9, "{formula}: Q {:e}", rel(a, b));
+        }
+
+        let adjusted = model.kenward_roger_adjusted_vcov().unwrap();
+        let phi = adjusted.unadjusted_vcov_active.clone();
+        let reference = model
+            .kenward_roger_adjusted_from_ingredients(phi, dense)
+            .unwrap();
+        assert!(
+            rel(
+                &adjusted.adjusted_vcov_active,
+                &reference.adjusted_vcov_active
+            ) < 1e-9,
+            "{formula}: adjusted vcov"
+        );
+        assert!(rel(&adjusted.w, &reference.w) < 1e-8, "{formula}: W");
+        for row in 0..model.coef_names().len() {
+            let mut l = DMatrix::zeros(1, model.coef_names().len());
+            l[(0, row)] = 1.0;
+            let a = model
+                .kenward_roger_lbddf_with_adjusted(&l, &adjusted)
+                .unwrap();
+            let b = model
+                .kenward_roger_lbddf_with_adjusted(&l, &reference)
+                .unwrap();
+            assert!(
+                (a.denominator_df - b.denominator_df).abs() <= 1e-8 * b.denominator_df.abs(),
+                "{formula}: ddf {} vs {}",
+                a.denominator_df,
+                b.denominator_df
+            );
+        }
+    }
 }
 
 #[test]
@@ -7382,4 +7578,71 @@ fn weighted_lmm_simulation_scales_residual_noise_by_weights() {
         }
     }
     assert!(light > 2.0 * heavy, "light={light} heavy={heavy}");
+}
+
+#[test]
+fn reml_logdet_treats_non_positive_lxx_pivot_as_infeasible() {
+    let df = dyestuff_fixture();
+    let formula = parse_formula("yield ~ 1 + (1 | batch)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &df, None).unwrap();
+    model.fit(true).unwrap();
+    let (logdet, _) = model.determinant_term_and_pwrss_for_reml(true);
+    assert!(logdet.is_finite());
+
+    let k = model.reterms.len();
+    let mut last = model.l_blocks[block_index(k, k)].as_dense();
+    last[(0, 0)] = 0.0;
+    model.l_blocks[block_index(k, k)] = MatrixBlock::Dense(last);
+    let (logdet, _) = model.determinant_term_and_pwrss_for_reml(true);
+    assert_eq!(logdet, f64::INFINITY);
+    // ML ignores L_XX and is unaffected.
+    let (ml_logdet, _) = model.determinant_term_and_pwrss_for_reml(false);
+    assert!(ml_logdet.is_finite());
+}
+
+#[test]
+fn unused_grouping_levels_are_dropped_like_lme4() {
+    let base = dyestuff_fixture();
+    let batch = base.categorical("batch").unwrap();
+    let mut declared = batch.levels.clone();
+    declared.insert(1, "unused_a".to_string());
+    declared.push("unused_b".to_string());
+    let mut df = DataFrame::new();
+    df.add_numeric("yield", base.numeric("yield").unwrap().to_vec())
+        .unwrap();
+    df.add_categorical_with_levels("batch", batch.values.clone(), declared)
+        .unwrap();
+
+    let formula = parse_formula("yield ~ 1 + (1 | batch)").unwrap();
+    let mut with_unused = LinearMixedModel::new(formula.clone(), &df, None).unwrap();
+    with_unused.fit(true).unwrap();
+    let mut reference = LinearMixedModel::new(formula, &base, None).unwrap();
+    reference.fit(true).unwrap();
+
+    assert_eq!(with_unused.reterms[0].n_levels(), batch.levels.len());
+    assert_eq!(with_unused.reterms[0].levels, batch.levels);
+    assert_relative_eq!(
+        with_unused.objective(),
+        reference.objective(),
+        epsilon = 1e-8
+    );
+    assert_eq!(with_unused.ranef_b()[0].ncols(), batch.levels.len());
+
+    // A level that was declared but never observed is a new level at
+    // prediction time.
+    let mut newdata = DataFrame::new();
+    newdata.add_numeric("yield", vec![0.0, 0.0]).unwrap();
+    newdata
+        .add_categorical(
+            "batch",
+            vec![batch.levels[0].clone(), "unused_a".to_string()],
+        )
+        .unwrap();
+    assert!(with_unused
+        .predict_new(&newdata, NewReLevels::Error)
+        .is_err());
+    let pred = with_unused
+        .predict_new(&newdata, NewReLevels::Population)
+        .unwrap();
+    assert_eq!(pred.len(), 2);
 }

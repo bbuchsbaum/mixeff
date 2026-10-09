@@ -3,8 +3,12 @@
 #' `revive()` restores the process-local parts of a `mixeff` object after
 #' `saveRDS()` / `readRDS()` or a worker restart. The fitted artifact and flat
 #' extractor values are the durable source of truth; the Rust handle is only a
-#' cache and may be absent. In the current bridge, revival recreates the lazy
-#' R-side cache and explicitly leaves `rust_handle = NULL`.
+#' cache and may be absent. Revival recreates the lazy R-side cache, keeps a
+#' live native handle, and clears a dead one (an external pointer restored by
+#' `readRDS()`); it does not refit the model. Without a live handle,
+#' computations that need the engine model (contrasts, `summary()` tests,
+#' predictions with intervals, profiles, bootstraps) refit it from the stored
+#' model frame, with identical results.
 #'
 #' @param fit A fitted `mm_fit` object.
 #' @param ... Reserved for future methods.
@@ -45,7 +49,9 @@ revive.mm_fit <- function(fit, ...) {
   }
 
   fit$schema <- fit$schema %||% mm_object_schema(fit$artifact)
-  fit$rust_handle <- NULL
+  if (!isTRUE(mm_handle_alive(fit$rust_handle))) {
+    fit$rust_handle <- NULL
+  }
   fit$lazy_cache <- mm_empty_lazy_cache()
   class(fit) <- unique(c(class(fit), "mm_fit", "mm_compiled"))
   fit
@@ -62,10 +68,19 @@ revive.default <- function(fit, ...) {
 
 #' Test whether a mixeff fit has a live native handle
 #'
-#' The native handle is a process-local cache. A `FALSE` result does not mean
-#' the fit is unusable: extractors read from the durable artifact and
-#' flat R-side payload, and [revive()] recreates the lazy cache after
-#' serialization.
+#' The native handle is a process-local cache of the fitted engine model,
+#' created by [lmm()] and [glmm()]. While it is alive, computations that need
+#' the engine model (contrasts, `summary()` tests, predictions with intervals,
+#' `ranef(condVar = TRUE)`, profiles, bootstraps, model comparison,
+#' [verify_convergence()]) reuse it instead of refitting. A `FALSE` result
+#' does not mean the fit is unusable: the handle does not survive
+#' `saveRDS()` / `readRDS()` or a new R process, and those computations then
+#' refit the model from the stored model frame, with identical results;
+#' extractors read from the durable artifact and flat R-side payload, and
+#' [revive()] recreates the lazy cache after serialization. Set
+#' `options(mixeff.keep_handle = FALSE)` before fitting to not keep handles
+#' (each one holds a copy of the model data for as long as the fit object
+#' lives).
 #'
 #' @param fit A fitted `mm_fit` object.
 #' @param ... Reserved for future methods.
@@ -80,8 +95,7 @@ fit_handle_alive <- function(fit, ...) {
 #' @rdname fit_handle_alive
 #' @export
 fit_handle_alive.mm_fit <- function(fit, ...) {
-  ptr <- fit$rust_handle
-  !is.null(ptr) && identical(typeof(ptr), "externalptr")
+  isTRUE(mm_handle_alive(fit$rust_handle))
 }
 
 #' @export

@@ -210,7 +210,12 @@ glmm <- function(formula,
     engine_family <- mm_glmm_nb_engine_spec(family_info)
   }
 
-  spec <- compile_model(engine_formula, data)
+  compiled <- mm_compile_model(
+    engine_formula, data,
+    call = quote(compile_model(formula = engine_formula, data = data)),
+    for_fit = TRUE
+  )
+  spec <- compiled$spec
   spec$expansion <- mprep$expansion
   mm_validate_fit_structure(spec, lmm = FALSE)
   mm_scaling_advisory(spec, control$verbose)
@@ -244,7 +249,10 @@ glmm <- function(formula,
     }
   }
 
-  spec_data <- mm_translate_data(spec$model_frame)
+  # The engine fits from the spec compiled above; the data columns cross the
+  # bridge only when it could not compile ahead (no spec handle).
+  spec_data <- if (is.null(compiled$handle)) compiled$spec_data else mm_empty_spec_data()
+  compiled$spec_data <- NULL
   formula_string <- mm_coerce_formula_string(engine_formula)
   control_json <- jsonlite::toJSON(unclass(control), auto_unbox = TRUE,
                                    null = "null", digits = NA)
@@ -264,7 +272,9 @@ glmm <- function(formula,
       spec_data$categorical_ordered,
       mm_bridge_weights(weights),
       mm_bridge_weights(offset),
-      as.character(control_json)
+      as.character(control_json),
+      compiled$handle,
+      mm_keep_handle()
     ),
     error = function(cnd) cnd
   )
@@ -282,6 +292,11 @@ glmm <- function(formula,
     )
   }
 
+  rust_handle <- mm_keyed_handle(
+    json$handle,
+    mm_handle_key_glmm(formula_string, engine_family, family_info$link, method,
+                       nAGQ, control_json)
+  )
   fit_result <- mm_bridge_fit_result(json, mm_json_parse_glmm_fit)
   fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
@@ -328,10 +343,11 @@ glmm <- function(formula,
     artifact       = artifact,
     # Raw payload minus the n-length vectors, which are stored once below.
     fit            = fit_result[setdiff(names(fit_result),
-                                        c("fitted", "fixed_fitted", "residuals"))],
+                                        c("fitted", "fixed_fitted", "residuals",
+                                          "handle"))],
     fit_summary    = fit_summary,
     schema         = mm_object_schema(artifact),
-    rust_handle    = NULL,
+    rust_handle    = rust_handle,
     lazy_cache     = mm_empty_lazy_cache(),
     beta           = beta,
     theta          = as.numeric(unlist(fit_result$theta, use.names = FALSE)),

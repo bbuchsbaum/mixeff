@@ -18,8 +18,17 @@ fit_handle_alive(fit, ...)
 A length-one logical value.
 }
 \description{
-The native handle is a process-local cache. A \code{FALSE} result does not mean
-the fit is unusable: extractors read from the durable artifact and
-flat R-side payload, and \code{\link[=revive]{revive()}} recreates the lazy cache after
-serialization.
+The native handle is a process-local cache of the fitted engine model,
+created by \code{\link[=lmm]{lmm()}} and \code{\link[=glmm]{glmm()}}. While it is alive, computations that need
+the engine model (contrasts, \code{summary()} tests, predictions with intervals,
+\code{ranef(condVar = TRUE)}, profiles, bootstraps, model comparison,
+\code{\link[=verify_convergence]{verify_convergence()}}) reuse it instead of refitting. A \code{FALSE} result
+does not mean the fit is unusable: the handle does not survive
+\code{saveRDS()} / \code{readRDS()} or a new R process, and those computations then
+refit the model from the stored model frame, with identical results;
+extractors read from the durable artifact and flat R-side payload, and
+\code{\link[=revive]{revive()}} recreates the lazy cache after serialization. Set
+\code{options(mixeff.keep_handle = FALSE)} before fitting to not keep handles
+(each one holds a copy of the model data for as long as the fit object
+lives).
 }

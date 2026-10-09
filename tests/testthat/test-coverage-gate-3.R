@@ -421,10 +421,14 @@ test_that("getME extra names and fit_handle_alive true path", {
   parts <- getME(fit, c("flist", "cnms", "Lambda", "mu", "y"))
   expect_true(all(c("flist", "cnms", "Lambda", "mu", "y") %in% names(parts)))
 
-  expect_false(fit_handle_alive(fit))
-  live <- fit
-  live$rust_handle <- new("externalptr")
-  expect_true(fit_handle_alive(live))
+  # Fresh fits keep a live engine handle; a NULL external pointer (what
+  # readRDS() restores) is not alive.
+  expect_true(fit_handle_alive(fit))
+  dead <- fit
+  dead$rust_handle <- new("externalptr")
+  expect_false(fit_handle_alive(dead))
+  dead$rust_handle <- NULL
+  expect_false(fit_handle_alive(dead))
 
   sch <- mixeff:::mm_object_schema(fit$artifact)
   expect_true(is.list(sch) && "schema_name" %in% names(sch))

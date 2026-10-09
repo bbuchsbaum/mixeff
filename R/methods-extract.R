@@ -333,9 +333,11 @@ mm_cond_var_postvars <- function(fit) {
 }
 
 mm_compute_cond_var_postvars <- function(fit) {
-  spec_data <- mm_translate_data(mm_engine_frame(fit))
   formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- mm_refit_control_json(fit)
+  handle <- mm_lmm_live_handle(fit, formula_string = formula_string,
+                               control_json = control_json)
+  spec_data <- mm_bridge_spec_data(fit, handle)
 
   json <- tryCatch(
     .Call(
@@ -348,7 +350,8 @@ mm_compute_cond_var_postvars <- function(fit) {
       spec_data$categorical_levels,
       spec_data$categorical_ordered,
       mm_bridge_weights(fit$weights),
-      as.character(control_json)
+      as.character(control_json),
+      handle
     ),
     error = function(cnd) cnd
   )

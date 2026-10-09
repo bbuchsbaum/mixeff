@@ -63,8 +63,17 @@
 #'
 #' @export
 compile_model <- function(formula, data) {
-  call <- match.call()
+  mm_compile_model(formula, data, call = match.call())$spec
+}
 
+# Shared body of compile_model(). With `for_fit = TRUE` (lmm()/glmm()) the
+# engine compiles through its `CompiledModelSpec` and also returns an external
+# pointer to the compiled spec, which the fit entry point consumes: the
+# formula is compiled and the design audited once per fit, and the data is
+# translated once. Returns list(spec, spec_data, handle); `handle` is NULL
+# when the engine could not compile ahead of the fit (the fit then compiles
+# from `spec_data` and raises its usual typed error).
+mm_compile_model <- function(formula, data, call, for_fit = FALSE) {
   if (!inherits(formula, "formula")) {
     mm_abort(
       message = "`formula` must be a two-sided R formula (lhs ~ rhs).",
@@ -108,7 +117,7 @@ compile_model <- function(formula, data) {
 
   json <- tryCatch(
     .Call(
-      wrap__mm_compile_model_json,
+      if (isTRUE(for_fit)) wrap__mm_compile_model_spec else wrap__mm_compile_model_json,
       formula_string,
       spec_data$column_order,
       spec_data$numeric_columns,
@@ -131,6 +140,11 @@ compile_model <- function(formula, data) {
     )
   }
 
+  handle <- NULL
+  if (is.list(json)) {
+    handle <- json$handle
+    json <- json$json
+  }
   artifact <- mm_json_parse_artifact(json)
 
   spec <- list(
@@ -141,7 +155,7 @@ compile_model <- function(formula, data) {
     artifact    = artifact
   )
   class(spec) <- c("mm_spec", "mm_compiled")
-  spec
+  list(spec = spec, spec_data = spec_data, handle = handle)
 }
 
 #' @method print mm_spec

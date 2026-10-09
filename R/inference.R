@@ -1319,7 +1319,8 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         as.integer(ncol(L)),
         as.character(rownames(L)),
         as.numeric(rhs),
-        as.character(bootstrap_json)
+        as.character(bootstrap_json),
+        bridge$handle
       ),
       error = function(cnd) cnd
     )
@@ -1340,7 +1341,8 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         as.integer(ncol(L)),
         as.character(rownames(L)),
         as.numeric(rhs),
-        method
+        method,
+        bridge$handle
       ),
       error = function(cnd) cnd
     )
@@ -1377,7 +1379,8 @@ mm_rust_term_table <- function(fit, method, type = "III") {
       bridge$weights,
       bridge$control_json,
       method,
-      mm_fixed_effect_term_type_label(type)
+      mm_fixed_effect_term_type_label(type),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -1424,14 +1427,26 @@ mm_fixed_effect_term_type_label <- function(type) {
   )
 }
 
-mm_rust_fit_bridge_payload <- function(fit, warm_start = FALSE) {
-  spec_data <- mm_translate_data(mm_engine_frame(fit))
+# Bridge arguments for an engine-side refit of an LMM `fit` under `reml`.
+# When the fit's live native handle matches that refit (R/handle.R), the
+# payload carries it as `handle` and the model frame is not translated (the
+# engine reuses the live model); `need_data = TRUE` translates it anyway, for
+# verbs that also fit another model to the same data.
+mm_rust_fit_bridge_payload <- function(fit, warm_start = FALSE,
+                                       reml = isTRUE(fit$REML),
+                                       need_data = FALSE) {
   formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
+  control_json <- mm_refit_control_json(fit, warm_start = warm_start)
+  handle <- mm_lmm_live_handle(fit, reml = reml,
+                               formula_string = formula_string,
+                               control_json = control_json)
   list(
-    spec_data = spec_data,
+    spec_data = mm_bridge_spec_data(fit, handle, need_data = need_data),
     formula_string = formula_string,
     weights = mm_bridge_weights(fit$weights),
-    control_json = mm_refit_control_json(fit, warm_start = warm_start)
+    control_json = control_json,
+    REML = isTRUE(reml),
+    handle = handle
   )
 }
 
@@ -1758,7 +1773,8 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
       as.character(rownames(L)),
       0,
       as.character(bootstrap_json),
-      as.numeric(level)
+      as.numeric(level),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -1870,7 +1886,8 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
       as.integer(ncol(L)),
       as.character(term),
       as.numeric(rhs),
-      as.character(bootstrap_json)
+      as.character(bootstrap_json),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -1917,7 +1934,9 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
       reason_code = "bootstrap_lrt_reduced_formula_failed"
     ))
   }
-  bridge <- mm_rust_fit_bridge_payload(fit)
+  # The reduced model is fitted to the same data, so translate it even when
+  # the (ML) alternative is served from its live handle.
+  bridge <- mm_rust_fit_bridge_payload(fit, reml = FALSE, need_data = TRUE)
   bootstrap_json <- jsonlite::toJSON(
     mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
@@ -1934,7 +1953,8 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
       bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.character(bootstrap_json)
+      as.character(bootstrap_json),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -2257,7 +2277,7 @@ mm_profile_confint <- function(fit, parm = NULL, level = 0.95, threads = 1L) {
 
 mm_profile_confint_payload <- function(fit, level, threads = 1L,
                                        reml = isTRUE(fit$REML)) {
-  bridge <- mm_rust_fit_bridge_payload(fit)
+  bridge <- mm_rust_fit_bridge_payload(fit, reml = reml)
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_profile_confint_json,
@@ -2271,7 +2291,8 @@ mm_profile_confint_payload <- function(fit, level, threads = 1L,
       bridge$weights,
       bridge$control_json,
       as.numeric(level),
-      as.integer(threads)
+      as.integer(threads),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )

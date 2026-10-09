@@ -218,7 +218,10 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL,
   }
   mm_assert_bootstrap_lrt_pair(null, alternative)
   bootstrap <- bootstrap_control(nsim = nsim, seed = seed, threads = threads)
-  bridge <- mm_rust_fit_bridge_payload(alternative)
+  # The null model is refitted to the alternative's data, so translate it even
+  # when the (ML) alternative is served from its live handle.
+  bridge <- mm_rust_fit_bridge_payload(alternative, reml = FALSE,
+                                       need_data = TRUE)
   bootstrap_json <- jsonlite::toJSON(
     mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
@@ -235,7 +238,8 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL,
       bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.character(bootstrap_json)
+      as.character(bootstrap_json),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -500,7 +504,8 @@ mm_anova_joint_f <- function(fit, L, method, label) {
     as.integer(ncol(L)),
     label,
     rep(0, nrow(L)),
-    method
+    method,
+    bridge$handle
   )
   row <- mm_json_parse_fixed_effect_inference_table(
     jsonlite::fromJSON(json, simplifyVector = FALSE)

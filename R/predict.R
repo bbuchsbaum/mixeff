@@ -775,9 +775,11 @@ mm_prediction_target <- function(re.form) {
 mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
 
-  spec_data <- mm_translate_data(mm_engine_frame(fit))
   formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- mm_refit_control_json(fit)
+  handle <- mm_lmm_live_handle(fit, formula_string = formula_string,
+                               control_json = control_json)
+  spec_data <- mm_bridge_spec_data(fit, handle)
   new_data <- mm_translate_data(mm_engine_newdata(fit, newdata))
 
   json <- tryCatch(
@@ -802,7 +804,8 @@ mm_predict_conditional_newdata <- function(fit, newdata, allow_new_levels) {
       # no-op that could only spuriously error on an ordered newdata column
       # observed at <2 levels. Training flags (above) drive the coding.
       character(0),
-      policy
+      policy,
+      handle
     ),
     error = function(cnd) cnd
   )
@@ -925,13 +928,16 @@ mm_parse_prediction_variance <- function(json, n) {
 # (the training model frame for in-sample, or user `newdata`).
 mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
-  spec_data <- mm_translate_data(mm_engine_frame(fit))
-  new_data <- mm_translate_data(mm_engine_newdata(fit, se_data))
+  formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- mm_refit_control_json(fit)
+  handle <- mm_lmm_live_handle(fit, formula_string = formula_string,
+                               control_json = control_json)
+  spec_data <- mm_bridge_spec_data(fit, handle)
+  new_data <- mm_translate_data(mm_engine_newdata(fit, se_data))
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_predict_new_variance_json,
-      mm_coerce_formula_string(mm_engine_formula(fit)),
+      formula_string,
       isTRUE(fit$REML),
       spec_data$column_order,
       spec_data$numeric_columns,
@@ -951,7 +957,8 @@ mm_lmm_prediction_variance <- function(fit, se_data, allow_new_levels, level) {
       # observed at <2 levels. Training flags (above) drive the coding.
       character(0),
       policy,
-      as.numeric(level)
+      as.numeric(level),
+      handle
     ),
     error = function(cnd) cnd
   )
@@ -981,14 +988,19 @@ mm_glmm_engine_family <- function(fit) {
 # new-level rows come back with se_fit = NA and a reason.
 mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, level) {
   policy <- if (isTRUE(allow_new_levels)) "population" else "error"
-  spec_data <- mm_translate_data(mm_engine_frame(fit))
-  new_data <- mm_translate_data(mm_engine_newdata(fit, se_data))
+  formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- mm_refit_control_json(fit)
+  family <- mm_glmm_engine_family(fit)
+  handle <- mm_glmm_live_handle(fit, family, fit$family$link, fit$method,
+                                fit$nAGQ, formula_string = formula_string,
+                                control_json = control_json)
+  spec_data <- mm_bridge_spec_data(fit, handle)
+  new_data <- mm_translate_data(mm_engine_newdata(fit, se_data))
   json <- tryCatch(
     .Call(
       wrap__mm_glmm_predict_new_variance_json,
-      mm_coerce_formula_string(mm_engine_formula(fit)),
-      mm_glmm_engine_family(fit),
+      formula_string,
+      family,
       fit$family$link,
       fit$method,
       as.integer(fit$nAGQ),
@@ -1012,7 +1024,8 @@ mm_glmm_prediction_variance <- function(fit, se_data, scale, allow_new_levels, l
       character(0),
       scale,
       policy,
-      as.numeric(level)
+      as.numeric(level),
+      handle
     ),
     error = function(cnd) cnd
   )

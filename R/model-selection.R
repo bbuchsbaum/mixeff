@@ -76,7 +76,7 @@ mm_compare_fixed_f <- function(small, big, method) {
   } else {
     big
   }
-  bridge <- mm_rust_fit_bridge_payload(fit_kr)
+  bridge <- mm_rust_fit_bridge_payload(fit_kr, reml = TRUE)
   rownames(L) <- paste0("restriction_", seq_len(nrow(L)))
   json <- tryCatch(
     mm_fixed_effect_joint_test_json(
@@ -94,7 +94,8 @@ mm_compare_fixed_f <- function(small, big, method) {
       as.integer(ncol(L)),
       "small vs large model",
       rep(0, nrow(L)),
-      method
+      method,
+      bridge$handle
     ),
     error = function(cnd) cnd
   )

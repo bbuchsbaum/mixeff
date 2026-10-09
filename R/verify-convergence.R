@@ -251,15 +251,31 @@ mm_rust_glmm_verify_payload <- function(fit) {
 ## bootstrap refits the EFFECTIVE estimator (resampling the distribution of
 ## the numbers actually returned).
 mm_rust_glmm_refit_payload <- function(fit, method) {
-  payload <- mm_rust_fit_bridge_payload(fit)
-  payload$offset <- mm_bridge_weights(fit$offset)
-  payload$family <- as.character(
+  formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
+  control_json <- mm_refit_control_json(fit)
+  family <- as.character(
     fit$engine_family %||% mm_glmm_engine_family_fallback(fit)
   )
-  payload$link <- as.character(fit$family$link)
-  payload$method <- as.character(method)
-  payload$n_agq <- as.numeric(fit$nAGQ %||% 1L)
-  payload
+  link <- as.character(fit$family$link)
+  n_agq <- as.numeric(fit$nAGQ %||% 1L)
+  # The live model serves the refit only when it was fitted with exactly
+  # these estimator settings (not, e.g., the effective fallback method of a
+  # substituted fit, which the bootstrap refits cold).
+  handle <- mm_glmm_live_handle(fit, family, link, method, n_agq,
+                                formula_string = formula_string,
+                                control_json = control_json)
+  list(
+    spec_data = mm_bridge_spec_data(fit, handle),
+    formula_string = formula_string,
+    weights = mm_bridge_weights(fit$weights),
+    control_json = control_json,
+    offset = mm_bridge_weights(fit$offset),
+    family = family,
+    link = link,
+    method = as.character(method),
+    n_agq = n_agq,
+    handle = handle
+  )
 }
 
 mm_glmm_requested_method <- function(fit) {

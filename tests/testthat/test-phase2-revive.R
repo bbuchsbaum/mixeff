@@ -16,7 +16,7 @@ mk_phase2_fit <- function(seed = 20L) {
 test_that("Phase 2 fits carry cache and handle metadata", {
   fit <- mk_phase2_fit()
 
-  expect_false(fit_handle_alive(fit))
+  expect_true(fit_handle_alive(fit))
   expect_true(is.environment(fit$lazy_cache))
   expect_named(fit$schema,
                c("schema_name", "schema_version", "crate_version", "package_version"))

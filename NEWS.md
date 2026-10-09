@@ -1,5 +1,41 @@
 # mixeff 0.2.0
 
+## Bridge performance: compile once, keep the fitted model (mixeff-rs bridge-perf)
+
+* `lmm()` and `glmm()` now compile the formula and audit the design once per
+  fit. The engine builds the model from the spec compiled for the pre-fit
+  explanation (`CompiledModelSpec`), so the second compile/audit pass and the
+  second translation of the data to the engine are gone. The pre-fit
+  explanation now shows the artifact the model is actually built from: for a
+  formula with in-formula transforms the engine evaluates (such as
+  `log(x)`), or a `||` term on a factor, it reports the evaluated and
+  expanded design. `compile_model()` is unchanged.
+* Fits now keep the fitted engine model as a native handle (`fit$rust_handle`,
+  see `fit_handle_alive()`). Computations that need the engine model reuse it
+  instead of rebuilding and refitting the model from the stored data:
+  `summary()` and `anova()` tests (Satterthwaite and Kenward-Roger),
+  `contrast()`, `test_effect()`, `compare()`, `test_random_effect()`,
+  `confint(method = "profile")`, bootstrap contrasts and intervals,
+  `parametric_bootstrap()`, `predict()` on new data and with intervals or
+  `se.fit` (LMMs and GLMMs), `ranef(condVar = TRUE)`, GLMM bootstrap
+  intervals, and `verify_convergence()`. Results are identical to the cold
+  refit. Profiles and convergence checks work on a copy, so the cached model
+  never changes. These calls stay interruptible. On a 200,000-row crossed
+  LMM, `contrast()` drops from 0.39 s to 0.002 s, `predict(newdata,
+  interval = "prediction")` from 0.70 s to 0.04 s and `summary()` by the
+  0.45 s refit. On a 3,000-row binomial GLMM, `predict(newdata, se.fit = TRUE)`
+  drops from 0.44 s to 0.006 s.
+* The handle is a process-local cache. It does not survive `saveRDS()` /
+  `readRDS()` or a new R process. Those fits, and fits where the handle does
+  not match the requested refit (for example a profile under ML of a REML
+  fit), fall back to the cold refit automatically, with identical results.
+  `revive()` keeps a live handle and clears a dead one. Copies of a fit share
+  the handle.
+* Memory: the handle keeps the engine model, including a copy of the model
+  data, alive for as long as the fit object, outside R's heap. To fit without
+  keeping handles, set `options(mixeff.keep_handle = FALSE)`.
+  `update()` and `refit()` create new fits with their own handles.
+
 ## Engine follow-ups (mixeff-rs engine-followups)
 
 * GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and

@@ -60,6 +60,7 @@ mm_glmm_family_object <- function(fit) {
     gamma = stats::Gamma(link = link),
     Gamma = stats::Gamma(link = link),
     inverse_gaussian = stats::inverse.gaussian(link = link),
+    gaussian = stats::gaussian(link = link),
     negative_binomial = mm_nb_family(as.numeric(info$nb_theta), link),
     mm_abort(
       message = sprintf("No R family object is known for GLMM family `%s`.",
@@ -130,10 +131,17 @@ mm_glmm_resp <- function(fit) {
 }
 
 # PIRLS working weights at the converged conditional modes:
-# prior weight * mu.eta(eta)^2 / variance(mu) (lme4's Xwts^2).
+# prior weight * mu.eta(eta)^2 / variance(mu) (lme4's Xwts^2), divided by
+# the dispersion phi = sigma^2 for free-dispersion families (Gamma, inverse
+# Gaussian, Gaussian with a non-identity link), as in lme4 >= 2.1-0, whose
+# PIRLS criterion is deviance / phi + |u|^2.
 mm_glmm_working_weights <- function(fit) {
   r <- mm_glmm_resp(fit)
-  r$wt * r$family$mu.eta(r$eta)^2 / r$family$variance(r$mu)
+  w <- r$wt * r$family$mu.eta(r$eta)^2 / r$family$variance(r$mu)
+  if (mm_glmm_free_dispersion(fit)) {
+    w <- w / as.numeric(sigma(fit))^2
+  }
+  w
 }
 
 #' @rdname mm_family
@@ -569,7 +577,7 @@ mm_compute_pls <- function(fit) {
   pwrss <- wrss + ussq
   st <- mm_re_structure(fit)
   if (glmm) {
-    use_sc <- fit$family$family %in% c("gamma", "inverse_gaussian")
+    use_sc <- mm_glmm_free_dispersion(fit)
     cmp <- c(ldL2 = ldL2, ldRX2 = ldRX2, wrss = wrss, ussq = ussq,
              pwrss = pwrss, drsum = drsum, REML = NA_real_,
              dev = -2 * as.numeric(fit$logLik),
@@ -579,7 +587,12 @@ mm_compute_pls <- function(fit) {
               nth = length(fit$theta), nAGQ = as.integer(fit$nAGQ %||% 1L),
               compDev = 1L, useSc = as.integer(use_sc), reTrms = 1L,
               spFe = 0L, REML = 0L, GLMM = 1L, NLMM = 0L,
-              npar = length(fit$theta))
+              npar = length(fit$theta),
+              # lme4 >= 2.1-0 glmerControl() defaults (disp_method =
+              # "moment", maxPhiIter = 100), which the engine uses, and
+              # qEff = rank([X, Z]) for free-dispersion families (else NA).
+              dispProfile = 1L, maxPhiIter = 100L,
+              qEff = if (use_sc) mm_glmm_qeff(X, Zt) else NA_integer_)
   } else {
     reml <- isTRUE(fit$REML)
     cmp <- c(ldL2 = ldL2, ldRX2 = ldRX2, wrss = wrss, ussq = ussq,
@@ -600,8 +613,20 @@ mm_compute_pls <- function(fit) {
 
 mm_devcomp <- function(fit) mm_pls(fit)$devcomp
 
+# rank([X, Z]), the residual degrees-of-freedom correction lme4 >= 2.1-0
+# applies to the dispersion of free-dispersion GLMMs (lme4's computeQEff()).
+mm_glmm_qeff <- function(X, Zt) {
+  full <- cbind(Matrix::Matrix(X, sparse = TRUE), Matrix::t(Zt))
+  out <- tryCatch(
+    suppressWarnings(Matrix::rankMatrix(full, method = "qr"))[[1L]],
+    error = function(cnd) NA_integer_
+  )
+  as.integer(out)
+}
+
 # Conditional covariance of the random effects from the Laplace / PLS
-# decomposition: sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda',
+# decomposition: sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda'
+# (sigma^2 = 1 for GLMMs),
 # returned per grouping factor as lme4's p x p x nlevels postVar arrays.
 mm_r_cond_var_postvars <- function(fit) {
   pls <- mm_pls(fit)
@@ -610,7 +635,12 @@ mm_r_cond_var_postvars <- function(fit) {
   # M'M = Lambda A^{-1} Lambda' with M = L^{-1} P Lambda'
   M <- Matrix::solve(pls$L, Matrix::solve(pls$L, Lt, system = "P"),
                      system = "L")
-  s2 <- as.numeric(sigma(fit))^2
+  # GLMMs: the PIRLS weights already carry 1/phi for free-dispersion
+  # families and Lambda is on the absolute scale, so no sigma^2 factor
+  # (lme4 2.1-0's ranef(condVar = TRUE) still multiplies by sigma()^2 for
+  # Gamma / inverse-Gaussian / Gaussian-link fits; mixeff does not copy that,
+  # consistent with vcov()).
+  s2 <- if (inherits(fit, "mm_glmm")) 1 else as.numeric(sigma(fit))^2
   out <- list()
   offset <- 0L
   for (tm in st$terms) {
@@ -909,9 +939,12 @@ mm_varcorr_lme4 <- function(vc, fit) {
                   use.names = FALSE)
          } else numeric())
   })
+  # lme4 >= 2.1-0: useSc is FALSE for every GLMM (no Residual row; the
+  # random-effect SDs are absolute, never multiplied by sigma) while `sc`
+  # keeps sigma() -- sqrt(phi) for free-dispersion families, else 1.
   glmm <- inherits(fit, "mm_glmm")
-  use_sc <- if (glmm) fit$family$family %in% c("gamma", "inverse_gaussian") else TRUE
-  sc <- if (use_sc) as.numeric(sigma(fit)) else 1
+  use_sc <- !glmm
+  sc <- as.numeric(sigma(fit))
   attr(mats, "sc") <- sc
   attr(mats, "useSc") <- use_sc
   attr(mats, "mm_table") <- vc$table

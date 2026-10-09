@@ -34,14 +34,19 @@
 #' `VarCorr.merMod` structure: a named list of covariance matrices (one per
 #' random-effect term, so `VarCorr(fit)$Subject` is a matrix) with
 #' `"stddev"` and `"correlation"` attributes and list attributes `"sc"`
-#' (residual standard deviation) and `"useSc"`; it prints like lme4 and
+#' (`sigma()`) and `"useSc"` (`TRUE` for LMMs; `FALSE` for every GLMM, as in
+#' lme4 >= 2.1-0, so GLMM random-effect SDs are absolute and no Residual row
+#' is printed); it prints like lme4 and
 #' `as.data.frame()` gives lme4's long form. mixeff's full-precision long
 #' table remains available as `VarCorr(fit)$table` (with `$residual_sd`).
 #' `sigma()` of a binomial, Poisson or negative-binomial GLMM is 1, as in
-#' lme4 (the negative-binomial theta is `getME(fit, "glmer.nb.theta")`); for
-#' Gamma GLMMs it is mixeff's dispersion estimate `sqrt(sum(pearson^2) / n)`,
-#' whereas lme4 also adds the squared spherical random effects to the
-#' numerator. `deviance()` of a GLMM is the sum of squared deviance
+#' lme4 (the negative-binomial theta is `getME(fit, "glmer.nb.theta")`). For
+#' GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and
+#' Gaussian with a non-identity link) it is `sqrt(phi)` with
+#' `phi = sum(deviance residuals^2) / (n - rank([X, Z]))`, the dispersion
+#' profiled during the fit, as in lme4 >= 2.1-0 (`glmerControl()` defaults
+#' `disp_method = "moment"`, `disp_dof_correction = TRUE`; lme4 < 2.1-0 used
+#' a different, biased estimate). `deviance()` of a GLMM is the sum of squared deviance
 #' residuals, as `lme4::deviance.merMod()`; `-2 * logLik()` is the Laplace
 #' objective reported in `anova()`. `model.frame()` returns lme4's frame
 #' (transformed columns such as `log(y)`, a `terms` attribute, `(weights)`
@@ -60,6 +65,15 @@
 #' `"low"` and the engine's notes (`attr(, "mm_notes")`), and `vcov()` warns
 #' (class `mm_vcov_rx_fallback`). Such standard errors ignore the
 #' uncertainty in the covariance parameters.
+#'
+#' Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+#' (Gamma, inverse Gaussian, Gaussian with a non-identity link) the
+#' penalized least-squares factor already carries the `1 / phi` working
+#' weights, so mixeff's RX-based `vcov()` (`nAGQ = 0` fits, and the
+#' fallback above) is `unsc()` with no further `sigma^2` factor. lme4 >= 2.1-0
+#' still multiplies by `sigma()^2` there (and in `ranef(condVar = TRUE)`), so
+#' those values differ from lme4 2.1's by the factor `phi = sigma()^2`;
+#' Hessian-based `vcov()` values agree.
 #'
 #' @examples
 #' set.seed(1)
@@ -197,8 +211,9 @@ ranef.mm_glmm <- function(object, condVar = FALSE, ...) {
   object$random_effects <- mm_ranef_lme4_order(object, object$random_effects)
   if (isTRUE(condVar)) {
     # Conditional variances from the Laplace approximation at the fitted
-    # modes: sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda' with the
-    # final PIRLS working weights W (lme4's condVar for glmer fits).
+    # modes: Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda' with the final
+    # PIRLS working weights W (lme4's condVar for glmer fits; W carries
+    # 1/phi for free-dispersion families).
     postvars <- tryCatch(
       mm_r_cond_var_postvars(object),
       error = function(cnd) cnd
@@ -521,13 +536,30 @@ sigma.mm_lmm <- function(object, ...) {
 #' @export
 sigma.mm_glmm <- function(object, ...) {
   # lme4: sigma() is the residual scale only for families with a free scale
-  # parameter (Gamma, inverse Gaussian); binomial, Poisson and
+  # parameter (Gamma, inverse Gaussian, Gaussian with a non-identity link),
+  # where lme4 >= 2.1-0 and the engine report sqrt(phi) with
+  # phi = deviance / (n - rank([X, Z])); binomial, Poisson and
   # negative-binomial fits return 1.
   # The negative-binomial theta is getME(fit, "glmer.nb.theta").
-  if (object$family$family %in% c("gamma", "inverse_gaussian")) {
+  if (mm_glmm_free_dispersion(object)) {
     return(object$sigma)
   }
   1
+}
+
+# TRUE when a GLMM's family has a free (estimated) dispersion parameter phi:
+# Gamma, inverse Gaussian, and Gaussian with a non-identity link (a Gaussian
+# identity-link model is an LMM). For these lme4 >= 2.1-0 profiles phi,
+# divides the PIRLS working weights by it, reports sigma() = sqrt(phi) and
+# unscaled random-effect SDs; the engine does the same.
+mm_glmm_free_dispersion <- function(fit) {
+  fam <- fit$family
+  family <- as.character(fam$family %||% "")
+  if (family %in% c("gamma", "Gamma", "inverse_gaussian", "inverse.gaussian")) {
+    return(TRUE)
+  }
+  identical(family, "gaussian") &&
+    !identical(as.character(fam$link %||% "identity"), "identity")
 }
 
 # Refuse recognized-but-unsupported lme4 arguments that `...` would otherwise

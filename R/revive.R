@@ -271,7 +271,9 @@ mm_glmm_rx_fallback_message <- function(notes = character()) {
 
 mm_rank_deficient_vcov <- function(object, kept) {
   RX <- mm_pls(object)$RX
-  V <- as.numeric(sigma(object))^2 * chol2inv(RX)
+  # GLMM RX already carries the 1/phi working weights (engine unsc()).
+  s2 <- if (inherits(object, "mm_glmm")) 1 else as.numeric(sigma(object))^2
+  V <- s2 * chol2inv(RX)
   dimnames(V) <- list(colnames(RX), colnames(RX))
   V <- V[kept, kept, drop = FALSE]
   # Cross-check against the engine's own standard errors.

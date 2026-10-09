@@ -15,11 +15,8 @@
 #   probit        max|fixef diff| 7.4e-06, |logLik diff| 8.2e-06
 #   cloglog       max|fixef diff| 2.2e-04, |logLik diff| 1.9e-04
 #   poisson-sqrt  max|fixef diff| 5.7e-06, |logLik diff| 7.1e-06
-#   Gamma-log     max|fixef diff| 5.8e-04, |logLik diff| ~1.0 (see FINDING
-#                 in the Gamma test: the logLik gap is a dispersion-handling
-#                 convention difference, and glmer itself is off the exact
-#                 marginal likelihood for Gamma; fixef-slope agreement is
-#                 tight, so only fixef parity is asserted there)
+#   Gamma-log     compared with lme4 >= 2.1-0 (live, or its stored values
+#                 when an older lme4 is installed); see the Gamma test
 #   logit-slope   max|fixef diff| 2.0e-05, |logLik diff| 4.6e-06,
 #                 RE sd diffs < 5e-05, corr diff < 1e-04
 #
@@ -113,58 +110,25 @@ test_that("joint_laplace matches glmer on poisson-sqrt (random intercept)", {
   mm_cells_expect_joint_parity(m, gl)
 })
 
-test_that("joint_laplace matches glmer fixed effects on Gamma-log (random intercept)", {
-  mm_skip_if_no_lme4()
-  set.seed(205)
-  ng <- 40L
-  per <- 12L
-  g <- factor(rep(seq_len(ng), each = per))
-  n <- ng * per
-  x <- rnorm(n)
-  re <- rnorm(ng, sd = 0.2)[as.integer(g)]
-  mu <- exp(1 + 0.5 * x + re)
-  y <- rgamma(n, shape = 15, rate = 15 / mu)
-  d <- data.frame(y = y, x = x, g = g)
-  gl <- lme4::glmer(y ~ x + (1 | g), d, family = Gamma(link = "log"),
-                    nAGQ = 1)
-  m <- glmm(y ~ x + (1 | g), d, family = Gamma(link = "log"),
+test_that("joint_laplace matches glmer on Gamma-log (random intercept)", {
+  # lme4 2.1-0 reworked Gamma GLMMs (profiled phi, 1/phi PIRLS weights,
+  # absolute theta, logLik without the family aic()'s +2) and the engine
+  # follows it; with lme4 < 2.1-0 installed the reference is the stored
+  # lme4 2.1-0 fit (helper-lme4-dispersion.R). Pre-2.1 glmer sat ~1.0 below
+  # mixeff's logLik and reported theta relative to sigma, so only fixef
+  # parity could be asserted then.
+  case <- mm_disp_case("cells_gamma_log")
+  ref <- mm_disp_ref("cells_gamma_log")
+  m <- glmm(case$formula, case$data(), family = case$family,
             method = "joint_laplace", control = mm_cells_control())
 
-  bg <- unname(lme4::fixef(gl))
   bm <- unname(fixef(m))
   expect_identical(m$method, "joint_laplace")
-  expect_equal(length(bm), length(bg))
-  expect_lt(max(abs(bm - bg)), 5e-3)
-  # Observed at authoring: 5.8e-4 on this DGP.
-
-  # FINDING (WI-9.3, Gamma-log logLik): the standard 5e-2 logLik tolerance is
-  # NOT asserted for the Gamma family. Across a sweep of well-conditioned
-  # Gamma DGPs (shape 5..50, RE sd 0.1..0.3, clean glmer convergence) the
-  # mixeff-vs-glmer logLik gap is a stable ~+1.0 (mixeff higher), independent
-  # of the DGP -- a systematic dispersion-handling convention difference, not
-  # noise. Independent verification on the shape=5/sd=0.3/seed=104 DGP with a
-  # 60-point Gauss-Hermite exact marginal likelihood (cross-checked by direct
-  # optimization of that exact likelihood):
-  #   exact-ML optimum:    beta (0.987, 0.482), RE sd 0.368, ll -737.11
-  #   glmmTMB:             beta (0.987, 0.482), RE sd 0.368, ll -737.13
-  #   glmer  reported ll:  -723.25 (exact ll at its estimates: -740.7)
-  #   mixeff reported ll:  -722.14 (exact ll at its estimates: -742.7)
-  # i.e. BOTH glmer and mixeff report Gamma "logLik" values that are not on
-  # the exact marginal-likelihood scale (a known lme4 Gamma caveat; the
-  # upstream mixeff-rs joint-optimizer contract explicitly states Gamma
-  # dispersion handling makes objectives non-comparable across conventions).
-  # glmer is therefore not a certifiable logLik reference for Gamma, and a
-  # naive parity assertion would enshrine one arbitrary convention. The
-  # assertion that WOULD be made under the standard tolerance is preserved
-  # here, commented out, per the audit remediation protocol:
-  # expect_lt(abs(as.numeric(logLik(m)) - as.numeric(logLik(gl))), 5e-2)
-  # Observed gap at authoring: ~1.01 on this DGP.
-  expect_true(is.finite(as.numeric(logLik(m))))
-
-  # Gamma RE-sd parity is likewise not asserted: lme4 reports Gamma VarCorr
-  # on a dispersion-scaled convention (glmer sd 0.548 vs mixeff 0.242 on the
-  # seed-104 DGP, where glmer sd * sigma = 0.255 ~ mixeff's value), so the
-  # two tables are not directly comparable.
+  expect_equal(length(bm), length(ref$fixef))
+  expect_lt(max(abs(bm - ref$fixef)), 5e-3)
+  expect_lt(abs(as.numeric(logLik(m)) - ref$logLik), 5e-2)
+  expect_equal(unname(m$theta), ref$theta, tolerance = 1e-3)
+  expect_equal(as.numeric(sigma(m)), ref$sigma, tolerance = 1e-4)
 })
 
 test_that("joint_laplace matches glmer on a binomial-logit random-slope model", {

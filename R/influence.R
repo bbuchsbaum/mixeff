@@ -24,13 +24,16 @@ mm_influence_parts <- function(model) {
     } else {
       family$variance(mu)
     }
-    working <- prior * family$mu.eta(eta)^2 / var_mu
     pearson <- (y - mu) * sqrt(prior) / sqrt(var_mu)
-    dispersion <- if (model$family$family %in% c("gamma", "inverse_gaussian")) {
+    dispersion <- if (mm_glmm_free_dispersion(model)) {
       model$dispersion^2
     } else {
       1
     }
+    # PIRLS working weights: for free-dispersion families (Gamma, inverse
+    # Gaussian, Gaussian with a non-identity link) they carry 1/phi, as in
+    # lme4 >= 2.1-0, matching the absolute-scale relative covariance factor.
+    working <- prior * family$mu.eta(eta)^2 / var_mu / dispersion
   } else {
     working <- prior
     pearson <- (y - mu) * sqrt(prior)
@@ -53,14 +56,18 @@ mm_influence_parts <- function(model) {
 #' factor and `W` the weights. For an LMM, `W` holds the prior weights and the
 #' result equals `lme4::hatvalues()` on the same fit. For a GLMM, `W` holds the
 #' working (IRLS) weights at convergence, as [stats::hatvalues()] does for a
-#' `glm`; lme4 instead combines the working weights inside the factorization
+#' `glm`. For GLMMs with a free dispersion parameter `phi` (Gamma, inverse
+#' Gaussian, Gaussian with a non-identity link) the working weights are
+#' divided by `phi`, as lme4 >= 2.1-0's `weights(fit, "working")` are, to
+#' match the absolute-scale `Lambda`; lme4 instead combines the working weights inside the factorization
 #' with the prior weights outside it, so the two differ for GLMMs (lme4 warns
 #' that its GLMM hat matrix "may not make sense").
 #'
 #' `cooks.distance()` follows `lme4`: `D_i = (r_i / (1 - h_i))^2 h_i /
 #' (phi p)` with Pearson residuals `r_i` (`(y - mu) sqrt(w) / sqrt(V(mu))`),
 #' dispersion `phi` (`sigma^2` for an LMM, 1 for binomial, Poisson and
-#' negative-binomial GLMMs, `sigma^2` for Gamma) and `p` the rank of the
+#' negative-binomial GLMMs, `sigma^2` for Gamma, inverse-Gaussian and
+#' Gaussian non-identity-link GLMMs) and `p` the rank of the
 #' fixed-effect design.
 #'
 #' `influence()` deletes one case (default) or one level of `groups` at a
@@ -273,8 +280,11 @@ influence.mm_glmm <- influence.mm_lmm
 # random term the lower triangle (by column) of its covariance matrix.
 mm_influence_vc <- function(fit) {
   terms <- fit$artifact$semantic_model$random_terms %||% list()
-  vc <- if (inherits(fit, "mm_glmm") &&
-            !fit$family$family %in% c("gamma", "inverse_gaussian")) 1 else fit$sigma^2
+  vc <- if (inherits(fit, "mm_glmm") && !mm_glmm_free_dispersion(fit)) {
+    1
+  } else {
+    fit$sigma^2
+  }
   names(vc) <- "sigma^2"
   labels <- make.unique(vapply(seq_along(terms), function(i) {
     mm_random_term_group_label(fit, terms[[i]], i)

@@ -75,13 +75,16 @@ test_that("rePCA() dispatch and GLMM scaling", {
              control = cp4r_ctrl())
   blocks <- mixeff:::mm_relative_covariance_blocks(gg)
   sd_g <- attr(VarCorr(gg)$g, "stddev")
-  expect_equal(sqrt(blocks$g[1, 1]), unname(sd_g / sigma(gg)),
-               tolerance = 1e-6)
-  # A non-finite scale falls back to the unscaled covariance.
-  bad <- gg
+  # GLMM theta is absolute for Gamma too (lme4 >= 2.1-0): no sigma rescale.
+  expect_equal(sqrt(blocks$g[1, 1]), unname(sd_g), tolerance = 1e-6)
+  expect_equal(sqrt(blocks$g[1, 1]), unname(gg$theta), tolerance = 1e-6)
+  expect_equal(rePCA(gg)$g$sdev, unname(gg$theta), tolerance = 1e-6)
+  # A non-finite LMM scale falls back to the unscaled covariance.
+  bad <- lmm(yg ~ x + (1 | g), gd, control = cp4r_ctrl())
+  sd_l <- attr(VarCorr(bad)$g, "stddev")
   bad$sigma <- NA_real_
   expect_equal(mixeff:::mm_relative_covariance_blocks(bad)$g[1, 1],
-               unname(sd_g)^2, tolerance = 1e-6)
+               unname(sd_l)^2, tolerance = 1e-6)
   # An empty basis is the intercept.
   nb <- gg
   nb$artifact$semantic_model$random_terms[[1]]$basis <- list()

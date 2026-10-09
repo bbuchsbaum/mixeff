@@ -1,17 +1,14 @@
-# PR-4 coverage: hat values / Cook's distance for NB and Gamma GLMMs (vs lme4),
+# PR-4 coverage: hat values / Cook's distance for NB and Gamma GLMMs (vs lme4
+# 2.1-0's factors),
 # multi-column and failing deletion groups, parallel deletion, and the
 # dfbeta()/dfbetas()/print() edge cases.
 
 cp4i_ctrl <- function() mm_control(verbose = -1)
 
 test_that("Gamma hat values and Cook's distances use the dispersion", {
-  set.seed(481)
-  g <- gl(8, 8)
-  x <- rnorm(64)
-  mu <- exp(1 + 0.3 * x + rnorm(8, sd = 0.4)[g])
-  d <- data.frame(x = x, g = g, yg = rgamma(64, shape = 4, rate = 4 / mu))
-  ga <- glmm(yg ~ x + (1 | g), d, family = Gamma(link = "log"),
-             control = cp4i_ctrl())
+  case <- mm_disp_case("influence_gamma_log")
+  d <- case$data()
+  ga <- glmm(case$formula, d, family = case$family, control = cp4i_ctrl())
   h <- hatvalues(ga)
   expect_true(all(h > 0 & h < 1))
   expect_gt(sum(h), 2)
@@ -23,14 +20,15 @@ test_that("Gamma hat values and Cook's distances use the dispersion", {
   expect_equal(parts$dispersion, ga$dispersion^2)
   expect_equal(unname(cg),
                unname((parts$pearson / (1 - h))^2 * h / (parts$dispersion * 2)))
-  skip_if_not_installed("lme4")
-  # lme4 2.x changed its GLMM hat values; compare with the 1.1 series only.
-  skip_if(utils::packageVersion("lme4") >= "2.0.0")
-  rga <- lme4::glmer(yg ~ x + (1 | g), d, family = Gamma(link = "log"))
-  expect_equal(unname(h), unname(suppressWarnings(hatvalues(rga))),
-               tolerance = 1e-2)
-  expect_equal(unname(cg), unname(suppressWarnings(cooks.distance(rga))),
-               tolerance = 0.05)
+  # The PIRLS working weights carry 1/phi (lme4 >= 2.1-0).
+  expect_equal(parts$working, unname(weights(ga, type = "working")))
+  # Reference: the working-weight hat matrix (mixeff's documented GLMM
+  # convention; lme4's own hatvalues() puts the prior weights outside the
+  # factorization) built from lme4 2.1-0's factors at its fit -- live with
+  # lme4 >= 2.1-0, else the stored lme4 2.1-0 values.
+  ref <- mm_disp_ref("influence_gamma_log")
+  expect_equal(unname(h), ref$hat_working, tolerance = 1e-3)
+  expect_equal(unname(cg), ref$cooks_working, tolerance = 1e-2)
 })
 
 cp4i_data <- function(seed = 482L) {

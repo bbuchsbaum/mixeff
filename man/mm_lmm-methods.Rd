@@ -214,14 +214,19 @@ conditional modes, in lme4's column order. \code{VarCorr()} returns lme4's
 \code{VarCorr.merMod} structure: a named list of covariance matrices (one per
 random-effect term, so \code{VarCorr(fit)$Subject} is a matrix) with
 \code{"stddev"} and \code{"correlation"} attributes and list attributes \code{"sc"}
-(residual standard deviation) and \code{"useSc"}; it prints like lme4 and
+(\code{sigma()}) and \code{"useSc"} (\code{TRUE} for LMMs; \code{FALSE} for every GLMM, as in
+lme4 >= 2.1-0, so GLMM random-effect SDs are absolute and no Residual row
+is printed); it prints like lme4 and
 \code{as.data.frame()} gives lme4's long form. mixeff's full-precision long
 table remains available as \code{VarCorr(fit)$table} (with \verb{$residual_sd}).
 \code{sigma()} of a binomial, Poisson or negative-binomial GLMM is 1, as in
-lme4 (the negative-binomial theta is \code{getME(fit, "glmer.nb.theta")}); for
-Gamma GLMMs it is mixeff's dispersion estimate \code{sqrt(sum(pearson^2) / n)},
-whereas lme4 also adds the squared spherical random effects to the
-numerator. \code{deviance()} of a GLMM is the sum of squared deviance
+lme4 (the negative-binomial theta is \code{getME(fit, "glmer.nb.theta")}). For
+GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and
+Gaussian with a non-identity link) it is \code{sqrt(phi)} with
+\verb{phi = sum(deviance residuals^2) / (n - rank([X, Z]))}, the dispersion
+profiled during the fit, as in lme4 >= 2.1-0 (\code{glmerControl()} defaults
+\code{disp_method = "moment"}, \code{disp_dof_correction = TRUE}; lme4 < 2.1-0 used
+a different, biased estimate). \code{deviance()} of a GLMM is the sum of squared deviance
 residuals, as \code{lme4::deviance.merMod()}; \code{-2 * logLik()} is the Laplace
 objective reported in \code{anova()}. \code{model.frame()} returns lme4's frame
 (transformed columns such as \code{log(y)}, a \code{terms} attribute, \code{(weights)}
@@ -240,6 +245,15 @@ warning. mixeff does the same: the matrix carries
 \code{"low"} and the engine's notes (\code{attr(, "mm_notes")}), and \code{vcov()} warns
 (class \code{mm_vcov_rx_fallback}). Such standard errors ignore the
 uncertainty in the covariance parameters.
+
+Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+(Gamma, inverse Gaussian, Gaussian with a non-identity link) the
+penalized least-squares factor already carries the \code{1 / phi} working
+weights, so mixeff's RX-based \code{vcov()} (\code{nAGQ = 0} fits, and the
+fallback above) is \code{unsc()} with no further \code{sigma^2} factor. lme4 >= 2.1-0
+still multiplies by \code{sigma()^2} there (and in \code{ranef(condVar = TRUE)}), so
+those values differ from lme4 2.1's by the factor \code{phi = sigma()^2};
+Hessian-based \code{vcov()} values agree.
 }
 \examples{
 set.seed(1)

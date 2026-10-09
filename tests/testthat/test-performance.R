@@ -72,7 +72,25 @@ test_that("Gamma and negative-binomial decompositions are finite", {
   fg <- glmm(yg ~ x + (1 | g), d, family = Gamma(link = "log"),
              control = mm_control(verbose = -1))
   vg <- mm_variance_components(fg)
-  expect_equal(vg$var.distribution, sigma(fg)^2)
+  # insight >= 1.5: log-normal approximation log1p(sigma^2) for a log link.
+  expect_equal(vg$var.distribution, log1p(sigma(fg)^2))
+  fgi <- glmm(yg ~ x + (1 | g), d, family = Gamma(link = "inverse"),
+              control = mm_control(verbose = -1))
+  expect_equal(mm_variance_components(fgi)$var.distribution, sigma(fgi)^2)
+  # Live comparison needs lme4 >= 2.1-0, whose sigma() matches the engine's
+  # dispersion for Gamma GLMMs, and insight >= 1.5's Gamma conventions.
+  if (requireNamespace("lme4", quietly = TRUE) &&
+      requireNamespace("insight", quietly = TRUE) &&
+      requireNamespace("performance", quietly = TRUE) &&
+      utils::packageVersion("lme4") >= "2.1-0" &&
+      utils::packageVersion("insight") >= "1.5.0") {
+    lg <- lme4::glmer(yg ~ x + (1 | g), d, family = Gamma(link = "log"))
+    vl <- insight::get_variance(lg)
+    comps <- intersect(names(vl), names(vg))
+    expect_equal(vg[comps], vl[comps], tolerance = 1e-4)
+    expect_equal(unlist(mm_r2(fg)), unlist(performance::r2_nakagawa(lg)),
+                 tolerance = 1e-4)
+  }
   fn <- glmm(yn ~ x + (1 | g), d, family = mm_negative_binomial(),
              control = mm_control(verbose = -1))
   r2 <- mm_r2(fn)

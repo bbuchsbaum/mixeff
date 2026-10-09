@@ -2,7 +2,7 @@
 # methods registered into insight/performance (both in Suggests) so that
 # performance::icc(), performance::r2() and insight::get_variance() work on
 # mixeff fits. The variance decomposition follows insight's get_variance()
-# for merMod fits (insight 0.19.x).
+# for merMod fits (insight >= 1.5).
 
 #' Variance decomposition, Nakagawa R2 and ICC for mixeff fits
 #'
@@ -27,8 +27,10 @@
 #'   design (a random slope without a matching fixed column is dropped, as
 #'   insight does).
 #' * Distribution-specific variance: `sigma^2` for an LMM; `pi^2/3`, `1` and
-#'   `pi^2/6` for binomial logit, probit and cloglog links; `sigma^2` for
-#'   Gamma; and the log-normal approximation `log(1 + V(mu)/mu^2)` for Poisson
+#'   `pi^2/6` for binomial logit, probit and cloglog links; for Gamma,
+#'   `sigma^2` (inverse link) or the log-normal approximation
+#'   `log1p(sigma^2)` (log link), with `sigma()` the lme4 >= 2.1-0 dispersion
+#'   `sqrt(phi)`; and the log-normal approximation `log(1 + V(mu)/mu^2)` for Poisson
 #'   (`V(mu) = mu`) and negative-binomial (`V(mu) = mu (1 + mu/theta)`) log-link
 #'   models, with `mu = exp(b0 + v0/2)` from the intercept `b0` and the
 #'   random-effect variance `v0` (observation-level terms excluded) of the
@@ -187,7 +189,14 @@ mm_distribution_variance <- function(fit, warn = TRUE) {
     # trials, as insight (>= 1.5) does; `weights = trials` does not.
     binomial = switch(link, logit = pi^2 / 3, probit = 1, cloglog = pi^2 / 6,
                       bad_link()) / mm_binomial_trial_factor(fit),
-    gamma = fit$dispersion^2,
+    # insight >= 1.5: family$variance(sigma) = sigma^2 for the inverse and
+    # identity links, and the log-normal approximation log1p(sigma^2) for
+    # the log link (sigma() = sqrt(phi), as lme4 >= 2.1-0 reports it).
+    gamma = switch(link,
+                   log = log1p(as.numeric(sigma(fit))^2),
+                   inverse = ,
+                   identity = as.numeric(sigma(fit))^2,
+                   bad_link()),
     poisson = ,
     negative_binomial = {
       if (!identical(link, "log")) {

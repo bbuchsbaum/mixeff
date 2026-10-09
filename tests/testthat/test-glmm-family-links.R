@@ -1,69 +1,50 @@
 # Audit 2026-10 §4.7: every family/link pair the engine fits is exposed by
-# glmm(), with glmer(nAGQ = 1) parity on fixed effects and theta. The
-# log-likelihood is not compared: for dispersion families mixeff's logLik
-# sits a stable ~+1.0 above glmer's (a dispersion-convention difference; see
-# the Gamma FINDING in test-glmm-parity-cells.R). Pairs the engine lacks are
-# refused with a typed condition naming the supported set.
+# glmm(), with glmer(nAGQ = 1) parity on fixed effects, theta, sigma and the
+# log-likelihood. These are free-dispersion families, whose glmer() handling
+# changed in lme4 2.1-0 (which the engine follows), so the reference is
+# lme4 2.1-0: live glmer() when it is installed, else the stored lme4 2.1-0
+# values (mm_disp_ref(), helper-lme4-dispersion.R). Pairs the engine lacks
+# are refused with a typed condition naming the supported set.
 
-mm_fl_rig <- function(n, mu, lambda) {
-  nu <- rnorm(n)^2
-  y <- mu + mu^2 * nu / (2 * lambda) -
-    mu / (2 * lambda) * sqrt(4 * mu * lambda * nu + mu^2 * nu^2)
-  ifelse(runif(n) <= mu / (mu + y), y, mu^2 / y)
-}
-
-mm_fl_data <- function(gen, seed = 11) {
-  set.seed(seed)
-  ng <- 30L
-  per <- 12L
-  g <- factor(rep(seq_len(ng), each = per))
-  x <- rnorm(ng * per)
-  re <- rnorm(ng, sd = 0.2)[g]
-  data.frame(y = gen(x, re), x = x, g = g)
-}
-
-mm_fl_expect_parity <- function(family, gen, fixef_tol = 1e-2,
-                                theta_tol = 2e-2) {
-  skip_if_not_installed("lme4")
-  d <- mm_fl_data(gen)
-  ref <- suppressWarnings(lme4::glmer(y ~ x + (1 | g), d, family = family))
-  m <- glmm(y ~ x + (1 | g), d, family = family,
+mm_fl_expect_parity <- function(key, fixef_tol = 1e-2, theta_tol = 2e-2,
+                                ll_tol = 1e-4) {
+  case <- mm_disp_case(key)
+  ref <- mm_disp_ref(key)
+  m <- glmm(case$formula, case$data(), family = case$family,
             control = mm_control(verbose = -1, max_feval = 50000L))
   expect_identical(m$method, "joint_laplace")
-  expect_identical(m$family$link, family$link)
-  expect_equal(unname(fixef(m)), unname(lme4::fixef(ref)),
-               tolerance = fixef_tol)
-  expect_equal(unname(m$theta), unname(lme4::getME(ref, "theta")),
-               tolerance = theta_tol)
+  expect_identical(m$family$link, case$family$link)
+  expect_equal(unname(fixef(m)), ref$fixef, tolerance = fixef_tol)
+  expect_equal(unname(m$theta), ref$theta, tolerance = theta_tol)
+  expect_equal(as.numeric(sigma(m)), ref$sigma, tolerance = theta_tol)
+  expect_equal(as.numeric(logLik(m)), ref$logLik, tolerance = ll_tol)
   invisible(m)
 }
 
 test_that("Gamma with its default inverse link matches glmer", {
-  mm_fl_expect_parity(Gamma(), function(x, re) {
-    mu <- 1 / (2 + 0.3 * x + re)
-    rgamma(length(x), shape = 15, rate = 15 / mu)
-  })
+  mm_fl_expect_parity("fl_gamma_inverse")
 })
 
 test_that("inverse.gaussian log and inverse links match glmer", {
-  mm_fl_expect_parity(inverse.gaussian("log"), function(x, re) {
-    mm_fl_rig(length(x), exp(0.5 + 0.3 * x + re), 20)
-  })
-  mm_fl_expect_parity(inverse.gaussian("inverse"), function(x, re) {
-    mm_fl_rig(length(x), 1 / (2 + 0.2 * x + re), 20)
-  })
+  mm_fl_expect_parity("fl_ig_log")
+  mm_fl_expect_parity("fl_ig_inverse")
 })
 
 test_that("gaussian non-identity links match glmer", {
-  mm_fl_expect_parity(gaussian("log"), function(x, re) {
-    exp(1 + 0.3 * x + re) + rnorm(length(x), sd = 0.3)
-  }, fixef_tol = 1e-4, theta_tol = 1e-4)
-  mm_fl_expect_parity(gaussian("sqrt"), function(x, re) {
-    (2 + 0.3 * x + re)^2 + rnorm(length(x), sd = 0.3)
-  }, fixef_tol = 1e-4, theta_tol = 1e-4)
-  mm_fl_expect_parity(gaussian("inverse"), function(x, re) {
-    100 / (2 + 0.2 * x + re) + rnorm(length(x), sd = 2)
-  }, fixef_tol = 1e-3, theta_tol = 1e-2)
+  mm_fl_expect_parity("fl_gaussian_log", fixef_tol = 1e-4, theta_tol = 1e-4)
+  mm_fl_expect_parity("fl_gaussian_sqrt", fixef_tol = 1e-4, theta_tol = 1e-4)
+  mm_fl_expect_parity("fl_gaussian_inverse", fixef_tol = 1e-3,
+                      theta_tol = 1e-2)
+})
+
+test_that("stored lme4 2.1-0 dispersion references match live glmer", {
+  skip_on_cran()
+  skip_if_not(mm_disp_lme4_is_2_1(), "needs lme4 >= 2.1-0")
+  for (key in names(mm_disp_cases())) {
+    live <- mm_disp_ref_live(key)
+    stored <- mm_disp_ref_stored(key)
+    expect_equal(live[names(stored)], stored, tolerance = 1e-4, label = key)
+  }
 })
 
 test_that("family/link pairs the engine lacks are refused, not swapped", {

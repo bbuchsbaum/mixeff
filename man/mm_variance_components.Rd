@@ -48,8 +48,10 @@ where \code{z_i} holds the term's coefficients' columns of the fixed-effect
 design (a random slope without a matching fixed column is dropped, as
 insight does).
 \item Distribution-specific variance: \code{sigma^2} for an LMM; \code{pi^2/3}, \code{1} and
-\code{pi^2/6} for binomial logit, probit and cloglog links; \code{sigma^2} for
-Gamma; and the log-normal approximation \code{log(1 + V(mu)/mu^2)} for Poisson
+\code{pi^2/6} for binomial logit, probit and cloglog links; for Gamma,
+\code{sigma^2} (inverse link) or the log-normal approximation
+\code{log1p(sigma^2)} (log link), with \code{sigma()} the lme4 >= 2.1-0 dispersion
+\code{sqrt(phi)}; and the log-normal approximation \code{log(1 + V(mu)/mu^2)} for Poisson
 (\code{V(mu) = mu}) and negative-binomial (\code{V(mu) = mu (1 + mu/theta)}) log-link
 models, with \code{mu = exp(b0 + v0/2)} from the intercept \code{b0} and the
 random-effect variance \code{v0} (observation-level terms excluded) of the

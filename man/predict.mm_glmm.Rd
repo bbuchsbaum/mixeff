@@ -114,6 +114,14 @@ attribute — consistent with the package's "no fake certainty" contract.
 For a fit with an offset, conditional SEs/intervals on \code{newdata} are
 available on the link scale only.
 
+Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+(Gamma, inverse Gaussian, Gaussian with a non-identity link) lme4 >= 2.1-0
+builds \code{predict(se.fit = TRUE)} from \code{sigma()^2} times its unscaled
+penalized least-squares covariance, although its PIRLS weights already
+carry \code{1 / phi}. mixeff's SEs use the engine's covariance (\code{vcov()},
+without the extra \code{sigma^2}), so they differ from lme4 2.1's by roughly a
+factor of \code{sigma()}.
+
 Prediction (future-observation) intervals (\code{interval = "prediction"}) are
 available for conditional, response-scale predictions: the engine returns
 quantiles of the plug-in predictive distribution (the family conditional

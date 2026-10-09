@@ -290,13 +290,6 @@ glmm <- function(formula,
                                          family_info$nb_theta)
   }
 
-  # lme4 convention for the scale families: glmer's logLik is
-  # -aic()/2 + p-terms, and the Gamma / inverse-Gaussian family aic() adds a
-  # constant 2 (the dispersion parameter), so glmer's value is exactly 1
-  # below the density the engine reports. Report lme4's number (and the
-  # AIC / BIC / -2 logLik built from it); differences between fits of the
-  # same family, hence every LRT, are unchanged.
-  ll_shift <- mm_glmm_loglik_shift(family_info$family)
   fit <- list(
     call           = call,
     formula        = formula,
@@ -333,10 +326,10 @@ glmm <- function(formula,
     theta          = as.numeric(unlist(fit_result$theta, use.names = FALSE)),
     sigma          = as.numeric(fit_result$dispersion),
     dispersion     = as.numeric(fit_result$dispersion),
-    logLik         = as.numeric(fit_result$log_likelihood) - ll_shift,
-    deviance       = as.numeric(fit_result$deviance) + 2 * ll_shift,
-    AIC            = as.numeric(fit_result$aic) + 2 * ll_shift,
-    BIC            = as.numeric(fit_result$bic) + 2 * ll_shift,
+    logLik         = as.numeric(fit_result$log_likelihood),
+    deviance       = as.numeric(fit_result$deviance),
+    AIC            = as.numeric(fit_result$aic),
+    BIC            = as.numeric(fit_result$bic),
     nobs           = as.integer(fit_result$nobs),
     dof            = as.integer(fit_result$dof),
     df_residual    = as.integer(fit_result$df_residual),
@@ -777,8 +770,3 @@ mm_json_parse_glmm_fit <- function(json) {
   parsed
 }
 
-# Offset between the engine's GLMM log-likelihood and lme4's for a family
-# (see glmm()): 1 for Gamma and inverse-Gaussian, 0 otherwise.
-mm_glmm_loglik_shift <- function(family) {
-  if (as.character(family %||% "") %in% c("gamma", "inverse_gaussian")) 1 else 0
-}

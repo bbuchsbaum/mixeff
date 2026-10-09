@@ -74,13 +74,17 @@ optimum, \verb{H = W^\{1/2\} C M^\{-1\} C' W^\{1/2\}} with \verb{C = [X, Z Lambd
 factor and \code{W} the weights. For an LMM, \code{W} holds the prior weights and the
 result equals \code{lme4::hatvalues()} on the same fit. For a GLMM, \code{W} holds the
 working (IRLS) weights at convergence, as \code{\link[stats:influence.measures]{stats::hatvalues()}} does for a
-\code{glm}; lme4 instead combines the working weights inside the factorization
+\code{glm}. For GLMMs with a free dispersion parameter \code{phi} (Gamma, inverse
+Gaussian, Gaussian with a non-identity link) the working weights are
+divided by \code{phi}, as lme4 >= 2.1-0's \code{weights(fit, "working")} are, to
+match the absolute-scale \code{Lambda}; lme4 instead combines the working weights inside the factorization
 with the prior weights outside it, so the two differ for GLMMs (lme4 warns
 that its GLMM hat matrix "may not make sense").
 
 \code{cooks.distance()} follows \code{lme4}: \verb{D_i = (r_i / (1 - h_i))^2 h_i / (phi p)} with Pearson residuals \code{r_i} (\verb{(y - mu) sqrt(w) / sqrt(V(mu))}),
 dispersion \code{phi} (\code{sigma^2} for an LMM, 1 for binomial, Poisson and
-negative-binomial GLMMs, \code{sigma^2} for Gamma) and \code{p} the rank of the
+negative-binomial GLMMs, \code{sigma^2} for Gamma, inverse-Gaussian and
+Gaussian non-identity-link GLMMs) and \code{p} the rank of the
 fixed-effect design.
 
 \code{influence()} deletes one case (default) or one level of \code{groups} at a

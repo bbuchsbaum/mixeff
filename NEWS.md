@@ -2,6 +2,34 @@
 
 ## Engine follow-ups (mixeff-rs engine-followups)
 
+* GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and
+  Gaussian with a non-identity link) now follow lme4 2.1-0's estimated
+  dispersion handling, which the engine adopts. The working weights carry
+  `1/phi`, and `phi` is profiled during the fit. `sigma()` is `sqrt(phi)`
+  with `phi = deviance / (n - rank([X, Z]))`, and theta is the absolute
+  random-effect SD. `logLik()`, `deviance()`, `AIC()`, `BIC()`, `sigma()`,
+  theta and `VarCorr()` equal `glmer()` from lme4 >= 2.1-0. Fits of these
+  families no longer match older lme4, and their estimates change from
+  earlier mixeff versions. mixeff no longer shifts the logLik of Gamma and
+  inverse-Gaussian fits by 1; the engine's value already matches lme4 2.1-0.
+* For these families `weights(fit, "working")` is divided by `phi`, as in lme4
+  2.1-0. This also changes `getME()`'s `L`, `RZX`, `RX` and `devcomp`. GLMM
+  `devcomp` dims gain lme4 2.1-0's `dispProfile`, `maxPhiIter` and `qEff`.
+  `VarCorr()` of every GLMM has `useSc = FALSE`, with no Residual row and
+  absolute SDs, and keeps `sc = sigma()`. `rePCA()` no longer rescales GLMM
+  covariances by `sigma()`. Hat values and Cook's distances use the new
+  weights; the values are unchanged.
+* Known lme4 2.1-0 difference: for these families lme4 2.1-0 multiplies by
+  `sigma()^2` a second time in three places: the RX-based `vcov()` (`nAGQ = 0`),
+  `predict(se.fit = TRUE)` and `ranef(condVar = TRUE)`. mixeff reports the
+  engine's unscaled covariance there.
+* The Nakagawa distribution-specific variance of a Gamma log-link GLMM is
+  now insight 1.5's log-normal approximation `log1p(sigma^2)`, not `sigma^2`.
+  `family()` now works for Gaussian non-identity-link GLMMs.
+* lme4 2.1-0's `glmerControl()` dispersion settings (`disp_method`,
+  `disp_dof_correction`, `maxPhiIter`) are not exposed. The engine uses their
+  defaults.
+
 * `confint(method = "profile")` and `profile()` no longer fail when one
   parameter's profile is irregular. The row is kept with a `status`
   (`"non_monotone"`, `"not_bracketing"` or `"failed"`), a `reason_code`

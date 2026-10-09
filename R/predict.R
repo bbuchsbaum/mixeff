@@ -551,6 +551,14 @@ residuals.mm_glmm <- function(object,
 #' For a fit with an offset, conditional SEs/intervals on `newdata` are
 #' available on the link scale only.
 #'
+#' Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+#' (Gamma, inverse Gaussian, Gaussian with a non-identity link) lme4 >= 2.1-0
+#' builds `predict(se.fit = TRUE)` from `sigma()^2` times its unscaled
+#' penalized least-squares covariance, although its PIRLS weights already
+#' carry `1 / phi`. mixeff's SEs use the engine's covariance (`vcov()`,
+#' without the extra `sigma^2`), so they differ from lme4 2.1's by roughly a
+#' factor of `sigma()`.
+#'
 #' Prediction (future-observation) intervals (`interval = "prediction"`) are
 #' available for conditional, response-scale predictions: the engine returns
 #' quantiles of the plug-in predictive distribution (the family conditional

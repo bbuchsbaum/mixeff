@@ -255,16 +255,12 @@ summary.mm_prcomplist <- function(object, ...) {
 }
 
 # Per random term, the covariance matrix divided by the residual variance
-# (lme4's Lambda %*% t(Lambda)), named by grouping factor.
+# (lme4's Lambda %*% t(Lambda)), named by grouping factor. GLMM covariance
+# parameters are absolute (lme4 >= 2.1-0 for the free-dispersion families
+# too), so GLMM blocks are not rescaled.
 mm_relative_covariance_blocks <- function(fit) {
   terms <- fit$artifact$semantic_model$random_terms %||% list()
-  scale2 <- if (inherits(fit, "mm_glmm")) {
-    fam <- as.character(fit$family$family %||% "")
-    if (fam %in% c("binomial", "poisson", "negative_binomial")) 1 else
-      as.numeric(fit$sigma)^2
-  } else {
-    as.numeric(fit$sigma)^2
-  }
+  scale2 <- if (inherits(fit, "mm_glmm")) 1 else as.numeric(fit$sigma)^2
   if (!length(scale2) || !is.finite(scale2) || scale2 <= 0) scale2 <- 1
   blocks <- lapply(seq_along(terms), function(i) {
     term <- terms[[i]]

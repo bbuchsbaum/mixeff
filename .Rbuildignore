@@ -45,3 +45,5 @@
 ^\.planning$
 ^Audit1\.md$
 ^release-evidence$
+^rlib$
+^\.git$

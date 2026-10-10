@@ -36,6 +36,15 @@
   keeping handles, set `options(mixeff.keep_handle = FALSE)`.
   `update()` and `refit()` create new fits with their own handles.
 
+## Profile memory (mixeff-rs #12)
+
+* `confint(method = "profile")` and `profile()` no longer build a dense
+  n x n covariance for the fixed-effect profiles. A crossed LMM with
+  60,000 rows previously aborted R trying to allocate 28.8 GB; it now
+  profiles in seconds with memory linear in the data. Leverage, Cook's
+  distance and new-data prediction variance also stop densifying the
+  factor's off-diagonal blocks once per row.
+
 ## Engine follow-ups (mixeff-rs engine-followups)
 
 * GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and

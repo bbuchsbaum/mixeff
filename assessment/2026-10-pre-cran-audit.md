@@ -266,7 +266,7 @@ bbuchsbaum/mixeff#4.
 11. [x] **Low: `predict` and `simulate` limits.**
     - Partial `re.form` formulas such as `~(1|g)` are refused.
     - GLMM `predict(newdata)` is refused when the fit has an offset.
-12. [~] **Low: `nlmer`, `lmList`, `allFit`, `REMLcrit`, the modular
+12. [x] **Low: `nlmer`, `lmList`, `allFit`, `REMLcrit`, the modular
   _Done: `mm_lmlist()`, `mm_allfit()`, `REMLcrit()`, `mm_control(optCtrl =)`. Declined: `nlmer` (non-goal), `devFunOnly` (the engine owns the objective), `check.conv.*` (convergence is reported as a typed certificate)._
     `devFunOnly` API, `optCtrl` and `check.conv.*` are missing.**
 13. [x] **Low: pbkrtest's KRmodcomp model-comparison form and lmerTest's
@@ -341,3 +341,28 @@ Already fine:
 - tests write only to `tempdir()`;
 - `options()` changes are restored;
 - Suggests packages are guarded.
+
+## 7. Found while completing the checklist
+
+These turned up during the work above; each is fixed, with a regression
+test.
+
+- [x] **lme4 2.x / insight 1.5 conventions.** Profile `.sigNN` order, the
+  `anova()` `-2*log(L)` column, devcomp `npar`, `VarCorr` printing, and the
+  Nakagawa R2 conventions follow current CRAN releases.
+- [x] **lme4 2.1 estimated-dispersion GLMMs** (Gamma, inverse Gaussian,
+  non-identity Gaussian): engine matches lme4 2.1 (mixeff-rs #8); R side and
+  `mm_control(disp_method =, disp_dof_correction =, max_phi_iter =)`.
+- [x] **Missing values** follow `na.action` (default
+  `getOption("na.action")`) and are announced (`mm_rows_dropped`).
+- [x] **Windows thread determinism**: worker threads now inherit the x87
+  control word and MXCSR (mixeff-rs #9); a windows-gnu CI job guards it.
+- [x] **arm64 joint-GLMM start**: rounding-limited PIRLS step acceptance at
+  the joint start (mixeff-rs #11).
+- [x] **Profile memory**: fixed-effect profiles built a dense n×n covariance
+  (28.8 GB at n = 60,000, aborting R); now O(n·p + nnz(L)) (mixeff-rs #12,
+  `test-profile-scale.R`).
+- [x] **Smaller bugs**: synthetic-name infinite loop; 1-df Kenward-Roger
+  comparison reported t as F; negative-binomial `hatvalues()`; computed
+  binomial responses (`I(y > c)`); a `.Call` with a computed routine (R CMD
+  check NOTE).

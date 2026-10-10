@@ -9,6 +9,27 @@ a pinned, vendored snapshot (`tools/vendor-rust.R`; provenance in
 feature is disabled for this build, so the source package builds with
 the declared Rust toolchain requirements only.
 
+## Status after the pre-CRAN audit (October 2026)
+
+The package changed substantially after the runs listed under "Test
+environments" below: the engine was re-pinned to mixeff-rs `10f1768`
+and the lme4-parity audit (`assessment/2026-10-pre-cran-audit.md`) was
+completed. On the resulting tree:
+
+- GitHub Actions on the release-candidate commit: Ubuntu R-release and
+  R-devel, macOS R-release, Windows R-release (two jobs), test coverage,
+  pkgdown and the vendor-drift check are all green (R CMD check with no
+  errors or warnings).
+- Local `R CMD check --as-cran` (Ubuntu, R 4.3.3, offline): examples,
+  tests and vignettes clean; every other WARNING/NOTE was environmental
+  (no `checkbashisms`/`qpdf`, locale, Suggests unavailable offline,
+  clock, the machine's own compiler flags).
+
+**To do before submitting:** re-run mac-builder, win-builder (R-devel
+and R-release) and the R-hub court on the final tarball, and replace the
+"Test environments" and "R-hub court results" sections below with those
+results.
+
 ## Test environments
 
 Checked as the built source tarball throughout (never the source
@@ -131,8 +152,11 @@ None.
   benchmarks, examples, datasets, and CI configuration from the
   vendored crates before they are committed; upstream LICENSE / NOTICE
   files are preserved in `inst/LICENSE.note`.
-- **Installed size**: about 8.6 MB, dominated by the Rust-compiled
-  library.
+- **Installed size**: about 11 MB on Windows (libs 8.7 MB) and up to
+  about 18 MB on Linux when the shared library is not stripped (libs
+  15.4 MB; 12.2 MB after `strip --strip-debug`). Nearly all of it is the
+  statically linked Rust engine, built with `lto = true` and
+  `codegen-units = 1`; the R code is about 1 MB.
 - **Cross-platform**: macOS arm64 + x86_64, Ubuntu LTS, Windows UCRT
   (Rtools43+ MinGW, `x86_64-pc-windows-gnu`). Windows i386 is not
   supported.
@@ -142,8 +166,18 @@ None.
   upstream and disabled in this build; CRAN machines do not need nlopt
   or CMake.
 - **Serialization**: fitted model objects survive `saveRDS()` /
-  `readRDS()`; all reported quantities are stored in the R object and
-  no live external handle is required after reloading.
+  `readRDS()`; all reported quantities are stored in the R object. Within
+  a session a fit also holds an external pointer to the live engine model
+  (`fit$rust_handle`) so follow-on computations (contrasts, prediction
+  intervals, bootstraps) skip a refit. The pointer does not survive
+  serialization; after reloading, those computations refit from the
+  stored data and give identical results. `options(mixeff.keep_handle =
+  FALSE)` disables the handle.
+- **Threads**: single-threaded by default. The parametric bootstrap
+  uses more threads only when asked (`bootstrap_control(threads =)`);
+  results are bit-identical for every thread count
+  (including on Windows, where worker threads inherit R's x87 and MXCSR
+  floating-point state).
 
 ## Reverse dependencies
 

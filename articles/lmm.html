@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Linear Mixed Models">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -195,8 +197,8 @@ summary, residual scale, and fixed effects.</p>
 <span><span class="co">#&gt; Linear mixed model fit by REML</span></span>
 <span><span class="co">#&gt; Formula: Reaction ~ Days + (Days | Subject)</span></span>
 <span><span class="co">#&gt; Fit status: converged_interior</span></span>
-<span><span class="co">#&gt; Optimizer: trust_bq; iterations: 438; objective: 1715.67</span></span>
-<span><span class="co">#&gt; nobs: 180, sigma: 23.5051, logLik: -857.837</span></span>
+<span><span class="co">#&gt; Optimizer: trust_bq; iterations: 16; objective: 1715.67</span></span>
+<span><span class="co">#&gt; nobs: 180, sigma: 23.5052, logLik: -857.837</span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt; (Intercept)        Days </span></span>
 <span><span class="co">#&gt;    256.2570     10.1502 </span></span>
@@ -211,16 +213,15 @@ summary, residual scale, and fixed effects.</p>
 <span><span class="co">#&gt; Formula: Reaction ~ Days + (Days | Subject)</span></span>
 <span><span class="co">#&gt; Fit status: converged_interior</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Variance components:</span></span>
-<span><span class="co">#&gt;    group        name variance  std_dev correlation</span></span>
-<span><span class="co">#&gt;  Subject (Intercept) 652.6850 25.54770            </span></span>
-<span><span class="co">#&gt;  Subject        Days  29.5779  5.43856       -0.08</span></span>
-<span><span class="co">#&gt; Residual std. dev.: 23.5051</span></span>
+<span><span class="co">#&gt;  Groups   Name        Std.Dev. Corr   </span></span>
+<span><span class="co">#&gt;  Subject  (Intercept) 25.5476         </span></span>
+<span><span class="co">#&gt;           Days         5.4385  -0.083 </span></span>
+<span><span class="co">#&gt;  Residual             23.5052         </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt;              Estimate Std. Error       df   t value  Pr(&gt;|t|)        method</span></span>
-<span><span class="co">#&gt; (Intercept) 256.25687   6.845701 16.99932 37.433253   &lt; 1e-16 satterthwaite</span></span>
-<span><span class="co">#&gt; Days         10.15023   1.419601 16.99972  7.150056 1.626e-06 satterthwaite</span></span>
+<span><span class="co">#&gt; (Intercept) 256.25687   6.845681 17.00010 37.433363   &lt; 1e-16 satterthwaite</span></span>
+<span><span class="co">#&gt; Days         10.15023   1.419585 17.00012  7.150137 1.626e-06 satterthwaite</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Inference status:</span></span>
 <span><span class="co">#&gt;         term        method    status reliability</span></span>
@@ -231,7 +232,7 @@ summary, residual scale, and fixed effects.</p>
 <span><span class="co">#&gt;  satterthwaite_finite_difference_approximation</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Notes:</span></span>
-<span><span class="co">#&gt;   Satterthwaite denominator df computed from finite-difference vcov_beta Jacobian and deviance Hessian over varpar</span></span></code></pre></div>
+<span><span class="co">#&gt;   Satterthwaite denominator df computed from analytic vcov_beta Jacobian and finite-difference deviance Hessian over varpar</span></span></code></pre></div>
 <p>The summary has four blocks, in print order.</p>
 <p><strong>Fit status.</strong> Check this line first:
 <code>converged_interior</code> is the status every other block of the
@@ -275,7 +276,7 @@ objects.</p>
 <span><span class="co">#&gt; (Intercept)        Days </span></span>
 <span><span class="co">#&gt;   256.25687    10.15023</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/sigma.html" class="external-link">sigma</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 23.50513</span></span>
+<span><span class="co">#&gt; [1] 23.50517</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; 'log Lik.' -857.8369 (df=6)</span></span></code></pre></div>
 <p><code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code> reports fitted variance components, and
@@ -283,25 +284,24 @@ objects.</p>
 factor.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/mm_lmm-methods.html">VarCorr</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Variance components:</span></span>
-<span><span class="co">#&gt;    group        name variance  std_dev correlation</span></span>
-<span><span class="co">#&gt;  Subject (Intercept) 652.6850 25.54770            </span></span>
-<span><span class="co">#&gt;  Subject        Days  29.5779  5.43856       -0.08</span></span>
-<span><span class="co">#&gt; Residual std. dev.: 23.5051</span></span>
+<span><span class="co">#&gt;  Groups   Name        Std.Dev. Corr   </span></span>
+<span><span class="co">#&gt;  Subject  (Intercept) 25.5476         </span></span>
+<span><span class="co">#&gt;           Days         5.4385  -0.083 </span></span>
+<span><span class="co">#&gt;  Residual             23.5052</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="../reference/mm_lmm-methods.html">ranef</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">$</span><span class="va">Subject</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   (Intercept)      Days</span></span>
-<span><span class="co">#&gt; 1   -8.047967  2.798294</span></span>
-<span><span class="co">#&gt; 2    4.457804  4.828437</span></span>
-<span><span class="co">#&gt; 3  -17.180029  4.799092</span></span>
-<span><span class="co">#&gt; 4   36.246461  4.003065</span></span>
-<span><span class="co">#&gt; 5   -4.147918  1.625769</span></span>
-<span><span class="co">#&gt; 6  -23.075829 -8.536017</span></span></code></pre></div>
+<span><span class="co">#&gt; 1   -8.047859  2.798272</span></span>
+<span><span class="co">#&gt; 2    4.457929  4.828410</span></span>
+<span><span class="co">#&gt; 3  -17.179833  4.799052</span></span>
+<span><span class="co">#&gt; 4   36.246456  4.003062</span></span>
+<span><span class="co">#&gt; 5   -4.147857  1.625757</span></span>
+<span><span class="co">#&gt; 6  -23.075999 -8.535978</span></span></code></pre></div>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">fit</span>, method <span class="op">=</span> <span class="st">"asymptotic"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Confidence intervals:</span></span>
-<span><span class="co">#&gt;                 2.5 %    97.5 %</span></span>
-<span><span class="co">#&gt; (Intercept) 242.83954 269.67420</span></span>
-<span><span class="co">#&gt; Days          7.36786  12.93259</span></span>
+<span><span class="co">#&gt;                  2.5 %    97.5 %</span></span>
+<span><span class="co">#&gt; (Intercept) 242.839579 269.67416</span></span>
+<span><span class="co">#&gt; Days          7.367891  12.93256</span></span>
 <span><span class="co">#&gt; method: wald_asymptotic_from_stored_standard_errors</span></span>
 <span><span class="co">#&gt; status: Wald (asymptotic) intervals from stored standard errors (engine-certified profile intervals: method = "profile")</span></span></code></pre></div>
 <p><code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> with <code>method = "asymptotic"</code> gives
@@ -313,8 +313,10 @@ available, are covered in
 <p>Design matrices can be rebuilt from the stored formula and model
 frame — including after a save/reload cycle
 (<code><a href="../articles/mixeff.html">vignette("mixeff", package = "mixeff")</a></code> covers
-persistence). <code><a href="../reference/getME.html">getME()</a></code> provides a small familiar subset for
-code that expects lme4-style names.</p>
+persistence). <code><a href="../reference/getME.html">getME()</a></code> rebuilds lme4’s low-level components
+(<code>theta</code>, <code>Lambdat</code>, <code>L</code>,
+<code>RX</code>, <code>devcomp</code>, …) for code that expects
+lme4-style names.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="va">fit</span>, type <span class="op">=</span> <span class="st">"fixed"</span><span class="op">)</span></span>
 <span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix</a></span><span class="op">(</span><span class="va">fit</span>, type <span class="op">=</span> <span class="st">"random"</span><span class="op">)</span></span>
@@ -330,18 +332,15 @@ code that expects lme4-style names.</p>
 <span></span>
 <span><span class="fu"><a href="../reference/getME.html">getME</a></span><span class="op">(</span><span class="va">fit</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"theta"</span>, <span class="st">"beta"</span>, <span class="st">"cnms"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $theta</span></span>
-<span><span class="co">#&gt; [1]  1.08689842 -0.01922381  0.23057757</span></span>
+<span><span class="co">#&gt;      Subject.(Intercept) Subject.Days.(Intercept)             Subject.Days </span></span>
+<span><span class="co">#&gt;               1.08689219              -0.01922107               0.23057417 </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $beta</span></span>
-<span><span class="co">#&gt; (Intercept)        Days </span></span>
-<span><span class="co">#&gt;   256.25687    10.15023 </span></span>
+<span><span class="co">#&gt; [1] 256.25687  10.15023</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $cnms</span></span>
-<span><span class="co">#&gt; $Subject</span></span>
-<span><span class="co">#&gt; [1] "(Intercept)" "Days"       </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; attr(,"class")</span></span>
-<span><span class="co">#&gt; [1] "mm_cnms" "list"</span></span></code></pre></div>
+<span><span class="co">#&gt; $cnms$Subject</span></span>
+<span><span class="co">#&gt; [1] "(Intercept)" "Days"</span></span></code></pre></div>
 <p>For report-ready data-frame tables of the same fit — design summary,
 random terms, fixed effects — see the <a href="https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.html">reporting
 article</a> on the package site.</p>
@@ -361,12 +360,12 @@ only.</p>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">prediction_check</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   Reaction   fitted fixed_only   residual</span></span>
-<span><span class="co">#&gt; 1 224.4814 248.2089   256.2569 -23.727494</span></span>
-<span><span class="co">#&gt; 2 248.2831 261.1574   266.4071 -12.874274</span></span>
-<span><span class="co">#&gt; 3 292.6939 274.1059   276.5573  18.588001</span></span>
-<span><span class="co">#&gt; 4 299.7000 287.0545   286.7075  12.645567</span></span>
-<span><span class="co">#&gt; 5 291.9349 300.0030   296.8578  -8.068110</span></span>
-<span><span class="co">#&gt; 6 305.1412 312.9515   307.0080  -7.810256</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 224.4814 248.2090   256.2569 -23.727602</span></span>
+<span><span class="co">#&gt; 2 248.2831 261.1575   266.4071 -12.874360</span></span>
+<span><span class="co">#&gt; 3 292.6939 274.1060   276.5573  18.587938</span></span>
+<span><span class="co">#&gt; 4 299.7000 287.0545   286.7075  12.645526</span></span>
+<span><span class="co">#&gt; 5 291.9349 300.0030   296.8578  -8.068130</span></span>
+<span><span class="co">#&gt; 6 305.1412 312.9515   307.0080  -7.810253</span></span></code></pre></div>
 <div class="section level3">
 <h3 id="prediction-standard-errors-and-intervals">Prediction standard errors and intervals<a class="anchor" aria-label="anchor" href="#prediction-standard-errors-and-intervals"></a>
 </h3>
@@ -377,15 +376,15 @@ linear predictor):</p>
 <code class="sourceCode R"><span><span class="va">pop</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">fit</span>, re.form <span class="op">=</span> <span class="cn">NA</span>, se.fit <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">pop</span><span class="op">$</span><span class="va">se.fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        1        2        3        4        5        6 </span></span>
-<span><span class="co">#&gt; 6.845701 6.651902 6.757404 7.148969 7.783542 8.607545</span></span>
+<span><span class="co">#&gt; 6.845681 6.651891 6.757396 7.148958 7.783523 8.607515</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">fit</span>, re.form <span class="op">=</span> <span class="cn">NA</span>, interval <span class="op">=</span> <span class="st">"confidence"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        fit      lwr      upr</span></span>
-<span><span class="co">#&gt; 1 256.2569 242.8395 269.6742</span></span>
+<span><span class="co">#&gt; 1 256.2569 242.8396 269.6742</span></span>
 <span><span class="co">#&gt; 2 266.4071 253.3696 279.4446</span></span>
 <span><span class="co">#&gt; 3 276.5573 263.3131 289.8016</span></span>
-<span><span class="co">#&gt; 4 286.7075 272.6958 300.7193</span></span>
+<span><span class="co">#&gt; 4 286.7075 272.6958 300.7192</span></span>
 <span><span class="co">#&gt; 5 296.8578 281.6023 312.1132</span></span>
-<span><span class="co">#&gt; 6 307.0080 290.1375 323.8785</span></span></code></pre></div>
+<span><span class="co">#&gt; 6 307.0080 290.1376 323.8784</span></span></code></pre></div>
 <p><em>Conditional</em> prediction standard errors (the default,
 <code>re.form = NULL</code>) come from the engine’s prediction-variance
 payload, which combines the fixed-effect Wald variance with the
@@ -397,20 +396,20 @@ prediction intervals come from the same payload.</p>
 <code class="sourceCode R"><span><span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">fit</span>, se.fit <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>population_se <span class="op">=</span> <span class="va">pop</span><span class="op">$</span><span class="va">se.fit</span>, conditional_se <span class="op">=</span> <span class="va">pred</span><span class="op">$</span><span class="va">se.fit</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   population_se conditional_se</span></span>
-<span><span class="co">#&gt; 1      6.845701      11.757630</span></span>
-<span><span class="co">#&gt; 2      6.651902      10.086320</span></span>
-<span><span class="co">#&gt; 3      6.757404       8.665374</span></span>
-<span><span class="co">#&gt; 4      7.148969       7.635864</span></span>
-<span><span class="co">#&gt; 5      7.783542       7.168472</span></span>
-<span><span class="co">#&gt; 6      8.607545       7.370917</span></span>
+<span><span class="co">#&gt; 1      6.845681      11.757606</span></span>
+<span><span class="co">#&gt; 2      6.651891      10.086304</span></span>
+<span><span class="co">#&gt; 3      6.757396       8.665367</span></span>
+<span><span class="co">#&gt; 4      7.148958       7.635865</span></span>
+<span><span class="co">#&gt; 5      7.783523       7.168480</span></span>
+<span><span class="co">#&gt; 6      8.607515       7.370927</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">fit</span>, interval <span class="op">=</span> <span class="st">"confidence"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        fit      lwr      upr</span></span>
-<span><span class="co">#&gt; 1 248.2089 225.1644 271.2534</span></span>
-<span><span class="co">#&gt; 2 261.1574 241.3886 280.9262</span></span>
-<span><span class="co">#&gt; 3 274.1059 257.1221 291.0898</span></span>
-<span><span class="co">#&gt; 4 287.0545 272.0884 302.0205</span></span>
-<span><span class="co">#&gt; 5 300.0030 285.9530 314.0529</span></span>
-<span><span class="co">#&gt; 6 312.9515 298.5048 327.3982</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 248.2090 225.1645 271.2535</span></span>
+<span><span class="co">#&gt; 2 261.1575 241.3887 280.9263</span></span>
+<span><span class="co">#&gt; 3 274.1060 257.1222 291.0898</span></span>
+<span><span class="co">#&gt; 4 287.0545 272.0885 302.0205</span></span>
+<span><span class="co">#&gt; 5 300.0030 285.9530 314.0530</span></span>
+<span><span class="co">#&gt; 6 312.9515 298.5048 327.3983</span></span></code></pre></div>
 <p>Rows the engine cannot certify — for example an unseen grouping level
 predicted with <code>allow.new.levels = TRUE</code>, where there is no
 posterior variance for the missing level — return <code>NA</code> with
@@ -561,9 +560,9 @@ factor.</p>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/parameterization.html">parameterization</a></span><span class="op">(</span><span class="va">full_fit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"theta_name"</span>, <span class="st">"theta_value"</span>, <span class="st">"lambda_value"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                     theta_name theta_value lambda_value</span></span>
-<span><span class="co">#&gt; 1 theta[0:intercept,intercept]   1.0706644    1.0706644</span></span>
-<span><span class="co">#&gt; 2      theta[0:time,intercept]   0.1222131    0.1222131</span></span>
-<span><span class="co">#&gt; 3           theta[0:time,time]   0.5466997    0.5466997</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 theta[0:intercept,intercept]   1.0706638    1.0706638</span></span>
+<span><span class="co">#&gt; 2      theta[0:time,intercept]   0.1222134    0.1222134</span></span>
+<span><span class="co">#&gt; 3           theta[0:time,time]   0.5466992    0.5466992</span></span></code></pre></div>
 <p>What θ is, why the engine optimizes it rather than the covariance
 matrix directly, and how boundary fits are read off this table are
 covered in <code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>.</p>
@@ -640,11 +639,14 @@ split-block model.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Design notes:</span></span>
 <span><span class="co">#&gt;   covariance_assumption: the covariance between 'Intercept' and 'time' is fixed at zero by || syntax</span></span></code></pre></div>
-<p>One caveat: when a <strong>factor</strong> appears inside
-<code>||</code>, mixeff’s expansion differs from lme4’s —
-<code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code> states the
-exact semantics and the explicit spelling that reproduces lme4’s model
-family.</p>
+<p>A <strong>factor</strong> inside <code>||</code> expands as in lme4:
+<code>(1 + x + f || g)</code> is
+<code>(1 | g) + (0 + x | g) + (0 + f | g)</code>, so the factor keeps
+its own correlated block. To fix every covariance at zero, factor
+columns included (MixedModels.jl’s <code>zerocorr()</code>), write
+<code>diag(1 + x + f | g)</code>;
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code> has the
+details.</p>
 </div>
 <div class="section level3">
 <h3 id="nested-and-crossed-grouping">Nested and crossed grouping<a class="anchor" aria-label="anchor" href="#nested-and-crossed-grouping"></a>

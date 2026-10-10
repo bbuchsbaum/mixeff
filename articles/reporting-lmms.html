@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Reporting Linear Mixed Models">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -163,7 +165,7 @@ availability, and versioned artifact information.</p>
 <span><span class="co">#&gt;         fit_status                          converged_interior</span></span>
 <span><span class="co">#&gt;          inference             3/3 available fixed-effect rows</span></span>
 <span><span class="co">#&gt;    artifact_schema       mixedmodels.compiled_model_artifact 1</span></span>
-<span><span class="co">#&gt;      crate_version                                  1.0.0-rc.1</span></span>
+<span><span class="co">#&gt;      crate_version                                  1.0.0-rc.5</span></span>
 <span><span class="co">#&gt;    package_version                                       0.2.0</span></span></code></pre></div>
 </div>
 <div class="section level2">
@@ -195,7 +197,7 @@ plain-language description.</p>
 <p><code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> gives a familiar coefficient table. Use it for
 console review.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">coef_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span>, method <span class="op">=</span> <span class="st">"auto"</span><span class="op">)</span><span class="op">$</span><span class="va">coefficients</span></span>
+<code class="sourceCode R"><span><span class="va">coef_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span>, method <span class="op">=</span> <span class="st">"auto"</span><span class="op">)</span><span class="op">$</span><span class="va">coef_table</span></span>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">coef_table</span>, digits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
@@ -221,7 +223,7 @@ console review.</p>
 <td align="left">(Intercept)</td>
 <td align="right">7.6829</td>
 <td align="right">0.1965</td>
-<td align="right">12.5650</td>
+<td align="right">12.5655</td>
 <td align="right">39.1065</td>
 <td align="right">0.0000</td>
 <td align="left">satterthwaite</td>
@@ -230,7 +232,7 @@ console review.</p>
 <td align="left">week</td>
 <td align="right">-0.2784</td>
 <td align="right">0.0260</td>
-<td align="right">58.9997</td>
+<td align="right">59.0002</td>
 <td align="right">-10.7280</td>
 <td align="right">0.0000</td>
 <td align="left">satterthwaite</td>
@@ -239,7 +241,7 @@ console review.</p>
 <td align="left">treatmentcoached</td>
 <td align="right">-0.8995</td>
 <td align="right">0.2623</td>
-<td align="right">9.9993</td>
+<td align="right">9.9997</td>
 <td align="right">-3.4298</td>
 <td align="right">0.0064</td>
 <td align="left">satterthwaite</td>
@@ -252,13 +254,13 @@ p-value, method, row status, and reliability label together.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"fixed_effects"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;              term   estimate  std_error        df  statistic statistic_name</span></span>
-<span><span class="co">#&gt;       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t</span></span>
-<span><span class="co">#&gt;              week -0.2783994 0.02595083 58.999740 -10.727955              t</span></span>
-<span><span class="co">#&gt;  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t</span></span>
+<span><span class="co">#&gt;       (Intercept)  7.6828778 0.19646018 12.565500  39.106539              t</span></span>
+<span><span class="co">#&gt;              week -0.2783994 0.02595083 59.000150 -10.727955              t</span></span>
+<span><span class="co">#&gt;  treatmentcoached -0.8994747 0.26225014  9.999671  -3.429835              t</span></span>
 <span><span class="co">#&gt;       p_value        method    status reliability</span></span>
 <span><span class="co">#&gt;  1.665335e-14 satterthwaite available    moderate</span></span>
 <span><span class="co">#&gt;  1.776357e-15 satterthwaite available    moderate</span></span>
-<span><span class="co">#&gt;  6.440943e-03 satterthwaite available    moderate</span></span></code></pre></div>
+<span><span class="co">#&gt;  6.440574e-03 satterthwaite available    moderate</span></span></code></pre></div>
 <p>When you need to audit where those rows came from, request the audit
 view.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">

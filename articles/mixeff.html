@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Introduction and the Supported Model Contract">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -83,13 +85,16 @@
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
 <p>If you fit mixed-effects models in R, you most likely use
 <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code>. <code><a href="../reference/lmm.html">mixeff::lmm()</a></code> speaks the same
-formula language, and the extractors — <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>,
+formula language, and the familiar extractors — <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>,
 <code><a href="../reference/mm_lmm-methods.html">ranef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code>, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>,
 <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code>, <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>,
-<code><a href="https://rdrr.io/r/stats/update.html" class="external-link">update()</a></code> — do what you expect. On the package’s supported
-envelope, statistical answers agree with <code>lme4</code> within
-documented tolerances on the parity datasets shipped with the package;
-the envelope itself is documented, closed, and machine-readable
+<code><a href="https://rdrr.io/r/stats/update.html" class="external-link">update()</a></code> — are there. Where their output or coverage
+differs from lme4 (for example the default <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code>
+method, or <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> being LMM-only),
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration")</a></code> lists it. On the package’s
+supported envelope, statistical answers agree with <code>lme4</code>
+within documented tolerances on the parity datasets shipped with the
+package; the envelope itself is documented, closed, and machine-readable
 (<code><a href="../reference/supported_models.html">supported_models()</a></code>). It is not a literal <em>drop-in</em>:
 you call <code><a href="../reference/lmm.html">lmm()</a></code> rather than <code>lmer()</code>, results are
 not bit-exact, and when the package changes or declines a request it
@@ -174,7 +179,7 @@ read <code>(x | g)</code>, you can read <code>mixeff</code>.</p>
 <span><span class="co">#&gt; Linear mixed model fit by REML</span></span>
 <span><span class="co">#&gt; Formula: rt ~ days + (1 + days | subj)</span></span>
 <span><span class="co">#&gt; Fit status: converged_reduced_rank</span></span>
-<span><span class="co">#&gt; Optimizer: trust_bq; iterations: 314; objective: 1647.7</span></span>
+<span><span class="co">#&gt; Optimizer: trust_bq; iterations: 30; objective: 1647.7</span></span>
 <span><span class="co">#&gt; nobs: 180, sigma: 20.065, logLik: -823.849</span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt; (Intercept)        days </span></span>
@@ -188,7 +193,9 @@ read <code>(x | g)</code>, you can read <code>mixeff</code>.</p>
 <span><span class="co">#&gt; Audit verbs: audit(), diagnostics(), inference_table(), model_report()</span></span></code></pre></div>
 <p><code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">ranef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code>,
 <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code>, <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>,
-and <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> all do what you expect.</p>
+and <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> all work on this fit;
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration")</a></code> lists where their output differs
+from lme4’s.</p>
 </div>
 <div class="section level2">
 <h2 id="b--when-a-fit-is-degenerate-the-object-says-so">B. When a fit is degenerate, the object says so<a class="anchor" aria-label="anchor" href="#b--when-a-fit-is-degenerate-the-object-says-so"></a>
@@ -287,7 +294,17 @@ envelope.</p>
 </tr>
 <tr class="odd">
 <td align="left">Gamma</td>
-<td align="left">log</td>
+<td align="left">inverse, log</td>
+<td align="left">pirls_profiled, joint_laplace</td>
+</tr>
+<tr class="even">
+<td align="left">inverse.gaussian</td>
+<td align="left">inverse, log</td>
+<td align="left">pirls_profiled, joint_laplace</td>
+</tr>
+<tr class="odd">
+<td align="left">gaussian</td>
+<td align="left">log, inverse, sqrt</td>
 <td align="left">pirls_profiled, joint_laplace</td>
 </tr>
 <tr class="even">
@@ -303,9 +320,9 @@ envelope.</p>
 <table class="table">
 <caption>Feature support, from the registry.</caption>
 <colgroup>
-<col width="72%">
-<col width="13%">
-<col width="13%">
+<col width="83%">
+<col width="9%">
+<col width="6%">
 </colgroup>
 <thead><tr class="header">
 <th align="left">feature</th>
@@ -320,24 +337,35 @@ envelope.</p>
 </tr>
 <tr class="even">
 <td align="left">offset</td>
-<td align="left">unsupported</td>
+<td align="left">supported</td>
 <td align="left">supported</td>
 </tr>
 <tr class="odd">
 <td align="left">simulate</td>
 <td align="left">supported</td>
-<td align="left">refused</td>
+<td align="left">supported</td>
 </tr>
 <tr class="even">
 <td align="left">refit</td>
 <td align="left">supported</td>
+<td align="left">supported</td>
+</tr>
+<tr class="odd">
+<td align="left">subset / na.action / contrasts</td>
+<td align="left">supported</td>
+<td align="left">supported</td>
+</tr>
+<tr class="even">
+<td align="left">random = (GLMM)</td>
+<td align="left">not applicable</td>
 <td align="left">refused</td>
 </tr>
 <tr class="odd">
-<td align="left">subset / random / custom na.action / custom contrasts
-(GLMM)</td>
-<td align="left">see notes</td>
-<td align="left">refused</td>
+<td align="left">stateful fixed-effect terms (factor(), poly(), scale(),
+ns()/bs(), cut(), relevel(), offset(), ^, %in%, parenthesised
+groups)</td>
+<td align="left">supported</td>
+<td align="left">supported</td>
 </tr>
 <tr class="even">
 <td align="left">marginal means verbs (mm_means / mm_comparisons /
@@ -347,8 +375,8 @@ mm_grid / mm_predictions / test_effect)</td>
 </tr>
 <tr class="odd">
 <td align="left">double-bar || with factor terms</td>
-<td align="left">mixeff semantics</td>
-<td align="left">mixeff semantics</td>
+<td align="left">supported</td>
+<td align="left">supported</td>
 </tr>
 </tbody>
 </table>
@@ -436,13 +464,13 @@ itself, and the Rust handle is deliberately absent after reload.</p>
 <span><span class="co">#&gt; 7.585932 7.307533 7.029134 6.750734 6.472335 6.193935</span></span>
 <span><span class="fu"><a href="../reference/model_report.html">reporting_table</a></span><span class="op">(</span><span class="va">restored</span>, <span class="st">"fixed_effects"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;              term   estimate  std_error        df  statistic statistic_name</span></span>
-<span><span class="co">#&gt;       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t</span></span>
-<span><span class="co">#&gt;              week -0.2783994 0.02595083 58.999740 -10.727955              t</span></span>
-<span><span class="co">#&gt;  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t</span></span>
+<span><span class="co">#&gt;       (Intercept)  7.6828778 0.19646018 12.565500  39.106539              t</span></span>
+<span><span class="co">#&gt;              week -0.2783994 0.02595083 59.000150 -10.727955              t</span></span>
+<span><span class="co">#&gt;  treatmentcoached -0.8994747 0.26225014  9.999671  -3.429835              t</span></span>
 <span><span class="co">#&gt;       p_value        method    status reliability</span></span>
 <span><span class="co">#&gt;  1.665335e-14 satterthwaite available    moderate</span></span>
 <span><span class="co">#&gt;  1.776357e-15 satterthwaite available    moderate</span></span>
-<span><span class="co">#&gt;  6.440943e-03 satterthwaite available    moderate</span></span></code></pre></div>
+<span><span class="co">#&gt;  6.440574e-03 satterthwaite available    moderate</span></span></code></pre></div>
 <p>Conditional variances for random effects also survive the round trip.
 With <code>condVar = TRUE</code>, each grouping table carries a finite
 <code>postVar</code> array.</p>
@@ -473,7 +501,7 @@ version of the package understands:</p>
 <span><span class="co">#&gt; 2      mixedmodels.compiled_model_artifact       1</span></span>
 <span><span class="co">#&gt; 3           mixedmodels.model_audit_report       2</span></span>
 <span><span class="co">#&gt; 4             mixedmodels.random_term_card       1</span></span>
-<span><span class="co">#&gt; 5 mixedmodels.fixed_effect_inference_table   1.1.0</span></span>
+<span><span class="co">#&gt; 5 mixedmodels.fixed_effect_inference_table   1.2.0</span></span>
 <span><span class="co">#&gt; 6      mixedmodels.marginal_quantity_table   1.0.0</span></span></code></pre></div>
 </div>
 </div>

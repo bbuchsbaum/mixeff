@@ -149,8 +149,19 @@ to refit with a different optimizer or tolerances.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
-fit <- lmm(y ~ t + (1 | s), df)
+set.seed(1)
+df <- data.frame(t = rep(0:4, 8), s = factor(rep(1:8, each = 5)))
+df$y <- 1 + 0.5 * df$t + rnorm(8)[df$s] + rnorm(40)
+fit <- lmm(y ~ t + (1 | s), df, control = mm_control(verbose = -1))
 verify_convergence(fit)
-} # }
+#> Convergence verification (status: restart_agrees)
+#>   restart from fitted theta agrees with the recorded optimum
+#> Runs:
+#>                 label      optimizer return_code objective_value
+#>  restart_from_optimum pattern_search     SUCCESS         112.048
+#>      jitter_restart_1 pattern_search     SUCCESS         112.048
+#>  objective_delta theta_delta  beta_delta agrees
+#>      0.00000e+00 0.00000e+00 0.00000e+00   TRUE
+#>      9.08287e-10 5.90301e-06 1.33227e-15   TRUE
+#> Tolerances: objective 1e-05; theta 0.001; beta 1e-04
 ```

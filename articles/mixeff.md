@@ -8,7 +8,7 @@ library(mixeff)
 If you fit mixed-effects models in R, you most likely use
 [`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html).
 [`mixeff::lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
-speaks the same formula language, and the extractors —
+speaks the same formula language, and the familiar extractors —
 [`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
 [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
 [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
@@ -16,10 +16,14 @@ speaks the same formula language, and the extractors —
 [`simulate()`](https://rdrr.io/r/stats/simulate.html),
 [`anova()`](https://rdrr.io/r/stats/anova.html),
 [`summary()`](https://rdrr.io/r/base/summary.html),
-[`update()`](https://rdrr.io/r/stats/update.html) — do what you expect.
-On the package’s supported envelope, statistical answers agree with
-`lme4` within documented tolerances on the parity datasets shipped with
-the package; the envelope itself is documented, closed, and
+[`update()`](https://rdrr.io/r/stats/update.html) — are there. Where
+their output or coverage differs from lme4 (for example the default
+[`confint()`](https://rdrr.io/r/stats/confint.html) method, or
+[`simulate()`](https://rdrr.io/r/stats/simulate.html) being LMM-only),
+[`vignette("lme4-migration")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md)
+lists it. On the package’s supported envelope, statistical answers agree
+with `lme4` within documented tolerances on the parity datasets shipped
+with the package; the envelope itself is documented, closed, and
 machine-readable
 ([`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)).
 It is not a literal *drop-in*: you call
@@ -109,7 +113,7 @@ fit
 #> Linear mixed model fit by REML
 #> Formula: rt ~ days + (1 + days | subj)
 #> Fit status: converged_reduced_rank
-#> Optimizer: trust_bq; iterations: 314; objective: 1647.7
+#> Optimizer: trust_bq; iterations: 30; objective: 1647.7
 #> nobs: 180, sigma: 20.065, logLik: -823.849
 #> Fixed effects:
 #> (Intercept)        days 
@@ -129,8 +133,9 @@ fit
 [`predict()`](https://rdrr.io/r/stats/predict.html),
 [`simulate()`](https://rdrr.io/r/stats/simulate.html),
 [`anova()`](https://rdrr.io/r/stats/anova.html), and
-[`summary()`](https://rdrr.io/r/base/summary.html) all do what you
-expect.
+[`summary()`](https://rdrr.io/r/base/summary.html) all work on this fit;
+[`vignette("lme4-migration")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md)
+lists where their output differs from lme4’s.
 
 ## B. When a fit is degenerate, the object says so
 
@@ -222,7 +227,9 @@ knitr::kable(sm$glmm_families[, c("family", "links", "estimators")],
 |:------------------|:-----------------------|:------------------------------|
 | binomial          | logit, probit, cloglog | pirls_profiled, joint_laplace |
 | poisson           | log, sqrt              | pirls_profiled, joint_laplace |
-| Gamma             | log                    | pirls_profiled, joint_laplace |
+| Gamma             | inverse, log           | pirls_profiled, joint_laplace |
+| inverse.gaussian  | inverse, log           | pirls_profiled, joint_laplace |
+| gaussian          | log, inverse, sqrt     | pirls_profiled, joint_laplace |
 | negative_binomial | log                    | pirls_profiled                |
 
 GLMM family/link/estimator cells, from the registry. {.table}
@@ -236,12 +243,14 @@ knitr::kable(sm$features[, c("feature", "lmm", "glmm")],
 | feature | lmm | glmm |
 |:---|:---|:---|
 | case weights | supported | supported |
-| offset | unsupported | supported |
-| simulate | supported | refused |
-| refit | supported | refused |
-| subset / random / custom na.action / custom contrasts (GLMM) | see notes | refused |
+| offset | supported | supported |
+| simulate | supported | supported |
+| refit | supported | supported |
+| subset / na.action / contrasts | supported | supported |
+| random = (GLMM) | not applicable | refused |
+| stateful fixed-effect terms (factor(), poly(), scale(), ns()/bs(), cut(), relevel(), offset(), ^, %in%, parenthesised groups) | supported | supported |
 | marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect) | supported | refused |
-| double-bar \|\| with factor terms | mixeff semantics | mixeff semantics |
+| double-bar \|\| with factor terms | supported | supported |
 
 Feature support, from the registry. {.table}
 
@@ -346,13 +355,13 @@ head(predict(restored))
 #> 7.585932 7.307533 7.029134 6.750734 6.472335 6.193935
 reporting_table(restored, "fixed_effects")
 #>              term   estimate  std_error        df  statistic statistic_name
-#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
-#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
-#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       (Intercept)  7.6828778 0.19646018 12.565500  39.106539              t
+#>              week -0.2783994 0.02595083 59.000150 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999671  -3.429835              t
 #>       p_value        method    status reliability
 #>  1.665335e-14 satterthwaite available    moderate
 #>  1.776357e-15 satterthwaite available    moderate
-#>  6.440943e-03 satterthwaite available    moderate
+#>  6.440574e-03 satterthwaite available    moderate
 ```
 
 Conditional variances for random effects also survive the round trip.
@@ -393,7 +402,7 @@ head(mm_json_known_schemas())
 #> 2      mixedmodels.compiled_model_artifact       1
 #> 3           mixedmodels.model_audit_report       2
 #> 4             mixedmodels.random_term_card       1
-#> 5 mixedmodels.fixed_effect_inference_table   1.1.0
+#> 5 mixedmodels.fixed_effect_inference_table   1.2.0
 #> 6      mixedmodels.marginal_quantity_table   1.0.0
 ```
 

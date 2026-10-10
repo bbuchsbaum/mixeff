@@ -5,7 +5,7 @@ generically (tryCatch(..., mm_condition = handler)), or by a more
 specific subclass for finer-grained handling."><meta property="og:description" content="All structured errors and informational signals raised by the package
 inherit from the mm_condition class so callers can catch them
 generically (tryCatch(..., mm_condition = handler)), or by a more
-specific subclass for finer-grained handling."></head><body>
+specific subclass for finer-grained handling."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -81,6 +81,9 @@ any model, engine, schema, or data semantics. Catching
 <code>mm_inference_unavailable</code> must mean "the engine refuses to certify
 this", not "you typed it wrong" — so plain argument validation raises
 <code>mm_arg_error</code>, never the domain-refusal classes.</p>
+<p><code>mm_interrupted</code> is raised when the user interrupts (Ctrl-C / Esc) a
+long native computation: fits, refits, bootstraps, and profiles check for
+a pending interrupt between optimizer evaluations and stop cleanly.</p>
     </div>
 
   </main></div>

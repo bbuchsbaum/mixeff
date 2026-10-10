@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Generalized Linear Mixed Models">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -86,28 +88,33 @@ two estimators, and the difference between them decides what inference
 you get:</p>
 <ul>
 <li>
-<strong><code>method = "pirls_profiled"</code> (the
-default)</strong> is a fast profiled PIRLS fitter. It returns point
+<strong><code>method = "joint_laplace"</code> (the default)</strong>
+maximizes the same joint Laplace objective as <code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code>
+(at <code>nAGQ = 1</code>). It returns the full inference table —
+standard errors, z tests, and Wald confidence intervals — from a
+covariance the engine certifies.</li>
+<li>
+<strong><code>method = "pirls_profiled"</code></strong> is a fast
+profiled PIRLS fitter, the analogue of lme4’s <code>nAGQ = 0</code>
+(<code>glmm(..., nAGQ = 0)</code> selects it). It returns point
 estimates, fitted values, and variance components, but <strong>refuses
 Wald standard errors, z statistics, p-values, and confidence
 intervals</strong>: its working-Hessian covariance payload is not
 certified for inference (the full contract, including the engine’s
 accuracy caveats for the profiled approximation, is stated in
-<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>).</li>
-<li>
-<strong><code>method = "joint_laplace"</code></strong> maximizes the
-same joint Laplace objective as <code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code> (at
-<code>nAGQ = 1</code>). It is slower, and it returns the full inference
-table — standard errors, z tests, and Wald confidence intervals — from a
-covariance the engine certifies.</li>
+<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>).
+Negative-binomial families, <code>nAGQ &gt; 1</code>, and
+<code>inference = "working_hessian"</code> need this path; when
+<code>method</code> is not given, <code><a href="../reference/glmm.html">glmm()</a></code> selects it for
+them and says so with an <code>mm_estimator_notice</code> message.</li>
 </ul>
 <p>Three inference routes exist, and every refusal message names
 them:</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>Certified Wald</strong> — refit with
-<code>method = "joint_laplace"</code> for standard errors, z tests, and
-Wald intervals from an engine-certified covariance.</li>
+<strong>Certified Wald</strong> — the default
+<code>method = "joint_laplace"</code> gives standard errors, z tests,
+and Wald intervals from an engine-certified covariance.</li>
 <li>
 <strong>Parametric bootstrap</strong> —
 <code>confint(fit, method = "bootstrap")</code> on profiled-estimator
@@ -122,8 +129,9 @@ caveat.</li>
 replicate accounting the bootstrap reports, and the full
 availability/refusal matrix — is stated once, in
 <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>. The practical
-rule: explore with the default, report with <code>joint_laplace</code>
-or the bootstrap.</p>
+rule: report with the default (<code>joint_laplace</code>); use
+<code>pirls_profiled</code> when speed matters or for its parametric
+bootstrap.</p>
 <p>The example uses the <code><a href="https://rdrr.io/pkg/lme4/man/cbpp.html" class="external-link">lme4::cbpp</a></code> data. As in
 <code>lme4</code>, a binomial response with grouped counts can be
 written either as a two-column <code>cbind(successes, failures)</code>
@@ -183,45 +191,114 @@ accepts both.)</p>
 <span><span class="co">#&gt; Generalized linear mixed model fit</span></span>
 <span><span class="co">#&gt; Formula: .mm_binomial_response ~ period + (1 | herd)</span></span>
 <span><span class="co">#&gt; Family/link: binomial/logit</span></span>
-<span><span class="co">#&gt; Method: pirls_profiled (nAGQ = 1)</span></span>
+<span><span class="co">#&gt; Method: joint_laplace (nAGQ = 1)</span></span>
 <span><span class="co">#&gt; Fit status: converged_interior</span></span>
-<span><span class="co">#&gt; Optimizer: cobyla; iterations: 23; objective: 100.152</span></span>
-<span><span class="co">#&gt; nobs: 56, dispersion: 1, logLik: -92.0543</span></span>
+<span><span class="co">#&gt; Optimizer: trust_bq; iterations: 419; objective: 184.053</span></span>
+<span><span class="co">#&gt; nobs: 56, dispersion: 1, logLik: -92.0263</span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt; (Intercept)     period2     period3     period4 </span></span>
-<span><span class="co">#&gt;   -1.360470   -0.976176   -1.111080   -1.559680 </span></span>
+<span><span class="co">#&gt;   -1.398530   -0.992332   -1.128670   -1.580310 </span></span>
 <span><span class="co">#&gt; Audit verbs: audit(), diagnostics(), model_report()</span></span>
 <span><span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; (Intercept)     period2     period3     period4 </span></span>
-<span><span class="co">#&gt;  -1.3604731  -0.9761761  -1.1110755  -1.5596789</span></span>
+<span><span class="co">#&gt;  -1.3985327  -0.9923324  -1.1286718  -1.5803138</span></span>
 <span><span class="fu"><a href="../reference/mm_lmm-methods.html">VarCorr</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Variance components:</span></span>
-<span><span class="co">#&gt;  group        name variance  std_dev correlation</span></span>
-<span><span class="co">#&gt;   herd (Intercept) 0.411937 0.641823</span></span></code></pre></div>
+<span><span class="co">#&gt;  Groups Name        Std.Dev.</span></span>
+<span><span class="co">#&gt;  herd   (Intercept) 0.64226</span></span></code></pre></div>
 <p>The weights form reproduces it exactly:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">glmm_fit_w</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
 <span>  <span class="va">weight_formula</span>,</span>
 <span>  <span class="va">cbpp</span>,</span>
 <span>  family <span class="op">=</span> <span class="va">cbpp_family</span>,</span>
-<span>  weights <span class="op">=</span> <span class="va">cbpp</span><span class="op">$</span><span class="va">size</span>,</span>
+<span>  weights <span class="op">=</span> <span class="va">size</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/all.equal.html" class="external-link">all.equal</a></span><span class="op">(</span><span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>, <span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_fit_w</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>On this default fit, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints the estimates and
-withholds the inference columns, with a note naming the alternative:</p>
+<p>On this default (joint-Laplace) fit, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints
+the full Wald inference table:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">glmm_fit</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Generalized linear mixed model fit</span></span>
+<span><span class="co">#&gt; Formula: .mm_binomial_response ~ period + (1 | herd)</span></span>
+<span><span class="co">#&gt; Family/link: binomial/logit</span></span>
+<span><span class="co">#&gt; Method: joint_laplace (nAGQ = 1)</span></span>
+<span><span class="co">#&gt; Fit status: converged_interior</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;  Groups Name        Std.Dev.</span></span>
+<span><span class="co">#&gt;  herd   (Intercept) 0.64226 </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Fixed effects:</span></span>
+<span><span class="co">#&gt;               Estimate Std. Error   z value  Pr(&gt;|z|)            method</span></span>
+<span><span class="co">#&gt; (Intercept) -1.3985327  0.2324725 -6.015905 1.789e-09 asymptotic_wald_z</span></span>
+<span><span class="co">#&gt; period2     -0.9923324  0.3066426 -3.236121 0.0012117 asymptotic_wald_z</span></span>
+<span><span class="co">#&gt; period3     -1.1286718  0.3266380 -3.455421 0.0005494 asymptotic_wald_z</span></span>
+<span><span class="co">#&gt; period4     -1.5803138  0.4274366 -3.697189 0.0002180 asymptotic_wald_z</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Wald-z reliability: moderate (asymptotic_wald_z).</span></span></code></pre></div>
+<p>Core extractors read from the durable R object:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;          1          2          3          4          5          6 </span></span>
+<span><span class="co">#&gt; 0.30820789 0.14174843 0.12595768 0.08402885 0.15480117 0.06358014</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;          1          2          3          4          5          6 </span></span>
+<span><span class="co">#&gt; -1.4380337  0.9887413  2.3569962 -0.9368586 -0.2431828 -0.1424220</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="../reference/mm_lmm-methods.html">ranef</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">[[</span><span class="fl">1L</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   (Intercept)</span></span>
+<span><span class="co">#&gt; 1   0.5900217</span></span>
+<span><span class="co">#&gt; 2  -0.2988977</span></span>
+<span><span class="co">#&gt; 3   0.4062566</span></span>
+<span><span class="co">#&gt; 4   0.0392777</span></span>
+<span><span class="co">#&gt; 5  -0.1900155</span></span>
+<span><span class="co">#&gt; 6  -0.4002694</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  logLik <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  deviance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/deviance.html" class="external-link">deviance</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>,</span>
+<span>  AIC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>,</span>
+<span>  BIC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;    logLik  deviance       AIC       BIC </span></span>
+<span><span class="co">#&gt; -92.02628  73.47167 194.05256 204.17932</span></span></code></pre></div>
+<p>The joint route prints an up-front runtime notice before iterating —
+the engine chooses its evaluation budget and announces it; cap it with
+<code>mm_control(max_feval = )</code>. (The <code>verbose = -1</code>
+control used here silences the notice for the vignette.)</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Confidence intervals:</span></span>
+<span><span class="co">#&gt;                 2.5 %     97.5 %</span></span>
+<span><span class="co">#&gt; (Intercept) -1.854171 -0.9428949</span></span>
+<span><span class="co">#&gt; period2     -1.593341 -0.3913240</span></span>
+<span><span class="co">#&gt; period3     -1.768871 -0.4884731</span></span>
+<span><span class="co">#&gt; period4     -2.418074 -0.7425534</span></span>
+<span><span class="co">#&gt; method: wald_asymptotic_from_rust_inference_table</span></span>
+<span><span class="co">#&gt; status: available</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="the-fast-profiled-path">The fast profiled path<a class="anchor" aria-label="anchor" href="#the-fast-profiled-path"></a>
+</h2>
+<p><code>method = "pirls_profiled"</code> fits faster and withholds Wald
+inference; on this fit <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints the estimates with
+a note naming the alternatives:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">glmm_fast</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
+<span>  <span class="va">cbind_formula</span>,</span>
+<span>  <span class="va">cbpp</span>,</span>
+<span>  family <span class="op">=</span> <span class="va">cbpp_family</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"pirls_profiled"</span>,</span>
+<span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">glmm_fast</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Generalized linear mixed model fit</span></span>
 <span><span class="co">#&gt; Formula: .mm_binomial_response ~ period + (1 | herd)</span></span>
 <span><span class="co">#&gt; Family/link: binomial/logit</span></span>
 <span><span class="co">#&gt; Method: pirls_profiled (nAGQ = 1)</span></span>
 <span><span class="co">#&gt; Fit status: converged_interior</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Variance components:</span></span>
-<span><span class="co">#&gt;  group        name variance  std_dev correlation</span></span>
-<span><span class="co">#&gt;   herd (Intercept) 0.411937 0.641823            </span></span>
+<span><span class="co">#&gt;  Groups Name        Std.Dev.</span></span>
+<span><span class="co">#&gt;  herd   (Intercept) 0.64182 </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt;               Estimate Std. Error statistic p.value       method</span></span>
@@ -233,87 +310,18 @@ withholds the inference columns, with a note naming the alternative:</p>
 <span><span class="co">#&gt; Wald-z reliability: not_available (not_computed).</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Notes:</span></span>
-<span><span class="co">#&gt;   standard errors, z statistics, and p-values are not available from the fast default method (pirls_profiled). Re-fit with method = "joint_laplace" for glmer-equivalent Wald inference, or use confint(fit, method = "bootstrap") for parametric-bootstrap intervals. inference_options(fit) lists every route.</span></span></code></pre></div>
-<p>Core extractors read from the durable R object:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;          1          2          3          4          5          6 </span></span>
-<span><span class="co">#&gt; 0.30926668 0.14433698 0.12846211 0.08602001 0.15578121 0.06500146</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;            1            2            3            4            5            6 </span></span>
-<span><span class="co">#&gt; -0.166409542  0.105663020  0.315982339 -0.086020007 -0.019417571 -0.009445903</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="../reference/mm_lmm-methods.html">ranef</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">[[</span><span class="fl">1L</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   (Intercept)</span></span>
-<span><span class="co">#&gt; 1  0.55692322</span></span>
-<span><span class="co">#&gt; 2 -0.32948612</span></span>
-<span><span class="co">#&gt; 3  0.36897593</span></span>
-<span><span class="co">#&gt; 4  0.01190522</span></span>
-<span><span class="co">#&gt; 5 -0.22338936</span></span>
-<span><span class="co">#&gt; 6 -0.43117113</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  logLik <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  deviance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/deviance.html" class="external-link">deviance</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>,</span>
-<span>  AIC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>,</span>
-<span>  BIC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt;   logLik deviance      AIC      BIC </span></span>
-<span><span class="co">#&gt; -92.0543 184.1086 194.1086 204.2353</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="inference-refit-with-joint_laplace">Inference: refit with joint_laplace<a class="anchor" aria-label="anchor" href="#inference-refit-with-joint_laplace"></a>
-</h2>
-<p>The joint route prints an up-front runtime notice before iterating —
-the engine chooses its evaluation budget and announces it; cap it with
-<code>mm_control(max_feval = )</code>. (The <code>verbose = -1</code>
-control below silences the notice for the vignette.)</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">glmm_joint</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
-<span>  <span class="va">cbind_formula</span>,</span>
-<span>  <span class="va">cbpp</span>,</span>
-<span>  family <span class="op">=</span> <span class="va">cbpp_family</span>,</span>
-<span>  method <span class="op">=</span> <span class="st">"joint_laplace"</span>,</span>
-<span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">glmm_joint</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Generalized linear mixed model fit</span></span>
-<span><span class="co">#&gt; Formula: .mm_binomial_response ~ period + (1 | herd)</span></span>
-<span><span class="co">#&gt; Family/link: binomial/logit</span></span>
-<span><span class="co">#&gt; Method: joint_laplace (nAGQ = 1)</span></span>
-<span><span class="co">#&gt; Fit status: converged_interior</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Variance components:</span></span>
-<span><span class="co">#&gt;  group        name variance  std_dev correlation</span></span>
-<span><span class="co">#&gt;   herd (Intercept) 0.412513 0.642272            </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Fixed effects:</span></span>
-<span><span class="co">#&gt;               Estimate Std. Error   z value  Pr(&gt;|z|)            method</span></span>
-<span><span class="co">#&gt; (Intercept) -1.3985345  0.2324741 -6.015872 1.789e-09 asymptotic_wald_z</span></span>
-<span><span class="co">#&gt; period2     -0.9923309  0.3066426 -3.236115 0.0012117 asymptotic_wald_z</span></span>
-<span><span class="co">#&gt; period3     -1.1286704  0.3266381 -3.455416 0.0005494 asymptotic_wald_z</span></span>
-<span><span class="co">#&gt; period4     -1.5803119  0.4274367 -3.697184 0.0002180 asymptotic_wald_z</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Wald-z reliability: moderate (asymptotic_wald_z).</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">glmm_joint</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Confidence intervals:</span></span>
-<span><span class="co">#&gt;                 2.5 %     97.5 %</span></span>
-<span><span class="co">#&gt; (Intercept) -1.854175 -0.9428936</span></span>
-<span><span class="co">#&gt; period2     -1.593339 -0.3913224</span></span>
-<span><span class="co">#&gt; period3     -1.768869 -0.4884715</span></span>
-<span><span class="co">#&gt; period4     -2.418072 -0.7425514</span></span>
-<span><span class="co">#&gt; method: wald_asymptotic_from_rust_inference_table</span></span>
-<span><span class="co">#&gt; status: available</span></span></code></pre></div>
+<span><span class="co">#&gt;   standard errors, z statistics, and p-values are not available from the fast profiled method (pirls_profiled). Re-fit with method = "joint_laplace" for glmer-equivalent Wald inference, or use confint(fit, method = "bootstrap") for parametric-bootstrap intervals. inference_options(fit) lists every route.</span></span></code></pre></div>
 <p>The joint-Laplace estimates differ slightly from the profiled ones —
 different estimators, same model — and match <code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code>
 closely:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">glmer_fit</span> <span class="op">&lt;-</span> <span class="fu">lme4</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">glmer</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">incidence</span>, <span class="va">size</span> <span class="op">-</span> <span class="va">incidence</span><span class="op">)</span> <span class="op">~</span> <span class="va">period</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">herd</span><span class="op">)</span>,</span>
 <span>  data <span class="op">=</span> <span class="va">cbpp</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span></span>
-<span>  pirls_profiled <span class="op">=</span> <span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>,</span>
-<span>  joint_laplace  <span class="op">=</span> <span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_joint</span><span class="op">)</span>,</span>
+<span>  pirls_profiled <span class="op">=</span> <span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_fast</span><span class="op">)</span>,</span>
+<span>  joint_laplace  <span class="op">=</span> <span class="fu"><a href="../reference/mm_lmm-methods.html">fixef</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>,</span>
 <span>  glmer          <span class="op">=</span> <span class="fu">lme4</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/nlme/man/fixed.effects.html" class="external-link">fixef</a></span><span class="op">(</span><span class="va">glmer_fit</span><span class="op">)</span></span>
 <span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                (Intercept) period2 period3 period4</span></span>
@@ -334,21 +342,26 @@ not — an unseen grouping level under
 <code>allow.new.levels = TRUE</code>, for example — the affected rows
 come back <code>NA</code> with the engine’s reason in an
 <code>mm_reason</code> attribute, not a silent zero.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">glmm_joint</span>, type <span class="op">=</span> <span class="st">"response"</span><span class="op">)</span><span class="op">)</span></span>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">glmm_fit</span>, type <span class="op">=</span> <span class="st">"response"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;          1          2          3          4          5          6 </span></span>
-<span><span class="co">#&gt; 0.30820858 0.14174900 0.12595820 0.08402924 0.15480072 0.06358002</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">glmm_joint</span>, re.form <span class="op">=</span> <span class="cn">NA</span>, type <span class="op">=</span> <span class="st">"response"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; 0.30820789 0.14174843 0.12595768 0.08402885 0.15480117 0.06358014</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">glmm_fit</span>, re.form <span class="op">=</span> <span class="cn">NA</span>, type <span class="op">=</span> <span class="st">"response"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;          1          2          3          4          5          6 </span></span>
-<span><span class="co">#&gt; 0.19804877 0.08387191 0.07397289 0.04839073 0.19804877 0.08387191</span></span></code></pre></div>
+<span><span class="co">#&gt; 0.19804905 0.08387193 0.07397291 0.04839072 0.19804905 0.08387193</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="quadrature-sensitivity">Quadrature Sensitivity<a class="anchor" aria-label="anchor" href="#quadrature-sensitivity"></a>
 </h2>
 <p><code>nAGQ</code> is part of the fit request and is recorded on the
-object. Values above one are a profiled-path sensitivity check; the
-joint-Laplace path is restricted to <code>nAGQ = 1</code>.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+object. Values above one are a profiled-path sensitivity check: as in
+lme4 they need a single scalar random-effect term such as
+<code>(1 | herd)</code>, and the joint-Laplace path is restricted to
+<code>nAGQ = 1</code>. Without an explicit <code>method</code>,
+<code>nAGQ &gt; 1</code> selects <code>"pirls_profiled"</code> with an
+<code>mm_estimator_notice</code> (silenced here by
+<code>verbose = -1</code>).</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">glmm_fit_agq3</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
 <span>  <span class="va">cbind_formula</span>,</span>
 <span>  <span class="va">cbpp</span>,</span>
@@ -358,10 +371,10 @@ joint-Laplace path is restricted to <code>nAGQ = 1</code>.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  nAGQ <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">$</span><span class="va">nAGQ</span>, <span class="va">glmm_fit_agq3</span><span class="op">$</span><span class="va">nAGQ</span><span class="op">)</span>,</span>
-<span>  logLik <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  nAGQ <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">glmm_fast</span><span class="op">$</span><span class="va">nAGQ</span>, <span class="va">glmm_fit_agq3</span><span class="op">$</span><span class="va">nAGQ</span><span class="op">)</span>,</span>
+<span>  logLik <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">glmm_fast</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>             <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik</a></span><span class="op">(</span><span class="va">glmm_fit_agq3</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  AIC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC</a></span><span class="op">(</span><span class="va">glmm_fit_agq3</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  AIC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC</a></span><span class="op">(</span><span class="va">glmm_fast</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC</a></span><span class="op">(</span><span class="va">glmm_fit_agq3</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  check.names <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt;   nAGQ   logLik      AIC</span></span>
@@ -375,12 +388,12 @@ the joint-Laplace standard errors shown earlier.</p>
 <div class="section level2">
 <h2 id="what-is-refused-where">What is refused where<a class="anchor" aria-label="anchor" href="#what-is-refused-where"></a>
 </h2>
-<p>The table below runs each verb on the default fit and reports what
+<p>The table below runs each verb on the profiled fit and reports what
 actually comes back — a result with numbers, a result with the inference
 withheld, or a typed error. A no-error return is not the same thing as
 an answer, so for the coefficient table the harness also checks whether
 the standard errors are finite.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">glmm_status</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">expr</span>, <span class="va">has_numbers</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">cnd</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">{</span> <span class="fu"><a href="https://rdrr.io/r/base/force.html" class="external-link">force</a></span><span class="op">(</span><span class="va">expr</span><span class="op">)</span>; <span class="cn">NULL</span> <span class="op">}</span>, error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">cnd</span><span class="op">)</span> <span class="va">cnd</span><span class="op">)</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">cnd</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -394,30 +407,36 @@ the standard errors are finite.</p>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>status <span class="op">=</span> <span class="st">"available"</span>, class <span class="op">=</span> <span class="cn">NA_character_</span>, check.names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
-<span><span class="va">coef_tab</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">glmm_fit</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span><span class="op">$</span><span class="va">coefficients</span></span>
+<span><span class="va">coef_tab</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">glmm_fast</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span><span class="op">$</span><span class="va">coefficients</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span></span>
-<span>  predict           <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  fitted            <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  predict           <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">glmm_fast</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  fitted            <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">glmm_fast</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  coefficient_tests <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="va">coef_tab</span>,</span>
 <span>                                  has_numbers <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/any.html" class="external-link">any</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">coef_tab</span><span class="op">[</span>, <span class="st">"Std. Error"</span><span class="op">]</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  confint           <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  simulate          <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu">stats</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate</a></span><span class="op">(</span><span class="va">glmm_fit</span>, nsim <span class="op">=</span> <span class="fl">1L</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  refit             <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="../reference/refit.html">refit</a></span><span class="op">(</span><span class="va">glmm_fit</span>, <span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>  confint           <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">glmm_fast</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  simulate          <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu">stats</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate</a></span><span class="op">(</span><span class="va">glmm_fit</span>, nsim <span class="op">=</span> <span class="fl">1L</span>, seed <span class="op">=</span> <span class="fl">1L</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  refit             <span class="op">=</span> <span class="fu">glmm_status</span><span class="op">(</span><span class="fu"><a href="../reference/refit.html">refit</a></span><span class="op">(</span><span class="va">glmm_fit</span>,</span>
+<span>                                        <span class="fu">stats</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate</a></span><span class="op">(</span><span class="va">glmm_fit</span>, seed <span class="op">=</span> <span class="fl">1L</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt;                                        status                    class</span></span>
 <span><span class="co">#&gt; predict                             available                     &lt;NA&gt;</span></span>
 <span><span class="co">#&gt; fitted                              available                     &lt;NA&gt;</span></span>
 <span><span class="co">#&gt; coefficient_tests returns, inference withheld                     &lt;NA&gt;</span></span>
 <span><span class="co">#&gt; confint                           typed error mm_inference_unavailable</span></span>
-<span><span class="co">#&gt; simulate                          typed error mm_inference_unavailable</span></span>
-<span><span class="co">#&gt; refit                             typed error mm_inference_unavailable</span></span></code></pre></div>
-<p>Wald <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> on the default fit raises
+<span><span class="co">#&gt; simulate                            available                     &lt;NA&gt;</span></span>
+<span><span class="co">#&gt; refit                               available                     &lt;NA&gt;</span></span></code></pre></div>
+<p>Wald <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> on the profiled fit raises
 <code>mm_inference_unavailable</code> (the working-Hessian payload is
-not certified for Wald intervals); the same request on the joint-Laplace
-fit succeeds, as shown above. The bootstrap route complements it from
-the other side: <code>confint(glmm_fit, method = "bootstrap")</code>
-succeeds on this default fit (route 2 above). <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code>
-and <code><a href="../reference/refit.html">refit()</a></code> are not implemented for GLMM fits.</p>
+not certified for Wald intervals); the same request on the default
+joint-Laplace fit succeeds, as shown above. The bootstrap route
+complements it from the other side:
+<code>confint(glmm_fast, method = "bootstrap")</code> succeeds on the
+profiled fit (route 2 above) and is refused on joint-Laplace fits at
+this engine pin. <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> draws family-aware responses
+with lme4’s semantics (new random effects by default,
+<code>re.form = NULL</code> to condition on the fitted ones), and
+<code><a href="../reference/refit.html">refit()</a></code> re-fits the same GLMM to a new response such as a
+simulated one.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

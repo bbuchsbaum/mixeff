@@ -50,15 +50,15 @@ Start with the ordinary coefficient table.
 
 ``` r
 
-coef_table <- summary(fit, tests = "coefficients", method = "auto")$coefficients
+coef_table <- summary(fit, tests = "coefficients", method = "auto")$coef_table
 knitr::kable(coef_table, digits = 4)
 ```
 
 |  | Estimate | Std. Error | df | t value | Pr(\>\|t\|) | method |
 |:---|---:|---:|---:|---:|---:|:---|
-| (Intercept) | 7.6829 | 0.1965 | 12.5650 | 39.1065 | 0.0000 | satterthwaite |
-| week | -0.2784 | 0.0260 | 58.9997 | -10.7280 | 0.0000 | satterthwaite |
-| treatmentcoached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
+| (Intercept) | 7.6829 | 0.1965 | 12.5655 | 39.1065 | 0.0000 | satterthwaite |
+| week | -0.2784 | 0.0260 | 59.0002 | -10.7280 | 0.0000 | satterthwaite |
+| treatmentcoached | -0.8995 | 0.2623 | 9.9997 | -3.4298 | 0.0064 | satterthwaite |
 
 The last column tells you the method used for each available p-value.
 Here `"auto"` resolved to Satterthwaite, because the fit is interior and
@@ -84,9 +84,9 @@ inference_table(fit)
 #>              week             week coefficient -0.2783994 0.02595083 NA
 #>  treatmentcoached treatmentcoached coefficient -0.8994747 0.26225014 NA
 #>  numerator_df denominator_df  statistic statistic_name      p_value
-#>            NA             NA  39.106539              z 0.0000000000
-#>            NA             NA -10.727955              z 0.0000000000
-#>            NA             NA  -3.429835              z 0.0006039485
+#>            NA             NA  39.106539              z 0.000000e+00
+#>            NA             NA -10.727955              z 7.524248e-27
+#>            NA             NA  -3.429835              z 6.039485e-04
 #>             method    status reliability         reliability_reason reason
 #>  asymptotic_wald_z available         low asymptotic_wald_z_fallback   <NA>
 #>  asymptotic_wald_z available         low asymptotic_wald_z_fallback   <NA>
@@ -111,9 +111,9 @@ names(L) <- names(fixef(fit))
 contrast(fit, L, method = "satterthwaite")
 #> Fixed-effect contrasts:
 #>  contrast   estimate rhs std_error       df statistic statistic_name
-#>        c1 -0.8994747   0 0.2622501 9.999273 -3.429835              t
+#>        c1 -0.8994747   0 0.2622501 9.999671 -3.429835              t
 #>      p_value        method requested_method    status reliability
-#>  0.006440943 satterthwaite    satterthwaite available    moderate
+#>  0.006440574 satterthwaite    satterthwaite available    moderate
 #>                             reliability_reason estimability reason reason_code
 #>  satterthwaite_finite_difference_approximation fixed_co....   <NA>        <NA>
 #>  reason_detail      details        notes
@@ -141,11 +141,12 @@ same kind of term-level table.
 ``` r
 
 anova(fit, type = "III", method = "kenward_roger")
-#> Type III analysis of fixed effects (method: kenward_roger):
-#>       term num_df den_df statistic      p_value        method
-#>       week      1     59 115.08903 1.776357e-15 kenward_roger
-#>  treatment      1     10  11.76377 6.440269e-03 kenward_roger
-#> Full provenance columns available in `$table` (type, statistic_name, requested_method, status, reliability, reason, details, notes).
+#> Type III Analysis of Variance Table with Kenward-Roger's method
+#>            Sum Sq Mean Sq NumDF DenDF F value    Pr(>F)    
+#> week      16.2763 16.2763     1    59 115.089 1.776e-15 ***
+#> treatment  1.6637  1.6637     1    10  11.764   0.00644 ** 
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ```
 
 `type` selects the term hypothesis. `"III"` (the default) is marginal
@@ -447,7 +448,7 @@ data.frame(
   mcse = round(run$mcse, 4)
 )
 #>   requested_replicates successful_replicates boundary_rate   mcse
-#> 1                   50                    50          0.56 0.0196
+#> 1                   50                    50          0.48 0.0196
 ```
 
 The boundary rate is not a failure count. It reports how often the
@@ -484,18 +485,18 @@ ci <- confint(
 ci
 #> Confidence intervals:
 #>         2.5 %   97.5 %
-#> days 7.588973 10.68778
+#> days 7.589003 10.68777
 #> method: bootstrap_full_model_distribution
 #> interval: percentile
 #> status: available
 #> 
 #> Bootstrap run:
 #>  parameter requested successful failed_refits boundary_rate seed
-#>       days        50         50             0          0.58    2
+#>       days        50         50             0          0.46    2
 #> notes:
 #>   - full-model bootstrap distributions do not certify fixed-effect
 #>         hypothesis-test p-values
-#>   - 29 successful bootstrap refit(s) ended on a covariance boundary
+#>   - 23 successful bootstrap refit(s) ended on a covariance boundary
 #> Full bootstrap payload available in `attr(x, "bootstrap")`.
 ```
 
@@ -512,7 +513,7 @@ payload$metadata$notes
 #> [1] "full-model bootstrap distributions do not certify fixed-effect hypothesis-test p-values"
 #> 
 #> [[2]]
-#> [1] "29 successful bootstrap refit(s) ended on a covariance boundary"
+#> [1] "23 successful bootstrap refit(s) ended on a covariance boundary"
 ```
 
 This distinction is central:
@@ -567,7 +568,10 @@ Self-Liang 50:50 mixture, `0.5 * chi-square(0) + 0.5 * chi-square(1)`.
 In finite samples the true null distribution puts more mass at zero than
 the mixture, so the test runs conservative (Crainiceanu and Ruppert
 2004); with 18 subjects here, read a marginal mixture p-value with that
-in mind.
+in mind. A comparison that adds only correlation parameters — `(x || g)`
+against `(x | g)` — has no boundary (a zero correlation is interior), so
+it is referred to the ordinary chi-square, as
+[`anova()`](https://rdrr.io/r/stats/anova.html) does.
 
 Fit a simpler random-intercept model by ML:
 
@@ -620,65 +624,66 @@ route refuses rather than running.
 
 ## Profile confidence intervals
 
-Profile-likelihood intervals are available for variance parameters under
-both fitting criteria, but fixed-effect (beta) profile intervals require
-an ML fit: under the REML default, the beta rows are recorded as
-unavailable with the reason code `profile_beta_unavailable_under_reml`,
-not silently approximated.
+`confint(fit, method = "profile")` returns lme4’s rows: `.sig01`, …
+(random-effect standard deviations and correlations, numbered in lme4’s
+term order), `.sigma`, then the fixed effects. As in lme4, the profile
+is of the ML deviance, so a REML fit’s intervals are those of its ML
+refit, fixed effects included. The engine’s relative-Cholesky `theta`
+rows (profiled on the fit’s own criterion) stay in the attached table.
+Large models can pass `threads =`; the intervals are identical for every
+thread count.
 
 ``` r
 
 prof <- confint(fit, method = "profile")
 prof
 #> Confidence intervals:
-#>                      2.5 %    97.5 %
-#> theta1           0.6712410 2.0292158
-#> sigma            0.3172088 0.4556499
-#> (Intercept)             NA        NA
-#> week                    NA        NA
-#> treatmentcoached        NA        NA
+#>                       2.5 %     97.5 %
+#> .sig01            0.2469336  0.6399050
+#> .sigma            0.3149774  0.4510658
+#> (Intercept)       7.3039685  8.0617870
+#> week             -0.3296535 -0.2271452
+#> treatmentcoached -1.4088634 -0.3900860
 #> method: profile_likelihood
 #> status: available
 attr(prof, "mm_profile")$table[
   ,
-  c("parameter", "parameter_kind", "lower", "upper", "reason_code")
+  c("parameter", "parameter_kind", "lower", "upper", "profiled_criterion")
 ]
-#>          parameter parameter_kind     lower     upper
-#> 1           theta1          theta 0.6712410 2.0292158
-#> 2            sigma          sigma 0.3172088 0.4556499
-#> 3      (Intercept)           beta        NA        NA
-#> 4             week           beta        NA        NA
-#> 5 treatmentcoached           beta        NA        NA
-#>                           reason_code
-#> 1                                <NA>
-#> 2                                <NA>
-#> 3 profile_beta_unavailable_under_reml
-#> 4 profile_beta_unavailable_under_reml
-#> 5 profile_beta_unavailable_under_reml
+#>          parameter parameter_kind      lower      upper profiled_criterion
+#> 1           .sig01             sd  0.2469336  0.6399050                 ML
+#> 2           .sigma          sigma  0.3149774  0.4510658                 ML
+#> 3      (Intercept)           beta  7.3039685  8.0617870                 ML
+#> 4             week           beta -0.3296535 -0.2271452                 ML
+#> 5 treatmentcoached           beta -1.4088634 -0.3900860                 ML
+#> 6           theta1          theta  0.6712410  2.0292158               REML
 ```
 
-Refit with `REML = FALSE` when you want beta profile intervals. On
-boundary fits, profile intervals are refused outright
+On boundary fits, profile intervals are refused outright
 (`profile_ci_unavailable_at_boundary`), as the route map above showed.
 
 ## GLMM inference: the three-route contract
 
-For generalized linear mixed models the contract is stricter, because
-the default estimator is not certified for Wald inference.
+For generalized linear mixed models the contract depends on the
+estimator.
 [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)’s
-default `method = "pirls_profiled"` is a fast profiled PIRLS fitter: it
-returns point estimates, fitted values, and variance components, but
-**refuses Wald standard errors, z statistics, p-values, and confidence
-intervals on every route**. Its covariance payload is a working Hessian
-the engine does not certify, and the engine’s own documentation warns
-that the profiled path is a different statistical approximation than
-`glmer()`’s joint Laplace fit — it can be less accurate for
-overdispersed models and models with observation-level random effects.
+default `method = "joint_laplace"` is glmer’s joint Laplace estimator
+and its Wald inference is certified. The opt-in
+`method = "pirls_profiled"` (lme4’s `nAGQ = 0` analogue; also used, with
+a notice, for negative-binomial families and `nAGQ > 1`) is a fast
+profiled PIRLS fitter: it returns point estimates, fitted values, and
+variance components, but **refuses Wald standard errors, z statistics,
+p-values, and confidence intervals on every route**. Its covariance
+payload is a working Hessian the engine does not certify, and the
+engine’s own documentation warns that the profiled path is a different
+statistical approximation than `glmer()`’s joint Laplace fit — it can be
+less accurate for overdispersed models and models with observation-level
+random effects.
 
 Exactly three routes lead to reportable GLMM inference, and every
 refusal names them:
 
-1.  **Certified joint Wald.** Refit with `method = "joint_laplace"`;
+1.  **Certified joint Wald.** The default `method = "joint_laplace"`;
     standard errors, z tests, and Wald intervals come from a covariance
     the engine certifies.
     [`vignette("glmm")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md)
@@ -699,10 +704,10 @@ refusal names them:
     (<https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html>)
     is the worked example of why this route is opt-in.
 
-The practical rule: explore with the default, report with
-`joint_laplace` or the bootstrap.
+The practical rule: report with the default `joint_laplace` fit or the
+bootstrap; treat profiled-fit point estimates as exploratory.
 
-Here is the contract on a small simulated binomial GLMM. On the default
+Here is the contract on a small simulated binomial GLMM. On a profiled
 fit, [`summary()`](https://rdrr.io/r/base/summary.html) prints the
 estimates and withholds the inference columns:
 
@@ -712,10 +717,11 @@ gfit <- glmm(
   y ~ x + (1 | g),
   trials,
   family = binomial(),
+  method = "pirls_profiled",
   control = mm_control(verbose = -1)
 )
 
-gtab <- summary(gfit, tests = "coefficients")$coefficients
+gtab <- summary(gfit, tests = "coefficients")$coef_table
 gtab
 #>               Estimate Std. Error statistic p.value       method
 #> (Intercept) -0.3993006         NA        NA      NA not_computed
@@ -751,8 +757,8 @@ the small, seeded run below stays `low` by that rubric.
 gci <- confint(gfit, method = "bootstrap", nsim = 30, seed = 42)
 gci
 #>                  2.5 %    97.5 %
-#> (Intercept) -0.9729923 0.3359735
-#> x            0.1704129 1.2433597
+#> (Intercept) -0.9733695 0.3359715
+#> x            0.1702030 1.2433526
 #> attr(,"mm_method")
 #> [1] "glmm_parametric_bootstrap_percentile"
 #> attr(,"mm_estimator")
@@ -770,12 +776,15 @@ gci
 #> attr(,"mm_bootstrap")$seed
 #> [1] 42
 #> 
+#> attr(,"mm_bootstrap")$threads
+#> [1] 1
+#> 
 #> attr(,"mm_bootstrap")$std_errors
 #> (Intercept)           x 
-#>   0.3686198   0.2927409 
+#>   0.3686496   0.2926142 
 #> 
 #> attr(,"mm_bootstrap")$mcse
-#> [1] 0.06730046
+#> [1] 0.0673059
 #> 
 #> attr(,"mm_bootstrap")$reliability
 #> attr(,"mm_bootstrap")$reliability$reliability
@@ -894,18 +903,17 @@ summary(rfit, tests = "coefficients")
 #> Formula: score ~ trt * time + (1 | clinic) + (1 | subj)
 #> Fit status: converged_interior
 #> 
-#> Variance components:
-#>   group        name variance  std_dev correlation
-#>    subj (Intercept) 0.328791 0.573403            
-#>  clinic (Intercept) 1.267670 1.125910            
-#> Residual std. dev.: 0.399888
+#>  Groups   Name        Std.Dev.
+#>  subj     (Intercept) 0.57340 
+#>  clinic   (Intercept) 1.12591 
+#>  Residual             0.39989 
 #> 
 #> Fixed effects:
 #>                     Estimate Std. Error        df    t value  Pr(>|t|)
-#> (Intercept)        51.871482  0.6018249  3.425072  86.190327 7.755e-07
-#> trtactive          -1.971661  0.3156838 25.438945  -6.245684 1.443e-06
-#> timepost           -3.962867  0.1632535 22.009671 -24.274316   < 1e-16
-#> trtactive:timepost -2.818065  0.2308753 22.009671 -12.206006 2.848e-11
+#> (Intercept)        51.871482  0.6018245  3.423972  86.190373 7.785e-07
+#> trtactive          -1.971661  0.3156837 25.430247  -6.245686 1.445e-06
+#> timepost           -3.962867  0.1632536 22.000014 -24.274304   < 1e-16
+#> trtactive:timepost -2.818065  0.2308754 22.000014 -12.206000 2.865e-11
 #>                           method
 #> (Intercept)        satterthwaite
 #> trtactive          satterthwaite
@@ -925,7 +933,7 @@ summary(rfit, tests = "coefficients")
 #>  satterthwaite_finite_difference_approximation
 #> 
 #> Notes:
-#>   Satterthwaite denominator df computed from finite-difference vcov_beta Jacobian and deviance Hessian over varpar
+#>   Satterthwaite denominator df computed from analytic vcov_beta Jacobian and finite-difference deviance Hessian over varpar
 ```
 
 The interaction coefficient `trtactive:timepost` tells you the
@@ -967,10 +975,10 @@ confidence interval from the certified covariance. These are estimand
 preds <- mm_predictions(rfit, specs = ~ trt * time)
 preds$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
 #>                    label estimate conf_low conf_high        method
-#> 1  trt=control, time=pre 51.87148 50.08390  53.65906 satterthwaite
-#> 2   trt=active, time=pre 49.89982 48.11224  51.68740 satterthwaite
-#> 3 trt=control, time=post 47.90862 46.12103  49.69620 satterthwaite
-#> 4  trt=active, time=post 43.11889 41.33131  44.90647 satterthwaite
+#> 1  trt=control, time=pre 51.87148 50.08363  53.65934 satterthwaite
+#> 2   trt=active, time=pre 49.89982 48.11197  51.68768 satterthwaite
+#> 3 trt=control, time=post 47.90862 46.12076  49.69647 satterthwaite
+#> 4  trt=active, time=post 43.11889 41.33103  44.90674 satterthwaite
 ```
 
 Each row carries its inference method so the provenance is visible
@@ -987,8 +995,8 @@ average over timepoints to get a treatment-level summary.
 mt <- mm_means(rfit, specs = ~ trt)
 mt$table[, c("label", "estimate", "conf_low", "conf_high", "method")]
 #>         label estimate conf_low conf_high        method
-#> 1 trt=control 49.89005 48.08653  51.69356 satterthwaite
-#> 2  trt=active 46.50935 44.70584  48.31287 satterthwaite
+#> 1 trt=control 49.89005 48.08624  51.69385 satterthwaite
+#> 2  trt=active 46.50935 44.70555  48.31316 satterthwaite
 ```
 
 Compare these to the raw means:
@@ -1025,8 +1033,8 @@ same inference method.
 
 ctr <- mm_comparisons(rfit, specs = ~ trt)
 ctr$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
-#>                      label  estimate conf_low conf_high     p_value
-#> 1 trt=active - trt=control -3.380694 -3.99461 -2.766778 3.86692e-10
+#>                      label  estimate  conf_low conf_high      p_value
+#> 1 trt=active - trt=control -3.380694 -3.994629 -2.766759 3.888465e-10
 #>          method
 #> 1 satterthwaite
 ```
@@ -1049,11 +1057,11 @@ the analogue of simple effects in a factorial design.
 ctr_by <- mm_comparisons(rfit, specs = ~ trt | time)
 ctr_by$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")]
 #>                                            label  estimate  conf_low conf_high
-#> 1 trt=active, time=post - trt=control, time=post -4.789727 -5.439321 -4.140132
-#> 2   trt=active, time=pre - trt=control, time=pre -1.971661 -2.621256 -1.322067
+#> 1 trt=active, time=post - trt=control, time=post -4.789727 -5.439332 -4.140121
+#> 2   trt=active, time=pre - trt=control, time=pre -1.971661 -2.621267 -1.322056
 #>        p_value        method
-#> 1 2.953193e-14 satterthwaite
-#> 2 1.442769e-06 satterthwaite
+#> 1 2.975398e-14 satterthwaite
+#> 2 1.444943e-06 satterthwaite
 ```
 
 Two rows: the treatment difference *at pre-intervention* and the
@@ -1072,8 +1080,8 @@ specific points rather than its mean.
 mt_time <- mm_means(rfit, specs = ~ time, at = list(trt = "active"))
 mt_time$table[, c("label", "estimate", "conf_low", "conf_high")]
 #>       label estimate conf_low conf_high
-#> 1  time=pre 49.89982 48.11224  51.68740
-#> 2 time=post 43.11889 41.33131  44.90647
+#> 1  time=pre 49.89982 48.11197  51.68768
+#> 2 time=post 43.11889 41.33103  44.90674
 ```
 
 This gives the pre/post means *within the active arm* only, holding
@@ -1101,7 +1109,7 @@ w["trtactive:timepost"] <- 1
 lc <- mm_lincomb(rfit, weights = w)
 lc[, c("estimate", "lower", "upper", "p_value", "method")]
 #>    estimate     lower     upper      p_value        method
-#> 1 -2.818065 -3.296859 -2.339271 2.848244e-11 satterthwaite
+#> 1 -2.818065 -3.296872 -2.339259 2.865068e-11 satterthwaite
 ```
 
 [`mm_lincomb()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lincomb.md)
@@ -1173,7 +1181,12 @@ attr(V, "mm_status")
 #> [1] "available"
 ```
 
-For rank-deficient or otherwise uncertified fits,
+For a rank-deficient design,
+[`vcov()`](https://rdrr.io/r/stats/vcov.html) covers the estimable
+coefficients only, as lme4’s does (the dropped coefficient is omitted
+from
+[`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+too). For otherwise uncertified fits,
 [`vcov()`](https://rdrr.io/r/stats/vcov.html) returns an `NA` matrix
 carrying an `mm_unavailable_reason` attribute instead of fabricated
 numbers — the same available/unavailable/typed-error contract as every

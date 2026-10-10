@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Convergence, Boundaries, and Singularity">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -138,16 +140,16 @@ summarizes:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/optimizer_certificate.html">optimizer_certificate</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Optimizer certificate:</span></span>
-<span><span class="co">#&gt;                   metric              value</span></span>
-<span><span class="co">#&gt;                   status converged_interior</span></span>
-<span><span class="co">#&gt;                optimizer     pattern_search</span></span>
-<span><span class="co">#&gt;                objective   95.0585066127678</span></span>
-<span><span class="co">#&gt;               iterations                 23</span></span>
-<span><span class="co">#&gt;       free_gradient_norm 0.0003577914994027</span></span>
-<span><span class="co">#&gt;  projected_gradient_norm 0.0003577914994027</span></span>
-<span><span class="co">#&gt;        hessian_eigen_min   20.7641716529313</span></span>
-<span><span class="co">#&gt;             hessian_rank                  1</span></span>
-<span><span class="co">#&gt;         information_rank                  1</span></span></code></pre></div>
+<span><span class="co">#&gt;                   metric                value</span></span>
+<span><span class="co">#&gt;                   status   converged_interior</span></span>
+<span><span class="co">#&gt;                optimizer       pattern_search</span></span>
+<span><span class="co">#&gt;                objective     95.0585066127678</span></span>
+<span><span class="co">#&gt;               iterations                   23</span></span>
+<span><span class="co">#&gt;       free_gradient_norm 0.000357840060177139</span></span>
+<span><span class="co">#&gt;  projected_gradient_norm 0.000357840060177139</span></span>
+<span><span class="co">#&gt;        hessian_eigen_min     20.7651381551018</span></span>
+<span><span class="co">#&gt;             hessian_rank                    1</span></span>
+<span><span class="co">#&gt;         information_rank                    1</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="boundary-and-reduced-rank-fits-are-labeled-facts">Boundary and reduced-rank fits are labeled facts<a class="anchor" aria-label="anchor" href="#boundary-and-reduced-rank-fits-are-labeled-facts"></a>
@@ -204,10 +206,10 @@ arc.</p>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="fu"><a href="../reference/diagnostics.html">diagnostics</a></span><span class="op">(</span><span class="va">sfit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"code"</span>, <span class="st">"severity"</span>, <span class="st">"stage"</span>, <span class="st">"message"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                 code severity         stage</span></span>
-<span><span class="co">#&gt; 1 boundary_parameter     info certification</span></span>
+<span><span class="co">#&gt; 1 optimizer_recovery     info certification</span></span>
 <span><span class="co">#&gt; 2 covariance_reduced     info certification</span></span>
 <span><span class="co">#&gt;                                                                            message</span></span>
-<span><span class="co">#&gt; 1           standard deviation for days in (1 + days | subj) is on its lower bound</span></span>
+<span><span class="co">#&gt; 1            optimizer recovered after covariance KKT-guided restart (2x2 block 0)</span></span>
 <span><span class="co">#&gt; 2 fitted covariance for (1 + days | subj) has effective rank 1 of requested rank 2</span></span>
 <span><span class="fu"><a href="../reference/changes.html">changes</a></span><span class="op">(</span><span class="va">sfit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Model changes:</span></span>
@@ -227,7 +229,7 @@ carries the tag in its header every time it prints — where
 <span><span class="co">#&gt; Linear mixed model fit by REML</span></span>
 <span><span class="co">#&gt; Formula: rt ~ days + (1 + days | subj)</span></span>
 <span><span class="co">#&gt; Fit status: converged_reduced_rank</span></span>
-<span><span class="co">#&gt; Optimizer: trust_bq; iterations: 314; objective: 1647.7</span></span>
+<span><span class="co">#&gt; Optimizer: trust_bq; iterations: 30; objective: 1647.7</span></span>
 <span><span class="co">#&gt; nobs: 180, sigma: 20.065, logLik: -823.849</span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt; (Intercept)        days </span></span>
@@ -258,10 +260,10 @@ of Λ. This is the parameterization Bates et al. (2015) describe for
 the mapping for the singular fit:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/parameterization.html">parameterization</a></span><span class="op">(</span><span class="va">sfit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"theta_name"</span>, <span class="st">"theta_value"</span>, <span class="st">"lambda_value"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;                     theta_name theta_value lambda_value</span></span>
-<span><span class="co">#&gt; 1 theta[0:intercept,intercept]   1.1802493    1.1802493</span></span>
-<span><span class="co">#&gt; 2      theta[0:days,intercept]   0.1605448    0.1605448</span></span>
-<span><span class="co">#&gt; 3           theta[0:days,days]   0.0000000    0.0000000</span></span></code></pre></div>
+<span><span class="co">#&gt;                     theta_name  theta_value lambda_value</span></span>
+<span><span class="co">#&gt; 1 theta[0:intercept,intercept] 1.180242e+00 1.180242e+00</span></span>
+<span><span class="co">#&gt; 2      theta[0:days,intercept] 1.605414e-01 1.605414e-01</span></span>
+<span><span class="co">#&gt; 3           theta[0:days,days] 1.678443e-08 1.678443e-08</span></span></code></pre></div>
 <p>The <em>diagonal</em> entry for the <code>days</code> slope is pinned
 at numerical zero — that is the boundary event behind the
 <code>converged_reduced_rank</code> status.</p>
@@ -371,12 +373,12 @@ drivers own optimizer selection).</p>
 <span><span class="co">#&gt; Convergence verification (status: restart_agrees)</span></span>
 <span><span class="co">#&gt;   restart from fitted theta agrees with the recorded optimum</span></span>
 <span><span class="co">#&gt; Runs:</span></span>
-<span><span class="co">#&gt;                 label optimizer  return_code objective_value objective_delta</span></span>
-<span><span class="co">#&gt;  restart_from_optimum    cobyla FTOL_REACHED         179.484     0.00000e+00</span></span>
-<span><span class="co">#&gt;      jitter_restart_1    cobyla FTOL_REACHED         179.484     8.06031e-09</span></span>
-<span><span class="co">#&gt;  theta_delta  beta_delta agrees</span></span>
-<span><span class="co">#&gt;  0.00000e+00 0.00000e+00   TRUE</span></span>
-<span><span class="co">#&gt;  7.40564e-06 5.80241e-07   TRUE</span></span>
+<span><span class="co">#&gt;                 label optimizer                return_code objective_value</span></span>
+<span><span class="co">#&gt;  restart_from_optimum  trust_bq JOINT_LAPLACE:FTOL_REACHED         179.457</span></span>
+<span><span class="co">#&gt;      jitter_restart_1  trust_bq JOINT_LAPLACE:FTOL_REACHED         179.457</span></span>
+<span><span class="co">#&gt;  objective_delta theta_delta  beta_delta agrees</span></span>
+<span><span class="co">#&gt;      2.84217e-14 3.70270e-12 1.83527e-11   TRUE</span></span>
+<span><span class="co">#&gt;      5.68434e-14 4.26725e-12 2.10366e-11   TRUE</span></span>
 <span><span class="co">#&gt; Tolerances: objective 1e-04; theta 0.001; beta 0.001</span></span></code></pre></div>
 </div>
 <div class="section level2">

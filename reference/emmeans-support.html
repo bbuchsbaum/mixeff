@@ -5,7 +5,7 @@ expose the same fixed-effect design surface used by mm_grid() and
 mm_means()."><meta property="og:description" content="These methods let emmeans build reference grids for mm_lmm and
 mm_glmm objects when the optional emmeans package is installed. They
 expose the same fixed-effect design surface used by mm_grid() and
-mm_means()."></head><body>
+mm_means()."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -106,7 +106,7 @@ expose the same fixed-effect design surface used by <code><a href="mm_grid.html"
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>The bridge covers population fixed-effect means only. For GLMMs the whole
 emmeans surface is gated by the package's inference-capability contract:
-a default profiled fit refuses with a typed error (refit with
+a profiled (<code>pirls_profiled</code>) fit refuses with a typed error (refit with
 <code>method = "joint_laplace"</code> for certified Wald inference, or opt in to the
 labelled working-Hessian approximation at fit time with
 <code>inference = "working_hessian"</code>). When the fitted artifact carries a

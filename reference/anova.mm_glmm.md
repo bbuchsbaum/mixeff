@@ -28,4 +28,9 @@ anova(object, ...)
 
 ## Value
 
-An `mm_model_comparison` object (multi-model case).
+A data frame of class
+`c("mm_anova_comparison", "mm_glmm_comparison", "anova", "data.frame")`
+shaped like `anova(glmer1, glmer2)`: columns `npar`, `AIC`, `BIC`,
+`logLik`, `-2*log(L)` (lme4 before 2.0 called it `deviance`), `Chisq`,
+`Df`, `Pr(>Chisq)`, rows named after the arguments. The underlying
+comparison (with the model formulas) is reachable as `x$table`.

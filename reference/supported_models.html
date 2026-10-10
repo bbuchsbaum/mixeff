@@ -13,7 +13,7 @@ semantics, and the package's explicit non-goals. The registry ships as
 inst/support/model-support.json and is the single source of truth for
 the migration vignette's support table; the test suite asserts that the
 fitting code enforces exactly this envelope (unsupported combinations
-refuse with the declared condition classes and reason codes)."></head><body>
+refuse with the declared condition classes and reason codes)."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -103,31 +103,39 @@ refuse with the declared condition classes and reason codes).</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  family            links                  estimators                   </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  binomial          logit, probit, cloglog pirls_profiled, joint_laplace</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  poisson           log, sqrt              pirls_profiled, joint_laplace</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  Gamma             log                    pirls_profiled, joint_laplace</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Gamma             inverse, log           pirls_profiled, joint_laplace</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  inverse.gaussian  inverse, log           pirls_profiled, joint_laplace</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  gaussian          log, inverse, sqrt     pirls_profiled, joint_laplace</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  negative_binomial log                    pirls_profiled               </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  notes                                                                                                 </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  Bernoulli 0/1, cbind(successes, failures), and proportion + trial weights responses.                  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>                                                                                                        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                                                                        </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  inverse is R's default Gamma link.                                                                    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  R's default 1/mu^2 link is not available in the engine and is refused; pass link = "inverse" or "log".</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Non-identity links only; gaussian/identity is an LMM and is refused with a pointer to lmm().          </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  NB2 via mm_negative_binomial(); theta estimated or fixed. Intervals via confint(method = "bootstrap").</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Features:</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  feature                                                                                  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  case weights                                                                             </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  offset                                                                                   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  simulate                                                                                 </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  refit                                                                                    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  subset / random / custom na.action / custom contrasts (GLMM)                             </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  double-bar || with factor terms                                                          </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  lmm              glmm            </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  supported        supported       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  unsupported      supported       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  supported        refused         </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  supported        refused         </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  see notes        refused         </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  supported        refused         </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  mixeff semantics mixeff semantics</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  feature                                                                                                                      </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  case weights                                                                                                                 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  offset                                                                                                                       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  simulate                                                                                                                     </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  refit                                                                                                                        </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  subset / na.action / contrasts                                                                                               </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  random = (GLMM)                                                                                                              </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  stateful fixed-effect terms (factor(), poly(), scale(), ns()/bs(), cut(), relevel(), offset(), ^, %in%, parenthesised groups)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect)                                    </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  double-bar || with factor terms                                                                                              </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  lmm            glmm     </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      supported</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      supported</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      supported</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      supported</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      supported</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  not applicable refused  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      supported</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      refused  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  supported      supported</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Non-goals: nonlinear mixed models; arbitrary GLM family objects or custom links; adaptive Gaussian quadrature as a general estimator contract (nAGQ &gt; 1 is a profiled-path sensitivity mode) </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>

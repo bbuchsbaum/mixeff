@@ -58,7 +58,7 @@ install.packages(
 )
 ```
 
-From GitHub (requires Rust 1.78 or newer):
+From GitHub (requires Rust 1.85 or newer):
 
 ``` r
 
@@ -205,12 +205,14 @@ statistical agreement within documented tolerances on the parity
 datasets, and the family/link table ships as a machine-readable registry
 ([`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)).
 
-The default profiled PIRLS estimator is fast but is not the same
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+defaults to `method = "joint_laplace"`, glmer’s joint Laplace estimator,
+with certified Wald inference. The opt-in fast profiled PIRLS estimator
+(`method = "pirls_profiled"`, lme4’s `nAGQ = 0`) is not the same
 estimator as `glmer()`, and it returns point estimates only — standard
 errors, z tests, p-values, and confidence intervals are withheld with a
-note naming the alternative. Use `method = "joint_laplace"` when
-glmer-equivalent Laplace estimates are needed for a supported family.
-See the [GLMM
+note naming the alternative. Negative-binomial families, which have no
+joint route yet, use the profiled path (announced). See the [GLMM
 vignette](https://bbuchsbaum.github.io/mixeff/articles/glmm.html) for
 the current boundaries.
 
@@ -280,8 +282,6 @@ The familiar lme4 accessor surface.
   [`model.frame(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
   [`model.frame(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
   [`ngrps()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
-  [`weights(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
-  [`weights(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
   [`extractAIC(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
   [`extractAIC(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
   [`terms(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
@@ -293,26 +293,77 @@ The familiar lme4 accessor surface.
   [`vcov(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
   [`vcov(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
   : Extract components from a fitted mixeff LMM
+
 - [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md) :
   Extract low-level model components
+
+- [`REMLcrit()`](https://bbuchsbaum.github.io/mixeff/reference/REMLcrit.md)
+  : REML criterion of a linear mixed model
+
+- [`family(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_family.md)
+  [`family(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_family.md)
+  [`weights(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_family.md)
+  [`weights(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_family.md)
+  : Family objects and prior weights for mixeff fits
+
 - [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md)
   : Test whether a fit is singular or reduced-rank
+
 - [`predict(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
   [`fitted(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
   [`residuals(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
   [`fitted(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
   [`residuals(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_lmm.md)
   : Predict from a fitted mixeff LMM
+
 - [`predict(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/predict.mm_glmm.md)
   : Predict from a fitted mixeff GLMM
+
 - [`update(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/update.mm.md)
   [`update(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/update.mm.md)
   : Update and re-fit a mixeff model
+
 - [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md) :
-  Refit a mixeff LMM with a new response
+  Refit a mixeff model with a new response
+
 - [`simulate(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/simulate.mm_lmm.md)
   [`simulate(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/simulate.mm_lmm.md)
-  : Simulate from a mixeff LMM
+  : Simulate responses from a mixeff fit
+
+- [`rePCA()`](https://bbuchsbaum.github.io/mixeff/reference/rePCA.md) :
+
+  PCA of the random-effects covariance (lme4's
+  [`rePCA()`](https://bbuchsbaum.github.io/mixeff/reference/rePCA.md))
+
+- [`mm_lmlist()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmlist.md)
+  : Per-group linear (or generalized linear) model fits
+
+## Diagnostics and influence
+
+Residual and random-effect plots, leverage, influence, R2 and ICC.
+
+- [`plot(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/plot.mm_fit.md)
+  [`plot(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/plot.mm_fit.md)
+  [`qqnorm(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/plot.mm_fit.md)
+  [`qqnorm(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/plot.mm_fit.md)
+  : Diagnostic plots for mixeff fits
+- [`plot(`*`<mm_ranef>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/plot.mm_ranef.md)
+  [`qqnorm(`*`<mm_ranef>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/plot.mm_ranef.md)
+  : Caterpillar and Q-Q plots of random effects
+- [`hatvalues(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`hatvalues(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`cooks.distance(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`cooks.distance(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`influence(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`influence(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`dfbeta(`*`<mm_influence>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`dfbetas(`*`<mm_influence>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  [`cooks.distance(`*`<mm_influence>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/mm_influence.md)
+  : Leverage, Cook's distance and deletion influence for mixeff fits
+- [`mm_variance_components()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+  [`mm_r2()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+  [`mm_icc()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+  : Variance decomposition, Nakagawa R2 and ICC for mixeff fits
 
 ## Inference
 
@@ -332,6 +383,8 @@ Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   : Drop one fixed-effect term at a time
 - [`drop1(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/drop1.mm_glmm.md)
   : Drop one fixed-effect term at a time from a GLMM
+- [`confint(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/confint.mm_lmm.md)
+  : Confidence intervals for a mixeff LMM
 - [`confint(`*`<mm_glmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/confint.mm_glmm.md)
   : Confidence intervals for fixed effects of a mixeff GLMM
 - [`profile(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/profile.mm_lmm.md)
@@ -348,6 +401,8 @@ Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   : Fixed-effect bootstrap control
 - [`parametric_bootstrap()`](https://bbuchsbaum.github.io/mixeff/reference/parametric_bootstrap.md)
   : Parametric bootstrap likelihood-ratio comparison
+- [`mm_bootmer()`](https://bbuchsbaum.github.io/mixeff/reference/mm_bootmer.md)
+  : Parametric bootstrap of any statistic of a fitted LMM
 
 ## Marginal effects & emmeans
 
@@ -368,8 +423,22 @@ Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
 
 - [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
   : Compare fitted mixeff models
+
 - [`compare_covariance()`](https://bbuchsbaum.github.io/mixeff/reference/compare_covariance.md)
   : Compare covariance parameterizations for current random terms
+
+- [`step()`](https://bbuchsbaum.github.io/mixeff/reference/step.md) :
+  Stepwise model selection
+
+- [`step(`*`<mm_lmm>`*`)`](https://bbuchsbaum.github.io/mixeff/reference/step.mm_lmm.md)
+  :
+
+  Backward elimination of random and fixed effects (lmerTest's
+  [`step()`](https://bbuchsbaum.github.io/mixeff/reference/step.md))
+
+- [`mm_allfit()`](https://bbuchsbaum.github.io/mixeff/reference/mm_allfit.md)
+  : Refit a model with every available optimizer
+
 - [`model_report()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
   [`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
   : Produce reporting tables for a fitted mixeff model

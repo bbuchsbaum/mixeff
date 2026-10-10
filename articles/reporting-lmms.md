@@ -98,7 +98,7 @@ reporting_table(fit, "overview")
 #>         fit_status                          converged_interior
 #>          inference             3/3 available fixed-effect rows
 #>    artifact_schema       mixedmodels.compiled_model_artifact 1
-#>      crate_version                                  1.0.0-rc.1
+#>      crate_version                                  1.0.0-rc.5
 #>    package_version                                       0.2.0
 ```
 
@@ -138,15 +138,15 @@ coefficient table. Use it for console review.
 
 ``` r
 
-coef_table <- summary(fit, method = "auto")$coefficients
+coef_table <- summary(fit, method = "auto")$coef_table
 knitr::kable(coef_table, digits = 4)
 ```
 
 |  | Estimate | Std. Error | df | t value | Pr(\>\|t\|) | method |
 |:---|---:|---:|---:|---:|---:|:---|
-| (Intercept) | 7.6829 | 0.1965 | 12.5650 | 39.1065 | 0.0000 | satterthwaite |
-| week | -0.2784 | 0.0260 | 58.9997 | -10.7280 | 0.0000 | satterthwaite |
-| treatmentcoached | -0.8995 | 0.2623 | 9.9993 | -3.4298 | 0.0064 | satterthwaite |
+| (Intercept) | 7.6829 | 0.1965 | 12.5655 | 39.1065 | 0.0000 | satterthwaite |
+| week | -0.2784 | 0.0260 | 59.0002 | -10.7280 | 0.0000 | satterthwaite |
+| treatmentcoached | -0.8995 | 0.2623 | 9.9997 | -3.4298 | 0.0064 | satterthwaite |
 
 For report assembly, use
 [`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md).
@@ -157,13 +157,13 @@ p-value, method, row status, and reliability label together.
 
 reporting_table(fit, "fixed_effects")
 #>              term   estimate  std_error        df  statistic statistic_name
-#>       (Intercept)  7.6828778 0.19646018 12.565022  39.106539              t
-#>              week -0.2783994 0.02595083 58.999740 -10.727955              t
-#>  treatmentcoached -0.8994747 0.26225014  9.999273  -3.429835              t
+#>       (Intercept)  7.6828778 0.19646018 12.565500  39.106539              t
+#>              week -0.2783994 0.02595083 59.000150 -10.727955              t
+#>  treatmentcoached -0.8994747 0.26225014  9.999671  -3.429835              t
 #>       p_value        method    status reliability
 #>  1.665335e-14 satterthwaite available    moderate
 #>  1.776357e-15 satterthwaite available    moderate
-#>  6.440943e-03 satterthwaite available    moderate
+#>  6.440574e-03 satterthwaite available    moderate
 ```
 
 When you need to audit where those rows came from, request the audit

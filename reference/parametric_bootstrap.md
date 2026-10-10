@@ -13,7 +13,14 @@ payload.
 ## Usage
 
 ``` r
-parametric_bootstrap(null, alternative, nsim = 100L, seed = NULL, ...)
+parametric_bootstrap(
+  null,
+  alternative,
+  nsim = 100L,
+  seed = NULL,
+  threads = 1L,
+  ...
+)
 ```
 
 ## Arguments
@@ -30,6 +37,14 @@ parametric_bootstrap(null, alternative, nsim = 100L, seed = NULL, ...)
 - seed:
 
   Optional bootstrap seed.
+
+- threads:
+
+  Worker threads for the replicate refits (default 1). The responses are
+  simulated serially and each replicate refits fresh copies of both
+  models, so the result is identical for every value; see
+  [`bootstrap_control()`](https://bbuchsbaum.github.io/mixeff/reference/bootstrap_control.md)
+  for the threading contract.
 
 - ...:
 

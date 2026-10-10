@@ -24,3 +24,7 @@ any model, engine, schema, or data semantics. Catching
 `mm_inference_unavailable` must mean "the engine refuses to certify
 this", not "you typed it wrong" — so plain argument validation raises
 `mm_arg_error`, never the domain-refusal classes.
+
+`mm_interrupted` is raised when the user interrupts (Ctrl-C / Esc) a
+long native computation: fits, refits, bootstraps, and profiles check
+for a pending interrupt between optimizer evaluations and stop cleanly.

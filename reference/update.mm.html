@@ -5,7 +5,7 @@ the common cases: changing the formula (. ~ . - x), toggling REML,
 swapping weights/offset/family/control, or supplying new data."><meta property="og:description" content="update() re-fits an mm_lmm or mm_glmm with a modified
 model specification, mirroring stats::update() and lme4's update() for
 the common cases: changing the formula (. ~ . - x), toggling REML,
-swapping weights/offset/family/control, or supplying new data."></head><body>
+swapping weights/offset/family/control, or supplying new data."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -88,8 +88,12 @@ omit to keep the current formula. Random-effect terms (<code>(x | g)</code>,
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Arguments to override on the re-fit. For <code>mm_lmm</code>: <code>data</code>,
-<code>REML</code>, <code>weights</code>, <code>control</code>. For <code>mm_glmm</code>: additionally <code>family</code>,
-<code>offset</code>, <code>method</code>, <code>nAGQ</code>, <code>inference</code>.</p></dd>
+<code>REML</code>, <code>weights</code>, <code>offset</code>, <code>na.action</code>, <code>control</code>. For <code>mm_glmm</code>:
+additionally <code>family</code>, <code>method</code>, <code>nAGQ</code>, <code>inference</code>. The fit's
+missing-value handling carries over: a refit of the stored model frame
+keeps the original <code>na.action</code> record (so <code>na.exclude</code> padding
+persists), and new <code>data</code> is filtered with the original <code>na.action</code>
+(<code>na.omit</code> or <code>na.exclude</code>) unless <code>na.action</code> is supplied.</p></dd>
 
 
 <dt id="arg-evaluate">evaluate<a class="anchor" aria-label="anchor" href="#arg-evaluate"></a></dt>

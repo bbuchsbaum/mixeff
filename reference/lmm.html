@@ -7,7 +7,7 @@ upstream Rust LinearMixedModel."><meta property="og:description" content="lmm() 
 requested lme4-style formula, emits the same explain_model() view that
 pre-fit audit users see as a message (silence it with suppressMessages()
 or mm_control(verbose = -1)), then delegates the numerical fit to the
-upstream Rust LinearMixedModel."></head><body>
+upstream Rust LinearMixedModel."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -74,9 +74,10 @@ upstream Rust <code>LinearMixedModel</code>.</p>
 <span>  REML <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  weights <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  subset <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  na.action <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  na.action <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"na.action"</span><span class="op">)</span>,</span>
 <span>  contrasts <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  control <span class="op">=</span> <span class="fu"><a href="mm_control.html">mm_control</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  control <span class="op">=</span> <span class="fu"><a href="mm_control.html">mm_control</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  offset <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -108,11 +109,25 @@ one value per row or an expression evaluated in <code>data</code>.</p></dd>
 
 
 <dt id="arg-na-action">na.action<a class="anchor" aria-label="anchor" href="#arg-na-action"></a></dt>
-<dd><p>Optional function controlling missing-value handling,
-applied to the model variables before fitting (e.g. <a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.omit</a>).
-The default (<code>NULL</code>) refuses any <code>NA</code> in a model variable with a typed
-<code>mm_data_error</code> (audit-first: missing-data dropping must be opt-in). Pass
-<code>na.action = na.omit</code> for lme4's complete-case behavior.</p></dd>
+<dd><p>A function (or function name) controlling missing-value
+handling, as in <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code> and <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">stats::lm()</a></code>. The default is
+<code>getOption("na.action")</code> (<code>na.omit</code> unless changed). It is applied after
+<code>subset</code> to the variables the model uses only – the formula variables
+(fixed and random parts, including evaluated transforms such as <code>log(x)</code>)
+plus <code>weights</code> and <code>offset</code> – so an <code>NA</code> in an unused column of <code>data</code>
+never drops a row, exactly like <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame()</a></code>. Dropped rows are never
+silent: a typed <code>mm_rows_dropped</code> message reports how many rows were
+dropped and which variables had missing values (silence it with
+<code>mm_control(verbose = -1)</code>). The dropped rows are recorded as
+<code>na.action(fit)</code> and <code>attr(model.frame(fit), "na.action")</code>, and
+<code><a href="https://rdrr.io/r/stats/nobs.html" class="external-link">nobs()</a></code> counts the rows used. <a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.omit</a> keeps the compact
+shape; <a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.exclude</a> pads <code><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted()</a></code>, <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code> and in-sample
+<code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> back to the rows of <code>data</code> with <code>NA</code>; <a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.fail</a>
+refuses missing values with a typed <code>mm_data_error</code>; <a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.pass</a>
+(or no action configured) is refused with a typed <code>mm_data_error</code>, since
+a mixed model cannot be fitted to missing values. Factor levels left
+unused after <code>subset</code>/NA removal are dropped, as
+<code>model.frame(drop.unused.levels = TRUE)</code> does in lme4.</p></dd>
 
 
 <dt id="arg-contrasts">contrasts<a class="anchor" aria-label="anchor" href="#arg-contrasts"></a></dt>
@@ -125,6 +140,14 @@ factor instead).</p></dd>
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>
 <dd><p>A list from <code><a href="mm_control.html">mm_control()</a></code>.</p></dd>
+
+
+<dt id="arg-offset">offset<a class="anchor" aria-label="anchor" href="#arg-offset"></a></dt>
+<dd><p>Optional known component of the linear predictor: a numeric
+vector with one value per row of <code>data</code>, or an expression evaluated in
+<code>data</code> (as in <code>lme4::lmer(offset = )</code>). <code><a href="https://rdrr.io/r/stats/offset.html" class="external-link">offset()</a></code> terms in the formula
+are supported too and are added to it. The engine fits <code>y - offset</code>;
+<code><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted()</a></code> and <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> add the offset back, so they match lmer.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -141,10 +164,30 @@ native Rust handle is treated as a rebuildable cache, not as the source of
 truth.</p>
 <p>Optimization runs inside a single native call with no progress output: the
 pre-fit explanation block (when <code>verbose &gt;= 0</code>) is the last thing printed
-before the fitted result returns, and the call cannot be interrupted from
-R. Evaluation budgets are bounded (a bounded budget caps optimizer
+before the fitted result returns. The fit checks for a user interrupt
+(Ctrl-C / Esc) between optimizer evaluations and stops with a typed
+<code>mm_interrupted</code> error (the check happens at evaluation boundaries, so a
+single very expensive evaluation finishes first). Evaluation budgets are bounded (a bounded budget caps optimizer
 iterations; it does not prove every native evaluation terminates); runtime on
 large problems is governed by <code>mm_control(max_feval = )</code>.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="formula-language">Formula language<a class="anchor" aria-label="anchor" href="#formula-language"></a></h2>
+
+
+<p>The fixed-effects part accepts R's formula language as <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">lm()</a></code>/<code>lmer()</code>
+do: <code><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor()</a></code>, <code><a href="https://rdrr.io/r/stats/relevel.html" class="external-link">relevel()</a></code>, <code><a href="https://rdrr.io/r/base/cut.html" class="external-link">cut()</a></code>, <code><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale()</a></code>, <code><a href="https://rdrr.io/r/stats/poly.html" class="external-link">poly()</a></code>,
+<code><a href="https://rdrr.io/r/splines/ns.html" class="external-link">splines::ns()</a></code>/<code>bs()</code>, <code><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric()</a></code>, comparisons such as <code>I(x &gt; 0)</code>,
+<code><a href="https://rdrr.io/r/stats/offset.html" class="external-link">offset()</a></code>, and the operators <code>*</code>, <code>:</code>, <code>^</code>, <code>%in%</code>, <code>-</code> and parenthesised
+groups such as <code>(a + b)^2</code> or <code>a * (b + c)</code>. Terms the engine cannot
+evaluate itself are evaluated in R (with <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">stats::model.frame()</a></code>
+semantics: on the full <code>data</code>, before <code>subset</code>/<code>na.action</code>) and sent to
+the engine as synthetic columns; coefficient names match lme4's
+(<code>poly(x, 2)1</code>, <code>factor(cyl)6</code>), and <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> on new data reuses the
+training basis (<code>predvars</code>), as <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">lm()</a></code> does. A logical predictor is coded
+like a factor with levels <code>FALSE</code>/<code>TRUE</code>, as <code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code> codes it.
+Such transforms are not supported inside random-effect terms, where the
+engine refuses them with a typed error.</p>
     </div>
 
     <div class="section level2">
@@ -160,21 +203,19 @@ large problems is governed by <code>mm_control(max_feval = )</code>.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> (Intercept)           x </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  0.07858531 -0.28479350 </span>
 <span class="r-in"><span><span class="fu"><a href="mm_lmm-methods.html">VarCorr</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Variance components:</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    group        name variance std_dev correlation       note</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  subject (Intercept)        0       0             [boundary]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Groups   Name        Std.Dev.           </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  subject  (Intercept) 0.00000  [boundary]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Residual             0.86702            </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [boundary]: variance component is at the boundary of the parameter space.</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Residual std. dev.: 0.867021</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Linear mixed model fit by REML</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Formula: y ~ x + (1 | subject)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Fit status: converged_reduced_rank</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Variance components:</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    group        name variance std_dev correlation       note</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  subject (Intercept)        0       0             [boundary]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Groups   Name        Std.Dev.           </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  subject  (Intercept) 0.00000  [boundary]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Residual             0.86702            </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [boundary]: variance component is at the boundary of the parameter space.</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Residual std. dev.: 0.867021</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Fixed effects:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>                Estimate Std. Error   z value Pr(&gt;|z|)            method</span>

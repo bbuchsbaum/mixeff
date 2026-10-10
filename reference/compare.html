@@ -5,7 +5,7 @@ comparisons. REML fits are refit by ML when refit_for_comparison = "auto"
 or "ml"; "error" refuses that comparison.'><meta property="og:description" content='compare() is the namespace-qualified model-comparison front door. For LMMs
 it reports likelihood, information criteria, and asymptotic likelihood-ratio
 comparisons. REML fits are refit by ML when refit_for_comparison = "auto"
-or "ml"; "error" refuses that comparison.'></head><body>
+or "ml"; "error" refuses that comparison.'><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -72,10 +72,11 @@ or <code>"ml"</code>; <code>"error"</code> refuses that comparison.</p>
 <span>  <span class="va">object</span>,</span>
 <span>  <span class="va">...</span>,</span>
 <span>  target <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fixed_effects"</span>, <span class="st">"random_effects"</span>, <span class="st">"prediction"</span><span class="op">)</span>,</span>
-<span>  method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"lrt"</span>, <span class="st">"bootstrap"</span>, <span class="st">"aic"</span><span class="op">)</span>,</span>
+<span>  method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"lrt"</span>, <span class="st">"bootstrap"</span>, <span class="st">"aic"</span>, <span class="st">"kenward_roger"</span>, <span class="st">"satterthwaite"</span><span class="op">)</span>,</span>
 <span>  refit_for_comparison <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"auto"</span>, <span class="st">"error"</span>, <span class="st">"ml"</span><span class="op">)</span>,</span>
 <span>  nsim <span class="op">=</span> <span class="fl">0L</span>,</span>
-<span>  seed <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  threads <span class="op">=</span> <span class="fl">1L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -97,8 +98,24 @@ or <code>"ml"</code>; <code>"error"</code> refuses that comparison.</p>
 
 <dt id="arg-method">method<a class="anchor" aria-label="anchor" href="#arg-method"></a></dt>
 <dd><p><code>"auto"</code> / <code>"lrt"</code> for asymptotic likelihood-ratio rows,
-<code>"aic"</code> for information criteria only, or <code>"bootstrap"</code> for a small
-parametric-bootstrap LRT when <code>nsim &gt; 0</code>.</p></dd>
+<code>"aic"</code> for information criteria only, <code>"bootstrap"</code> for a small
+parametric-bootstrap LRT when <code>nsim &gt; 0</code>, or <code>"kenward_roger"</code> /
+<code>"satterthwaite"</code> for pbkrtest's <code>KRmodcomp()</code> / <code>SATmodcomp()</code>: an F
+test of the larger model's fixed effects restricted to the smaller
+model's (two models with identical random effects, nested in their fixed
+effects). The restriction matrix is built from the two design matrices
+as pbkrtest does; the test runs on the REML fit of the larger model
+(refitted by REML if it was fitted by ML, as pbkrtest does). The
+Kenward-Roger F is pbkrtest's scaled statistic (the main <code>Ftest</code> row of
+<code>KRmodcomp()</code>, which lmerTest's <code>anova(ddf = "Kenward-Roger")</code> also
+reports): \(F = \lambda F_U\) referred to
+\(F(q, \nu)\) with the KR denominator df, where
+\(\lambda\) is the KR scaling factor (<code>f_scaling</code>; 1 for a
+single restriction). The unscaled statistic and its p-value (pbkrtest's
+<code>FtestU</code> row) are kept as <code>unscaled_statistic</code> / <code>unscaled_p_value</code>.
+The F row
+replaces the LRT row (<code>statistic_name = "F"</code>, <code>df</code> = numerator df,
+<code>den_df</code> = denominator df); the full result is in <code>$fixed_f</code>.</p></dd>
 
 
 <dt id="arg-refit-for-comparison">refit_for_comparison<a class="anchor" aria-label="anchor" href="#arg-refit-for-comparison"></a></dt>
@@ -111,6 +128,11 @@ parametric-bootstrap LRT when <code>nsim &gt; 0</code>.</p></dd>
 
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
 <dd><p>Optional bootstrap seed.</p></dd>
+
+
+<dt id="arg-threads">threads<a class="anchor" aria-label="anchor" href="#arg-threads"></a></dt>
+<dd><p>Worker threads for the bootstrap refits (default 1; see
+<code><a href="bootstrap_control.html">bootstrap_control()</a></code>). The result is identical for every value.</p></dd>
 
 </dl></div>
     <div class="section level2">

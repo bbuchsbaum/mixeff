@@ -7,7 +7,7 @@ also quiet it)."><meta property="og:description" content="mm_control() collects 
 verbose = -1 suppresses the pre-fit explain_model() message;
 non-negative values emit it once before optimization (it travels on the
 message stream, so suppressMessages() and knitr's message = FALSE
-also quiet it)."></head><body>
+also quiet it)."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -75,7 +75,11 @@ also quiet it).</p>
 <span>  start <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  ftol_rel <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  ftol_abs <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  xtol_rel <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  xtol_rel <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  optCtrl <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  disp_method <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  disp_dof_correction <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  max_phi_iter <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -85,7 +89,9 @@ also quiet it).</p>
 
 <dl><dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Integer verbosity level. Use <code>-1</code> to suppress the automatic
-model explanation (and the GLMM estimator notice).</p></dd>
+model explanation and the fit notices (the GLMM estimator notice, the
+<code>mm_rows_dropped</code> missing-value notice, grouping coercion and scaling
+advisories).</p></dd>
 
 
 <dt id="arg-max-feval">max_feval<a class="anchor" aria-label="anchor" href="#arg-max-feval"></a></dt>
@@ -118,6 +124,39 @@ tolerances on the objective. <code>NULL</code> keeps the engine default.</p></dd
 <dt id="arg-xtol-rel">xtol_rel<a class="anchor" aria-label="anchor" href="#arg-xtol-rel"></a></dt>
 <dd><p>Optional positive relative convergence tolerance on the
 optimizer parameters. <code>NULL</code> keeps the engine default.</p></dd>
+
+
+<dt id="arg-optctrl">optCtrl<a class="anchor" aria-label="anchor" href="#arg-optctrl"></a></dt>
+<dd><p>Optional named list in the style of lme4's
+<code>lmerControl(optCtrl = )</code>, translated to the engine's controls:
+<code>maxfun</code>/<code>maxeval</code> -&gt; <code>max_feval</code>; <code>ftol_rel</code>/<code>ftol_abs</code>/<code>xtol_rel</code> -&gt;
+the arguments of the same name; <code>xtol_abs</code> (scalar or one per theta)
+-&gt; the absolute parameter tolerance; <code>rhobeg</code> (scalar or one per
+theta) -&gt; the optimizer's initial step. Unknown names are refused with
+an <code>mm_arg_error</code> rather than ignored. lme4's <code>check.conv.*</code> options
+have no counterpart: mixeff does not emit post-hoc convergence
+warnings; the fit's convergence status is the engine's typed
+certificate (<code><a href="optimizer_certificate.html">optimizer_certificate()</a></code>, <code><a href="verify_convergence.html">verify_convergence()</a></code>).</p></dd>
+
+
+<dt id="arg-disp-method-disp-dof-correction-max-phi-iter">disp_method, disp_dof_correction, max_phi_iter<a class="anchor" aria-label="anchor" href="#arg-disp-method-disp-dof-correction-max-phi-iter"></a></dt>
+<dd><p>lme4 2.1-0's
+<code>glmerControl()</code> dispersion controls for <code><a href="glmm.html">glmm()</a></code> fits with a free
+dispersion parameter (Gamma, inverse Gaussian, Gaussian with a
+non-identity link). <code>disp_method = "moment"</code> (the default) profiles the
+dispersion <code>phi</code> in a damped fixed-point loop around PIRLS, with the
+working weights divided by <code>phi</code>; <code>"old/buggy"</code> restores lme4 &lt; 2.1
+(working weights with <code>phi = 1</code>, theta relative to <code><a href="https://rdrr.io/r/stats/sigma.html" class="external-link">sigma()</a></code>).
+<code>disp_dof_correction</code> (default <code>TRUE</code>) divides the deviance by
+<code>n - rank([X, Z])</code> rather than <code>n</code> in the moment estimator, and
+<code>max_phi_iter</code> (lme4's <code>maxPhiIter</code>, default 100) caps the <code>phi</code>
+iterations per objective evaluation. Both only matter for
+<code>"moment"</code>. <code>NULL</code> keeps the engine default (the lme4 2.1-0 default).
+Invalid values raise an <code>mm_arg_error</code>. For families without a free
+dispersion (binomial, Poisson, negative binomial) and for <code><a href="lmm.html">lmm()</a></code> the
+settings have no effect: they are kept on the control, and the fit
+announces that they were ignored with an <code>mm_control_ignored_notice</code>
+message (silenced by <code>verbose = -1</code>). lme4 ignores them silently.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -58,7 +58,7 @@ install.packages(
 )
 ```
 
-From GitHub (requires Rust 1.78 or newer):
+From GitHub (requires Rust 1.85 or newer):
 
 ``` r
 
@@ -205,12 +205,14 @@ statistical agreement within documented tolerances on the parity
 datasets, and the family/link table ships as a machine-readable registry
 ([`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)).
 
-The default profiled PIRLS estimator is fast but is not the same
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+defaults to `method = "joint_laplace"`, glmer’s joint Laplace estimator,
+with certified Wald inference. The opt-in fast profiled PIRLS estimator
+(`method = "pirls_profiled"`, lme4’s `nAGQ = 0`) is not the same
 estimator as `glmer()`, and it returns point estimates only — standard
 errors, z tests, p-values, and confidence intervals are withheld with a
-note naming the alternative. Use `method = "joint_laplace"` when
-glmer-equivalent Laplace estimates are needed for a supported family.
-See the [GLMM
+note naming the alternative. Negative-binomial families, which have no
+joint route yet, use the profiled path (announced). See the [GLMM
 vignette](https://bbuchsbaum.github.io/mixeff/articles/glmm.html) for
 the current boundaries.
 

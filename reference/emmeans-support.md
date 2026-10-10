@@ -51,9 +51,9 @@ and
 
 The bridge covers population fixed-effect means only. For GLMMs the
 whole emmeans surface is gated by the package's inference-capability
-contract: a default profiled fit refuses with a typed error (refit with
-`method = "joint_laplace"` for certified Wald inference, or opt in to
-the labelled working-Hessian approximation at fit time with
+contract: a profiled (`pirls_profiled`) fit refuses with a typed error
+(refit with `method = "joint_laplace"` for certified Wald inference, or
+opt in to the labelled working-Hessian approximation at fit time with
 `inference = "working_hessian"`). When the fitted artifact carries a
 usable `mixedmodels.fixed_effect_covariance_matrix` payload, `emmeans`
 receives that full fixed-effect covariance matrix. Native

@@ -70,16 +70,16 @@ facts the status label summarizes:
 
 optimizer_certificate(fit)
 #> Optimizer certificate:
-#>                   metric              value
-#>                   status converged_interior
-#>                optimizer     pattern_search
-#>                objective   95.0585066127678
-#>               iterations                 23
-#>       free_gradient_norm 0.0003577914994027
-#>  projected_gradient_norm 0.0003577914994027
-#>        hessian_eigen_min   20.7641716529313
-#>             hessian_rank                  1
-#>         information_rank                  1
+#>                   metric                value
+#>                   status   converged_interior
+#>                optimizer       pattern_search
+#>                objective     95.0585066127678
+#>               iterations                   23
+#>       free_gradient_norm 0.000357840060177139
+#>  projected_gradient_norm 0.000357840060177139
+#>        hessian_eigen_min     20.7651381551018
+#>             hessian_rank                    1
+#>         information_rank                    1
 ```
 
 ## Boundary and reduced-rank fits are labeled facts
@@ -145,10 +145,10 @@ is_singular(sfit)
 #> [1] TRUE
 diagnostics(sfit)$table[, c("code", "severity", "stage", "message")]
 #>                 code severity         stage
-#> 1 boundary_parameter     info certification
+#> 1 optimizer_recovery     info certification
 #> 2 covariance_reduced     info certification
 #>                                                                            message
-#> 1           standard deviation for days in (1 + days | subj) is on its lower bound
+#> 1            optimizer recovered after covariance KKT-guided restart (2x2 block 0)
 #> 2 fitted covariance for (1 + days | subj) has effective rank 1 of requested rank 2
 changes(sfit)
 #> Model changes:
@@ -171,7 +171,7 @@ print(sfit)
 #> Linear mixed model fit by REML
 #> Formula: rt ~ days + (1 + days | subj)
 #> Fit status: converged_reduced_rank
-#> Optimizer: trust_bq; iterations: 314; objective: 1647.7
+#> Optimizer: trust_bq; iterations: 30; objective: 1647.7
 #> nobs: 180, sigma: 20.065, logLik: -823.849
 #> Fixed effects:
 #> (Intercept)        days 
@@ -204,10 +204,10 @@ shows the mapping for the singular fit:
 ``` r
 
 parameterization(sfit)$table[, c("theta_name", "theta_value", "lambda_value")]
-#>                     theta_name theta_value lambda_value
-#> 1 theta[0:intercept,intercept]   1.1802493    1.1802493
-#> 2      theta[0:days,intercept]   0.1605448    0.1605448
-#> 3           theta[0:days,days]   0.0000000    0.0000000
+#>                     theta_name  theta_value lambda_value
+#> 1 theta[0:intercept,intercept] 1.180242e+00 1.180242e+00
+#> 2      theta[0:days,intercept] 1.605414e-01 1.605414e-01
+#> 3           theta[0:days,days] 1.678443e-08 1.678443e-08
 ```
 
 The *diagonal* entry for the `days` slope is pinned at numerical zero —
@@ -333,12 +333,12 @@ gv
 #> Convergence verification (status: restart_agrees)
 #>   restart from fitted theta agrees with the recorded optimum
 #> Runs:
-#>                 label optimizer  return_code objective_value objective_delta
-#>  restart_from_optimum    cobyla FTOL_REACHED         179.484     0.00000e+00
-#>      jitter_restart_1    cobyla FTOL_REACHED         179.484     8.06031e-09
-#>  theta_delta  beta_delta agrees
-#>  0.00000e+00 0.00000e+00   TRUE
-#>  7.40564e-06 5.80241e-07   TRUE
+#>                 label optimizer                return_code objective_value
+#>  restart_from_optimum  trust_bq JOINT_LAPLACE:FTOL_REACHED         179.457
+#>      jitter_restart_1  trust_bq JOINT_LAPLACE:FTOL_REACHED         179.457
+#>  objective_delta theta_delta  beta_delta agrees
+#>      2.84217e-14 3.70270e-12 1.83527e-11   TRUE
+#>      5.68434e-14 4.26725e-12 2.10366e-11   TRUE
 #> Tolerances: objective 1e-04; theta 0.001; beta 0.001
 ```
 

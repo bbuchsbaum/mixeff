@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Inference">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -118,7 +120,7 @@ allowed to vary.</p>
 </h2>
 <p>Start with the ordinary coefficient table.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">coef_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span>, method <span class="op">=</span> <span class="st">"auto"</span><span class="op">)</span><span class="op">$</span><span class="va">coefficients</span></span>
+<code class="sourceCode R"><span><span class="va">coef_table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span>, method <span class="op">=</span> <span class="st">"auto"</span><span class="op">)</span><span class="op">$</span><span class="va">coef_table</span></span>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">coef_table</span>, digits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
@@ -144,7 +146,7 @@ allowed to vary.</p>
 <td align="left">(Intercept)</td>
 <td align="right">7.6829</td>
 <td align="right">0.1965</td>
-<td align="right">12.5650</td>
+<td align="right">12.5655</td>
 <td align="right">39.1065</td>
 <td align="right">0.0000</td>
 <td align="left">satterthwaite</td>
@@ -153,7 +155,7 @@ allowed to vary.</p>
 <td align="left">week</td>
 <td align="right">-0.2784</td>
 <td align="right">0.0260</td>
-<td align="right">58.9997</td>
+<td align="right">59.0002</td>
 <td align="right">-10.7280</td>
 <td align="right">0.0000</td>
 <td align="left">satterthwaite</td>
@@ -162,7 +164,7 @@ allowed to vary.</p>
 <td align="left">treatmentcoached</td>
 <td align="right">-0.8995</td>
 <td align="right">0.2623</td>
-<td align="right">9.9993</td>
+<td align="right">9.9997</td>
 <td align="right">-3.4298</td>
 <td align="right">0.0064</td>
 <td align="left">satterthwaite</td>
@@ -188,9 +190,9 @@ to the best feasible method and agree with each other row for row.</p>
 <span><span class="co">#&gt;              week             week coefficient -0.2783994 0.02595083 NA</span></span>
 <span><span class="co">#&gt;  treatmentcoached treatmentcoached coefficient -0.8994747 0.26225014 NA</span></span>
 <span><span class="co">#&gt;  numerator_df denominator_df  statistic statistic_name      p_value</span></span>
-<span><span class="co">#&gt;            NA             NA  39.106539              z 0.0000000000</span></span>
-<span><span class="co">#&gt;            NA             NA -10.727955              z 0.0000000000</span></span>
-<span><span class="co">#&gt;            NA             NA  -3.429835              z 0.0006039485</span></span>
+<span><span class="co">#&gt;            NA             NA  39.106539              z 0.000000e+00</span></span>
+<span><span class="co">#&gt;            NA             NA -10.727955              z 7.524248e-27</span></span>
+<span><span class="co">#&gt;            NA             NA  -3.429835              z 6.039485e-04</span></span>
 <span><span class="co">#&gt;             method    status reliability         reliability_reason reason</span></span>
 <span><span class="co">#&gt;  asymptotic_wald_z available         low asymptotic_wald_z_fallback   &lt;NA&gt;</span></span>
 <span><span class="co">#&gt;  asymptotic_wald_z available         low asymptotic_wald_z_fallback   &lt;NA&gt;</span></span>
@@ -213,9 +215,9 @@ program differs from usual care.</p>
 <span><span class="fu"><a href="../reference/contrast.html">contrast</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">L</span>, method <span class="op">=</span> <span class="st">"satterthwaite"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Fixed-effect contrasts:</span></span>
 <span><span class="co">#&gt;  contrast   estimate rhs std_error       df statistic statistic_name</span></span>
-<span><span class="co">#&gt;        c1 -0.8994747   0 0.2622501 9.999273 -3.429835              t</span></span>
+<span><span class="co">#&gt;        c1 -0.8994747   0 0.2622501 9.999671 -3.429835              t</span></span>
 <span><span class="co">#&gt;      p_value        method requested_method    status reliability</span></span>
-<span><span class="co">#&gt;  0.006440943 satterthwaite    satterthwaite available    moderate</span></span>
+<span><span class="co">#&gt;  0.006440574 satterthwaite    satterthwaite available    moderate</span></span>
 <span><span class="co">#&gt;                             reliability_reason estimability reason reason_code</span></span>
 <span><span class="co">#&gt;  satterthwaite_finite_difference_approximation fixed_co....   &lt;NA&gt;        &lt;NA&gt;</span></span>
 <span><span class="co">#&gt;  reason_detail      details        notes</span></span>
@@ -235,11 +237,12 @@ program differs from usual care.</p>
 table.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova</a></span><span class="op">(</span><span class="va">fit</span>, type <span class="op">=</span> <span class="st">"III"</span>, method <span class="op">=</span> <span class="st">"kenward_roger"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Type III analysis of fixed effects (method: kenward_roger):</span></span>
-<span><span class="co">#&gt;       term num_df den_df statistic      p_value        method</span></span>
-<span><span class="co">#&gt;       week      1     59 115.08903 1.776357e-15 kenward_roger</span></span>
-<span><span class="co">#&gt;  treatment      1     10  11.76377 6.440269e-03 kenward_roger</span></span>
-<span><span class="co">#&gt; Full provenance columns available in `$table` (type, statistic_name, requested_method, status, reliability, reason, details, notes).</span></span></code></pre></div>
+<span><span class="co">#&gt; Type III Analysis of Variance Table with Kenward-Roger's method</span></span>
+<span><span class="co">#&gt;            Sum Sq Mean Sq NumDF DenDF F value    Pr(&gt;F)    </span></span>
+<span><span class="co">#&gt; week      16.2763 16.2763     1    59 115.089 1.776e-15 ***</span></span>
+<span><span class="co">#&gt; treatment  1.6637  1.6637     1    10  11.764   0.00644 ** </span></span>
+<span><span class="co">#&gt; ---</span></span>
+<span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span></code></pre></div>
 <p><code>type</code> selects the term hypothesis. <code>"III"</code>
 (the default) is marginal Type III: a term’s own contrast columns plus
 the equally-weighted average over the levels of every term that contains
@@ -514,7 +517,7 @@ standard error.</p>
 <span>  mcse <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">run</span><span class="op">$</span><span class="va">mcse</span>, <span class="fl">4</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt;   requested_replicates successful_replicates boundary_rate   mcse</span></span>
-<span><span class="co">#&gt; 1                   50                    50          0.56 0.0196</span></span></code></pre></div>
+<span><span class="co">#&gt; 1                   50                    50          0.48 0.0196</span></span></code></pre></div>
 <p>The boundary rate is not a failure count. It reports how often the
 bootstrap refits also ended on a covariance boundary. That is useful
 diagnostic information: it tells you that the boundary behavior is not
@@ -548,18 +551,18 @@ fixed-effect p-value.</p>
 <span><span class="va">ci</span></span>
 <span><span class="co">#&gt; Confidence intervals:</span></span>
 <span><span class="co">#&gt;         2.5 %   97.5 %</span></span>
-<span><span class="co">#&gt; days 7.588973 10.68778</span></span>
+<span><span class="co">#&gt; days 7.589003 10.68777</span></span>
 <span><span class="co">#&gt; method: bootstrap_full_model_distribution</span></span>
 <span><span class="co">#&gt; interval: percentile</span></span>
 <span><span class="co">#&gt; status: available</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Bootstrap run:</span></span>
 <span><span class="co">#&gt;  parameter requested successful failed_refits boundary_rate seed</span></span>
-<span><span class="co">#&gt;       days        50         50             0          0.58    2</span></span>
+<span><span class="co">#&gt;       days        50         50             0          0.46    2</span></span>
 <span><span class="co">#&gt; notes:</span></span>
 <span><span class="co">#&gt;   - full-model bootstrap distributions do not certify fixed-effect</span></span>
 <span><span class="co">#&gt;         hypothesis-test p-values</span></span>
-<span><span class="co">#&gt;   - 29 successful bootstrap refit(s) ended on a covariance boundary</span></span>
+<span><span class="co">#&gt;   - 23 successful bootstrap refit(s) ended on a covariance boundary</span></span>
 <span><span class="co">#&gt; Full bootstrap payload available in `attr(x, "bootstrap")`.</span></span></code></pre></div>
 <p>The attached bootstrap payload records what was simulated and why the
 interval should not be reinterpreted as a fixed-effect hypothesis
@@ -573,7 +576,7 @@ test.</p>
 <span><span class="co">#&gt; [1] "full-model bootstrap distributions do not certify fixed-effect hypothesis-test p-values"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; [[2]]</span></span>
-<span><span class="co">#&gt; [1] "29 successful bootstrap refit(s) ended on a covariance boundary"</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "23 successful bootstrap refit(s) ended on a covariance boundary"</span></span></code></pre></div>
 <p>This distinction is central:</p>
 <ul>
 <li>
@@ -627,7 +630,10 @@ the Self-Liang 50:50 mixture,
 samples the true null distribution puts more mass at zero than the
 mixture, so the test runs conservative (Crainiceanu and Ruppert 2004);
 with 18 subjects here, read a marginal mixture p-value with that in
-mind.</p>
+mind. A comparison that adds only correlation parameters —
+<code>(x || g)</code> against <code>(x | g)</code> — has no boundary (a
+zero correlation is interior), so it is referred to the ordinary
+chi-square, as <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> does.</p>
 <p>Fit a simpler random-intercept model by ML:</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ri_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lmm.html">lmm</a></span><span class="op">(</span></span>
@@ -669,64 +675,65 @@ route refuses rather than running.</p>
 <div class="section level2">
 <h2 id="profile-confidence-intervals">Profile confidence intervals<a class="anchor" aria-label="anchor" href="#profile-confidence-intervals"></a>
 </h2>
-<p>Profile-likelihood intervals are available for variance parameters
-under both fitting criteria, but fixed-effect (beta) profile intervals
-require an ML fit: under the REML default, the beta rows are recorded as
-unavailable with the reason code
-<code>profile_beta_unavailable_under_reml</code>, not silently
-approximated.</p>
+<p><code>confint(fit, method = "profile")</code> returns lme4’s rows:
+<code>.sig01</code>, … (random-effect standard deviations and
+correlations, numbered in lme4’s term order), <code>.sigma</code>, then
+the fixed effects. As in lme4, the profile is of the ML deviance, so a
+REML fit’s intervals are those of its ML refit, fixed effects included.
+The engine’s relative-Cholesky <code>theta</code> rows (profiled on the
+fit’s own criterion) stay in the attached table. Large models can pass
+<code>threads =</code>; the intervals are identical for every thread
+count.</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">prof</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">fit</span>, method <span class="op">=</span> <span class="st">"profile"</span><span class="op">)</span></span>
 <span><span class="va">prof</span></span>
 <span><span class="co">#&gt; Confidence intervals:</span></span>
-<span><span class="co">#&gt;                      2.5 %    97.5 %</span></span>
-<span><span class="co">#&gt; theta1           0.6712410 2.0292158</span></span>
-<span><span class="co">#&gt; sigma            0.3172088 0.4556499</span></span>
-<span><span class="co">#&gt; (Intercept)             NA        NA</span></span>
-<span><span class="co">#&gt; week                    NA        NA</span></span>
-<span><span class="co">#&gt; treatmentcoached        NA        NA</span></span>
+<span><span class="co">#&gt;                       2.5 %     97.5 %</span></span>
+<span><span class="co">#&gt; .sig01            0.2469336  0.6399050</span></span>
+<span><span class="co">#&gt; .sigma            0.3149774  0.4510658</span></span>
+<span><span class="co">#&gt; (Intercept)       7.3039685  8.0617870</span></span>
+<span><span class="co">#&gt; week             -0.3296535 -0.2271452</span></span>
+<span><span class="co">#&gt; treatmentcoached -1.4088634 -0.3900860</span></span>
 <span><span class="co">#&gt; method: profile_likelihood</span></span>
 <span><span class="co">#&gt; status: available</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">prof</span>, <span class="st">"mm_profile"</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span></span>
 <span>  ,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"parameter"</span>, <span class="st">"parameter_kind"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"reason_code"</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"parameter"</span>, <span class="st">"parameter_kind"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"profiled_criterion"</span><span class="op">)</span></span>
 <span><span class="op">]</span></span>
-<span><span class="co">#&gt;          parameter parameter_kind     lower     upper</span></span>
-<span><span class="co">#&gt; 1           theta1          theta 0.6712410 2.0292158</span></span>
-<span><span class="co">#&gt; 2            sigma          sigma 0.3172088 0.4556499</span></span>
-<span><span class="co">#&gt; 3      (Intercept)           beta        NA        NA</span></span>
-<span><span class="co">#&gt; 4             week           beta        NA        NA</span></span>
-<span><span class="co">#&gt; 5 treatmentcoached           beta        NA        NA</span></span>
-<span><span class="co">#&gt;                           reason_code</span></span>
-<span><span class="co">#&gt; 1                                &lt;NA&gt;</span></span>
-<span><span class="co">#&gt; 2                                &lt;NA&gt;</span></span>
-<span><span class="co">#&gt; 3 profile_beta_unavailable_under_reml</span></span>
-<span><span class="co">#&gt; 4 profile_beta_unavailable_under_reml</span></span>
-<span><span class="co">#&gt; 5 profile_beta_unavailable_under_reml</span></span></code></pre></div>
-<p>Refit with <code>REML = FALSE</code> when you want beta profile
-intervals. On boundary fits, profile intervals are refused outright
+<span><span class="co">#&gt;          parameter parameter_kind      lower      upper profiled_criterion</span></span>
+<span><span class="co">#&gt; 1           .sig01             sd  0.2469336  0.6399050                 ML</span></span>
+<span><span class="co">#&gt; 2           .sigma          sigma  0.3149774  0.4510658                 ML</span></span>
+<span><span class="co">#&gt; 3      (Intercept)           beta  7.3039685  8.0617870                 ML</span></span>
+<span><span class="co">#&gt; 4             week           beta -0.3296535 -0.2271452                 ML</span></span>
+<span><span class="co">#&gt; 5 treatmentcoached           beta -1.4088634 -0.3900860                 ML</span></span>
+<span><span class="co">#&gt; 6           theta1          theta  0.6712410  2.0292158               REML</span></span></code></pre></div>
+<p>On boundary fits, profile intervals are refused outright
 (<code>profile_ci_unavailable_at_boundary</code>), as the route map
 above showed.</p>
 </div>
 <div class="section level2">
 <h2 id="glmm-inference-the-three-route-contract">GLMM inference: the three-route contract<a class="anchor" aria-label="anchor" href="#glmm-inference-the-three-route-contract"></a>
 </h2>
-<p>For generalized linear mixed models the contract is stricter, because
-the default estimator is not certified for Wald inference.
-<code><a href="../reference/glmm.html">glmm()</a></code>’s default <code>method = "pirls_profiled"</code> is
-a fast profiled PIRLS fitter: it returns point estimates, fitted values,
-and variance components, but <strong>refuses Wald standard errors, z
-statistics, p-values, and confidence intervals on every route</strong>.
-Its covariance payload is a working Hessian the engine does not certify,
-and the engine’s own documentation warns that the profiled path is a
-different statistical approximation than <code>glmer()</code>’s joint
-Laplace fit — it can be less accurate for overdispersed models and
-models with observation-level random effects.</p>
+<p>For generalized linear mixed models the contract depends on the
+estimator. <code><a href="../reference/glmm.html">glmm()</a></code>’s default
+<code>method = "joint_laplace"</code> is glmer’s joint Laplace estimator
+and its Wald inference is certified. The opt-in
+<code>method = "pirls_profiled"</code> (lme4’s <code>nAGQ = 0</code>
+analogue; also used, with a notice, for negative-binomial families and
+<code>nAGQ &gt; 1</code>) is a fast profiled PIRLS fitter: it returns
+point estimates, fitted values, and variance components, but
+<strong>refuses Wald standard errors, z statistics, p-values, and
+confidence intervals on every route</strong>. Its covariance payload is
+a working Hessian the engine does not certify, and the engine’s own
+documentation warns that the profiled path is a different statistical
+approximation than <code>glmer()</code>’s joint Laplace fit — it can be
+less accurate for overdispersed models and models with observation-level
+random effects.</p>
 <p>Exactly three routes lead to reportable GLMM inference, and every
 refusal names them:</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>Certified joint Wald.</strong> Refit with
+<strong>Certified joint Wald.</strong> The default
 <code>method = "joint_laplace"</code>; standard errors, z tests, and
 Wald intervals come from a covariance the engine certifies.
 <code><a href="../articles/glmm.html">vignette("glmm")</a></code> is the operational quickstart for this
@@ -750,20 +757,22 @@ exploration and screening only. Every unlocked row is labeled
 invocation, and the aphantasia reproduction article (<a href="https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html" class="uri">https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html</a>)
 is the worked example of why this route is opt-in.</li>
 </ol>
-<p>The practical rule: explore with the default, report with
-<code>joint_laplace</code> or the bootstrap.</p>
-<p>Here is the contract on a small simulated binomial GLMM. On the
-default fit, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints the estimates and withholds
+<p>The practical rule: report with the default
+<code>joint_laplace</code> fit or the bootstrap; treat profiled-fit
+point estimates as exploratory.</p>
+<p>Here is the contract on a small simulated binomial GLMM. On a
+profiled fit, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints the estimates and withholds
 the inference columns:</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gfit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
 <span>  <span class="va">y</span> <span class="op">~</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">g</span><span class="op">)</span>,</span>
 <span>  <span class="va">trials</span>,</span>
 <span>  family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"pirls_profiled"</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">gtab</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">gfit</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span><span class="op">$</span><span class="va">coefficients</span></span>
+<span><span class="va">gtab</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">gfit</span>, tests <span class="op">=</span> <span class="st">"coefficients"</span><span class="op">)</span><span class="op">$</span><span class="va">coef_table</span></span>
 <span><span class="va">gtab</span></span>
 <span><span class="co">#&gt;               Estimate Std. Error statistic p.value       method</span></span>
 <span><span class="co">#&gt; (Intercept) -0.3993006         NA        NA      NA not_computed</span></span>
@@ -792,8 +801,8 @@ rubric.</p>
 <code class="sourceCode R"><span><span class="va">gci</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">gfit</span>, method <span class="op">=</span> <span class="st">"bootstrap"</span>, nsim <span class="op">=</span> <span class="fl">30</span>, seed <span class="op">=</span> <span class="fl">42</span><span class="op">)</span></span>
 <span><span class="va">gci</span></span>
 <span><span class="co">#&gt;                  2.5 %    97.5 %</span></span>
-<span><span class="co">#&gt; (Intercept) -0.9729923 0.3359735</span></span>
-<span><span class="co">#&gt; x            0.1704129 1.2433597</span></span>
+<span><span class="co">#&gt; (Intercept) -0.9733695 0.3359715</span></span>
+<span><span class="co">#&gt; x            0.1702030 1.2433526</span></span>
 <span><span class="co">#&gt; attr(,"mm_method")</span></span>
 <span><span class="co">#&gt; [1] "glmm_parametric_bootstrap_percentile"</span></span>
 <span><span class="co">#&gt; attr(,"mm_estimator")</span></span>
@@ -811,12 +820,15 @@ rubric.</p>
 <span><span class="co">#&gt; attr(,"mm_bootstrap")$seed</span></span>
 <span><span class="co">#&gt; [1] 42</span></span>
 <span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; attr(,"mm_bootstrap")$threads</span></span>
+<span><span class="co">#&gt; [1] 1</span></span>
+<span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; attr(,"mm_bootstrap")$std_errors</span></span>
 <span><span class="co">#&gt; (Intercept)           x </span></span>
-<span><span class="co">#&gt;   0.3686198   0.2927409 </span></span>
+<span><span class="co">#&gt;   0.3686496   0.2926142 </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; attr(,"mm_bootstrap")$mcse</span></span>
-<span><span class="co">#&gt; [1] 0.06730046</span></span>
+<span><span class="co">#&gt; [1] 0.0673059</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; attr(,"mm_bootstrap")$reliability</span></span>
 <span><span class="co">#&gt; attr(,"mm_bootstrap")$reliability$reliability</span></span>
@@ -923,18 +935,17 @@ treatment question.</p>
 <span><span class="co">#&gt; Formula: score ~ trt * time + (1 | clinic) + (1 | subj)</span></span>
 <span><span class="co">#&gt; Fit status: converged_interior</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Variance components:</span></span>
-<span><span class="co">#&gt;   group        name variance  std_dev correlation</span></span>
-<span><span class="co">#&gt;    subj (Intercept) 0.328791 0.573403            </span></span>
-<span><span class="co">#&gt;  clinic (Intercept) 1.267670 1.125910            </span></span>
-<span><span class="co">#&gt; Residual std. dev.: 0.399888</span></span>
+<span><span class="co">#&gt;  Groups   Name        Std.Dev.</span></span>
+<span><span class="co">#&gt;  subj     (Intercept) 0.57340 </span></span>
+<span><span class="co">#&gt;  clinic   (Intercept) 1.12591 </span></span>
+<span><span class="co">#&gt;  Residual             0.39989 </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Fixed effects:</span></span>
 <span><span class="co">#&gt;                     Estimate Std. Error        df    t value  Pr(&gt;|t|)</span></span>
-<span><span class="co">#&gt; (Intercept)        51.871482  0.6018249  3.425072  86.190327 7.755e-07</span></span>
-<span><span class="co">#&gt; trtactive          -1.971661  0.3156838 25.438945  -6.245684 1.443e-06</span></span>
-<span><span class="co">#&gt; timepost           -3.962867  0.1632535 22.009671 -24.274316   &lt; 1e-16</span></span>
-<span><span class="co">#&gt; trtactive:timepost -2.818065  0.2308753 22.009671 -12.206006 2.848e-11</span></span>
+<span><span class="co">#&gt; (Intercept)        51.871482  0.6018245  3.423972  86.190373 7.785e-07</span></span>
+<span><span class="co">#&gt; trtactive          -1.971661  0.3156837 25.430247  -6.245686 1.445e-06</span></span>
+<span><span class="co">#&gt; timepost           -3.962867  0.1632536 22.000014 -24.274304   &lt; 1e-16</span></span>
+<span><span class="co">#&gt; trtactive:timepost -2.818065  0.2308754 22.000014 -12.206000 2.865e-11</span></span>
 <span><span class="co">#&gt;                           method</span></span>
 <span><span class="co">#&gt; (Intercept)        satterthwaite</span></span>
 <span><span class="co">#&gt; trtactive          satterthwaite</span></span>
@@ -954,7 +965,7 @@ treatment question.</p>
 <span><span class="co">#&gt;  satterthwaite_finite_difference_approximation</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Notes:</span></span>
-<span><span class="co">#&gt;   Satterthwaite denominator df computed from finite-difference vcov_beta Jacobian and deviance Hessian over varpar</span></span></code></pre></div>
+<span><span class="co">#&gt;   Satterthwaite denominator df computed from analytic vcov_beta Jacobian and finite-difference deviance Hessian over varpar</span></span></code></pre></div>
 <p>The interaction coefficient <code>trtactive:timepost</code> tells you
 the <em>additional</em> post-treatment change for the active arm
 relative to control — a cell-specific quantity, estimand (1) territory.
@@ -989,10 +1000,10 @@ means.</p>
 <code class="sourceCode R"><span><span class="va">preds</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_grid.html">mm_predictions</a></span><span class="op">(</span><span class="va">rfit</span>, specs <span class="op">=</span> <span class="op">~</span> <span class="va">trt</span> <span class="op">*</span> <span class="va">time</span><span class="op">)</span></span>
 <span><span class="va">preds</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"label"</span>, <span class="st">"estimate"</span>, <span class="st">"conf_low"</span>, <span class="st">"conf_high"</span>, <span class="st">"method"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                    label estimate conf_low conf_high        method</span></span>
-<span><span class="co">#&gt; 1  trt=control, time=pre 51.87148 50.08390  53.65906 satterthwaite</span></span>
-<span><span class="co">#&gt; 2   trt=active, time=pre 49.89982 48.11224  51.68740 satterthwaite</span></span>
-<span><span class="co">#&gt; 3 trt=control, time=post 47.90862 46.12103  49.69620 satterthwaite</span></span>
-<span><span class="co">#&gt; 4  trt=active, time=post 43.11889 41.33131  44.90647 satterthwaite</span></span></code></pre></div>
+<span><span class="co">#&gt; 1  trt=control, time=pre 51.87148 50.08363  53.65934 satterthwaite</span></span>
+<span><span class="co">#&gt; 2   trt=active, time=pre 49.89982 48.11197  51.68768 satterthwaite</span></span>
+<span><span class="co">#&gt; 3 trt=control, time=post 47.90862 46.12076  49.69647 satterthwaite</span></span>
+<span><span class="co">#&gt; 4  trt=active, time=post 43.11889 41.33103  44.90674 satterthwaite</span></span></code></pre></div>
 <p>Each row carries its inference method so the provenance is visible
 without digging into model objects.</p>
 </div>
@@ -1006,8 +1017,8 @@ average over timepoints to get a treatment-level summary.</p>
 <code class="sourceCode R"><span><span class="va">mt</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_grid.html">mm_means</a></span><span class="op">(</span><span class="va">rfit</span>, specs <span class="op">=</span> <span class="op">~</span> <span class="va">trt</span><span class="op">)</span></span>
 <span><span class="va">mt</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"label"</span>, <span class="st">"estimate"</span>, <span class="st">"conf_low"</span>, <span class="st">"conf_high"</span>, <span class="st">"method"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;         label estimate conf_low conf_high        method</span></span>
-<span><span class="co">#&gt; 1 trt=control 49.89005 48.08653  51.69356 satterthwaite</span></span>
-<span><span class="co">#&gt; 2  trt=active 46.50935 44.70584  48.31287 satterthwaite</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 trt=control 49.89005 48.08624  51.69385 satterthwaite</span></span>
+<span><span class="co">#&gt; 2  trt=active 46.50935 44.70555  48.31316 satterthwaite</span></span></code></pre></div>
 <p>Compare these to the raw means:</p>
 <div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">raw_means</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">rehab</span><span class="op">$</span><span class="va">score</span>, <span class="va">rehab</span><span class="op">$</span><span class="va">trt</span>, <span class="va">mean</span><span class="op">)</span></span>
@@ -1036,8 +1047,8 @@ the marginal means and applies the same inference method.</p>
 <div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ctr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_grid.html">mm_comparisons</a></span><span class="op">(</span><span class="va">rfit</span>, specs <span class="op">=</span> <span class="op">~</span> <span class="va">trt</span><span class="op">)</span></span>
 <span><span class="va">ctr</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"label"</span>, <span class="st">"estimate"</span>, <span class="st">"conf_low"</span>, <span class="st">"conf_high"</span>, <span class="st">"p_value"</span>, <span class="st">"method"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;                      label  estimate conf_low conf_high     p_value</span></span>
-<span><span class="co">#&gt; 1 trt=active - trt=control -3.380694 -3.99461 -2.766778 3.86692e-10</span></span>
+<span><span class="co">#&gt;                      label  estimate  conf_low conf_high      p_value</span></span>
+<span><span class="co">#&gt; 1 trt=active - trt=control -3.380694 -3.994629 -2.766759 3.888465e-10</span></span>
 <span><span class="co">#&gt;          method</span></span>
 <span><span class="co">#&gt; 1 satterthwaite</span></span></code></pre></div>
 <p>The <code>active - control</code> row is the equal-weight
@@ -1058,11 +1069,11 @@ design.</p>
 <code class="sourceCode R"><span><span class="va">ctr_by</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_grid.html">mm_comparisons</a></span><span class="op">(</span><span class="va">rfit</span>, specs <span class="op">=</span> <span class="op">~</span> <span class="va">trt</span> <span class="op">|</span> <span class="va">time</span><span class="op">)</span></span>
 <span><span class="va">ctr_by</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"label"</span>, <span class="st">"estimate"</span>, <span class="st">"conf_low"</span>, <span class="st">"conf_high"</span>, <span class="st">"p_value"</span>, <span class="st">"method"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                                            label  estimate  conf_low conf_high</span></span>
-<span><span class="co">#&gt; 1 trt=active, time=post - trt=control, time=post -4.789727 -5.439321 -4.140132</span></span>
-<span><span class="co">#&gt; 2   trt=active, time=pre - trt=control, time=pre -1.971661 -2.621256 -1.322067</span></span>
+<span><span class="co">#&gt; 1 trt=active, time=post - trt=control, time=post -4.789727 -5.439332 -4.140121</span></span>
+<span><span class="co">#&gt; 2   trt=active, time=pre - trt=control, time=pre -1.971661 -2.621267 -1.322056</span></span>
 <span><span class="co">#&gt;        p_value        method</span></span>
-<span><span class="co">#&gt; 1 2.953193e-14 satterthwaite</span></span>
-<span><span class="co">#&gt; 2 1.442769e-06 satterthwaite</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 2.975398e-14 satterthwaite</span></span>
+<span><span class="co">#&gt; 2 1.444943e-06 satterthwaite</span></span></code></pre></div>
 <p>Two rows: the treatment difference <em>at pre-intervention</em> and
 the treatment difference <em>at post-intervention</em>. The
 post-intervention gap is larger because the interaction drives
@@ -1078,8 +1089,8 @@ predictor to specific points rather than its mean.</p>
 <code class="sourceCode R"><span><span class="va">mt_time</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_grid.html">mm_means</a></span><span class="op">(</span><span class="va">rfit</span>, specs <span class="op">=</span> <span class="op">~</span> <span class="va">time</span>, at <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>trt <span class="op">=</span> <span class="st">"active"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">mt_time</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"label"</span>, <span class="st">"estimate"</span>, <span class="st">"conf_low"</span>, <span class="st">"conf_high"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;       label estimate conf_low conf_high</span></span>
-<span><span class="co">#&gt; 1  time=pre 49.89982 48.11224  51.68740</span></span>
-<span><span class="co">#&gt; 2 time=post 43.11889 41.33131  44.90647</span></span></code></pre></div>
+<span><span class="co">#&gt; 1  time=pre 49.89982 48.11197  51.68768</span></span>
+<span><span class="co">#&gt; 2 time=post 43.11889 41.33103  44.90674</span></span></code></pre></div>
 <p>This gives the pre/post means <em>within the active arm</em> only,
 holding <code>trt</code> constant at <code>"active"</code>.</p>
 </div>
@@ -1103,7 +1114,7 @@ interaction effect expressed as a contrast: (active post − active pre) −
 <span><span class="va">lc</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mm_lincomb.html">mm_lincomb</a></span><span class="op">(</span><span class="va">rfit</span>, weights <span class="op">=</span> <span class="va">w</span><span class="op">)</span></span>
 <span><span class="va">lc</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"estimate"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"p_value"</span>, <span class="st">"method"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;    estimate     lower     upper      p_value        method</span></span>
-<span><span class="co">#&gt; 1 -2.818065 -3.296859 -2.339271 2.848244e-11 satterthwaite</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 -2.818065 -3.296872 -2.339259 2.865068e-11 satterthwaite</span></span></code></pre></div>
 <p><code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code> applies the same contract-preserving
 inference as <code><a href="../reference/contrast.html">contrast()</a></code>, so the method and status fields
 are populated identically. A row whose status is anything other than
@@ -1170,8 +1181,10 @@ status attributes attached:</p>
 <span><span class="co">#&gt; [1] "model_based"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">V</span>, <span class="st">"mm_status"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "available"</span></span></code></pre></div>
-<p>For rank-deficient or otherwise uncertified fits, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>
-returns an <code>NA</code> matrix carrying an
+<p>For a rank-deficient design, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> covers the estimable
+coefficients only, as lme4’s does (the dropped coefficient is omitted
+from <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code> too). For otherwise uncertified fits,
+<code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> returns an <code>NA</code> matrix carrying an
 <code>mm_unavailable_reason</code> attribute instead of fabricated
 numbers — the same available/unavailable/typed-error contract as every
 other surface in this vignette. Prediction standard errors and intervals

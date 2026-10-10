@@ -38,31 +38,39 @@ supported_models()
 #>  family            links                  estimators                   
 #>  binomial          logit, probit, cloglog pirls_profiled, joint_laplace
 #>  poisson           log, sqrt              pirls_profiled, joint_laplace
-#>  Gamma             log                    pirls_profiled, joint_laplace
+#>  Gamma             inverse, log           pirls_profiled, joint_laplace
+#>  inverse.gaussian  inverse, log           pirls_profiled, joint_laplace
+#>  gaussian          log, inverse, sqrt     pirls_profiled, joint_laplace
 #>  negative_binomial log                    pirls_profiled               
 #>  notes                                                                                                 
 #>  Bernoulli 0/1, cbind(successes, failures), and proportion + trial weights responses.                  
 #>                                                                                                        
-#>                                                                                                        
+#>  inverse is R's default Gamma link.                                                                    
+#>  R's default 1/mu^2 link is not available in the engine and is refused; pass link = "inverse" or "log".
+#>  Non-identity links only; gaussian/identity is an LMM and is refused with a pointer to lmm().          
 #>  NB2 via mm_negative_binomial(); theta estimated or fixed. Intervals via confint(method = "bootstrap").
 #> 
 #> Features:
-#>  feature                                                                                  
-#>  case weights                                                                             
-#>  offset                                                                                   
-#>  simulate                                                                                 
-#>  refit                                                                                    
-#>  subset / random / custom na.action / custom contrasts (GLMM)                             
-#>  marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect)
-#>  double-bar || with factor terms                                                          
-#>  lmm              glmm            
-#>  supported        supported       
-#>  unsupported      supported       
-#>  supported        refused         
-#>  supported        refused         
-#>  see notes        refused         
-#>  supported        refused         
-#>  mixeff semantics mixeff semantics
+#>  feature                                                                                                                      
+#>  case weights                                                                                                                 
+#>  offset                                                                                                                       
+#>  simulate                                                                                                                     
+#>  refit                                                                                                                        
+#>  subset / na.action / contrasts                                                                                               
+#>  random = (GLMM)                                                                                                              
+#>  stateful fixed-effect terms (factor(), poly(), scale(), ns()/bs(), cut(), relevel(), offset(), ^, %in%, parenthesised groups)
+#>  marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect)                                    
+#>  double-bar || with factor terms                                                                                              
+#>  lmm            glmm     
+#>  supported      supported
+#>  supported      supported
+#>  supported      supported
+#>  supported      supported
+#>  supported      supported
+#>  not applicable refused  
+#>  supported      supported
+#>  supported      refused  
+#>  supported      supported
 #> 
 #> Non-goals: nonlinear mixed models; arbitrary GLM family objects or custom links; adaptive Gaussian quadrature as a general estimator contract (nAGQ > 1 is a profiled-path sensitivity mode) 
 #> 

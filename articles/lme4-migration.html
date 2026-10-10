@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Migrating from lme4">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -137,7 +139,13 @@ two changes: the fitting verb and the control object.</p>
 <td><code>lmer(y ~ x + (x \| g), data)</code></td>
 <td><code>lmm(y ~ x + (x \| g), data)</code></td>
 <td>same formula language, incl. <code>(x\|\|g)</code>,
-<code>(1\|g1/g2)</code>, crossed</td>
+<code>(1\|g1/g2)</code>, crossed; fixed-part <code><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor()</a></code>,
+<code><a href="https://rdrr.io/r/stats/poly.html" class="external-link">poly()</a></code>, <code><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale()</a></code>,
+<code>ns()</code>/<code>bs()</code>, <code><a href="https://rdrr.io/r/base/cut.html" class="external-link">cut()</a></code>,
+<code><a href="https://rdrr.io/r/stats/relevel.html" class="external-link">relevel()</a></code>, <code><a href="https://rdrr.io/r/stats/offset.html" class="external-link">offset()</a></code>, <code>^</code>,
+<code>%in%</code> and <code>(a + b)^2</code> work with lme4’s
+coefficient names (evaluated in R and sent to the engine as columns);
+such transforms inside a random-effect bar are refused</td>
 </tr>
 <tr class="even">
 <td><code>glmer(y ~ ..., family = binomial)</code></td>
@@ -149,76 +157,321 @@ a string</td>
 <td>
 <code>lmerControl(...)</code> / <code>glmerControl(...)</code>
 </td>
-<td><code>mm_control(verbose=, max_feval=)</code></td>
-<td>optimizer/tolerance knobs are engine-chosen (see below)</td>
+<td><code>mm_control(optimizer=, max_feval=, verbose=, start=, optCtrl=, disp_method=, disp_dof_correction=, max_phi_iter=)</code></td>
+<td>
+<code>optCtrl</code> names <code>maxfun</code>/<code>maxeval</code>,
+<code>ftol_*</code>, <code>xtol_*</code>, <code>rhobeg</code> are mapped
+(others refused); no <code>check.conv.*</code> (no post-hoc convergence
+warnings): use <code><a href="../reference/optimizer_certificate.html">optimizer_certificate()</a></code> /
+<code><a href="../reference/verify_convergence.html">verify_convergence()</a></code>; lme4 2.1-0’s GLMM dispersion controls
+map one to one:
+<code>disp_method = "moment"</code>/<code>"old/buggy"</code>,
+<code>disp_dof_correction</code>, and <code>maxPhiIter</code> -&gt;
+<code>max_phi_iter</code> (defaults <code>"moment"</code>,
+<code>TRUE</code>, <code>100</code>, as lme4 2.1-0); they only affect
+Gamma, inverse-Gaussian and Gaussian non-identity-link fits (elsewhere a
+<code>mm_control_ignored_notice</code> says they were ignored; lme4 is
+silent) and carry over to
+<code><a href="../reference/refit.html">refit()</a></code>/<code><a href="https://rdrr.io/r/stats/update.html" class="external-link">update()</a></code>
+</td>
 </tr>
 <tr class="even">
 <td>
-<code>fixef</code>, <code>ranef</code>, <code>VarCorr</code>,
-<code>coef</code>, <code>sigma</code>, <code>vcov</code>
+<code>fixef</code>, <code>vcov</code>
 </td>
+<td>same generics, same values</td>
+<td>except for Gamma, inverse-Gaussian and Gaussian non-identity-link
+GLMMs where <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> comes from RX (<code>nAGQ = 0</code> or
+the Hessian fallback): lme4 2.1-0 multiplies by <code>sigma()^2</code>
+although its weights already carry <code>1/phi</code>; mixeff reports
+the unscaled RX covariance (same for
+<code>predict(se.fit = TRUE)</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>sigma</code></td>
 <td>identical</td>
-<td>same generics</td>
+<td>1 for binomial, Poisson and negative-binomial GLMMs (the NB theta is
+<code>getME(fit, "glmer.nb.theta")</code>); Gamma, inverse-Gaussian and
+Gaussian non-identity-link GLMMs report <code>sqrt(phi)</code> with
+<code>phi = deviance / (n - rank([X, Z]))</code>, as lme4 &gt;= 2.1-0
+(older lme4 used a different estimate, so those values, and their
+<code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>, theta and <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code>, match lme4
+&gt;= 2.1-0 only)</td>
+</tr>
+<tr class="even">
+<td><code>ranef</code></td>
+<td>same generic</td>
+<td>
+<code>condVar = TRUE</code> for LMMs and GLMMs (GLMM conditional
+variances from the Laplace approximation at the fitted modes, as lme4;
+for Gamma, inverse-Gaussian and Gaussian non-identity-link GLMMs lme4
+2.1-0 multiplies them by an extra <code>sigma()^2</code>, mixeff does
+not)</td>
+</tr>
+<tr class="odd">
+<td><code>coef</code></td>
+<td>identical</td>
+<td>every fixed-effect column per group (fixed-only columns repeated),
+lme4’s column order</td>
+</tr>
+<tr class="even">
+<td><code>VarCorr</code></td>
+<td>identical shape</td>
+<td>named list of covariance matrices with
+<code>stddev</code>/<code>correlation</code> attributes and
+<code>sc</code>/<code>useSc</code>, so <code>VarCorr(m)$Subject</code>
+is the matrix; prints like lme4 (plus <code>[boundary]</code> markers);
+mixeff’s long table is still <code>VarCorr(m)$table</code> (and
+<code>$residual_sd</code>); <code><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame()</a></code> matches lme4;
+GLMMs have <code>useSc = FALSE</code> (no Residual row, absolute SDs)
+with <code>sc = sigma()</code>, as lme4 &gt;= 2.1-0</td>
 </tr>
 <tr class="odd">
 <td>
 <code>logLik</code>, <code>AIC</code>, <code>BIC</code>,
-<code>deviance</code>, <code>nobs</code>, <code>confint</code>
+<code>nobs</code>
 </td>
 <td>identical</td>
 <td>
-<code>confint</code> supports Wald, profile, and bootstrap on LMMs;
-Wald/profile/bootstrap availability per GLMM fit type is the route
-matrix in <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>
-</td>
+<code>AIC(m1, m2)</code> / <code>BIC(m1, m2)</code> return stats’
+<code>df</code>/<code>AIC</code> data frame</td>
 </tr>
 <tr class="even">
-<td>
-<code>predict</code>, <code>fitted</code>, <code>residuals</code>,
-<code>simulate</code>, <code>refit</code>
-</td>
-<td>identical (LMM)</td>
-<td>
-<code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> supports <code>re.form = NULL/NA</code>,
-<code>se.fit</code>, <code>interval</code>;
-<code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code>/<code><a href="../reference/refit.html">refit()</a></code> are LMM-only and refuse
-GLMM fits with a typed error</td>
+<td><code>deviance</code></td>
+<td>identical</td>
+<td>LMM: as lme4 for ML fits (REML fits return the REML criterion
+without lme4’s deprecation warning); GLMM: sum of squared deviance
+residuals, as lme4</td>
 </tr>
 <tr class="odd">
-<td><code>update(fit, . ~ . - x)</code></td>
-<td>identical</td>
-<td>formula edits, <code>REML=</code>, <code>weights=</code>, etc.</td>
+<td><code>REMLcrit</code></td>
+<td><code><a href="../reference/REMLcrit.html">REMLcrit()</a></code></td>
+<td>exported by mixeff (lme4’s is not a generic; whichever package is
+attached last masks the other, and mixeff’s forwards lme4 fits to
+lme4)</td>
 </tr>
 <tr class="even">
 <td>
-<code>anova(m1, m2)</code>, <code>drop1</code>, <code>getME</code>,
-<code>ngrps</code>, <code>isSingular</code>
+<code>family</code>, <code>weights</code>,
+<code>model.frame</code>
 </td>
 <td>identical</td>
 <td>
-<code>isSingular()</code> is <code><a href="../reference/is_singular.html">is_singular()</a></code>
+<code><a href="https://rdrr.io/r/stats/weights.html" class="external-link">weights()</a></code> returns ones for unweighted fits and
+<code>type = "working"</code> for GLMMs; <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame()</a></code> has
+lme4’s transformed columns and <code>terms</code> attribute (the raw
+variables the engine used are <code>fit$model_frame</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>confint</code></td>
+<td>same generic, <strong>different default</strong>
+</td>
+<td>Wald (<code>"asymptotic"</code>, lme4 spelling <code>"Wald"</code>)
+by default, where lme4 defaults to profile; returns fixed effects only.
+<code>"profile"</code> (LMMs) returns lme4’s rows (<code>.sig01</code>,
+…, <code>.sigma</code>, fixed effects; REML fits profiled on the ML
+deviance, as lme4), and accepts <code>threads =</code>;
+<code>"bootstrap"</code> (lme4 spelling <code>"boot"</code>); GLMM
+availability per fit type is the route matrix in
+<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>
+</td>
+</tr>
+<tr class="even">
+<td>
+<code>predict</code>, <code>fitted</code>
+</td>
+<td>identical</td>
+<td>
+<code>re.form = NULL/NA/~0</code> or a partial formula such as
+<code>~(1 \| g)</code> (no <code>se.fit</code>/<code>interval</code> for
+partial ones), <code>allow.new.levels</code>, <code>na.action</code>
+(default <code>na.pass</code>), <code>se.fit</code>,
+<code>interval</code>; <code>newdata</code> is narrowed to the needed
+variables and coerced like the training frame; an <code>offset =</code>
+fit offset must be resupplied with <code>predict(offset =)</code> (lme4
+silently uses 0)</td>
+</tr>
+<tr class="odd">
+<td><code>residuals</code></td>
+<td>identical</td>
+<td>LMM default <code>"response"</code>,
+<code>"pearson"</code>/<code>"deviance"</code> are
+<code>sqrt(w) * (y - mu)</code>; GLMM default <code>"deviance"</code>,
+plus <code>"pearson"</code>, <code>"working"</code>,
+<code>"response"</code>; <code>scaled = TRUE</code> divides by
+<code><a href="https://rdrr.io/r/stats/sigma.html" class="external-link">sigma()</a></code> once</td>
+</tr>
+<tr class="even">
+<td>
+<code>simulate</code>, <code>refit</code>
+</td>
+<td>LMM and GLMM</td>
+<td>lme4’s <code>re.form</code>/<code>use.u</code> meaning (default
+<code>NA</code>: new random effects; <code>NULL</code>: condition on the
+BLUPs) and RNG order, so seeded draws match lme4; LMM draws honour prior
+weights (lme4 ignores them); Gamma (shape <code>w/phi</code>), Gaussian
+non-identity-link and inverse-Gaussian fits draw random effects on the
+absolute scale reported by lme4 &gt;= 2.1-0, and Gamma and unweighted
+Gaussian draws match lme4 2.1-0’s; Gaussian draws honour prior weights
+(lme4 ignores them); inverse-Gaussian draws use shape <code>w/phi</code>
+(needs statmod), where lme4 2.1-0 uses <code>w/sigma</code> and so
+simulates variance <code>sigma*mu^3</code> instead of the fitted
+<code>phi*mu^3</code>; a factor binomial response simulates as 0/1; a
+partial <code>re.form</code> such as <code>~(1 \| g)</code> conditions
+on those terms and redraws the others, as lme4; <code>newdata</code> and
+<code>newparams</code> are refused</td>
+</tr>
+<tr class="odd">
+<td>
+<code>plot(fit)</code>,
+<code>dotplot(ranef(fit, condVar = TRUE))</code>,
+<code>qqmath(ranef(...))</code>
+</td>
+<td>base-graphics <code><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot()</a></code>/<code><a href="https://rdrr.io/r/stats/qqnorm.html" class="external-link">qqnorm()</a></code>; lattice
+methods</td>
+<td>
+<code>plot(fit)</code> draws Pearson residuals vs fitted with base
+graphics (no formula interface);
+<code>plot(ranef(fit, condVar = TRUE))</code> gives a caterpillar
+plot</td>
+</tr>
+<tr class="even">
+<td>
+<code>hatvalues</code>, <code>cooks.distance</code>,
+<code>influence</code>
+</td>
+<td>same generics</td>
+<td>LMM values match lme4; GLMM hat values use the IRLS working weights
+(as <code>glm</code> does), so they differ from lme4’s;
+<code><a href="https://rdrr.io/r/stats/lm.influence.html" class="external-link">influence()</a></code> takes <code>groups=</code> and
+<code>ncores=</code> and records failed refits instead of stopping</td>
+</tr>
+<tr class="odd">
+<td>
+<code><a href="https://easystats.github.io/performance/reference/r2.html" class="external-link">performance::r2()</a></code>, <code><a href="https://easystats.github.io/performance/reference/icc.html" class="external-link">performance::icc()</a></code>,
+<code><a href="https://easystats.github.io/insight/reference/get_variance.html" class="external-link">insight::get_variance()</a></code>
+</td>
+<td>same calls, or <code><a href="../reference/mm_variance_components.html">mm_r2()</a></code>, <code><a href="../reference/mm_variance_components.html">mm_icc()</a></code>,
+<code><a href="../reference/mm_variance_components.html">mm_variance_components()</a></code>
+</td>
+<td>Nakagawa R2/ICC agree with performance on lme4 fits;
+<code>by_group = TRUE</code> is not supported</td>
+</tr>
+<tr class="even">
+<td><code>update(fit, . ~ . - x)</code></td>
+<td>same generic</td>
+<td>a formula that needs new columns re-evaluates the original
+<code>data</code>, as lme4 does; arguments
+<code><a href="../reference/lmm.html">lmm()</a></code>/<code><a href="../reference/glmm.html">glmm()</a></code> cannot carry over
+(e.g. <code>subset</code>, <code>contrasts</code>) are refused rather
+than dropped; the fit’s <code>na.action</code> carries over</td>
+</tr>
+<tr class="odd">
+<td>
+<code>anova(m1, m2)</code>, <code>drop1</code>
+</td>
+<td>LRT with automatic ML refit</td>
+<td>
+<code>anova(m1, m2)</code> is lme4’s data frame
+(<code>npar AIC BIC logLik -2*log(L) Chisq Df Pr(&gt;Chisq)</code>, as
+lme4 &gt;= 2.0); single-model <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> is lmerTest’s
+(<code>Sum Sq Mean Sq NumDF DenDF F value Pr(&gt;F)</code>, Type
+I/II/III, Satterthwaite/KR) and LMM-only; mixeff’s provenance table is
+<code>$table</code>; a multi-column term such as <code>poly(x, 2)</code>
+is tested as one multi-df row, like lmerTest, unless another term
+contains it (then per column)</td>
+</tr>
+<tr class="even">
+<td><code>getME</code></td>
+<td><code><a href="../reference/getME.html">getME()</a></code></td>
+<td>LMM and GLMM; lme4’s components including <code>u</code>,
+<code>b</code>, <code>L</code>, <code>RX</code>, <code>RZX</code>,
+<code>devcomp</code>, <code>lower</code>, <code>Gp</code>,
+<code>Ztlist</code>, <code>Tlist</code>, <code>ST</code>,
+<code>glmer.nb.theta</code>, <code>"ALL"</code>; <code>devfun</code> is
+refused (the optimizer lives in the engine)</td>
+</tr>
+<tr class="odd">
+<td><code>isSingular</code></td>
+<td><code>is_singular(fit, tol = 1e-4)</code></td>
+<td>lme4’s rule (a zero-bounded theta below <code>tol</code>), LMM and
+GLMM; <code><a href="https://rdrr.io/pkg/lme4/man/isSingular.html" class="external-link">lme4::isSingular()</a></code> is not a generic, so call
+<code><a href="../reference/is_singular.html">is_singular()</a></code>
+</td>
+</tr>
+<tr class="even">
+<td><code>ngrps</code></td>
+<td>identical</td>
+<td>interaction/nested groups are named as in lme4 (<code>a:b</code>;
+<code>b:a</code> for the nested term of <code>a/b</code>) with levels
+<code>x:y</code>
 </td>
 </tr>
 <tr class="odd">
 <td><code>broom.mixed::tidy/glance/augment</code></td>
-<td>identical</td>
+<td>supported</td>
 <td>registered for <code>mm_lmm</code>/<code>mm_glmm</code>
 </td>
 </tr>
 <tr class="even">
 <td><code>emmeans::emmeans(fit, ~ x)</code></td>
-<td>identical</td>
-<td>mixeff registers an emmeans basis on the same covariance payload, so
-estimates and SEs agree; mixeff’s status/reliability/reason audit
-columns do not survive the emmeans trip, and a default profiled GLMM
-refuses inference through emmeans too</td>
+<td>supported</td>
+<td>estimates and SEs agree with lme4’s; mixeff’s
+status/reliability/reason audit columns do not survive the emmeans trip,
+and a profiled (<code>pirls_profiled</code>) GLMM refuses inference
+through emmeans</td>
 </tr>
 <tr class="odd">
 <td>
 <code>lmerTest</code> p-values in <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>
 </td>
 <td>built in</td>
-<td>Satterthwaite/Kenward-Roger native, no extra package</td>
+<td>Satterthwaite/Kenward-Roger native, no extra package;
+<code>summary()$coefficients</code> is lmerTest’s matrix (per-row method
+labels in <code>summary()$coef_table</code>); lmerTest’s
+<code>ddf = "Satterthwaite"</code>/<code>"Kenward-Roger"</code>/<code>"lme4"</code>
+is accepted by <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> and <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>
+</td>
+</tr>
+<tr class="even">
+<td><code>bootMer(m, FUN, nsim)</code></td>
+<td><code>mm_bootmer(fit, FUN, nsim)</code></td>
+<td>LMM; a <code>boot</code>-compatible result for
+<code><a href="https://rdrr.io/pkg/boot/man/boot.ci.html" class="external-link">boot::boot.ci()</a></code>; <code>type = "semiparametric"</code>
+refused</td>
+</tr>
+<tr class="odd">
+<td>
+<code>rePCA</code>, <code>lmList</code>, <code>allFit</code>
+</td>
+<td>
+<code><a href="../reference/rePCA.html">rePCA()</a></code>, <code><a href="../reference/mm_lmlist.html">mm_lmlist()</a></code>,
+<code><a href="../reference/mm_allfit.html">mm_allfit()</a></code>
+</td>
+<td>
+<code>mm_*</code> names avoid masking lme4’s non-generic
+functions</td>
+</tr>
+<tr class="even">
+<td><code>pbkrtest::KRmodcomp(big, small)</code></td>
+<td><code>compare(small, big, method = "kenward_roger")</code></td>
+<td>also <code>"satterthwaite"</code> (<code>SATmodcomp</code>); KR F is
+pbkrtest’s scaled <code>Ftest</code> row (unscaled <code>FtestU</code>
+in <code>$fixed_f$unscaled_statistic</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>lmerTest::step(m)</code></td>
+<td><code>step(fit)</code></td>
+<td>random terms tested with the boundary-corrected LRT; whole terms
+only</td>
+</tr>
+<tr class="even">
+<td>
+<code>nlmer</code>, <code>devFunOnly = TRUE</code>
+</td>
+<td>not provided</td>
+<td>nonlinear mixed models are a non-goal; the engine owns the
+objective</td>
 </tr>
 </tbody>
 </table>
@@ -246,62 +499,91 @@ refuses inference through emmeans too</td>
 <tr class="even">
 <td><code>weights</code></td>
 <td><code>weights=</code></td>
-<td>LMM and GLMM</td>
+<td>a column of <code>data</code> or a vector, as in lme4 (LMM and
+GLMM)</td>
 </tr>
 <tr class="odd">
 <td><code>offset</code></td>
-<td><code>glmm(..., offset=)</code></td>
-<td>GLMM only; LMM in-fit offset is not yet supported</td>
+<td><code>offset=</code></td>
+<td>a column of <code>data</code>, an expression, or a vector (LMM and
+GLMM); <code><a href="https://rdrr.io/r/stats/offset.html" class="external-link">offset()</a></code> formula terms are added to it. LMMs fit
+<code>y - offset</code> and add it back in
+<code><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted()</a></code>/<code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>
+</td>
 </tr>
 <tr class="even">
 <td><code>subset</code></td>
-<td><code>lmm(..., subset=)</code></td>
-<td>supported for <code><a href="../reference/lmm.html">lmm()</a></code>
-</td>
+<td><code>subset=</code></td>
+<td>LMM and GLMM; formula transforms are evaluated before subsetting, as
+in <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame()</a></code>; unused factor levels are dropped
+afterwards</td>
 </tr>
 <tr class="odd">
 <td><code>na.action</code></td>
-<td><code>lmm(..., na.action=)</code></td>
-<td>
-<strong>default refuses NA</strong>; pass
-<code>na.action = na.omit</code> for lme4’s complete-case behavior</td>
+<td><code>na.action=</code></td>
+<td>LMM and GLMM; default <code>getOption("na.action")</code>
+(<code>na.omit</code>) as in lme4; only model variables,
+<code>weights</code> and <code>offset</code> count; dropped rows are
+announced (<code>mm_rows_dropped</code> message) and recorded in
+<code>na.action(fit)</code>; <code>na.exclude</code> pads
+<code><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted()</a></code>/<code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>/<code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>;
+<code>na.fail</code>/<code>na.pass</code> raise
+<code>mm_data_error</code>
+</td>
 </tr>
 <tr class="even">
 <td><code>contrasts</code></td>
 <td>partial</td>
 <td>unordered factors use treatment coding, ordered factors
-<code>contr.poly</code> (both matching R/lme4 defaults); other codings
-are refused — recode the factor. Contrast attributes set on factor
-columns and <code>options(contrasts=)</code> are currently ignored — the
-fit uses treatment coding — a known gap (bd-01KZ050ADJ2Y7SS20YH9CTE2NS);
-recode factors explicitly when porting</td>
+<code>contr.poly</code> (both matching R/lme4 defaults). Any other
+coding is refused with an <code>mm_arg_error</code> rather than silently
+replaced, whether it is requested through <code>contrasts=</code>, a
+contrast attached to the factor (<code>contrasts(f) &lt;- ...</code>),
+or <code>options(contrasts=)</code>; use <code><a href="https://rdrr.io/r/stats/relevel.html" class="external-link">relevel()</a></code> to
+change the reference level, or build coded columns as numeric
+predictors</td>
 </tr>
 <tr class="odd">
+<td>character predictors</td>
+<td>converted to factors</td>
+<td>sorted levels, as lme4’s <code><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor()</a></code> conversion does;
+logical predictors are coded as factors with levels
+<code>FALSE</code>/<code>TRUE</code>, as <code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code>
+does (e.g. <code>lFALSE</code>, <code>lTRUE</code> without an
+intercept)</td>
+</tr>
+<tr class="even">
 <td>numeric/character grouping (accepted silently)</td>
 <td>coerced to factor</td>
 <td>non-factor grouping columns are coerced to factor, announced via an
 <code>mm_grouping_coercion_notice</code>; silence it with
-<code>mm_control(verbose = -1)</code>
-</td>
+<code>mm_control(verbose = -1)</code>; an ordered grouping factor is
+used as an unordered one (grouping needs only its levels)</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>family = "binomial"</code></td>
 <td><code>family = binomial()</code></td>
 <td>string families are not accepted</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>nAGQ</code></td>
 <td><code>glmm(..., nAGQ=)</code></td>
 <td>
-<code>&gt;1</code> on the profiled path</td>
+<code>1</code> (default) is joint Laplace, as in <code>glmer</code>;
+<code>nAGQ = 0</code> selects the profiled fast path
+(<code>method = "pirls_profiled"</code>, lme4’s PIRLS-only estimate);
+<code>&gt;1</code> runs on the profiled path only and, as in lme4, needs
+a single scalar random effect (selected with an
+<code>mm_estimator_notice</code> when <code>method</code> is not
+given)</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>control = lmerControl(optimizer=, optCtrl=)</code></td>
-<td><code>mm_control(optimizer=, max_feval=, ...)</code></td>
+<td><code>mm_control(optimizer=, max_feval=, optCtrl=, ...)</code></td>
 <td>the engine picks a default optimizer; <code><a href="../reference/mm_control.html">mm_control()</a></code> can
 override it or cap the evaluation budget</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>start</code></td>
 <td><code>mm_control(start=)</code></td>
 <td>theta warm starts</td>
@@ -326,40 +608,78 @@ accepts the <code>cbind(successes, failures)</code> spelling like
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">incidence</span>, <span class="va">size</span> <span class="op">-</span> <span class="va">incidence</span><span class="op">)</span> <span class="op">~</span> <span class="va">period</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">herd</span><span class="op">)</span>,</span>
 <span>     <span class="fu">lme4</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/lme4/man/cbpp.html" class="external-link">cbpp</a></span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p><strong>3. The default GLMM estimator is not glmer’s.</strong>
-<code><a href="../reference/glmm.html">glmm()</a></code> defaults to a fast profiled (PIRLS) estimator whose
-coefficients do <strong>not</strong> match <code>glmer()</code> exactly;
-it prints a notice saying so. For glmer-equivalent (joint Laplace)
-estimates, ask for them:</p>
+<p><strong>3. The GLMM estimator.</strong> <code><a href="../reference/glmm.html">glmm()</a></code> defaults
+to <code>method = "joint_laplace"</code>, glmer’s joint Laplace
+(<code>nAGQ = 1</code>) estimator, with certified Wald inference. The
+fast profiled (PIRLS) estimator — lme4’s <code>nAGQ = 0</code> — is
+opt-in; its coefficients do <strong>not</strong> match
+<code>glmer(nAGQ = 1)</code> exactly. Negative-binomial families (no
+joint route yet), <code>nAGQ &gt; 1</code>, and
+<code>inference = "working_hessian"</code> need the profiled path:
+without an explicit <code>method</code>, <code><a href="../reference/glmm.html">glmm()</a></code> selects it
+and prints an <code>mm_estimator_notice</code> saying so.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">g</span><span class="op">)</span>, <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>     method <span class="op">=</span> <span class="st">"joint_laplace"</span><span class="op">)</span></span></code></pre></div>
-<p><strong>4. <code>||</code> with a factor means full
-decorrelation.</strong> In mixeff, <code>||</code> fixes <em>every</em>
-covariance in the block at zero — including the covariances among a
-factor’s level contrasts (each treatment-coded contrast gets an
-independent variance), matching <code>MixedModels.jl</code>’s
-<code>zerocorr()</code>. These are mixeff’s own semantics, stated
-directly: lme4 documents its <code>||</code> as intended for numeric
-predictors, and as currently implemented it leaves factor terms intact
-(the factor keeps its full within-factor covariance block) rather than
-promising a factor behavior. So <code>(1 + cond + x || subj)</code> with
-a factor <code>cond</code> fits a strictly larger model in lme4 than in
-mixeff. The two therefore disagree on the parameter count, hence on
-<code>df</code> and AIC — and on the optimum itself whenever the fitted
-within-factor covariance is non-zero. mixeff announces the situation at
-compile time with an info diagnostic
-(<code>covariance_assumption</code>, reason
-<code>double_bar_factor_term</code>). To reproduce lme4’s model family
-exactly, write the expansion explicitly and give the factor its own
-correlated block:</p>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">g</span><span class="op">)</span>, <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>   <span class="co"># joint Laplace (glmer)</span></span>
+<span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">g</span><span class="op">)</span>, <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>     method <span class="op">=</span> <span class="st">"pirls_profiled"</span><span class="op">)</span>                      <span class="co"># fast path (nAGQ = 0)</span></span></code></pre></div>
+<p><strong>4. <code>||</code> expands exactly like lme4’s, factors
+included.</strong> mixeff expands <code>(1 + x + f || g)</code> the way
+lme4’s <code>expandDoubleVerts()</code> does:
+<code>(1 | g) + (0 + x | g) + (0 + f | g)</code> — the numeric columns
+get independent variances, while the factor <code>f</code> keeps its
+full within-factor covariance block, coded like R’s
+<code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code> (so <code>(0 + f + h | g)</code> is full
+rank, as in lme4). The parameter count, <code>df</code>, AIC and the
+optimum therefore match lme4, and <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code> lists the
+pieces as separate entries named <code>g</code>, <code>g.1</code>, …
+exactly as lme4 does (also in <code>as.data.frame(VarCorr(fit))</code>).
+To fix <em>every</em> covariance at zero — including those among a
+factor’s columns (MixedModels.jl’s <code>zerocorr()</code>) — write
+<code>diag(1 + f | g)</code>, which has no lme4 equivalent. mixeff still
+notes a factor inside <code>||</code> at compile time with an info
+diagnostic (<code>covariance_assumption</code>, reason
+<code>double_bar_factor_term</code>).</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># mixeff `||`: independent variances for every column, factor levels included</span></span>
+<code class="sourceCode R"><span><span class="co"># lme4 semantics: independent intercept and x slope; the factor keeps its block</span></span>
 <span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">cond</span> <span class="op">*</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">cond</span> <span class="op">+</span> <span class="va">x</span> <span class="op">||</span> <span class="va">subj</span><span class="op">)</span>, <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co"># same model, written out</span></span>
+<span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">cond</span> <span class="op">*</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0</span> <span class="op">+</span> <span class="va">x</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0</span> <span class="op">+</span> <span class="va">cond</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span>,</span>
+<span>     <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># lme4-equivalent family: the factor keeps its within-factor covariance block</span></span>
-<span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">cond</span> <span class="op">*</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0</span> <span class="op">+</span> <span class="va">cond</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0</span> <span class="op">+</span> <span class="va">x</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span>,</span>
-<span>     <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># MixedModels.jl zerocorr semantics: every covariance fixed at zero</span></span>
+<span><span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">cond</span> <span class="op">*</span> <span class="va">x</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">cond</span> <span class="op">+</span> <span class="va">x</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span>, <span class="va">data</span>, family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>Comparing a <code>||</code> model with its correlated <code>|</code>
+counterpart adds only correlation parameters; the likelihood-ratio test
+(and <code><a href="../reference/test_random_effect.html">test_random_effect()</a></code>’s boundary route) then uses the
+ordinary chi-square, as <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> on lme4 fits does.</p>
+<p><strong>5. Random-effect terms are presented in lme4’s
+order.</strong> <code><a href="../reference/mm_lmm-methods.html">ranef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code>,
+<code><a href="../reference/getME.html">getME()</a></code> (<code>theta</code>, <code>Lambdat</code>,
+<code>Zt</code>, <code>cnms</code>, …) and the <code>.sig01</code>, …
+rows of <code>confint(method = "profile")</code> use lme4’s
+<code>mkReTrms</code> term order (formula order, reordered by decreasing
+number of levels only when a later term has more levels than an earlier
+one). The engine fits the same model with its own internal
+(MixedModels.jl) order; the translation is exact.</p>
+<p><strong>6. Profile intervals use lme4’s scale and names, but Wald is
+the default.</strong> <code>confint(fit, method = "profile")</code>
+returns lme4’s rows (<code>.sig01</code>, …, <code>.sigma</code>, then
+the fixed effects) on the standard-deviation/correlation scale, numbered
+as lme4 &gt;= 2.0 numbers them (term by term, each term’s standard
+deviations before its correlations; lme4 1.1 interleaved them in
+lower-triangle order), and, like lme4, profiles a REML fit on the ML
+deviance. lme4’s <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> defaults to the profile;
+mixeff’s default stays the Wald interval (the profile refits the model
+many times), so pass <code>method = "profile"</code> to reproduce lme4’s
+default output. Bootstrap and profile computations accept
+<code>threads =</code> (via <code>bootstrap_control(threads = )</code>
+for bootstraps); results are identical for every thread count, and the
+default of 1 respects CRAN’s two-thread policy.</p>
+<p><strong>7. Rank-deficient fixed effects.</strong> As in lme4, of two
+collinear columns the earlier is kept; <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code> omits the
+dropped coefficient (use <code>fixef(fit, add.dropped = TRUE)</code> for
+an <code>NA</code> in its place), and <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> and
+<code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> cover the estimable coefficients only.</p>
 </div>
 <div class="section level2">
 <h2 id="the-supported-envelope-generated">The supported envelope, generated<a class="anchor" aria-label="anchor" href="#the-supported-envelope-generated"></a>
@@ -400,9 +720,23 @@ proportion + trial weights responses.</td>
 </tr>
 <tr class="odd">
 <td align="left">Gamma</td>
-<td align="left">log</td>
+<td align="left">inverse, log</td>
 <td align="left">pirls_profiled, joint_laplace</td>
-<td align="left"></td>
+<td align="left">inverse is R’s default Gamma link.</td>
+</tr>
+<tr class="even">
+<td align="left">inverse.gaussian</td>
+<td align="left">inverse, log</td>
+<td align="left">pirls_profiled, joint_laplace</td>
+<td align="left">R’s default 1/mu^2 link is not available in the engine
+and is refused; pass link = “inverse” or “log”.</td>
+</tr>
+<tr class="odd">
+<td align="left">gaussian</td>
+<td align="left">log, inverse, sqrt</td>
+<td align="left">pirls_profiled, joint_laplace</td>
+<td align="left">Non-identity links only; gaussian/identity is an LMM
+and is refused with a pointer to lmm().</td>
 </tr>
 <tr class="even">
 <td align="left">negative_binomial</td>
@@ -417,10 +751,10 @@ fixed. Intervals via confint(method = “bootstrap”).</td>
 <caption>Feature support (see notes for mixeff-specific
 semantics).</caption>
 <colgroup>
-<col width="20%">
-<col width="3%">
-<col width="3%">
-<col width="71%">
+<col width="19%">
+<col width="2%">
+<col width="1%">
+<col width="76%">
 </colgroup>
 <thead><tr class="header">
 <th align="left">feature</th>
@@ -438,33 +772,60 @@ proportion responses.</td>
 </tr>
 <tr class="even">
 <td align="left">offset</td>
-<td align="left">unsupported</td>
 <td align="left">supported</td>
-<td align="left">lmm() has no offset argument; glmm(offset =) is
-supported.</td>
+<td align="left">supported</td>
+<td align="left">offset = argument and offset() formula terms. LMMs fit
+y - offset and add the offset back to fitted values and predictions
+(lmer semantics). predict(newdata) evaluates formula offsets from
+newdata; an offset = argument offset must be resupplied via
+predict(offset =).</td>
 </tr>
 <tr class="odd">
 <td align="left">simulate</td>
 <td align="left">supported</td>
-<td align="left">refused</td>
-<td align="left">GLMM simulation is not implemented in this
-version.</td>
+<td align="left">supported</td>
+<td align="left">lme4 re.form/use.u semantics (default NA: new random
+effects; NULL: conditional on the BLUPs). GLMM draws are family-aware
+(binomial, Poisson, Gamma, negative binomial); partial re.form formulas,
+newdata and newparams are refused.</td>
 </tr>
 <tr class="even">
 <td align="left">refit</td>
 <td align="left">supported</td>
-<td align="left">refused</td>
-<td align="left">Refit GLMMs by calling glmm() on the modified
-data.</td>
+<td align="left">supported</td>
+<td align="left">Re-fits with the stored settings; binomial fits accept
+a (successes, failures) matrix, a two-level factor or 0/1 values.</td>
 </tr>
 <tr class="odd">
-<td align="left">subset / random / custom na.action / custom contrasts
-(GLMM)</td>
-<td align="left">see notes</td>
+<td align="left">subset / na.action / contrasts</td>
+<td align="left">supported</td>
+<td align="left">supported</td>
+<td align="left">Same data preparation for lmm() and glmm(): na.action
+defaults to getOption(“na.action”) (na.omit) as in lme4, applied to the
+model variables, weights and offset only; dropped rows are announced
+(typed mm_rows_dropped message) and recorded in na.action(fit);
+na.exclude also pads fitted/residuals/predict; na.fail and na.pass raise
+mm_data_error. Unused factor levels are dropped after subset/NA removal.
+contrasts = is honoured only when it names the engine coding
+(contr.treatment / contr.poly).</td>
+</tr>
+<tr class="even">
+<td align="left">random = (GLMM)</td>
+<td align="left">not applicable</td>
 <td align="left">refused</td>
-<td align="left">Reserved arguments on glmm(); recode data before
-fitting. LMMs: default refuses NA unless na.action = na.omit;
-non-default contrast codings are refused at compile time.</td>
+<td align="left">Reserved argument on glmm(); write random terms in the
+formula.</td>
+</tr>
+<tr class="odd">
+<td align="left">stateful fixed-effect terms (factor(), poly(), scale(),
+ns()/bs(), cut(), relevel(), offset(), ^, %in%, parenthesised
+groups)</td>
+<td align="left">supported</td>
+<td align="left">supported</td>
+<td align="left">Evaluated in R as stats::model.frame() does and sent to
+the engine as synthetic columns; coefficient names match lme4 and
+predict(newdata) reuses the training basis. Such terms inside
+random-effect bars are refused by the engine.</td>
 </tr>
 <tr class="even">
 <td align="left">marginal means verbs (mm_means / mm_comparisons /
@@ -476,13 +837,13 @@ certified fits.</td>
 </tr>
 <tr class="odd">
 <td align="left">double-bar || with factor terms</td>
-<td align="left">mixeff semantics</td>
-<td align="left">mixeff semantics</td>
-<td align="left">mixeff fixes every covariance in the block at zero,
-including among a factor’s level contrasts (matching MixedModels.jl
-zerocorr()); lme4’s || leaves factor terms intact. Announced at compile
-time (covariance_assumption / double_bar_factor_term); the migration
-vignette gives the lme4-equivalent expansion.</td>
+<td align="left">supported</td>
+<td align="left">supported</td>
+<td align="left">Expanded like lme4: (1 + x + f || g) is (1 | g) + (0 +
+x | g) + (0 + f | g), the factor keeping its own block (model.matrix()
+coding); VarCorr() lists g, g.1, … as lme4. diag(1 + f | g) fixes every
+covariance at zero (MixedModels.jl zerocorr()). Noted at compile time
+(covariance_assumption / double_bar_factor_term).</td>
 </tr>
 </tbody>
 </table>
@@ -512,8 +873,10 @@ condition, rather than printing a number without comment:</p>
 <tr class="odd">
 <td>
 <code>NA</code> in a model variable</td>
-<td>silently dropped</td>
-<td>refused unless <code>na.action = na.omit</code>
+<td>silently dropped (<code>na.omit</code>)</td>
+<td>dropped under the same <code>na.action</code>, announced with a
+typed <code>mm_rows_dropped</code> message and recorded in
+<code>na.action(fit)</code>
 </td>
 </tr>
 <tr class="even">
@@ -543,7 +906,7 @@ condition, rather than printing a number without comment:</p>
 parametric-bootstrap intervals via <code>method = "bootstrap"</code> on
 profiled-estimator fits (like <code>bootMer</code>; refused on
 <code>joint_laplace</code> fits at this engine pin); Wald routes refused
-on the default <code>pirls_profiled</code> fit</td>
+on <code>pirls_profiled</code> fits</td>
 </tr>
 </tbody>
 </table>

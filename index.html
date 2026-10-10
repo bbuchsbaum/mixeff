@@ -14,6 +14,8 @@
 <script src="extra.js"></script><meta property="og:title" content="Mixed-Effects Models via the mixeff-rs Rust Crate">
 <meta name="description" content="Fits linear and generalized linear mixed-effects models from lme4-style formulas, with optimization by the bundled mixeff-rs Rust crate. A fitted model stores the compiled model specification, the optimizer certificate, and per-coefficient inference metadata (method, status, reliability) as data, so a result can be inspected, saved, and reloaded without a live handle to the compiled engine. When an inference method is unavailable for a fit, the affected value is either withheld with a stable reason code or reported under the name of the method actually used, never silently swapped. Vignettes cover migration from lme4 and the meaning of random-effects formula syntax.">
 <meta property="og:description" content="Fits linear and generalized linear mixed-effects models from lme4-style formulas, with optimization by the bundled mixeff-rs Rust crate. A fitted model stores the compiled model specification, the optimizer certificate, and per-coefficient inference metadata (method, status, reliability) as data, so a result can be inspected, saved, and reloaded without a live handle to the compiled engine. When an inference method is unavailable for a fit, the affected value is either withheld with a stable reason code or reported under the name of the method actually used, never silently swapped. Vignettes cover migration from lme4 and the meaning of random-effects formula syntax.">
+<link href="albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -100,7 +102,7 @@
 <span>  <span class="st">"mixeff"</span>,</span>
 <span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"https://bbuchsbaum.r-universe.dev"</span>, <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"repos"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>From GitHub (requires Rust 1.78 or newer):</p>
+<p>From GitHub (requires Rust 1.85 or newer):</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"bbuchsbaum/mixeff"</span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -202,7 +204,7 @@
 <h2 id="numerical-compatibility-with-lme4">Numerical compatibility with lme4<a class="anchor" aria-label="anchor" href="#numerical-compatibility-with-lme4"></a>
 </h2>
 <p><code>mixeff</code> does not target bit-exact reproduction of <code>lme4</code>; it targets statistical agreement within documented tolerances on the parity datasets, and the family/link table ships as a machine-readable registry (<code><a href="reference/supported_models.html">supported_models()</a></code>).</p>
-<p>The default profiled PIRLS estimator is fast but is not the same estimator as <code>glmer()</code>, and it returns point estimates only — standard errors, z tests, p-values, and confidence intervals are withheld with a note naming the alternative. Use <code>method = "joint_laplace"</code> when glmer-equivalent Laplace estimates are needed for a supported family. See the <a href="https://bbuchsbaum.github.io/mixeff/articles/glmm.html">GLMM vignette</a> for the current boundaries.</p>
+<p><code><a href="reference/glmm.html">glmm()</a></code> defaults to <code>method = "joint_laplace"</code>, glmer’s joint Laplace estimator, with certified Wald inference. The opt-in fast profiled PIRLS estimator (<code>method = "pirls_profiled"</code>, lme4’s <code>nAGQ = 0</code>) is not the same estimator as <code>glmer()</code>, and it returns point estimates only — standard errors, z tests, p-values, and confidence intervals are withheld with a note naming the alternative. Negative-binomial families, which have no joint route yet, use the profiled path (announced). See the <a href="https://bbuchsbaum.github.io/mixeff/articles/glmm.html">GLMM vignette</a> for the current boundaries.</p>
 </div>
 <div class="section level2">
 <h2 id="acknowledgements">Acknowledgements<a class="anchor" aria-label="anchor" href="#acknowledgements"></a>

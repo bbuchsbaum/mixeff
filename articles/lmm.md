@@ -142,8 +142,8 @@ fit
 #> Linear mixed model fit by REML
 #> Formula: Reaction ~ Days + (Days | Subject)
 #> Fit status: converged_interior
-#> Optimizer: trust_bq; iterations: 438; objective: 1715.67
-#> nobs: 180, sigma: 23.5051, logLik: -857.837
+#> Optimizer: trust_bq; iterations: 16; objective: 1715.67
+#> nobs: 180, sigma: 23.5052, logLik: -857.837
 #> Fixed effects:
 #> (Intercept)        Days 
 #>    256.2570     10.1502 
@@ -159,16 +159,15 @@ summary(fit, tests = "coefficients")
 #> Formula: Reaction ~ Days + (Days | Subject)
 #> Fit status: converged_interior
 #> 
-#> Variance components:
-#>    group        name variance  std_dev correlation
-#>  Subject (Intercept) 652.6850 25.54770            
-#>  Subject        Days  29.5779  5.43856       -0.08
-#> Residual std. dev.: 23.5051
+#>  Groups   Name        Std.Dev. Corr   
+#>  Subject  (Intercept) 25.5476         
+#>           Days         5.4385  -0.083 
+#>  Residual             23.5052         
 #> 
 #> Fixed effects:
 #>              Estimate Std. Error       df   t value  Pr(>|t|)        method
-#> (Intercept) 256.25687   6.845701 16.99932 37.433253   < 1e-16 satterthwaite
-#> Days         10.15023   1.419601 16.99972  7.150056 1.626e-06 satterthwaite
+#> (Intercept) 256.25687   6.845681 17.00010 37.433363   < 1e-16 satterthwaite
+#> Days         10.15023   1.419585 17.00012  7.150137 1.626e-06 satterthwaite
 #> 
 #> Inference status:
 #>         term        method    status reliability
@@ -179,7 +178,7 @@ summary(fit, tests = "coefficients")
 #>  satterthwaite_finite_difference_approximation
 #> 
 #> Notes:
-#>   Satterthwaite denominator df computed from finite-difference vcov_beta Jacobian and deviance Hessian over varpar
+#>   Satterthwaite denominator df computed from analytic vcov_beta Jacobian and finite-difference deviance Hessian over varpar
 ```
 
 The summary has four blocks, in print order.
@@ -227,7 +226,7 @@ fixef(fit)
 #> (Intercept)        Days 
 #>   256.25687    10.15023
 sigma(fit)
-#> [1] 23.50513
+#> [1] 23.50517
 logLik(fit)
 #> 'log Lik.' -857.8369 (df=6)
 ```
@@ -240,28 +239,27 @@ returns conditional random effects by grouping factor.
 ``` r
 
 VarCorr(fit)
-#> Variance components:
-#>    group        name variance  std_dev correlation
-#>  Subject (Intercept) 652.6850 25.54770            
-#>  Subject        Days  29.5779  5.43856       -0.08
-#> Residual std. dev.: 23.5051
+#>  Groups   Name        Std.Dev. Corr   
+#>  Subject  (Intercept) 25.5476         
+#>           Days         5.4385  -0.083 
+#>  Residual             23.5052
 head(ranef(fit)$Subject)
 #>   (Intercept)      Days
-#> 1   -8.047967  2.798294
-#> 2    4.457804  4.828437
-#> 3  -17.180029  4.799092
-#> 4   36.246461  4.003065
-#> 5   -4.147918  1.625769
-#> 6  -23.075829 -8.536017
+#> 1   -8.047859  2.798272
+#> 2    4.457929  4.828410
+#> 3  -17.179833  4.799052
+#> 4   36.246456  4.003062
+#> 5   -4.147857  1.625757
+#> 6  -23.075999 -8.535978
 ```
 
 ``` r
 
 confint(fit, method = "asymptotic")
 #> Confidence intervals:
-#>                 2.5 %    97.5 %
-#> (Intercept) 242.83954 269.67420
-#> Days          7.36786  12.93259
+#>                  2.5 %    97.5 %
+#> (Intercept) 242.839579 269.67416
+#> Days          7.367891  12.93256
 #> method: wald_asymptotic_from_stored_standard_errors
 #> status: Wald (asymptotic) intervals from stored standard errors (engine-certified profile intervals: method = "profile")
 ```
@@ -278,7 +276,8 @@ including after a save/reload cycle
 ([`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md)
 covers persistence).
 [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md)
-provides a small familiar subset for code that expects lme4-style names.
+rebuilds lme4’s low-level components (`theta`, `Lambdat`, `L`, `RX`,
+`devcomp`, …) for code that expects lme4-style names.
 
 ``` r
 
@@ -296,18 +295,15 @@ class(Z)
 
 getME(fit, c("theta", "beta", "cnms"))
 #> $theta
-#> [1]  1.08689842 -0.01922381  0.23057757
+#>      Subject.(Intercept) Subject.Days.(Intercept)             Subject.Days 
+#>               1.08689219              -0.01922107               0.23057417 
 #> 
 #> $beta
-#> (Intercept)        Days 
-#>   256.25687    10.15023 
+#> [1] 256.25687  10.15023
 #> 
 #> $cnms
-#> $Subject
-#> [1] "(Intercept)" "Days"       
-#> 
-#> attr(,"class")
-#> [1] "mm_cnms" "list"
+#> $cnms$Subject
+#> [1] "(Intercept)" "Days"
 ```
 
 For report-ready data-frame tables of the same fit — design summary,
@@ -331,12 +327,12 @@ prediction_check <- data.frame(
 )
 head(prediction_check)
 #>   Reaction   fitted fixed_only   residual
-#> 1 224.4814 248.2089   256.2569 -23.727494
-#> 2 248.2831 261.1574   266.4071 -12.874274
-#> 3 292.6939 274.1059   276.5573  18.588001
-#> 4 299.7000 287.0545   286.7075  12.645567
-#> 5 291.9349 300.0030   296.8578  -8.068110
-#> 6 305.1412 312.9515   307.0080  -7.810256
+#> 1 224.4814 248.2090   256.2569 -23.727602
+#> 2 248.2831 261.1575   266.4071 -12.874360
+#> 3 292.6939 274.1060   276.5573  18.587938
+#> 4 299.7000 287.0545   286.7075  12.645526
+#> 5 291.9349 300.0030   296.8578  -8.068130
+#> 6 305.1412 312.9515   307.0080  -7.810253
 ```
 
 ### Prediction standard errors and intervals
@@ -349,15 +345,15 @@ via `re.form = NA` (the Wald SE of the fixed-effect linear predictor):
 pop <- predict(fit, re.form = NA, se.fit = TRUE)
 head(pop$se.fit)
 #>        1        2        3        4        5        6 
-#> 6.845701 6.651902 6.757404 7.148969 7.783542 8.607545
+#> 6.845681 6.651891 6.757396 7.148958 7.783523 8.607515
 head(predict(fit, re.form = NA, interval = "confidence"))
 #>        fit      lwr      upr
-#> 1 256.2569 242.8395 269.6742
+#> 1 256.2569 242.8396 269.6742
 #> 2 266.4071 253.3696 279.4446
 #> 3 276.5573 263.3131 289.8016
-#> 4 286.7075 272.6958 300.7193
+#> 4 286.7075 272.6958 300.7192
 #> 5 296.8578 281.6023 312.1132
-#> 6 307.0080 290.1375 323.8785
+#> 6 307.0080 290.1376 323.8784
 ```
 
 *Conditional* prediction standard errors (the default, `re.form = NULL`)
@@ -373,20 +369,20 @@ payload.
 pred <- predict(fit, se.fit = TRUE)
 head(data.frame(population_se = pop$se.fit, conditional_se = pred$se.fit))
 #>   population_se conditional_se
-#> 1      6.845701      11.757630
-#> 2      6.651902      10.086320
-#> 3      6.757404       8.665374
-#> 4      7.148969       7.635864
-#> 5      7.783542       7.168472
-#> 6      8.607545       7.370917
+#> 1      6.845681      11.757606
+#> 2      6.651891      10.086304
+#> 3      6.757396       8.665367
+#> 4      7.148958       7.635865
+#> 5      7.783523       7.168480
+#> 6      8.607515       7.370927
 head(predict(fit, interval = "confidence"))
 #>        fit      lwr      upr
-#> 1 248.2089 225.1644 271.2534
-#> 2 261.1574 241.3886 280.9262
-#> 3 274.1059 257.1221 291.0898
-#> 4 287.0545 272.0884 302.0205
-#> 5 300.0030 285.9530 314.0529
-#> 6 312.9515 298.5048 327.3982
+#> 1 248.2090 225.1645 271.2535
+#> 2 261.1575 241.3887 280.9263
+#> 3 274.1060 257.1222 291.0898
+#> 4 287.0545 272.0885 302.0205
+#> 5 300.0030 285.9530 314.0530
+#> 6 312.9515 298.5048 327.3983
 ```
 
 Rows the engine cannot certify — for example an unseen grouping level
@@ -558,9 +554,9 @@ full_fit <- lmm(
 )
 parameterization(full_fit)$table[, c("theta_name", "theta_value", "lambda_value")]
 #>                     theta_name theta_value lambda_value
-#> 1 theta[0:intercept,intercept]   1.0706644    1.0706644
-#> 2      theta[0:time,intercept]   0.1222131    0.1222131
-#> 3           theta[0:time,time]   0.5466997    0.5466997
+#> 1 theta[0:intercept,intercept]   1.0706638    1.0706638
+#> 2      theta[0:time,intercept]   0.1222134    0.1222134
+#> 3           theta[0:time,time]   0.5466992    0.5466992
 ```
 
 What θ is, why the engine optimizes it rather than the covariance matrix
@@ -645,11 +641,12 @@ explain_model(double_bar)
 #>   covariance_assumption: the covariance between 'Intercept' and 'time' is fixed at zero by || syntax
 ```
 
-One caveat: when a **factor** appears inside `||`, mixeff’s expansion
-differs from lme4’s —
+A **factor** inside `||` expands as in lme4: `(1 + x + f || g)` is
+`(1 | g) + (0 + x | g) + (0 + f | g)`, so the factor keeps its own
+correlated block. To fix every covariance at zero, factor columns
+included (MixedModels.jl’s `zerocorr()`), write `diag(1 + x + f | g)`;
 [`vignette("lme4-migration", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md)
-states the exact semantics and the explicit spelling that reproduces
-lme4’s model family.
+has the details.
 
 ### Nested and crossed grouping
 

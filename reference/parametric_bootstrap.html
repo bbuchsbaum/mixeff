@@ -13,7 +13,7 @@ parameters) is the reduced model; the larger is the alternative. The
 returned object carries the engine's replicate accounting (successful and
 completed replicates, boundary count, Monte-Carlo standard error, seed)
 rather than a bare mean() p-value, so every reported number traces back
-to a versioned Rust payload."></head><body>
+to a versioned Rust payload."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -77,7 +77,14 @@ to a versioned Rust payload.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">parametric_bootstrap</span><span class="op">(</span><span class="va">null</span>, <span class="va">alternative</span>, nsim <span class="op">=</span> <span class="fl">100L</span>, seed <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">parametric_bootstrap</span><span class="op">(</span></span>
+<span>  <span class="va">null</span>,</span>
+<span>  <span class="va">alternative</span>,</span>
+<span>  nsim <span class="op">=</span> <span class="fl">100L</span>,</span>
+<span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  threads <span class="op">=</span> <span class="fl">1L</span>,</span>
+<span>  <span class="va">...</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -95,6 +102,13 @@ model with fewer parameters is treated as the reduced model.</p></dd>
 
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
 <dd><p>Optional bootstrap seed.</p></dd>
+
+
+<dt id="arg-threads">threads<a class="anchor" aria-label="anchor" href="#arg-threads"></a></dt>
+<dd><p>Worker threads for the replicate refits (default 1). The
+responses are simulated serially and each replicate refits fresh copies
+of both models, so the result is identical for every value; see
+<code><a href="bootstrap_control.html">bootstrap_control()</a></code> for the threading contract.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

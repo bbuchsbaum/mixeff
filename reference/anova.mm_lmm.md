@@ -1,10 +1,16 @@
 # Analysis of variance for a mixeff LMM
 
 With no extra models, [`anova()`](https://rdrr.io/r/stats/anova.html)
-returns a term-level table for `object`. With further fitted models in
-`...`, it defers to
+returns a term-level F-test table for `object` shaped like lmerTest's: a
+data frame of class `"anova"` with columns `Sum Sq`, `Mean Sq`, `NumDF`,
+`DenDF`, `F value` and `Pr(>F)` (rows named by term;
+`Mean Sq = F * sigma^2` and `Sum Sq = NumDF * Mean Sq`, as in lmerTest).
+With further fitted models in `...`, it returns lme4's likelihood-ratio
+table (`npar`, `AIC`, `BIC`, `logLik`, `-2*log(L)`, `Chisq`, `Df`,
+`Pr(>Chisq)`, rows named after the arguments; lme4 before 2.0 called the
+`-2*log(L)` column `deviance`), computed by
 [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
-for a nested model comparison.
+(REML fits are refit by ML, as in lme4).
 
 ## Usage
 
@@ -15,7 +21,8 @@ anova(
   ...,
   type = c("III", "II", "I", "block"),
   method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic", "none"),
-  refit_for_comparison = c("auto", "error", "ml")
+  refit_for_comparison = c("auto", "error", "ml"),
+  ddf = NULL
 )
 ```
 
@@ -44,6 +51,8 @@ anova(
   is the simple effect at the other factors' reference levels, which is
   a legitimate quantity but is *not* Type III on unbalanced designs; it
   is the hypothesis mixeff computed for `"III"` before engine `1f3f689`.
+  lmerTest's spellings `3`, `2`, `1` (numeric or character) are
+  accepted.
 
 - method:
 
@@ -55,6 +64,27 @@ anova(
   [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
   when `...` is used.
 
+- ddf:
+
+  lmerTest's spelling of the method: `"Satterthwaite"`
+  (`method = "satterthwaite"`), `"Kenward-Roger"`
+  (`method = "kenward_roger"`), or `"lme4"`, which returns lme4's own
+  single-model table (sequential `npar`, `Sum Sq`, `Mean Sq`, `F value`,
+  no denominator df or p-values). Supply `ddf` or `method`, not both.
+
 ## Value
 
-An `mm_anova` object.
+A data frame of class `c("mm_anova", "anova", "data.frame")` for one
+model, or
+`c("mm_anova_comparison", "mm_model_comparison", "anova", "data.frame")`
+for several.
+
+## Details
+
+mixeff's provenance stays on the result: `x$table` is the full
+term-level (or
+[`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md))
+table with method, status, reliability and reason columns, and `x$type`
+/ `x$requested_method` record the request. Rows the engine could not
+certify keep `NA` statistics and their reason is printed under the
+table.

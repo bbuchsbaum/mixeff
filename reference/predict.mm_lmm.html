@@ -3,7 +3,7 @@
 the cached fitted/fixed values; new-data predictions are dispatched
 through the Rust predict_new contract."><meta property="og:description" content="Predictions follow the lme4 generic shape. In-sample predictions reuse
 the cached fitted/fixed values; new-data predictions are dispatched
-through the Rust predict_new contract."></head><body>
+through the Rust predict_new contract."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -72,6 +72,8 @@ through the Rust <code>predict_new</code> contract.</p>
 <span>  se.fit <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  interval <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"none"</span>, <span class="st">"confidence"</span>, <span class="st">"prediction"</span><span class="op">)</span>,</span>
 <span>  level <span class="op">=</span> <span class="fl">0.95</span>,</span>
+<span>  na.action <span class="op">=</span> <span class="fu">stats</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">na.pass</a></span>,</span>
+<span>  offset <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -90,7 +92,12 @@ through the Rust <code>predict_new</code> contract.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_glmm'</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals</a></span><span class="op">(</span><span class="va">object</span>, type <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"response"</span><span class="op">)</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals</a></span><span class="op">(</span></span>
+<span>  <span class="va">object</span>,</span>
+<span>  type <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"deviance"</span>, <span class="st">"pearson"</span>, <span class="st">"working"</span>, <span class="st">"response"</span><span class="op">)</span>,</span>
+<span>  scaled <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  <span class="va">...</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -103,17 +110,22 @@ through the Rust <code>predict_new</code> contract.</p>
 
 <dt id="arg-newdata">newdata<a class="anchor" aria-label="anchor" href="#arg-newdata"></a></dt>
 <dd><p>Optional new data. Must be a <code>data.frame</code> containing every
-variable referenced by the model's formula. Categorical levels must
-either match the training factor levels or trigger the <code>allow.new.levels</code>
-policy.</p></dd>
+variable the requested prediction needs (the fixed-effect variables, plus
+the grouping and slope variables of the random terms used); other
+columns are ignored. Grouping columns may be factor, character, or
+integer (coerced the way they were at fit time); fixed-effect factor and
+character columns are matched to the training levels, and a level not
+seen when fitting is refused. Stateful terms (<code><a href="https://rdrr.io/r/stats/poly.html" class="external-link">poly()</a></code>, <code><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale()</a></code>,
+<code>ns()</code>, ...) are evaluated with the training basis, as in <code><a href="https://rdrr.io/r/stats/lm.html" class="external-link">stats::lm()</a></code>.</p></dd>
 
 
 <dt id="arg-re-form">re.form<a class="anchor" aria-label="anchor" href="#arg-re-form"></a></dt>
-<dd><p>Random-effects conditioning, following lme4's basic
-convention. <code>NULL</code> returns conditional predictions; <code>NA</code> (or <code>~0</code>)
-returns population-level (fixed-effect) predictions. Conditioning on a
-subset of grouping factors via a one-sided formula is not supported by
-the current Rust contract and raises <code>mm_inference_unavailable</code>.</p></dd>
+<dd><p>Random-effects conditioning, following lme4. <code>NULL</code>
+returns conditional predictions; <code>NA</code> (or <code>~0</code>) returns population-level
+(fixed-effect) predictions; a one-sided formula naming some of the
+model's random terms (e.g. <code>~ (1 | subject)</code>) conditions on those terms'
+conditional modes only. Standard errors and intervals are not available
+for such partial conditioning.</p></dd>
 
 
 <dt id="arg-allow-new-levels">allow.new.levels<a class="anchor" aria-label="anchor" href="#arg-allow-new-levels"></a></dt>
@@ -126,7 +138,11 @@ the population mean (zero random effect), matching
 
 <dt id="arg-type">type<a class="anchor" aria-label="anchor" href="#arg-type"></a></dt>
 <dd><p>Prediction scale. Gaussian LMMs use the same values for
-<code>"response"</code> and <code>"link"</code>.</p></dd>
+<code>"response"</code> and <code>"link"</code>. For <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>, the residual type, as in
+lme4: LMMs default to <code>"response"</code> (<code>y - mu</code>, also <code>"working"</code>), with
+<code>"pearson"</code>/<code>"deviance"</code> the weighted residuals <code>sqrt(w) * (y - mu)</code>;
+GLMMs default to <code>"deviance"</code> and also offer <code>"pearson"</code>
+(<code>(y - mu) * sqrt(w / V(mu))</code>), <code>"working"</code> and <code>"response"</code>.</p></dd>
 
 
 <dt id="arg-se-fit">se.fit<a class="anchor" aria-label="anchor" href="#arg-se-fit"></a></dt>
@@ -153,13 +169,31 @@ prediction-variance payload. Returns a matrix with <code>fit</code>/<code>lwr</c
 <dd><p>Confidence level for <code>interval</code> / <code>se.fit</code> intervals.</p></dd>
 
 
+<dt id="arg-na-action">na.action<a class="anchor" aria-label="anchor" href="#arg-na-action"></a></dt>
+<dd><p>Missing-value handling for <code>newdata</code>, as in
+<code><a href="https://rdrr.io/pkg/lme4/man/predict.merMod.html" class="external-link">lme4::predict.merMod()</a></code>: the default <a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.pass</a> returns <code>NA</code> for
+rows with a missing value in a variable the prediction needs;
+<a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.omit</a> drops them and <a href="https://rdrr.io/r/stats/na.fail.html" class="external-link">stats::na.exclude</a> pads them back as
+<code>NA</code>. In-sample predictions of a fit made with <code>na.action = na.exclude</code>
+are padded to the original rows, like <code><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted()</a></code> and <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>.</p></dd>
+
+
+<dt id="arg-offset">offset<a class="anchor" aria-label="anchor" href="#arg-offset"></a></dt>
+<dd><p>Offset for <code>newdata</code> rows when the model was fitted with the
+<code>offset =</code> argument: a numeric vector (one value per <code>newdata</code> row) or an
+expression evaluated in <code>newdata</code>. Offsets written in the formula
+(<code>offset(log(t))</code>) are evaluated from <code>newdata</code> automatically. (lme4
+silently drops an <code>offset =</code> argument offset for new data; mixeff refuses
+instead of guessing.)</p></dd>
+
+
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Reserved for generic compatibility.</p></dd>
 
 
 <dt id="arg-scaled">scaled<a class="anchor" aria-label="anchor" href="#arg-scaled"></a></dt>
-<dd><p>Logical; when <code>TRUE</code>, residuals are divided by the residual
-scale.</p></dd>
+<dd><p>Logical; when <code>TRUE</code>, residuals are divided by <code>sigma(object)</code>
+(once), as in lme4.</p></dd>
 
 </dl></div>
     <div class="section level2">

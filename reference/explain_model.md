@@ -58,12 +58,26 @@ does not carry a valid compiled artifact.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+set.seed(1)
 df <- data.frame(
   y = rnorm(20),
   t = rep(0:3, 5),
   s = factor(rep(1:5, each = 4))
 )
 explain_model(compile_model(y ~ t + (1 | s), df))
-} # }
+#> Random effects explanation:
+#>   formula: y ~ 1 + t + (1 | s)
+#> 
+#> Random effects:
+#>   r0:
+#>     wrote:      (1 | s)
+#>     canonical:  (1 | s)
+#>     named form: re(group = s, intercept = TRUE, slopes = NULL, cov = "scalar")
+#>     scope:      `s` units may differ in average outcome.
+#>     covariance: scalar; theta parameters: 1
+#>     support:    sufficient; group levels: 5; min rows/group: 4; median rows/group: 4
+#>     variation:  intercept=not_assessed
+#> 
+#> Design notes:
+#>   scope_note: `t` varies within `s`, so a `s`-level slope is structurally possible
 ```

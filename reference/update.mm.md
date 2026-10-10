@@ -35,8 +35,12 @@ update(object, formula., ..., evaluate = TRUE)
 - ...:
 
   Arguments to override on the re-fit. For `mm_lmm`: `data`, `REML`,
-  `weights`, `control`. For `mm_glmm`: additionally `family`, `offset`,
-  `method`, `nAGQ`, `inference`.
+  `weights`, `offset`, `na.action`, `control`. For `mm_glmm`:
+  additionally `family`, `method`, `nAGQ`, `inference`. The fit's
+  missing-value handling carries over: a refit of the stored model frame
+  keeps the original `na.action` record (so `na.exclude` padding
+  persists), and new `data` is filtered with the original `na.action`
+  (`na.omit` or `na.exclude`) unless `na.action` is supplied.
 
 - evaluate:
 

@@ -27,7 +27,7 @@ correlation (off-diagonal). This is the shape broom.mixed::tidy() expects.
 Produces the long form returned by as.data.frame(lme4::ranef(.)): columns
 grpvar, term, grp, condval, and condsd. condsd is the
 conditional standard deviation, taken from the postVar attribute when the
-modes were extracted with condVar = TRUE, and NA otherwise."></head><body>
+modes were extracted with condVar = TRUE, and NA otherwise."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -104,10 +104,10 @@ modes were extracted with <code>condVar = TRUE</code>, and <code>NA</code> other
 <span><span class="fu">fixef</span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_lmm'</span></span>
-<span><span class="fu">fixef</span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="fu">fixef</span><span class="op">(</span><span class="va">object</span>, add.dropped <span class="op">=</span> <span class="cn">FALSE</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_glmm'</span></span>
-<span><span class="fu">fixef</span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="fu">fixef</span><span class="op">(</span><span class="va">object</span>, add.dropped <span class="op">=</span> <span class="cn">FALSE</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">ranef</span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
@@ -153,7 +153,7 @@ modes were extracted with <code>condVar = TRUE</code>, and <code>NA</code> other
 <span><span class="fu"><a href="https://rdrr.io/r/stats/deviance.html" class="external-link">deviance</a></span><span class="op">(</span><span class="va">object</span>, REML <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_glmm'</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/deviance.html" class="external-link">deviance</a></span><span class="op">(</span><span class="va">object</span>, REML <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/deviance.html" class="external-link">deviance</a></span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_lmm'</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC</a></span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span>, k <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
@@ -186,10 +186,10 @@ modes were extracted with <code>condVar = TRUE</code>, and <code>NA</code> other
 <span><span class="fu"><a href="https://rdrr.io/r/stats/formula.html" class="external-link">formula</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_lmm'</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame</a></span><span class="op">(</span><span class="va">formula</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame</a></span><span class="op">(</span><span class="va">formula</span>, fixed.only <span class="op">=</span> <span class="cn">FALSE</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_glmm'</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame</a></span><span class="op">(</span><span class="va">formula</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame</a></span><span class="op">(</span><span class="va">formula</span>, fixed.only <span class="op">=</span> <span class="cn">FALSE</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">ngrps</span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
@@ -201,12 +201,6 @@ modes were extracted with <code>condVar = TRUE</code>, and <code>NA</code> other
 <span></span>
 <span><span class="co"># S3 method for class 'mm_glmm'</span></span>
 <span><span class="fu">ngrps</span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># S3 method for class 'mm_lmm'</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/weights.html" class="external-link">weights</a></span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># S3 method for class 'mm_glmm'</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/stats/weights.html" class="external-link">weights</a></span><span class="op">(</span><span class="va">object</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># S3 method for class 'mm_lmm'</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/stats/extractAIC.html" class="external-link">extractAIC</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">scale</span>, k <span class="op">=</span> <span class="fl">2</span>, <span class="va">...</span><span class="op">)</span></span>
@@ -248,15 +242,27 @@ modes were extracted with <code>condVar = TRUE</code>, and <code>NA</code> other
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Reserved for generic compatibility.</p></dd>
+<dd><p>Reserved for generic compatibility. For <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC()</a></code> and <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC()</a></code>,
+further fitted models: with several models the result is the data frame
+<code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">stats::AIC()</a></code> returns (<code>df</code> and <code>AIC</code>/<code>BIC</code>, rows named after the
+arguments).</p></dd>
+
+
+<dt id="arg-add-dropped">add.dropped<a class="anchor" aria-label="anchor" href="#arg-add-dropped"></a></dt>
+<dd><p>For <code>fixef()</code>: if <code>TRUE</code>, coefficients dropped for
+rank deficiency are included as <code>NA</code> (lme4's <code>add.dropped</code>); by default
+they are omitted, as in lme4.</p></dd>
 
 
 <dt id="arg-condvar">condVar<a class="anchor" aria-label="anchor" href="#arg-condvar"></a></dt>
 <dd><p>Logical; when <code>TRUE</code>, attach a <code>postVar</code> array of conditional
 variances to each random-effects table. Gaussian <code><a href="lmm.html">lmm()</a></code> fits receive the
-conditional covariances computed by the engine. <code><a href="glmm.html">glmm()</a></code> fits, and any fit
-whose conditional-variance computation refuses, receive an all-<code>NA</code>
-<code>postVar</code> plus an <code>mm_unavailable_reason</code> attribute rather than fabricated
+conditional covariances computed by the engine. <code><a href="glmm.html">glmm()</a></code> fits receive
+lme4's Laplace-approximation conditional covariances
+<code>sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda'</code> at the fitted
+modes, with <code>W</code> the final PIRLS working weights. A fit whose
+conditional-variance computation refuses receives an all-<code>NA</code> <code>postVar</code>
+plus an <code>mm_unavailable_reason</code> attribute rather than fabricated
 conditional variances.</p></dd>
 
 
@@ -267,6 +273,11 @@ deviance generics.</p></dd>
 
 <dt id="arg-k">k<a class="anchor" aria-label="anchor" href="#arg-k"></a></dt>
 <dd><p>Penalty per parameter for <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC()</a></code>.</p></dd>
+
+
+<dt id="arg-fixed-only">fixed.only<a class="anchor" aria-label="anchor" href="#arg-fixed-only"></a></dt>
+<dd><p>For <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame()</a></code>: return only the fixed-effect
+variables, as <code><a href="https://rdrr.io/pkg/lme4/man/merMod-class.html" class="external-link">lme4::model.frame.merMod()</a></code>.</p></dd>
 
 
 <dt id="arg-scale">scale<a class="anchor" aria-label="anchor" href="#arg-scale"></a></dt>
@@ -293,6 +304,59 @@ attribute.</p></dd>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A named integer vector of group counts.</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>These methods follow lme4's shapes. <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code> returns, per grouping factor,
+every fixed-effect column (fixed-only columns repeated) plus the
+conditional modes, in lme4's column order. <code>VarCorr()</code> returns lme4's
+<code>VarCorr.merMod</code> structure: a named list of covariance matrices (one per
+random-effect term, so <code>VarCorr(fit)$Subject</code> is a matrix) with
+<code>"stddev"</code> and <code>"correlation"</code> attributes and list attributes <code>"sc"</code>
+(<code><a href="https://rdrr.io/r/stats/sigma.html" class="external-link">sigma()</a></code>) and <code>"useSc"</code> (<code>TRUE</code> for LMMs; <code>FALSE</code> for every GLMM, as in
+lme4 &gt;= 2.1-0, so GLMM random-effect SDs are absolute and no Residual row
+is printed); it prints like lme4 and
+<code><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame()</a></code> gives lme4's long form. mixeff's full-precision long
+table remains available as <code>VarCorr(fit)$table</code> (with <code>$residual_sd</code>).
+<code><a href="https://rdrr.io/r/stats/sigma.html" class="external-link">sigma()</a></code> of a binomial, Poisson or negative-binomial GLMM is 1, as in
+lme4 (the negative-binomial theta is <code>getME(fit, "glmer.nb.theta")</code>). For
+GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and
+Gaussian with a non-identity link) it is <code>sqrt(phi)</code> with
+<code>phi = sum(deviance residuals^2) / (n - rank([X, Z]))</code>, the dispersion
+profiled during the fit, as in lme4 &gt;= 2.1-0 (<code>glmerControl()</code> defaults
+<code>disp_method = "moment"</code>, <code>disp_dof_correction = TRUE</code>; lme4 &lt; 2.1-0 used
+a different, biased estimate). <code>mm_control(disp_dof_correction = FALSE)</code>
+divides by <code>n</code> instead, and <code>mm_control(max_phi_iter = )</code> caps the <code>phi</code>
+iterations. With <code>mm_control(disp_method = "old/buggy")</code> the fit
+reproduces lme4 2.1-0's <code>disp_method = "old/buggy"</code>: PIRLS runs with
+<code>phi = 1</code>, so <code>weights(fit, "working")</code> does not carry <code>1/phi</code>, and
+<code>VarCorr()</code> reports theta itself as the random-effect SD, as lme4 2.1-0
+does. Under lme4 &lt; 2.1-0 that SD was <code>sigma() * theta</code>. <code><a href="https://rdrr.io/r/stats/deviance.html" class="external-link">deviance()</a></code> of a GLMM is the sum of squared deviance
+residuals, as <code><a href="https://rdrr.io/pkg/lme4/man/deviance.html" class="external-link">lme4::deviance.merMod()</a></code>; <code>-2 * logLik()</code> is the Laplace
+objective reported in <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>. <code><a href="https://rdrr.io/r/stats/model.frame.html" class="external-link">model.frame()</a></code> returns lme4's frame
+(transformed columns such as <code>log(y)</code>, a <code>terms</code> attribute, <code>(weights)</code>
+and <code>(offset)</code> columns); the raw variables the engine used are in
+<code>fit$model_frame</code>.</p>
+<p><code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> of a joint-Laplace GLMM is the inverse of the finite-difference
+Hessian over the fixed effects and covariance parameters, glmer's default
+(<code>use.hessian = TRUE</code>). When that Hessian is not positive definite (or
+unavailable) the engine falls back to the fixed-effect block RX of the
+Laplace penalized least-squares factorization at the optimum,
+conditional on the covariance parameters – glmer's
+<code>vcov(fit, use.hessian = FALSE)</code>, which glmer also falls back to with a
+warning. mixeff does the same: the matrix carries
+<code>attr(, "mm_method") == "laplace_rx_conditional_on_theta"</code>, reliability
+<code>"low"</code> and the engine's notes (<code>attr(, "mm_notes")</code>), and <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> warns
+(class <code>mm_vcov_rx_fallback</code>). Such standard errors ignore the
+uncertainty in the covariance parameters.</p>
+<p>Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+(Gamma, inverse Gaussian, Gaussian with a non-identity link) the
+penalized least-squares factor already carries the <code>1 / phi</code> working
+weights, so mixeff's RX-based <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> (<code>nAGQ = 0</code> fits, and the
+fallback above) is <code>unsc()</code> with no further <code>sigma^2</code> factor. lme4 &gt;= 2.1-0
+still multiplies by <code>sigma()^2</code> there (and in <code>ranef(condVar = TRUE)</code>), so
+those values differ from lme4 2.1's by the factor <code>phi = sigma()^2</code>;
+Hessian-based <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> values agree.</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
@@ -306,11 +370,10 @@ attribute.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span> (Intercept)           x </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   0.1122739  -0.0416571 </span>
 <span class="r-in"><span><span class="fu">VarCorr</span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Variance components:</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  group        name variance std_dev correlation       note</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>      g (Intercept)        0       0             [boundary]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Groups   Name        Std.Dev.           </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  g        (Intercept) 0.00000  [boundary]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Residual             0.86165            </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [boundary]: variance component is at the boundary of the parameter space.</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Residual std. dev.: 0.861654</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu">ranef</span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">$</span><span class="va">g</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   (Intercept)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1           0</span>

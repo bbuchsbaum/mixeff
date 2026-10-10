@@ -5,7 +5,7 @@ It formats the upstream RandomTermCard and diagnostic payloads; Rust
 remains the source of truth for per-block English wording and design facts."><meta property="og:description" content="explain_model() renders the random-effects guidance surface for an
 mm_spec returned by compile_model() or an mm_fit.
 It formats the upstream RandomTermCard and diagnostic payloads; Rust
-remains the source of truth for per-block English wording and design facts."></head><body>
+remains the source of truth for per-block English wording and design facts."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -109,14 +109,28 @@ not carry a valid compiled artifact.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">df</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>  y <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">20</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  t <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">0</span><span class="op">:</span><span class="fl">3</span>, <span class="fl">5</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  s <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span>, each <span class="op">=</span> <span class="fl">4</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">explain_model</span><span class="op">(</span><span class="fu"><a href="compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">y</span> <span class="op">~</span> <span class="va">t</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">s</span><span class="op">)</span>, <span class="va">df</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Random effects explanation:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   formula: y ~ 1 + t + (1 | s)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Random effects:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   r0:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     wrote:      (1 | s)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     canonical:  (1 | s)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     named form: re(group = s, intercept = TRUE, slopes = NULL, cov = "scalar")</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     scope:      `s` units may differ in average outcome.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     covariance: scalar; theta parameters: 1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     support:    sufficient; group levels: 5; min rows/group: 4; median rows/group: 4</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     variation:  intercept=not_assessed</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Design notes:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   scope_note: `t` varies within `s`, so a `s`-level slope is structurally possible</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

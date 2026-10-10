@@ -29,10 +29,10 @@ mm_json_known_schemas()
 #> 2       mixedmodels.compiled_model_artifact       1
 #> 3            mixedmodels.model_audit_report       2
 #> 4              mixedmodels.random_term_card       1
-#> 5  mixedmodels.fixed_effect_inference_table   1.1.0
+#> 5  mixedmodels.fixed_effect_inference_table   1.2.0
 #> 6       mixedmodels.marginal_quantity_table   1.0.0
 #> 7        mixedmodels.model_comparison_table   1.0.0
 #> 8                  mixedmodels.boundary_lrt   1.0.0
-#> 9                   mixedmodels.fit_summary   1.0.0
+#> 9                   mixedmodels.fit_summary   1.1.0
 #> 10        mixedmodels.profile_likelihood_ci   1.0.0
 ```

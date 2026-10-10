@@ -20,7 +20,11 @@ mm_control(
   start = NULL,
   ftol_rel = NULL,
   ftol_abs = NULL,
-  xtol_rel = NULL
+  xtol_rel = NULL,
+  optCtrl = NULL,
+  disp_method = NULL,
+  disp_dof_correction = NULL,
+  max_phi_iter = NULL
 )
 ```
 
@@ -29,7 +33,9 @@ mm_control(
 - verbose:
 
   Integer verbosity level. Use `-1` to suppress the automatic model
-  explanation (and the GLMM estimator notice).
+  explanation and the fit notices (the GLMM estimator notice, the
+  `mm_rows_dropped` missing-value notice, grouping coercion and scaling
+  advisories).
 
 - max_feval:
 
@@ -65,6 +71,42 @@ mm_control(
 
   Optional positive relative convergence tolerance on the optimizer
   parameters. `NULL` keeps the engine default.
+
+- optCtrl:
+
+  Optional named list in the style of lme4's `lmerControl(optCtrl = )`,
+  translated to the engine's controls: `maxfun`/`maxeval` -\>
+  `max_feval`; `ftol_rel`/`ftol_abs`/`xtol_rel` -\> the arguments of the
+  same name; `xtol_abs` (scalar or one per theta) -\> the absolute
+  parameter tolerance; `rhobeg` (scalar or one per theta) -\> the
+  optimizer's initial step. Unknown names are refused with an
+  `mm_arg_error` rather than ignored. lme4's `check.conv.*` options have
+  no counterpart: mixeff does not emit post-hoc convergence warnings;
+  the fit's convergence status is the engine's typed certificate
+  ([`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md),
+  [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)).
+
+- disp_method, disp_dof_correction, max_phi_iter:
+
+  lme4 2.1-0's `glmerControl()` dispersion controls for
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) fits
+  with a free dispersion parameter (Gamma, inverse Gaussian, Gaussian
+  with a non-identity link). `disp_method = "moment"` (the default)
+  profiles the dispersion `phi` in a damped fixed-point loop around
+  PIRLS, with the working weights divided by `phi`; `"old/buggy"`
+  restores lme4 \< 2.1 (working weights with `phi = 1`, theta relative
+  to [`sigma()`](https://rdrr.io/r/stats/sigma.html)).
+  `disp_dof_correction` (default `TRUE`) divides the deviance by
+  `n - rank([X, Z])` rather than `n` in the moment estimator, and
+  `max_phi_iter` (lme4's `maxPhiIter`, default 100) caps the `phi`
+  iterations per objective evaluation. Both only matter for `"moment"`.
+  `NULL` keeps the engine default (the lme4 2.1-0 default). Invalid
+  values raise an `mm_arg_error`. For families without a free dispersion
+  (binomial, Poisson, negative binomial) and for
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) the
+  settings have no effect: they are kept on the control, and the fit
+  announces that they were ignored with an `mm_control_ignored_notice`
+  message (silenced by `verbose = -1`). lme4 ignores them silently.
 
 ## Value
 

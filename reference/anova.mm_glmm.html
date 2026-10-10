@@ -7,7 +7,7 @@ GLMM contract supports directly."><meta property="og:description" content="With 
 likelihood-ratio comparison (like anova(glmer1, glmer2)). For a single
 model, fixed-effect tests are routed to drop1() (term LRTs),
 summary() (Wald z), or contrast() (custom Wald contrasts), which the
-GLMM contract supports directly."></head><body>
+GLMM contract supports directly."><link href="../albers.css" rel="stylesheet"><script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -86,7 +86,10 @@ GLMM contract supports directly.</p>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>An <code>mm_model_comparison</code> object (multi-model case).</p>
+    <p>A data frame of class <code>c("mm_anova_comparison", "mm_glmm_comparison", "anova", "data.frame")</code> shaped like <code>anova(glmer1, glmer2)</code>: columns <code>npar</code>,
+<code>AIC</code>, <code>BIC</code>, <code>logLik</code>, <code>-2*log(L)</code> (lme4 before 2.0 called it
+<code>deviance</code>), <code>Chisq</code>, <code>Df</code>, <code>Pr(&gt;Chisq)</code>, rows named after the arguments. The underlying comparison
+(with the model formulas) is reachable as <code>x$table</code>.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

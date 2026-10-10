@@ -62,8 +62,8 @@ for the broader capability record.
 
 ``` r
 mm_json_negotiate(list(schema_name = "formula", schema_version = "v0"))
-if (FALSE) { # \dontrun{
 # Raises mm_schema_error:
-mm_json_negotiate(list(schema_name = "formula", schema_version = "v99"))
-} # }
+try(mm_json_negotiate(list(schema_name = "formula", schema_version = "v99")))
+#> Error in mm_json_negotiate(list(schema_name = "formula", schema_version = "v99")) : 
+#>   schema 'formula' version mismatch (wrapper expects 'v0', got 'v99')
 ```

@@ -12,6 +12,8 @@
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
 <script src="../extra.js"></script><meta property="og:title" content="Reproducing the Loo Aphantasia GLMMs">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -155,14 +157,15 @@ slower S1 random-effects stability variants run under
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># inference = "working_hessian": this vignette DELIBERATELY opts in to the</span></span>
 <span><span class="co"># uncertified working-Hessian approximation, because its purpose below is to</span></span>
-<span><span class="co"># measure that approximation against the frozen glmer reference (the ~11%</span></span>
-<span><span class="co"># anti-conservatism behind the opt-in's documented caveat). A default fit</span></span>
-<span><span class="co"># refuses Wald inference on every route.</span></span>
+<span><span class="co"># measure that approximation against the frozen glmer reference. Without</span></span>
+<span><span class="co"># the opt-in, Wald inference is refused on this fit: the profiled</span></span>
+<span><span class="co"># covariance is uncertified.</span></span>
 <span><span class="va">primary_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
 <span>  <span class="va">correct</span> <span class="op">~</span> <span class="va">group</span> <span class="op">*</span> <span class="va">mask</span> <span class="op">*</span> <span class="va">soa_s</span> <span class="op">+</span> <span class="va">block</span> <span class="op">+</span></span>
 <span>    <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">mask</span> <span class="op">+</span> <span class="va">soa_s</span> <span class="op">||</span> <span class="va">participant</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">item</span><span class="op">)</span>,</span>
 <span>  <span class="va">primary_dat</span>,</span>
 <span>  family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"pirls_profiled"</span>,</span>
 <span>  inference <span class="op">=</span> <span class="st">"working_hessian"</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
@@ -194,13 +197,16 @@ fits: the sensitivity model assigns the four intermediate VVIQ
 participants to the control group. The estimator matters for two of the
 models that follow. The intact high-baseline Bernoulli model reaches
 near-exact lme4 fixed-effect and log-likelihood parity only under
-<code>method = "joint_laplace"</code>, which is how the opt-in
-reproduction test fits it (about 40 seconds per fit on a release build).
-On the default profiled path its coefficients drift well past the strict
-tolerances, so the chunks below do not claim parity for it. The combined
-model is fitted by the default profiled path here and in the test suite;
-like every profiled GLMM fit, it carries the engine’s support note that
-a fast-PIRLS fit is not certified as glmer joint-Laplace parity.</p>
+<code>method = "joint_laplace"</code> (the default), which is how the
+opt-in reproduction test fits it (about 100 seconds per fit). On the
+profiled path its coefficients drift well past the strict tolerances, so
+the chunks below do not claim parity for it. The same holds for the
+combined model: the default joint fit matches glmer’s coefficients to
+about 0.013 and ends 0.14 log-likelihood units <em>above</em> the
+reference (about 7.5 minutes), while the profiled fit used in the chunks
+below is ~0.24 off on one coefficient. Like every profiled GLMM fit, the
+chunks’ fits carry the engine’s support note that a fast-PIRLS fit is
+not certified as glmer joint-Laplace parity.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sensitivity</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">trials</span>, <span class="va">bubbled</span> <span class="op">==</span> <span class="st">"yes"</span> <span class="op">&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">correct</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">sensitivity</span><span class="op">$</span><span class="va">aphantasia</span><span class="op">[</span><span class="va">sensitivity</span><span class="op">$</span><span class="va">participant</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">excluded</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"no"</span></span>
@@ -220,6 +226,7 @@ a fast-PIRLS fit is not certified as glmer joint-Laplace parity.</p>
 <span>    <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">mask</span> <span class="op">+</span> <span class="va">soa_s</span> <span class="op">||</span> <span class="va">participant</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">item</span><span class="op">)</span>,</span>
 <span>  <span class="va">sensitivity_dat</span>,</span>
 <span>  family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"pirls_profiled"</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -228,6 +235,7 @@ a fast-PIRLS fit is not certified as glmer joint-Laplace parity.</p>
 <span>    <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">mask</span> <span class="op">+</span> <span class="va">soa_s</span> <span class="op">||</span> <span class="va">participant</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">item</span><span class="op">)</span>,</span>
 <span>  <span class="va">intact_dat</span>,</span>
 <span>  family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"pirls_profiled"</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -236,6 +244,7 @@ a fast-PIRLS fit is not certified as glmer joint-Laplace parity.</p>
 <span>    <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">mask</span> <span class="op">+</span> <span class="va">soa_s</span> <span class="op">||</span> <span class="va">participant</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">item</span><span class="op">)</span>,</span>
 <span>  <span class="va">combined_dat</span>,</span>
 <span>  family <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/family.html" class="external-link">binomial</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  method <span class="op">=</span> <span class="st">"pirls_profiled"</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -275,10 +284,13 @@ calls remain valid against any locally-built fit.</p>
 working-Hessian caveat. The fit above passes
 <code>inference = "working_hessian"</code> — the explicit opt-in that
 unlocks the UNCERTIFIED profiled working-Hessian approximation. Without
-it, a default profiled fit withholds standard errors, tests, and
-intervals on every route (refit with
-<code>method = "joint_laplace"</code> for certified Wald inference, or
-use <code>confint(fit, method = "bootstrap")</code>). With the opt-in,
+it, a profiled fit withholds standard errors, tests, and intervals on
+every route (<code>confint(fit, method = "bootstrap")</code> remains
+available). On this dataset the default joint-Laplace fit withholds them
+too: it matches glmer’s coefficients to 5e-5, but its Hessian is not
+positive definite on the active parameter space (the fitted mask block
+sits near a boundary, correlation ~0.98), so the engine does not certify
+its Wald table. With the opt-in,
 <code>summary(fit, tests = "coefficients")</code> returns a Wald-z table
 in which every row is labelled <code>wald_z_working_hessian</code>:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
@@ -289,12 +301,10 @@ in which every row is labelled <code>wald_z_working_hessian</code>:</p>
 <code>available_noninferential</code>: the working-Hessian covariance is
 not the same estimator as <code>lme4::vcov(glmer_fit)</code>. On this
 dataset its Wald standard errors for the difference-in-differences
-contrasts run about 11% <em>smaller</em> than glmer’s —
-anti-conservative, so p-values lean optimistic — which the package’s
-parity ledger classifies as an expected mismatch with a 15% bound. That
-measured gap is exactly why the approximation is opt-in rather than
-default: the manuscript’s qualitative conclusions do not flip here, but
-a reader re-using these SEs should know which way they err.</p>
+contrasts come within 0.1% of glmer’s (0.0807 vs 0.0808 at the centered
+SOA), and the opt-in test suite pins them to ±0.002. That agreement is
+measured here, not certified in general, which is why the approximation
+stays opt-in rather than default.</p>
 <p>The manuscript’s primary estimand — the difference-in-differences
 contrast at the centered SOA and at the focal 25 ms SOA — is a linear
 combination of fixed effects, which <code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code>
@@ -326,13 +336,12 @@ the fixture:</p>
 <p>Both contrasts come out negative (larger masking cost in aphantasia),
 as in the manuscript. Be precise about what is pinned. The opt-in test
 suite enforces agreement with the frozen reference at ±0.02 on the
-estimates and ±0.01 on the SEs; at the worst corner of those bands the
-centered-SOA p-value — .039 in the reference — could reach .106, so the
+estimates and ±0.002 on the SEs; at the worst corner of those bands the
+centered-SOA p-value — .039 in the reference — could reach .077, so the
 significance verdict there is not guaranteed by the tests. In practice
-mixeff lands on the other side: its SEs run smaller than glmer’s (see
-above), so its centered-SOA p-value comes out below the reference value,
-not above it. The sign and approximate size of both contrasts are
-pinned.</p>
+mixeff lands close: the profiled estimate is −0.163 (reference −0.167)
+with SE 0.0807, giving p ≈ .044. The sign and approximate size of both
+contrasts are pinned.</p>
 <p><code>emmeans</code> works on <code>mm_glmm</code> via
 <code>emm_basis.mm_glmm</code>. Population-level cell means at the
 centered SOA, on the response (probability) scale, recover the same
@@ -372,19 +381,13 @@ Bayesian engine.</p>
 <ul>
 <li>The Wald numbers in this article come from the PIRLS/Laplace
 working-Hessian covariance via the explicit
-<code>inference = "working_hessian"</code> opt-in (default fits refuse
-Wald inference; certified routes are
-<code>method = "joint_laplace"</code> and the parametric bootstrap). The
-approximation is graded <code>reliability = "moderate"</code>, and its
-SEs run about 11% smaller than <code>lme4::vcov()</code> on this dataset
-(anti-conservative; ledger bound 15%). A hold-the-point decomposition,
-measured once at engine pin <code>6731062</code>, attributes roughly 73%
-of the gap to the native <code>||</code> random-effect family, 26% to a
-uniform working-Hessian scale factor (tracked upstream), and 1% to
-optimizer drift; the measurement is recorded in the package’s parity
-ledger (<code>inst/extdata/expected-mismatches.json</code>, case
-<code>aphantasia_primary</code>, field
-<code>inference.primary_dd.SE</code>).</li>
+<code>inference = "working_hessian"</code> opt-in (on this dataset
+neither the profiled nor the default joint-Laplace fit certifies Wald
+inference; the parametric bootstrap is the certified alternative). The
+approximation is graded <code>reliability = "moderate"</code>; its DiD
+standard errors come within 0.1% of <code>lme4::vcov()</code> on this
+dataset, and the opt-in test suite pins them to ±0.002 with no
+parity-ledger exemption.</li>
 <li>Population-level GLMM prediction (<code>re.form = NA</code>,
 <code>type = "link"</code> or <code>"response"</code>) is supported and
 matches <code>predict(glmer, re.form = NA)</code> on joint-Laplace fits;

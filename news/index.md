@@ -2,13 +2,701 @@
 
 ## mixeff 0.2.0
 
+### Bridge performance: compile once, keep the fitted model (mixeff-rs bridge-perf)
+
+- [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) and
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) now
+  compile the formula and audit the design once per fit. The engine
+  builds the model from the spec compiled for the pre-fit explanation
+  (`CompiledModelSpec`), so the second compile/audit pass and the second
+  translation of the data to the engine are gone. The pre-fit
+  explanation now shows the artifact the model is actually built from:
+  for a formula with in-formula transforms the engine evaluates (such as
+  `log(x)`), or a `||` term on a factor, it reports the evaluated and
+  expanded design.
+  [`compile_model()`](https://bbuchsbaum.github.io/mixeff/reference/compile_model.md)
+  is unchanged.
+- Fits now keep the fitted engine model as a native handle
+  (`fit$rust_handle`, see
+  [`fit_handle_alive()`](https://bbuchsbaum.github.io/mixeff/reference/fit_handle_alive.md)).
+  Computations that need the engine model reuse it instead of rebuilding
+  and refitting the model from the stored data:
+  [`summary()`](https://rdrr.io/r/base/summary.html) and
+  [`anova()`](https://rdrr.io/r/stats/anova.html) tests (Satterthwaite
+  and Kenward-Roger),
+  [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md),
+  [`test_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_effect.md),
+  [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md),
+  [`test_random_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_random_effect.md),
+  `confint(method = "profile")`, bootstrap contrasts and intervals,
+  [`parametric_bootstrap()`](https://bbuchsbaum.github.io/mixeff/reference/parametric_bootstrap.md),
+  [`predict()`](https://rdrr.io/r/stats/predict.html) on new data and
+  with intervals or `se.fit` (LMMs and GLMMs), `ranef(condVar = TRUE)`,
+  GLMM bootstrap intervals, and
+  [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md).
+  Results are identical to the cold refit. Profiles and convergence
+  checks work on a copy, so the cached model never changes. These calls
+  stay interruptible. On a 200,000-row crossed LMM,
+  [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md)
+  drops from 0.39 s to 0.002 s,
+  `predict(newdata, interval = "prediction")` from 0.70 s to 0.04 s and
+  [`summary()`](https://rdrr.io/r/base/summary.html) by the 0.45 s
+  refit. On a 3,000-row binomial GLMM, `predict(newdata, se.fit = TRUE)`
+  drops from 0.44 s to 0.006 s.
+- The handle is a process-local cache. It does not survive
+  [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) /
+  [`readRDS()`](https://rdrr.io/r/base/readRDS.html) or a new R process.
+  Those fits, and fits where the handle does not match the requested
+  refit (for example a profile under ML of a REML fit), fall back to the
+  cold refit automatically, with identical results.
+  [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
+  keeps a live handle and clears a dead one. Copies of a fit share the
+  handle.
+- Memory: the handle keeps the engine model, including a copy of the
+  model data, alive for as long as the fit object, outside R’s heap. To
+  fit without keeping handles, set
+  `options(mixeff.keep_handle = FALSE)`.
+  [`update()`](https://rdrr.io/r/stats/update.html) and
+  [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md)
+  create new fits with their own handles.
+
+### Profile memory (mixeff-rs [\#12](https://github.com/bbuchsbaum/mixeff/issues/12))
+
+- `confint(method = "profile")` and
+  [`profile()`](https://rdrr.io/r/stats/profile.html) no longer build a
+  dense n x n covariance for the fixed-effect profiles. A crossed LMM
+  with 60,000 rows previously aborted R trying to allocate 28.8 GB; it
+  now profiles in seconds with memory linear in the data. Leverage,
+  Cook’s distance and new-data prediction variance also stop densifying
+  the factor’s off-diagonal blocks once per row.
+
+### Engine follow-ups (mixeff-rs engine-followups)
+
+- GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and
+  Gaussian with a non-identity link) now follow lme4 2.1-0’s estimated
+  dispersion handling, which the engine adopts. The working weights
+  carry `1/phi`, and `phi` is profiled during the fit.
+  [`sigma()`](https://rdrr.io/r/stats/sigma.html) is `sqrt(phi)` with
+  `phi = deviance / (n - rank([X, Z]))`, and theta is the absolute
+  random-effect SD. [`logLik()`](https://rdrr.io/r/stats/logLik.html),
+  [`deviance()`](https://rdrr.io/r/stats/deviance.html),
+  [`AIC()`](https://rdrr.io/r/stats/AIC.html),
+  [`BIC()`](https://rdrr.io/r/stats/AIC.html),
+  [`sigma()`](https://rdrr.io/r/stats/sigma.html), theta and
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  equal `glmer()` from lme4 \>= 2.1-0. Fits of these families no longer
+  match older lme4, and their estimates change from earlier mixeff
+  versions. mixeff no longer shifts the logLik of Gamma and
+  inverse-Gaussian fits by 1; the engine’s value already matches lme4
+  2.1-0.
+
+- For these families `weights(fit, "working")` is divided by `phi`, as
+  in lme4 2.1-0. This also changes
+  [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md)’s
+  `L`, `RZX`, `RX` and `devcomp`. GLMM `devcomp` dims gain lme4 2.1-0’s
+  `dispProfile`, `maxPhiIter` and `qEff`.
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  of every GLMM has `useSc = FALSE`, with no Residual row and absolute
+  SDs, and keeps `sc = sigma()`.
+  [`rePCA()`](https://bbuchsbaum.github.io/mixeff/reference/rePCA.md) no
+  longer rescales GLMM covariances by
+  [`sigma()`](https://rdrr.io/r/stats/sigma.html). Hat values and Cook’s
+  distances use the new weights; the values are unchanged.
+
+- Known lme4 2.1-0 difference: for these families lme4 2.1-0 multiplies
+  by `sigma()^2` a second time in three places: the RX-based
+  [`vcov()`](https://rdrr.io/r/stats/vcov.html) (`nAGQ = 0`),
+  `predict(se.fit = TRUE)` and `ranef(condVar = TRUE)`. mixeff reports
+  the engine’s unscaled covariance there.
+
+- The Nakagawa distribution-specific variance of a Gamma log-link GLMM
+  is now insight 1.5’s log-normal approximation `log1p(sigma^2)`, not
+  `sigma^2`. [`family()`](https://rdrr.io/r/stats/family.html) now works
+  for Gaussian non-identity-link GLMMs.
+
+- [`mm_r2()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md),
+  [`mm_icc()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+  and
+  [`mm_variance_components()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+  now support Gaussian GLMMs with a non-identity link. As insight 1.5 /
+  performance 0.18 do for `glmer()` fits, the distribution-specific
+  variance is `sigma()^2`, and observation-level terms add no
+  dispersion. This residual variance is on the response scale, so the R2
+  and ICC depend on the units of the response. Inverse-Gaussian GLMMs
+  are still refused, now with reason code
+  `"r2_distribution_variance_undefined"`. insight 1.5 has no
+  inverse-Gaussian case and falls back to
+  [`sigma()`](https://rdrr.io/r/stats/sigma.html) itself, which is not a
+  variance and changes when the response is rescaled.
+
+- [`simulate()`](https://rdrr.io/r/stats/simulate.html) (and so
+  [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md)-based
+  bootstraps) now works for inverse Gaussian and Gaussian
+  non-identity-link GLMMs. Previously these were refused with
+  `"simulate_family_unavailable"`. Draws follow the fitted variance
+  function with `phi = sigma()^2`, and new random effects are drawn on
+  lme4 2.1-0’s absolute scale. Gamma draws and unweighted Gaussian draws
+  match lme4 2.1-0’s
+  [`simulate()`](https://rdrr.io/r/stats/simulate.html) draw for draw.
+  The tests compare seeded draws with live `glmer()` or with stored lme4
+  2.1-0 draws. Gaussian draws use prior weights
+  (`sd = sigma / sqrt(w)`), which lme4 ignores. Inverse-Gaussian draws
+  use
+  [`statmod::rinvgauss()`](https://rdrr.io/pkg/statmod/man/invgauss.html)
+  (statmod is now in Suggests) with shape `w / phi`. lme4 2.1-0 instead
+  uses `w / sigma()`, so its draws have variance `sigma * mu^3` rather
+  than the fitted `phi * mu^3`.
+
+- lme4 2.1-0’s `glmerControl()` dispersion settings are now available as
+  `mm_control(disp_method = c("moment", "old/buggy"), disp_dof_correction, max_phi_iter)`.
+  lme4’s `maxPhiIter` becomes `max_phi_iter`. They are sent to the
+  engine (`set_dispersion_method()`, `set_dispersion_dof_correction()`,
+  `set_max_phi_iter()`). Invalid values raise `mm_arg_error`, and unset
+  ones keep lme4 2.1-0’s defaults (`"moment"`, `TRUE`, `100`). They
+  affect Gamma, inverse-Gaussian and Gaussian non-identity-link GLMMs.
+  For other families and for
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) they
+  have no effect, and the fit says so with an
+  `mm_control_ignored_notice` (lme4 ignores them silently). Because the
+  control is stored on the fit,
+  [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md),
+  [`update()`](https://rdrr.io/r/stats/update.html),
+  [`simulate()`](https://rdrr.io/r/stats/simulate.html)-based refits,
+  bootstraps and the R2 null model reuse it. `getME(fit, "devcomp")`
+  dims `dispProfile`, `maxPhiIter` and `qEff` reflect the settings.
+  Under `"old/buggy"`, the working weights do not carry `1/phi`, and
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  / [`simulate()`](https://rdrr.io/r/stats/simulate.html) use theta
+  itself as the random-effect SD, as lme4 2.1-0 does. Fits match
+  `glmer(control = glmerControl(...))` from lme4 2.1-0. Under
+  `"old/buggy"` they agree to about 2e-4 in the estimates and 3e-6
+  relative in [`logLik()`](https://rdrr.io/r/stats/logLik.html), at the
+  same lme4 deviance. The tests compare with stored lme4 2.1-0 values
+  when the installed lme4 is older.
+
+- `confint(method = "profile")` and
+  [`profile()`](https://rdrr.io/r/stats/profile.html) no longer fail
+  when one parameter’s profile is irregular. The row is kept with a
+  `status` (`"non_monotone"`, `"not_bracketing"` or `"failed"`), a
+  `reason_code` (`"non_monotone_profile"`, `"profile_not_bracketing"`,
+  `"profile_failed"`) and the engine’s `reason` in
+  `attr(ci, "mm_profile")$table`. Bounds the profile cannot determine
+  are `NA`, and printing the intervals adds a note. Failed `.sigNN` rows
+  now appear; previously they were dropped. lme4 instead warns and falls
+  back to linear interpolation, which often gives `[-1, 1]` for a
+  correlation. The profile CI JSON schema accepts the new fields, null
+  bounds and the engine’s string notes.
+
+- The multi-df Kenward-Roger F is now pbkrtest’s scaled `Ftest`
+  statistic (`F = lambda * F_U` with KR denominator df). Previously it
+  was the unscaled `FtestU`. This affects
+  `compare(method = "kenward_roger")` and
+  `anova(ddf = "Kenward-Roger")`, which matches lmerTest: the F value is
+  scaled and `Mean Sq` comes from the unscaled F. `$fixed_f` gains
+  `statistic_scale`, `unscaled_statistic` and `unscaled_p_value`;
+  `f_scaling` is lambda.
+
+- When a joint-Laplace GLMM’s Hessian is not positive definite, mixeff
+  now reports Wald inference instead of withholding it, as glmer does.
+  The fixed-effect covariance falls back to RX conditional on theta, as
+  in glmer’s `vcov(use.hessian = FALSE)`, with reliability `"low"`.
+  [`summary()`](https://rdrr.io/r/base/summary.html) explains the
+  fallback and prints the engine’s notes,
+  [`vcov()`](https://rdrr.io/r/stats/vcov.html) warns (class
+  `mm_vcov_rx_fallback`), and
+  [`inference_options()`](https://bbuchsbaum.github.io/mixeff/reference/inference_options.md)
+  labels the route `glmm_laplace_rx_conditional_on_theta_wald`. These
+  standard errors ignore uncertainty in theta.
+
+- A joint-Laplace fit that the engine labels `not_optimized` is now
+  shown as “convergence not certified” when the optimizer stopped
+  normally within its budget and the estimated objective gap is at most
+  `1e-2` deviance units. The engine certifies only at `1e-6`. This is a
+  warning-level label, like lme4’s convergence warnings, and does not
+  refuse the fit.
+  [`fit_status()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
+  still returns the engine’s label.
+
+- [`inference_options()`](https://bbuchsbaum.github.io/mixeff/reference/inference_options.md)
+  on joint-Laplace GLMMs no longer describes withheld Wald rows as
+  “uncertified for the profiled estimator”. It also reports the
+  parametric bootstrap as refused, matching
+  [`confint()`](https://rdrr.io/r/stats/confint.html).
+
+### Correctness fixes (pre-release audit)
+
+- Character fixed-effect predictors (e.g. columns from
+  [`read.csv()`](https://rdrr.io/r/utils/read.table.html)) are now
+  converted to factors with sorted levels, as lme4 does. Previously the
+  fit aborted with an `mm_schema_error` while building coefficient
+  names.
+- A numeric predictor whose name starts with a factor’s name (`group`
+  and `group_size`) no longer aborts the fit.
+- Contrast codings mixeff cannot honour are refused with an
+  `mm_arg_error` instead of being silently replaced by treatment coding:
+  a contrast attached to an unordered factor, a non-`contr.treatment`
+  unordered entry in `options(contrasts =)`, and
+  `contrasts = list(f = "contr.SAS")` (which uses the last level as
+  reference; the engine always uses the first).
+- [`update()`](https://rdrr.io/r/stats/update.html) re-evaluates the
+  original `data` when the updated formula needs columns the stored
+  model frame lacks (as lme4 does), and refuses arguments it cannot
+  carry over (e.g. `subset`, `contrasts`) instead of dropping them. It
+  carries the fit’s `na.action` over (and accepts a new one).
+- The declared Rust toolchain minimum is now 1.85, the bundled engine’s
+  actual requirement (some vendored crates use edition 2024).
+- The lme4 migration vignette no longer describes
+  [`coef()`](https://rdrr.io/r/stats/coef.html),
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`residuals()`](https://rdrr.io/r/stats/residuals.html),
+  [`anova()`](https://rdrr.io/r/stats/anova.html),
+  [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md),
+  `isSingular()` and `emmeans` as identical to lme4; it lists the actual
+  differences.
+
+### lme4 parity and checklist completion
+
+- Missing values are handled as in `lmer()`/`glmer()`:
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) and
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
+  honour `na.action`, whose default is now `getOption("na.action")`
+  (`na.omit` unless changed) instead of refusing `NA`. Only the
+  variables the model uses count (fixed and random terms, evaluated
+  transforms, `weights`, `offset`), so an `NA` in an unused column never
+  drops a row. Dropped rows are announced with a typed `mm_rows_dropped`
+  message giving the number of rows and the variables with missing
+  values (silence with `mm_control(verbose = -1)`), recorded as
+  `na.action(fit)` and `attr(model.frame(fit), "na.action")`, and
+  excluded from [`nobs()`](https://rdrr.io/r/stats/nobs.html).
+  `na.exclude` pads
+  [`residuals()`](https://rdrr.io/r/stats/residuals.html)/[`fitted()`](https://rdrr.io/r/stats/fitted.values.html)/[`predict()`](https://rdrr.io/r/stats/predict.html)
+  for both fitters; `na.fail` and `na.pass` are refused with a typed
+  `mm_data_error`.
+  [`simulate()`](https://rdrr.io/r/stats/simulate.html),
+  [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md),
+  [`update()`](https://rdrr.io/r/stats/update.html), bootstrap and
+  influence measures use the fitted rows, and
+  [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)/[`anova()`](https://rdrr.io/r/stats/anova.html)
+  refuse models fitted to different numbers of rows
+  (`reason_code = "different_nobs"`), as lme4’s
+  [`anova()`](https://rdrr.io/r/stats/anova.html) does.
+
+- Shapes follow lme4 \>= 2.0 and insight \>= 1.5:
+
+  - `confint(method = "profile")` numbers `.sigNN` term by term, each
+    term’s standard deviations before its correlations. lme4 1.1
+    numbered them in lower-triangle order.
+  - `anova(m1, m2)` names its `-2 * logLik` column `-2*log(L)`, where it
+    was `deviance`.
+  - `getME(m, "devcomp")$dims` gains `npar`.
+  - `print(VarCorr(m))` uses
+    [`reformulas::formatVC()`](https://rdrr.io/pkg/reformulas/man/formatVC.html)
+    when reformulas is installed.
+  - For GLMMs,
+    [`mm_r2()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+    /
+    [`mm_icc()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+    divide the binomial distribution-specific variance of a
+    [`cbind()`](https://rdrr.io/r/base/cbind.html) response by the mean
+    number of trials. For count models, the null-model mean is
+    `exp(b0 + v0/2)`, where `b0` is the null model’s intercept and `v0`
+    its random-effect variance.
+
+- [`residuals()`](https://rdrr.io/r/stats/residuals.html) follows lme4:
+  LMM `type = "pearson"`/`"deviance"` are `sqrt(w) * (y - mu)` (no
+  longer divided by sigma), and `scaled = TRUE` divides by
+  [`sigma()`](https://rdrr.io/r/stats/sigma.html) exactly once (it
+  divided twice for Pearson). GLMM residuals default to `"deviance"` and
+  support `"pearson"`, `"working"` and `"response"`, computed from the
+  family, prior weights and binomial trials.
+
+- [`sigma()`](https://rdrr.io/r/stats/sigma.html) of a negative-binomial
+  GLMM is 1, as in lme4; theta is `getME(fit, "glmer.nb.theta")`. GLMM
+  [`deviance()`](https://rdrr.io/r/stats/deviance.html) is the sum of
+  squared deviance residuals (as lme4), no longer `-2 * logLik()`.
+
+- [`coef()`](https://rdrr.io/r/stats/coef.html) returns every
+  fixed-effect column per group in lme4’s order.
+
+- [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  returns lme4’s structure (named list of covariance matrices with
+  `stddev`/`correlation` attributes, `sc`/`useSc`), so
+  `VarCorr(m)$Subject` is the matrix; it prints like lme4.
+  `VarCorr(m)$table` and `$residual_sd` still work.
+
+- `AIC(m1, m2)` / `BIC(m1, m2)` return stats’ `df`/`AIC` data frame
+  instead of refusing.
+
+- New
+  [`REMLcrit()`](https://bbuchsbaum.github.io/mixeff/reference/REMLcrit.md),
+  [`family()`](https://rdrr.io/r/stats/family.html) methods,
+  `weights(type = "working")`;
+  [`weights()`](https://rdrr.io/r/stats/weights.html) returns ones for
+  unweighted fits;
+  [`model.frame()`](https://rdrr.io/r/stats/model.frame.html) has lme4’s
+  transformed columns and `terms` attribute (raw variables stay in
+  `fit$model_frame`).
+
+- [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md)
+  covers lme4’s components (`u`, `b`, `L`, `RX`, `RZX`, `devcomp`,
+  `lower`, `Gp`, `Tp`, `Lind`, `Ztlist`, `Tlist`, `ST`, `offset`,
+  `weights`, `glmer.nb.theta`, `"ALL"`, …) for LMMs and GLMMs; `devfun`
+  is refused with a typed error. `Lambda`/`Lambdat` (and
+  `model.matrix(fit, type = "random")`) now follow the engine’s (lme4’s)
+  term order; previously theta was assigned in formula order, so crossed
+  designs such as Penicillin’s `(1|sample) + (1|plate)` gave a term
+  another term’s theta.
+
+- [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md)
+  uses lme4’s rule (a zero-bounded theta below `tol`), honours `tol`,
+  and works for GLMMs.
+
+- `ranef(condVar = TRUE)` returns Laplace conditional variances for
+  GLMMs instead of `NA`.
+
+- [`summary()`](https://rdrr.io/r/base/summary.html) and
+  [`anova()`](https://rdrr.io/r/stats/anova.html) accept lmerTest’s
+  `ddf = "Satterthwaite"`, `"Kenward-Roger"` or `"lme4"`.
+  `summary()$coefficients` is lmerTest’s numeric matrix (per-row method
+  labels moved to `summary()$coef_table`). `anova(m)` is lmerTest’s data
+  frame (`Sum Sq Mean Sq NumDF DenDF F value Pr(>F)`) and
+  `anova(m1, m2)` lme4’s
+  (`npar AIC BIC logLik deviance Chisq Df Pr(>Chisq)`); mixeff’s
+  provenance table stays in `$table`.
+
+- [`confint()`](https://rdrr.io/r/stats/confint.html) accepts lme4’s
+  `method = "Wald"` and `"boot"` spellings.
+
+- Stateful and expanded fixed-effect formula terms now work in
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) and
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md):
+  [`factor()`](https://rdrr.io/r/base/factor.html),
+  [`relevel()`](https://rdrr.io/r/stats/relevel.html),
+  [`cut()`](https://rdrr.io/r/base/cut.html),
+  [`scale()`](https://rdrr.io/r/base/scale.html),
+  [`poly()`](https://rdrr.io/r/stats/poly.html),
+  [`splines::ns()`](https://rdrr.io/r/splines/ns.html)/`bs()`,
+  [`as.numeric()`](https://rdrr.io/r/base/numeric.html), `I(x > 0)`,
+  [`offset()`](https://rdrr.io/r/stats/offset.html), `^`, `%in%`, and
+  parenthesised groups such as `(a + b)^2` and `a * (b + c)`.
+  Coefficient names, [`terms()`](https://rdrr.io/r/stats/terms.html),
+  [`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html),
+  [`drop1()`](https://rdrr.io/r/stats/add1.html) and `emmeans` grids
+  follow lme4, and `predict(newdata)` reuses the training basis.
+
+- [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) gains
+  `offset =` (and [`offset()`](https://rdrr.io/r/stats/offset.html)
+  formula terms); fitted values and predictions include the offset, as
+  in lmer.
+
+- [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) now
+  accepts `subset`, `na.action` and `contrasts` with the same data
+  preparation as
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md). Its
+  `na.action` default is now `NULL` (refuse `NA`, like
+  [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)); the
+  old `na.omit` default was never applied.
+
+- `na.action = na.exclude` pads
+  [`fitted()`](https://rdrr.io/r/stats/fitted.values.html),
+  [`residuals()`](https://rdrr.io/r/stats/residuals.html) and in-sample
+  [`predict()`](https://rdrr.io/r/stats/predict.html) to the original
+  rows; the na.action record is kept on the fit (`fit$na.action`,
+  model-frame attribute) and used by the emmeans bridge.
+
+- Unused factor levels (fixed and grouping) are dropped after
+  `subset`/NA removal, so
+  [`ngrps()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  and coefficient sets match lme4.
+
+- `predict(newdata)` keeps only the variables it needs (an unused Date
+  column no longer fails), coerces integer/character grouping and
+  character/logical fixed columns like the training frame, returns `NA`
+  for incomplete rows (new `na.action` argument, default `na.pass` as in
+  lme4), accepts partial `re.form` formulas such as `~ (1 | g)`, and
+  evaluates formula offsets from `newdata` (an `offset =` argument
+  offset must be resupplied via `predict(offset =)`).
+
+- Interaction and nested grouping factors are labelled as in lme4
+  (`a:b`, and `b:a` for the nested term of `a/b`, with levels `x:y`) in
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  and
+  [`ngrps()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md);
+  GLMM `predict(newdata)` works for them.
+
+- Logical predictors are coded as factors with levels `FALSE`/`TRUE`, as
+  [`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html) does, so
+  no-intercept and margin-free interaction models match lme4 (`lFALSE`,
+  `lTRUE`).
+
+- Ordered grouping factors are grouped as unordered factors (no dense
+  `contr.poly` basis is built for them).
+
+- [`simulate()`](https://rdrr.io/r/stats/simulate.html) now works for
+  GLMMs (binomial, Poisson, Gamma, negative binomial) and
+  [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md)
+  re-fits a GLMM to a new response. Binomial
+  [`cbind()`](https://rdrr.io/r/base/cbind.html) fits simulate
+  two-column count matrices and proportion fits simulate proportions, as
+  in lme4.
+
+- Breaking: [`simulate()`](https://rdrr.io/r/stats/simulate.html) now
+  uses lme4’s `re.form` meaning. The default `re.form = NA` (or `~0`, or
+  `use.u = FALSE`) draws new random effects; `re.form = NULL` (or
+  `use.u = TRUE`) conditions on the fitted random effects. Previously
+  `NULL` drew new random effects and `NA` left them out entirely. Seeded
+  draws now reproduce lme4’s when the estimates agree.
+
+- New diagnostics:
+  [`plot()`](https://rdrr.io/r/graphics/plot.default.html) on a fit
+  draws Pearson residuals against fitted values (also Q-Q and
+  scale-location via `which =`),
+  [`qqnorm()`](https://rdrr.io/r/stats/qqnorm.html) works on fits, and
+  [`plot()`](https://rdrr.io/r/graphics/plot.default.html)/[`qqnorm()`](https://rdrr.io/r/stats/qqnorm.html)
+  on
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  output draw caterpillar and Q-Q plots with conditional-variance
+  intervals. With lattice loaded, `dotplot()` and `qqmath()` work on
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  output as in lme4.
+
+- New [`hatvalues()`](https://rdrr.io/r/stats/influence.measures.html),
+  [`cooks.distance()`](https://rdrr.io/r/stats/influence.measures.html)
+  and [`influence()`](https://rdrr.io/r/stats/lm.influence.html) (case
+  or group deletion refits, with
+  [`dfbeta()`](https://rdrr.io/r/stats/influence.measures.html),
+  [`dfbetas()`](https://rdrr.io/r/stats/influence.measures.html) and
+  [`cooks.distance()`](https://rdrr.io/r/stats/influence.measures.html)
+  methods for the result). LMM values match lme4. GLMM hat values use
+  the working weights, as `glm` does, so they differ from lme4’s.
+
+- New
+  [`mm_r2()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md),
+  [`mm_icc()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+  and
+  [`mm_variance_components()`](https://bbuchsbaum.github.io/mixeff/reference/mm_variance_components.md)
+  compute Nakagawa marginal/conditional R2 and adjusted/unadjusted ICC.
+  With performance and insight installed,
+  [`performance::r2()`](https://easystats.github.io/performance/reference/r2.html),
+  [`performance::icc()`](https://easystats.github.io/performance/reference/icc.html)
+  and
+  [`insight::get_variance()`](https://easystats.github.io/insight/reference/get_variance.html)
+  also work on mixeff fits and agree with their values on the matching
+  lme4 fit.
+
+- **Breaking:**
+  [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) now
+  defaults to `method = "joint_laplace"` (glmer’s `nAGQ = 1` estimator,
+  certified Wald inference). `method = "pirls_profiled"` remains
+  available explicitly, and `nAGQ = 0` selects it (lme4’s fast
+  estimate). Without an explicit `method`, negative-binomial families,
+  `nAGQ > 1`, and `inference = "working_hessian"` use the profiled path
+  with an `mm_estimator_notice`; explicit `method = "joint_laplace"`
+  requests for them are refused.
+
+- LMM bootstraps (`bootstrap_control(seed = NULL)`, the default) now
+  draw their engine seed from R’s RNG, so
+  [`set.seed()`](https://rdrr.io/r/base/Random.html) makes them
+  reproducible.
+
+- [`simulate.mm_lmm()`](https://bbuchsbaum.github.io/mixeff/reference/simulate.mm_lmm.md)’s
+  `"seed"` attribute follows
+  [`stats::simulate`](https://rdrr.io/r/stats/simulate.html) (the prior
+  `.Random.seed`, or the seed with its RNG `kind`).
+
+- [`drop1()`](https://rdrr.io/r/stats/add1.html), random-term LRTs, and
+  random-structure candidates keep a no-intercept model no-intercept
+  instead of re-adding the intercept.
+
+- [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md) on
+  a transformed response (`log(y) ~ ...`) refits to the new response
+  (previously it returned the original fit); it keeps the fit’s
+  [`mm_control()`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md).
+
+- Internal refits no longer resolve `weights` through the data mask (a
+  data column named `fit`, `full`, or `object` broke them), and
+  REML-to-ML refits in
+  [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)/[`anova()`](https://rdrr.io/r/stats/anova.html)
+  keep the user’s
+  [`mm_control()`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md).
+
+- [`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`ngrps()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md)
+  and
+  [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md)
+  forward nlme (`lme`, `lmList`, `gls`) and lme4 objects to the owning
+  package’s generic, so attaching mixeff no longer breaks nlme fits.
+
+- [`summary()`](https://rdrr.io/r/base/summary.html)/`inference_table(method = )`
+  compute all coefficient rows in one engine call instead of one refit
+  per coefficient. Engine refits keep the fit’s full
+  [`mm_control()`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md)
+  (a user `start` is no longer rounded to 4 digits on the wire).
+
+- [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) fits
+  every family/link pair the engine supports:
+  [`Gamma()`](https://rdrr.io/r/stats/family.html) with its default
+  inverse link,
+  [`inverse.gaussian()`](https://rdrr.io/r/stats/family.html) with
+  `"inverse"`/`"log"`, and
+  [`gaussian()`](https://rdrr.io/r/stats/family.html) with
+  `"log"`/`"inverse"`/`"sqrt"` (glmer parity tests). Binomial
+  cauchit/log/identity, Poisson identity, and inverse.gaussian’s default
+  `1/mu^2` link are refused with a typed condition naming the supported
+  set.
+
+- Fits, refits, bootstraps and profiles can be interrupted (Ctrl-C/Esc):
+  the engine checks for a pending interrupt between optimizer
+  evaluations without longjmp-ing through Rust frames, and stops with a
+  typed `mm_interrupted` error.
+
+- New
+  [`mm_bootmer()`](https://bbuchsbaum.github.io/mixeff/reference/mm_bootmer.md)
+  ([`lme4::bootMer()`](https://rdrr.io/pkg/lme4/man/bootMer.html)
+  counterpart; a `boot`-compatible result for
+  [`boot::boot.ci()`](https://rdrr.io/pkg/boot/man/boot.ci.html)),
+  [`rePCA()`](https://bbuchsbaum.github.io/mixeff/reference/rePCA.md),
+  [`mm_lmlist()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmlist.md)
+  (`lmList()`),
+  [`mm_allfit()`](https://bbuchsbaum.github.io/mixeff/reference/mm_allfit.md)
+  (`allFit()`), and `mm_control(optCtrl = )` (lme4-style optimizer
+  controls, unknown names refused).
+
+- `compare(small, big, method = "kenward_roger")` (and
+  `"satterthwaite"`) gives pbkrtest’s `KRmodcomp()`/`SATmodcomp()` F
+  test for nested fixed effects;
+  [`step()`](https://bbuchsbaum.github.io/mixeff/reference/step.md)
+  gives lmerTest-style backward elimination for `mm_lmm` fits (mixeff
+  now exports a
+  [`step()`](https://bbuchsbaum.github.io/mixeff/reference/step.md)
+  generic whose default is
+  [`stats::step()`](https://rdrr.io/r/stats/step.html)).
+
+- Fast examples no longer use `\dontrun{}`; the fit result’s
+  per-observation vectors cross the bridge as R doubles instead of JSON
+  and are stored once in the fit object.
+
+- Single-model [`anova()`](https://rdrr.io/r/stats/anova.html) tests a
+  multi-column term such as `poly(x, 2)` as one multi-df row (joint F
+  with the same df method), matching lmerTest, when no other term
+  contains it.
+
+- Engine error messages containing `%` (e.g. a formula with `%in%`, or a
+  column name with `%s`) reach R verbatim: extendr passed the message to
+  `Rf_error()` as a printf format string, which garbled them and could
+  read out of bounds.
+
+- Engine re-pinned to mixeff-rs 2873312. `||` with a factor now expands
+  like lme4 (`(1 + x + f || g)` is
+  `(1 | g) + (0 + x | g) + (0 + f | g)`), so parameter counts, `df`, AIC
+  and estimates match lme4 (they used to differ when a factor sat inside
+  `||`); random-effect factor bases use
+  [`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html) coding.
+  `diag(1 + f | g)` gives MixedModels.jl `zerocorr()` semantics.
+
+- [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  `as.data.frame(VarCorr())`,
+  [`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
+  [`ngrps()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  and
+  [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md)
+  (`theta`, `Lambdat`, `Lind`, `Zt`, `cnms`, …) present random-effect
+  terms in lme4’s `mkReTrms` order, with `||` pieces as separate entries
+  `g`, `g.1`, …; `getME(fit, "theta")` is permuted to lme4’s order.
+  [`getME()`](https://bbuchsbaum.github.io/mixeff/reference/getME.md)
+  handles factor random-effect bases. `as.data.frame(VarCorr())` lists
+  covariance rows in lme4’s order.
+
+- `confint(fit, method = "profile")` /
+  [`profile()`](https://rdrr.io/r/stats/profile.html) return lme4’s rows
+  (`.sig01`, …, `.sigma`, fixed effects) on the SD/correlation scale and
+  profile REML fits on the ML deviance, as lme4 does, so fixed-effect
+  profile intervals are now available for REML fits (the
+  `profile_beta_unavailable_under_reml` refusal is gone). Theta-scale
+  rows stay in `attr(ci, "mm_profile")$table`. The LMM default remains
+  Wald.
+
+- New `threads` argument for bootstraps and profiles
+  (`bootstrap_control(threads = )`,
+  [`parametric_bootstrap()`](https://bbuchsbaum.github.io/mixeff/reference/parametric_bootstrap.md),
+  `compare(method = "bootstrap")`, GLMM
+  `confint(method = "bootstrap", threads = )`, LMM
+  [`confint()`](https://rdrr.io/r/stats/confint.html)/[`profile()`](https://rdrr.io/r/stats/profile.html)):
+  results are identical for every thread count; default 1 (CRAN’s
+  two-thread policy); workers never call into R and Ctrl-C still
+  interrupts.
+
+- Rank-deficient fixed effects keep the earlier of two collinear columns
+  (R’s rule).
+  [`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  omits dropped coefficients (`add.dropped = TRUE` gives `NA`), and
+  [`vcov()`](https://rdrr.io/r/stats/vcov.html) /
+  [`summary()`](https://rdrr.io/r/base/summary.html) cover the estimable
+  coefficients, matching lme4. Fixed: a dropped coefficient’s missing
+  standard error shifted every later standard error by one position.
+
+- Gamma and inverse-Gaussian GLMMs:
+  [`logLik()`](https://rdrr.io/r/stats/logLik.html),
+  [`AIC()`](https://rdrr.io/r/stats/AIC.html),
+  [`BIC()`](https://rdrr.io/r/stats/AIC.html) and anova tables report
+  glmer’s values (the engine’s density is 1 higher because glmer
+  includes the family `aic()`’s `+2`); estimates,
+  [`sigma()`](https://rdrr.io/r/stats/sigma.html) and SEs match glmer.
+  Inverse-Gaussian fits now have
+  [`sigma()`](https://rdrr.io/r/stats/sigma.html),
+  [`family()`](https://rdrr.io/r/stats/family.html) and a residual
+  [`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md)
+  row. Negative-binomial theta now maximizes the GLMM likelihood like
+  `glmer.nb()`.
+
+- [`test_random_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_random_effect.md)
+  labels a correlation-only comparison (e.g. `||` versus `|`) as an
+  ordinary chi-square test; the 50:50 boundary mixture is used only when
+  exactly one variance is added.
+
+- The aphantasia reproduction (`MIXEFF_RUN_APHANTASIA=true`) now reaches
+  strict lme4 parity on every case with lme4’s `||` expansion: primary,
+  intact and combined run the default joint-Laplace estimator, and the
+  parity-ledger exemptions for the primary DiD estimate/SE, intact AIC
+  and combined fixed effects are retired. The
+  `inference = "working_hessian"` documentation no longer says its SEs
+  run ~11% below glmer’s (that gap came from the old `||` family; they
+  now agree within 1% on this dataset).
+
 ### Compatibility
 
 - Fit-summary parsing accepts the additive `mixedmodels.fit_summary`
   1.1.0 schema emitted by mixeff-rs 1.0.0-rc.4, while retaining 1.0.0
   support. Covariance provenance is preserved in the stored payload.
-  Unknown schema versions and malformed payloads remain errors. The
-  bundled engine pin is unchanged.
+  Unknown schema versions and malformed payloads remain errors.
+- The bundled `mixeff-rs` engine moves from rc.1 (`1f3f689`) to rc.5
+  plus pre-release fixes (`accd4b1`). This brings the upstream fixes for
+  joint Laplace GLMM convergence without NLopt (and Ctrl-C during its
+  inner PIRLS), GLMM parametric-bootstrap replicates that silently used
+  the fast estimator, colliding `(1|a:b)` interaction keys, Wald
+  p-values underflowing to 0, and negative-binomial deviance precision;
+  it is also 2-7x faster on vector-valued and crossed models. New in
+  this pin:
+  - `y ~ 0 + f` codes the first factor with one column per level, as R’s
+    [`model.matrix()`](https://rdrr.io/r/stats/model.matrix.html) does;
+    previously the reference level was silently dropped (its mean forced
+    to zero).
+  - `predict(newdata =)` uses the fit’s design coding, fixing wrong
+    predictions for non-marginal formulas such as `y ~ f / h`.
+  - LMM prior weights are validated (length, finite, positive) and
+    simulation / parametric bootstrap draws residuals with sd
+    `sigma / sqrt(w)`; binomial GLMM responses above 1 are refused
+    instead of producing NaN estimates.
+- `mixedmodels.fixed_effect_inference_table` 1.2.0 (per-row covariance
+  provenance) is the current schema; stored 1.1.0 tables still parse.
+- [`simulate()`](https://rdrr.io/r/stats/simulate.html) for LMMs scales
+  residual noise by prior weights, and keeps a zero-variance
+  random-effect term at zero instead of borrowing another term’s
+  variance.
 
 ### Breaking: API-shape stabilization
 

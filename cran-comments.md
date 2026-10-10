@@ -116,8 +116,8 @@ None.
 
 ## CRAN policy notes
 
-- **System requirements**: `Cargo` (Rust's package manager, >= 1.78.0),
-  `rustc` (>= 1.78.0), `GNU make`. Documented in `SystemRequirements:`.
+- **System requirements**: `Cargo` (Rust's package manager, >= 1.85.0),
+  `rustc` (>= 1.85.0), `GNU make`. Documented in `SystemRequirements:`.
 - **Vendoring**: The upstream `mixeff-rs` Rust crate is vendored under
   `src/rust/upstream/`, and its transitive Cargo registry dependencies
   ship as `src/rust/vendor.tar.xz` (about 4 MB, the largest single item

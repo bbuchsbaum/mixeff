@@ -187,22 +187,24 @@ contrast.mm_glmm <- function(fit, L, rhs = 0,
 drop1.mm_glmm <- function(object, scope = NULL, test = c("none", "Chisq"),
                           ...) {
   test <- match.arg(test)
-  terms <- setdiff(mm_fixed_effect_terms(object), "1")
+  terms <- mm_drop1_terms(object)
   if (!is.null(scope)) {
     terms <- intersect(terms, as.character(scope))
   }
   family <- mm_glmm_family_from_info(object$family)
   rows <- lapply(terms, function(term) {
     reduced_formula <- mm_drop_fixed_term_formula(object, term)
-    reduced <- glmm(reduced_formula, object$model_frame, family = family,
-                    weights = object$weights, offset = object$offset,
-                    method = object$method, nAGQ = object$nAGQ,
-                    control = mm_control(verbose = -1))
+    reduced <- mm_internal_glmm(reduced_formula, object$model_frame,
+                                family = family, weights = object$weights,
+                                offset = object$offset, method = object$method,
+                                nAGQ = object$nAGQ,
+                                control = mm_internal_control(object,
+                                                              keep_start = FALSE))
     stat <- mm_lrt_stat(reduced, object)
     df <- object$dof - reduced$dof
     data.frame(
       dropped = term,
-      formula = deparse1(reduced_formula),
+      formula = mm_drop_formula_label(object, term, reduced_formula),
       df = df,
       logLik = as.numeric(logLik(reduced)),
       AIC = AIC(reduced),
@@ -242,12 +244,19 @@ drop1.mm_glmm <- function(object, scope = NULL, test = c("none", "Chisq"),
 #' @param object A fitted `mm_glmm`.
 #' @param ... Additional fitted models to compare.
 #'
-#' @return An `mm_model_comparison` object (multi-model case).
+#' @return A data frame of class `c("mm_anova_comparison",
+#'   "mm_glmm_comparison", "anova", "data.frame")` shaped like `anova(glmer1, glmer2)`: columns `npar`,
+#'   `AIC`, `BIC`, `logLik`, `-2*log(L)` (lme4 before 2.0 called it
+#'   `deviance`), `Chisq`, `Df`, `Pr(>Chisq)`, rows named after the arguments. The underlying comparison
+#'   (with the model formulas) is reachable as `x$table`.
 #'
 #' @method anova mm_glmm
 #' @export
 anova.mm_glmm <- function(object, ...) {
   dots <- list(...)
+  labels <- c(deparse1(substitute(object)),
+              vapply(as.list(match.call(expand.dots = FALSE)$...),
+                     deparse1, character(1)))
   if (!length(dots)) {
     mm_abort(
       message = paste(
@@ -267,7 +276,36 @@ anova.mm_glmm <- function(object, ...) {
       class = "mm_arg_error"
     )
   }
-  mm_glmm_lrt_comparison(fits)
+  cmp <- mm_glmm_lrt_comparison(fits)
+  mm_glmm_anova_frame(cmp, fits, labels)
+}
+
+mm_glmm_anova_frame <- function(cmp, fits, labels) {
+  tbl <- cmp$table
+  ord <- attr(cmp, "mm_order") %||% seq_along(fits)
+  row_labels <- labels[ord]
+  if (anyDuplicated(row_labels)) row_labels <- paste0("MODEL", seq_along(row_labels))
+  out <- data.frame(
+    npar = as.numeric(tbl$npar),
+    AIC = tbl$AIC,
+    BIC = tbl$BIC,
+    logLik = tbl$logLik,
+    `-2*log(L)` = -2 * tbl$logLik,
+    Chisq = tbl$Chisq,
+    Df = as.numeric(tbl$Df),
+    `Pr(>Chisq)` = tbl$p_value,
+    check.names = FALSE
+  )
+  row.names(out) <- row_labels
+  data_expr <- fits[[1L]]$call$data
+  structure(
+    out,
+    heading = c(mm_anova_data_line(data_expr),
+                "Models:", paste(row_labels, tbl$model, sep = ": ")),
+    mm_comparison = cmp,
+    class = c("mm_anova_comparison", "mm_glmm_comparison", "anova",
+              "data.frame")
+  )
 }
 
 # Sequential likelihood-ratio comparison of nested GLMMs, ordered by parameter
@@ -279,7 +317,9 @@ mm_glmm_lrt_comparison <- function(fits) {
   fits <- fits[ord]
   npar <- npar[ord]
   loglik <- vapply(fits, function(f) as.numeric(f$logLik), numeric(1))
-  dev <- vapply(fits, function(f) as.numeric(f$deviance), numeric(1))
+  # The LRT uses the Laplace objective -2 * logLik (lme4's anova "deviance"
+  # column), not deviance(), which is the residual deviance for GLMMs.
+  dev <- -2 * loglik
   aic <- vapply(fits, function(f) AIC(f), numeric(1))
   bic <- vapply(fits, function(f) BIC(f), numeric(1))
   chisq <- c(NA_real_, pmax(0, -diff(dev)))
@@ -302,6 +342,7 @@ mm_glmm_lrt_comparison <- function(fits) {
   rownames(table) <- NULL
   obj <- list(table = table, method = "asymptotic_lrt")
   class(obj) <- "mm_glmm_comparison"
+  attr(obj, "mm_order") <- ord
   obj
 }
 
@@ -399,7 +440,9 @@ mm_grid.mm_glmm <- function(fit, specs, ...) {
 ## dropped. Deterministic given `seed`; when `seed` is NULL one is drawn
 ## from R's RNG so set.seed() governs reproducibility.
 mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
-                                                 nsim = 999L, seed = NULL) {
+                                                 nsim = 999L, seed = NULL,
+                                                 threads = 1L) {
+  threads <- mm_check_threads(threads)
   if (identical(mm_glmm_effective_method(object), "joint_laplace")) {
     # Engine limitation at pin f82c646: GeneralizedLinearMixedModel::refit
     # hardcodes the fast path (generalized/optimizer.rs:19-23) and the
@@ -442,7 +485,8 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
 
   payload <- mm_rust_glmm_refit_payload(object, mm_glmm_effective_method(object))
   options_json <- jsonlite::toJSON(
-    list(nsim = as.integer(nsim), seed = as.numeric(seed)),
+    list(nsim = as.integer(nsim), seed = as.numeric(seed),
+         threads = threads),
     auto_unbox = TRUE
   )
   json <- tryCatch(
@@ -507,6 +551,7 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
     successful = successful,
     failed = failed,
     seed = as.numeric(seed),
+    threads = threads,
     std_errors = se,
     mcse = mcse,
     reliability = mm_bootstrap_reliability(TRUE, successful, mcse)

@@ -266,11 +266,12 @@ impl GeneralizedLinearMixedModel {
         let glmm_scale_multiplier = (glmm_covariance_scale / inner_lmm_scale).powi(2);
         let joint_laplace_conditional_variance =
             self.certified_joint_laplace_fixed_covariance().is_some();
-        let pirls_certified_conditional_variance = !joint_laplace_conditional_variance
-            && matches!(self.pirls_profiled_optimum_certificate, Some(Ok(_)));
+        let pirls_certificate = self.pirls_profiled_optimum_certificate();
+        let pirls_certified_conditional_variance =
+            !joint_laplace_conditional_variance && matches!(pirls_certificate, Some(Ok(_)));
         let certified_conditional_variance =
             joint_laplace_conditional_variance || pirls_certified_conditional_variance;
-        let pirls_certificate_failure = match &self.pirls_profiled_optimum_certificate {
+        let pirls_certificate_failure = match pirls_certificate {
             Some(Err(reason)) if !joint_laplace_conditional_variance => Some(reason.clone()),
             _ => None,
         };
@@ -492,8 +493,15 @@ impl GeneralizedLinearMixedModel {
     }
 
     pub(super) fn glmm_conditional_prediction_covariance_scale(&self) -> Option<f64> {
-        if !self.family.has_dispersion() {
+        if !self.family.has_dispersion() || self.profiles_dispersion() {
+            // Moment method: the working weights already carry 1/φ, so the
+            // PIRLS RX covariance is on the GLMM scale as it stands.
             return Some(1.0);
+        }
+        if matches!(self.family, Family::Gamma | Family::InverseGaussian) {
+            // Same scale as the reported residual SD (lme4's sigma()).
+            let scale = self.dispersion;
+            return (scale.is_finite() && scale > 0.0).then_some(scale);
         }
         let pwrss = self.lmm.pwrss();
         if !pwrss.is_finite() || pwrss < 0.0 {

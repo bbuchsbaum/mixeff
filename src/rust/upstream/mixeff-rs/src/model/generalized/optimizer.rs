@@ -5,6 +5,7 @@
 //! (bd-01KWHYQSTWK60P6HA4S4B2K99P). No logic changes.
 
 use super::*;
+use crate::model::linear::RefitStart;
 
 impl GeneralizedLinearMixedModel {
     /// Fit the GLMM.
@@ -16,9 +17,12 @@ impl GeneralizedLinearMixedModel {
     ///
     /// This mirrors Julia's `refit!` semantics for bootstrap and simulation
     /// workflows: the optimizer starts from `optsum.initial`, not from the
-    /// previous optimum.
+    /// previous optimum. The effective estimator and quadrature setting of
+    /// the template are retained, including for joint Laplace/AGQ fits.
+    /// A joint refit that substitutes fast PIRLS returns an error; it is not
+    /// a successful replicate of the joint estimator.
     pub fn refit(&mut self, new_y: &[f64]) -> Result<&mut Self> {
-        let n_agq = self.lmm.optsum.n_agq.max(1);
+        let n_agq = self.lmm.optsum.n_agq;
         self.refit_with_options(new_y, n_agq, false)
     }
 
@@ -33,8 +37,100 @@ impl GeneralizedLinearMixedModel {
             self.record_invalid_agq_diagnostic(n_agq, &error.to_string());
             return Err(error);
         }
+        let fast = !glmm_objective_includes_response_constants(&self.lmm.optsum.return_value);
+        let original = (!fast).then(|| self.clone());
         self.reset_for_refit(Some(new_y))?;
-        self.fit_with_options(true, n_agq, verbose)
+        self.fit_refit_estimator(fast, n_agq, verbose, original)
+    }
+
+    /// Refit to a new response with an explicit start (Phase 7 T7.3).
+    ///
+    /// [`RefitStart::Initial`] is [`refit`](Self::refit). [`RefitStart::Fitted`]
+    /// starts θ at the current optimum and keeps the current conditional
+    /// modes and fixed effects as the first PIRLS start, with the optimizer's
+    /// first step contracted to [`WARM_REFIT_INITIAL_STEP`](crate::model::linear::WARM_REFIT_INITIAL_STEP), because a
+    /// simulated or resampled response's optimum is expected nearby;
+    /// [`RefitStart::From`] does the same from a caller-supplied θ.
+    pub fn refit_with_start(&mut self, new_y: &[f64], start: RefitStart) -> Result<&mut Self> {
+        let n_agq = self.lmm.optsum.n_agq;
+        let start_theta = match start {
+            RefitStart::Initial => None,
+            RefitStart::Fitted => Some(self.theta.clone()),
+            RefitStart::From(theta) => Some(theta),
+        };
+        if let Some(start_theta) = &start_theta {
+            let n_theta = self.theta.len();
+            if start_theta.len() != n_theta {
+                return Err(MixedModelError::InvalidArgument(format!(
+                    "refit start theta length {} does not match theta length {n_theta}",
+                    start_theta.len()
+                )));
+            }
+            let lower = self.lmm.lower_bounds();
+            if start_theta
+                .iter()
+                .zip(&lower)
+                .any(|(&value, &bound)| !value.is_finite() || value < bound)
+            {
+                return Err(MixedModelError::InvalidArgument(
+                    "refit start theta must be finite and within the lower bounds".to_string(),
+                ));
+            }
+        }
+        let fast = !glmm_objective_includes_response_constants(&self.lmm.optsum.return_value);
+        let original = (!fast).then(|| self.clone());
+        self.reset_for_refit_with_start(Some(new_y), start_theta)?;
+        self.fit_refit_estimator(fast, n_agq, false, original)
+    }
+
+    fn fit_refit_estimator(
+        &mut self,
+        fast: bool,
+        n_agq: usize,
+        verbose: bool,
+        original: Option<Self>,
+    ) -> Result<&mut Self> {
+        crate::model::snapshot::record_optimizer_entry();
+        // A joint fit records its final backend. The joint driver's prefit
+        // needs a fast-compatible backend, as in convergence verification.
+        // Explicit caller choices are retained and handled by the driver.
+        if self.lmm.optsum.caller_selected_optimizer().is_none() {
+            self.configure_profile_start_optimizer();
+        }
+        // Keep the template's caller controls and callback. Applying fresh
+        // default fit options here would erase the recorded caller choices.
+        self.pending_progress_error = None;
+        let outcome =
+            if self.family == Family::NegativeBinomial && self.negative_binomial_estimate_theta {
+                self.fit_negative_binomial_estimated_theta(fast, n_agq, verbose)
+                    .map(|_| ())
+            } else if fast {
+                self.fit_with_options_impl(n_agq, verbose).map(|_| ())
+            } else {
+                self.fit_joint_glmm_with_response_constants(n_agq, verbose)
+                    .map(|_| ())
+            };
+        if let Err(error) = outcome {
+            if let Some(original) = original {
+                *self = original;
+            }
+            return Err(error);
+        }
+        let fitted_fast =
+            !glmm_objective_includes_response_constants(&self.lmm.optsum.return_value);
+        if fitted_fast != fast {
+            // An errored attempt must not turn a reusable joint template
+            // into a fast template for its next refit.
+            if let Some(original) = original {
+                *self = original;
+            }
+            return Err(MixedModelError::Unsupported(
+                "joint GLMM refit substituted fast PIRLS; the template estimator was not retained"
+                    .to_string(),
+            ));
+        }
+        self.seal_fitted_state();
+        Ok(self)
     }
 
     /// Fit after first applying a compiler policy.
@@ -76,6 +172,7 @@ impl GeneralizedLinearMixedModel {
 
     /// Fit with explicit GLMM options.
     pub fn fit_with_glmm_options(&mut self, options: GlmmFitOptions) -> Result<&mut Self> {
+        crate::model::snapshot::record_optimizer_entry();
         let GlmmFitOptions {
             fast,
             n_agq,
@@ -96,13 +193,16 @@ impl GeneralizedLinearMixedModel {
         if let Some(start_theta) = &optimizer_control.start_theta {
             self.theta = start_theta.clone();
         }
-        if self.family == Family::NegativeBinomial && self.negative_binomial_estimate_theta {
-            return self.fit_negative_binomial_estimated_theta(fast, n_agq, verbose);
-        }
-        if !fast {
-            return self.fit_joint_glmm_with_response_constants(n_agq, verbose);
-        }
-        self.fit_with_options_impl(n_agq, verbose)
+        let fitted =
+            if self.family == Family::NegativeBinomial && self.negative_binomial_estimate_theta {
+                self.fit_negative_binomial_estimated_theta(fast, n_agq, verbose)
+            } else if !fast {
+                self.fit_joint_glmm_with_response_constants(n_agq, verbose)
+            } else {
+                self.fit_with_options_impl(n_agq, verbose)
+            }?;
+        fitted.seal_fitted_state();
+        Ok(fitted)
     }
 
     fn fit_negative_binomial_estimated_theta(
@@ -113,7 +213,6 @@ impl GeneralizedLinearMixedModel {
     ) -> Result<&mut Self> {
         let initial_theta = self.require_negative_binomial_theta()?;
         let mut current_theta = clamp_negative_binomial_theta(initial_theta);
-        let mut last_fit_theta = f64::NAN;
         let mut update_iterations = 0usize;
         let mut converged = false;
 
@@ -123,7 +222,6 @@ impl GeneralizedLinearMixedModel {
             }
             self.negative_binomial_theta = Some(current_theta);
             self.fit_negative_binomial_conditional(fast, n_agq, verbose)?;
-            last_fit_theta = current_theta;
 
             let next_theta = self.estimate_negative_binomial_theta_given_fit()?;
             update_iterations = iteration + 1;
@@ -144,14 +242,68 @@ impl GeneralizedLinearMixedModel {
             }
         }
 
-        if relative_theta_change(last_fit_theta, current_theta)
-            > NEGATIVE_BINOMIAL_THETA_FINAL_REFIT_TOL
-        {
-            self.reset_for_refit(None)?;
-            self.negative_binomial_theta = Some(current_theta);
-            self.fit_negative_binomial_conditional(fast, n_agq, verbose)?;
-            last_fit_theta = current_theta;
+        // The alternation above maximizes the NB likelihood *given* the
+        // fitted means, which ignores the random-effect integral. Like
+        // lme4::glmer.nb (`optTheta`), finish by maximizing the GLMM's own
+        // (Laplace/AGQ) log-likelihood over log θ_NB in
+        // [log θ₀ − 3, log θ₀ + 3], refitting the model at every trial value.
+        let start_log = clamp_negative_binomial_theta(current_theta).ln();
+        let lo = (start_log - 3.0).max(NEGATIVE_BINOMIAL_THETA_MIN.ln());
+        let hi = (start_log + 3.0).min(NEGATIVE_BINOMIAL_THETA_MAX.ln());
+        let mut profile_evaluations = 0usize;
+        let mut neg2ll = |model: &mut Self, log_theta: f64| -> Result<f64> {
+            profile_evaluations += 1;
+            model.reset_for_refit(None)?;
+            model.negative_binomial_theta = Some(log_theta.exp());
+            match model.fit_negative_binomial_conditional(fast, n_agq, false) {
+                Ok(()) => {
+                    let value = -2.0 * model.loglikelihood();
+                    Ok(if value.is_finite() {
+                        value
+                    } else {
+                        f64::INFINITY
+                    })
+                }
+                Err(error @ MixedModelError::Interrupted(_)) => Err(error),
+                Err(_) => Ok(f64::INFINITY),
+            }
+        };
+        let inv_phi = (5.0_f64.sqrt() - 1.0) / 2.0;
+        let (mut a, mut b) = (lo, hi);
+        let mut c = b - inv_phi * (b - a);
+        let mut d = a + inv_phi * (b - a);
+        let mut fc = neg2ll(self, c)?;
+        let mut fd = neg2ll(self, d)?;
+        while (b - a) > 5.0e-5 {
+            if fc <= fd {
+                b = d;
+                d = c;
+                fd = fc;
+                c = b - inv_phi * (b - a);
+                fc = neg2ll(self, c)?;
+            } else {
+                a = c;
+                c = d;
+                fc = fd;
+                d = a + inv_phi * (b - a);
+                fd = neg2ll(self, d)?;
+            }
         }
+        let best_log = if fc <= fd { c } else { d };
+        if verbose {
+            eprintln!(
+                "  NB theta Laplace profile: theta = {:.6} after {profile_evaluations} refits",
+                best_log.exp()
+            );
+        }
+        current_theta = clamp_negative_binomial_theta(best_log.exp());
+        if (best_log - lo).abs() < 1e-3 || (hi - best_log).abs() < 1e-3 {
+            converged = false;
+        }
+        self.reset_for_refit(None)?;
+        self.negative_binomial_theta = Some(current_theta);
+        self.fit_negative_binomial_conditional(fast, n_agq, verbose)?;
+        let last_fit_theta = current_theta;
 
         self.negative_binomial_theta = Some(last_fit_theta);
         self.refresh_dispersion();
@@ -282,7 +434,9 @@ impl GeneralizedLinearMixedModel {
         } else {
             500
         };
-        let initial_step = if self.lmm.optsum.caller_set_field("initial_step") {
+        let initial_step = if let Some(step) = &self.warm_refit_step {
+            step.clone()
+        } else if self.lmm.optsum.caller_set_field("initial_step") {
             self.lmm.optsum.initial_step.clone()
         } else {
             vec![0.75; n_theta]
@@ -416,6 +570,11 @@ impl GeneralizedLinearMixedModel {
         // Hand the model to the COBYLA callback through a RefCell instead of a
         // raw `*mut Self`. The callback is the only borrower while the optimizer
         // is alive; `model.into_inner()` recovers `&mut self` afterwards.
+        let rhobeg = self
+            .warm_refit_step
+            .as_ref()
+            .and_then(|step| step.first().copied())
+            .unwrap_or(0.75);
         let model = std::cell::RefCell::new(self);
         let objective_fn = |theta: &[f64], _data: &mut ()| -> f64 {
             feval_count.set(feval_count.get() + 1);
@@ -440,7 +599,7 @@ impl GeneralizedLinearMixedModel {
             &cons_refs,
             (),
             maxeval,
-            cobyla::RhoBeg::All(0.75),
+            cobyla::RhoBeg::All(rhobeg),
             Some(stop_tol),
         );
 
@@ -509,7 +668,10 @@ impl GeneralizedLinearMixedModel {
         for tol in &mut step_tol {
             *tol = tol.max(1e-5);
         }
-        let mut step = self.lmm.optsum.initial_step.clone();
+        let mut step = self
+            .warm_refit_step
+            .clone()
+            .unwrap_or_else(|| self.lmm.optsum.initial_step.clone());
         if step.len() != n_theta {
             step = vec![0.75; n_theta];
         }
@@ -656,6 +818,7 @@ impl GeneralizedLinearMixedModel {
         n_agq: usize,
     ) -> Result<()> {
         LinearMixedModel::rectify_theta_columns(theta, &self.lmm.parmap, self.lmm.reterms.len());
+        self.snap_near_zero_variances_to_boundary(theta, n_agq);
 
         // Final PIRLS at optimal θ, after matching MixedModels.jl's
         // post-optimizer sign convention for Cholesky columns.
@@ -672,13 +835,43 @@ impl GeneralizedLinearMixedModel {
             // accepted as a good fit (audit 03·H1).
             self.record_pirls_nonconvergence_diagnostic(theta);
         }
-        self.beta = self.lmm.beta();
+        // PIRLS leaves β at its accepted iterate; the working factorization
+        // was refreshed at the accepted mean (lme4 GH #998), so re-reading β
+        // from it would take one more unaccepted Newton step.
         self.refresh_dispersion();
 
         self.lmm.optsum.n_agq = n_agq;
         self.lmm.optsum.fmin = self.deviance(n_agq);
         self.lmm.optsum.final_params = theta.to_vec();
         Ok(())
+    }
+
+    /// Boundary check, as the LMM path does after its optimizer: a diagonal
+    /// θ that the optimizer left just above its zero lower bound is set to
+    /// exactly 0 when the penalized deviance there is no worse. Derivative-
+    /// free optimizers often stop a hair inside a flat boundary (θ ≈ 1e-7),
+    /// which would otherwise hide a singular fit from boundary diagnostics.
+    fn snap_near_zero_variances_to_boundary(&mut self, theta: &mut [f64], n_agq: usize) {
+        const NEAR_ZERO: f64 = 1e-5;
+        let mut snapped = theta.to_vec();
+        let mut changed = false;
+        for (i, (_, row, col)) in self.lmm.parmap.iter().enumerate() {
+            if row == col && snapped[i] > 0.0 && snapped[i] < NEAR_ZERO {
+                snapped[i] = 0.0;
+                changed = true;
+            }
+        }
+        if !changed {
+            return;
+        }
+        let current = self.penalized_pirls_deviance_at_theta(theta, n_agq);
+        let at_zero = self.penalized_pirls_deviance_at_theta(&snapped, n_agq);
+        if at_zero.is_finite()
+            && current.is_finite()
+            && at_zero <= current + 1e-10 * (1.0 + current.abs())
+        {
+            theta.copy_from_slice(&snapped);
+        }
     }
 
     fn cobyla_success_status_label(status: cobyla::SuccessStatus) -> String {

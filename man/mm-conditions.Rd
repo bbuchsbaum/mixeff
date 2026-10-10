@@ -26,5 +26,9 @@ any model, engine, schema, or data semantics. Catching
 \code{mm_inference_unavailable} must mean "the engine refuses to certify
 this", not "you typed it wrong" — so plain argument validation raises
 \code{mm_arg_error}, never the domain-refusal classes.
+
+\code{mm_interrupted} is raised when the user interrupts (Ctrl-C / Esc) a
+long native computation: fits, refits, bootstraps, and profiles check for
+a pending interrupt between optimizer evaluations and stop cleanly.
 }
 \keyword{internal}

@@ -18,8 +18,12 @@ omit to keep the current formula. Random-effect terms (\code{(x | g)},
 \code{(x || g)}) are preserved across \code{. ~ .} edits.}
 
 \item{...}{Arguments to override on the re-fit. For \code{mm_lmm}: \code{data},
-\code{REML}, \code{weights}, \code{control}. For \code{mm_glmm}: additionally \code{family},
-\code{offset}, \code{method}, \code{nAGQ}, \code{inference}.}
+\code{REML}, \code{weights}, \code{offset}, \code{na.action}, \code{control}. For \code{mm_glmm}:
+additionally \code{family}, \code{method}, \code{nAGQ}, \code{inference}. The fit's
+missing-value handling carries over: a refit of the stored model frame
+keeps the original \code{na.action} record (so \code{na.exclude} padding
+persists), and new \code{data} is filtered with the original \code{na.action}
+(\code{na.omit} or \code{na.exclude}) unless \code{na.action} is supplied.}
 
 \item{evaluate}{If \code{TRUE} (default) re-fit and return the new model; if
 \code{FALSE} return the unevaluated call.}

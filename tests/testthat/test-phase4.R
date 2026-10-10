@@ -86,10 +86,14 @@ test_that("glmm() fits expanded cbpp binomial smoke through profiled PIRLS", {
 })
 
 test_that("glmm() family/link surface matches the upstream support contract", {
+  # Every pair the engine fits (audit 2026-10 §4.7 widened the surface to
+  # Gamma/inverse, inverse.gaussian inverse/log, gaussian non-identity).
   expected <- data.frame(
-    family = c(rep("binomial", 3), rep("poisson", 2), "Gamma",
+    family = c(rep("binomial", 3), rep("poisson", 2), rep("Gamma", 2),
+               rep("inverse.gaussian", 2), rep("gaussian", 3),
                "negative_binomial"),
-    link = c("logit", "probit", "cloglog", "log", "sqrt", "log", "log"),
+    link = c("logit", "probit", "cloglog", "log", "sqrt", "inverse", "log",
+             "inverse", "log", "log", "inverse", "sqrt", "log"),
     stringsAsFactors = FALSE
   )
   supported <- mm_glmm_supported_family_link_table()
@@ -130,8 +134,8 @@ test_that("glmm() refuses off-contract family/link pairs with a stable reason co
     gaussian_identity = gaussian(),
     binomial_log = binomial(link = "log"),
     poisson_identity = poisson(link = "identity"),
-    gamma_inverse = Gamma(link = "inverse"),
-    inverse_gaussian_log = inverse.gaussian(link = "log")
+    binomial_cauchit = binomial(link = "cauchit"),
+    inverse_gaussian_default = inverse.gaussian()
   )
 
   for (family in bad_cases) {

@@ -4,15 +4,17 @@
 \alias{profile.mm_lmm}
 \title{Profile a fitted linear mixed model}
 \usage{
-\method{profile}{mm_lmm}(fitted, which = NULL, level = 0.95, ...)
+\method{profile}{mm_lmm}(fitted, which = NULL, level = 0.95, threads = 1L, ...)
 }
 \arguments{
 \item{fitted}{A fitted \code{mm_lmm}.}
 
 \item{which}{Optional character vector of parameter names to keep
-(coefficient names, \code{"sigma"}, \code{"theta1"}, ...).}
+(coefficient names, \code{".sig01"}, \code{".sigma"}, \code{"theta1"}, ...).}
 
 \item{level}{Confidence level for the reported interval endpoints.}
+
+\item{threads}{Worker threads (default 1); see \code{\link[=confint.mm_lmm]{confint.mm_lmm()}}.}
 
 \item{...}{Unused; for generic consistency.}
 }
@@ -24,11 +26,26 @@ and \verb{$notes}.
 Computes profile-likelihood intervals for the model's parameters via the
 engine's certified profile payload and returns them as an \code{mm_profile}
 object: \verb{$table} has one row per profiled parameter (\code{parameter},
-\code{estimate}, \code{lower}, \code{upper}, \code{regularity}, \code{reason_code}). Under REML,
-fixed-effect coefficients are not profiled (upstream contract); their rows
-carry \code{reason_code = "profile_beta_unavailable_under_reml"} rather than
-being silently dropped. Use \code{\link[=confint]{confint()}} with \code{method = "profile"} for the
-matrix form.
+\code{parameter_kind}, \code{estimate}, \code{lower}, \code{upper}, \code{regularity}, \code{status},
+\code{reason_code}, \code{reason}, \code{profiled_criterion}). Rows use lme4's names: \code{.sig01},
+... (kind \code{"sd"} or \code{"cor"}, numbered in lme4's term order), \code{.sigma},
+and the fixed effects, all profiled on the ML deviance as lme4 does (a
+REML fit is refitted by ML); the engine's relative-Cholesky \code{theta1}, ...
+rows follow, profiled on the fit's own criterion. Use \code{\link[=confint]{confint()}} with
+\code{method = "profile"} for the matrix form.
+}
+\details{
+A parameter whose profile is irregular keeps its row: \code{status} is
+\code{"non_monotone"} (the signed-root deviance is not monotone),
+\code{"not_bracketing"} (the profile does not reach the cutoff on one side),
+or \code{"failed"} (a constrained refit failed); \code{reason_code} holds the
+matching \code{regularity} code (\code{"non_monotone_profile"},
+\code{"profile_not_bracketing"}, \code{"profile_failed"}) and \code{reason} the engine's
+explanation. Bounds the profile cannot determine are \code{NA}; a bound inside
+the regular part of the profile is still reported. lme4 instead warns
+and falls back to linear interpolation (often giving \verb{[-1, 1]} for a
+correlation); mixeff reports \code{NA} plus the reason rather than an
+interpolated bound. The other parameters' intervals are unaffected.
 }
 \seealso{
 \code{\link[=confint]{confint()}} with \code{method = "profile"} for the matrix form.

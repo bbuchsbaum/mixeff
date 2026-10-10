@@ -1,10 +1,13 @@
+use crate::stats::InferenceCovarianceMethod;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::model::data::DataFrame;
 use crate::types::{ConvergenceStatus, OptSummary};
 
-use super::audit::{audit_design, DesignAudit, OptimizerCertificate};
+use nalgebra::DMatrix;
+
+use super::audit::{audit_design_with_matrix, DesignAudit, OptimizerCertificate};
 use super::diagnostics::{Diagnostic, DiagnosticCode};
 use super::estimability::{EstimabilityAssessment, ReliabilityGrade};
 use super::ir::{CovarianceSupportStatus, SemanticModel};
@@ -29,7 +32,8 @@ pub const FIXED_EFFECT_INFERENCE_TABLE_SCHEMA: &str = "mixedmodels.fixed_effect_
 // value `fixed-effect term test type: coefficient_block`); `type_i` rows
 // sequence terms by interaction order (R `terms()` convention) instead of
 // literal formula-expansion order.
-pub const FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION: &str = "1.1.0";
+// 1.2.0: each inference row records the covariance actually used.
+pub const FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION: &str = "1.2.0";
 pub const FIXED_EFFECT_INFERENCE_TABLE_NAME: &str = "fixed_effect_inference";
 pub const FIXED_EFFECT_COVARIANCE_MATRIX_SCHEMA: &str =
     "mixedmodels.fixed_effect_covariance_matrix";
@@ -438,8 +442,10 @@ impl FixedEffectCovarianceMatrix {
         payload.status = FixedEffectCovarianceStatus::AvailableNoninferential;
         payload.reason = Some(
             "working-Hessian covariance is recorded for covariance geometry \
-             (vcov/prediction/diagnostics), not certified for Wald inference; \
-             the fixed_effect_inference_table is the inference arbiter"
+             (vcov/prediction/diagnostics); this engine does not implement Wald inference \
+             from that approximation. This support policy does not establish that \
+             working-Hessian or RX standard errors are invalid; read fixed_effect_inference_table \
+             for the supported inference result"
                 .to_string(),
         );
         payload
@@ -456,6 +462,25 @@ impl FixedEffectCovarianceMatrix {
             matrix,
             FixedEffectCovarianceMethod::JointLaplaceActiveHessian,
             ReliabilityGrade::Moderate,
+            details,
+            notes,
+        )
+    }
+
+    /// RX-based GLMM fixed-effect covariance conditional on θ (the joint
+    /// active-Hessian fallback); `Low` reliability because θ uncertainty is
+    /// ignored.
+    pub fn laplace_rx_conditional_on_theta(
+        coef_names: Vec<String>,
+        matrix: Vec<Vec<f64>>,
+        details: FixedEffectCovarianceDetails,
+        notes: Vec<String>,
+    ) -> Self {
+        Self::available_with_method(
+            coef_names,
+            matrix,
+            FixedEffectCovarianceMethod::LaplaceRxConditionalOnTheta,
+            ReliabilityGrade::Low,
             details,
             notes,
         )
@@ -489,14 +514,19 @@ pub enum FixedEffectCovarianceMethod {
     ModelBased,
     PirlsLaplaceWorkingHessian,
     JointLaplaceActiveHessian,
+    /// RX (fixed-effect block of the Laplace PLS factorization) at the joint
+    /// optimum, conditional on θ; the fallback when the joint active Hessian
+    /// is not positive definite (lme4 `vcov(use.hessian = FALSE)`).
+    LaplaceRxConditionalOnTheta,
     Unavailable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FixedEffectCovarianceStatus {
-    /// Recorded and certified for the inference backend named on the
-    /// matching `fixed_effect_inference_table` rows.
+    /// Recorded and accepted by the numerical gates of the inference backend
+    /// named on matching `fixed_effect_inference_table` rows. This does not
+    /// establish scientific validity or model adequacy.
     Available,
     /// Recorded as usable covariance geometry (vcov/prediction/diagnostics)
     /// for an estimator whose Wald inference is not certified; consumers must
@@ -529,6 +559,9 @@ pub struct FixedEffectInferenceRow {
     pub statistic_name: Option<FixedEffectStatisticName>,
     pub p_value: Option<f64>,
     pub method: FixedEffectInferenceMethod,
+    /// Actual SE/statistic covariance; distinct from the requested method.
+    #[serde(default)]
+    pub covariance_method: InferenceCovarianceMethod,
     pub status: FixedEffectInferenceStatus,
     pub reliability: ReliabilityGrade,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -548,6 +581,9 @@ pub enum FixedEffectReliabilityReason {
     KenwardRogerApproximation,
     ParametricBootstrapMonteCarlo,
     GlmmJointLaplaceActiveHessianWald,
+    /// Wald z from the RX covariance conditional on θ (joint active Hessian
+    /// not positive definite): θ uncertainty is ignored.
+    GlmmLaplaceRxConditionalOnThetaWald,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -611,8 +647,18 @@ pub struct ContrastFamilyDetails {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KenwardRogerInferenceDetails {
     pub restriction_rank: Option<usize>,
+    /// Kenward-Roger F scaling factor λ of a multi-df F row (pbkrtest
+    /// `F.scaling`); `None` for a t row.
     pub f_scaling: Option<f64>,
+    /// `"kenward_roger_scaled"` when the row's statistic is λ·F_U
+    /// (pbkrtest `Ftest`).
     pub statistic_scale: Option<String>,
+    /// Unscaled F_U of a multi-df F row (pbkrtest `FtestU`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unscaled_statistic: Option<f64>,
+    /// p-value of F_U on F(q, ddf) (pbkrtest `FtestU`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unscaled_p_value: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1078,11 +1124,25 @@ impl CompiledModelArtifact {
     }
 
     pub fn attach_design_audit(&mut self, data: &DataFrame) {
-        let audit = audit_design(&self.semantic_model, data);
+        let _ = self.attach_design_audit_with_matrix(data);
+    }
+
+    /// [`attach_design_audit`](Self::attach_design_audit) that hands back
+    /// the dense fixed-effect matrix the audit factorized and the column
+    /// pivot of its rank assessment, so the model constructor can reuse the
+    /// factorization rather than rebuilding and refactorizing the same
+    /// design. Neither is retained on the artifact.
+    pub fn attach_design_audit_with_matrix(
+        &mut self,
+        data: &DataFrame,
+    ) -> (DMatrix<f64>, Vec<usize>) {
+        let (audit, fixed_matrix, fixed_pivot) =
+            audit_design_with_matrix(&self.semantic_model, data);
         self.diagnostics.extend(audit.diagnostics.clone());
         self.policy_recommendations =
             recommend_policy(&self.semantic_model, &audit, &self.compiler_policy);
         self.design_audit = Some(audit);
+        (fixed_matrix, fixed_pivot)
     }
 
     pub fn set_compiler_policy(&mut self, policy: CompilerPolicy) {
@@ -2187,6 +2247,7 @@ mod tests {
         let mut artifact = CompiledModelArtifact::new(formula.to_string(), semantic);
         artifact.fixed_effect_inference_table = Some(FixedEffectInferenceTable::new(vec![
             FixedEffectInferenceRow {
+                covariance_method: InferenceCovarianceMethod::ModelBased,
                 label: "x".to_string(),
                 kind: FixedEffectInferenceRowKind::Coefficient,
                 estimate: Some(1.25),

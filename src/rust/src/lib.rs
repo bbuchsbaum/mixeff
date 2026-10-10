@@ -5,27 +5,35 @@ use mixeff_rs::compiler::{
     FixedEffectTestMethod, FIXED_EFFECT_INFERENCE_TABLE_SCHEMA,
     FIXED_EFFECT_INFERENCE_TABLE_SCHEMA_VERSION,
 };
+use mixeff_rs::error::MixedModelError;
 use mixeff_rs::formula::parse_formula;
-use mixeff_rs::model::linear::ConvergenceVerificationOptions;
-use mixeff_rs::model::{
-    parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate,
-    BootstrapSeedRecord, BootstrapTarget, Family, FitOptions, FitToleranceOverrides,
-    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder,
-    GlmmFitOptions, GlmmPredictionScale, LinearMixedModel, LinkFunction, MixedModelBootstrap,
-    MixedModelFit, NewReLevels, OptimizerControl,
+use mixeff_rs::model::linear::{
+    parametricbootstrap_with_options, BootstrapExecutionOptions, ConvergenceVerificationOptions,
 };
+use mixeff_rs::model::FitProgressCallback;
+use mixeff_rs::model::{
+    BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate, BootstrapSeedRecord,
+    BootstrapTarget, CompiledModelSpec, Family, FitOptions, FitToleranceOverrides,
+    FixedEffectBootstrapOptions, GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder,
+    GlmmDispersionMethod, GlmmFitOptions, GlmmPredictionScale, LinearMixedModel, LinkFunction,
+    MixedModelBootstrap, MixedModelFit, NewReLevels, OptimizerControl,
+};
+use mixeff_rs::stats::profile::{profile_confint_payload_with_options, ProfileOptions};
 use mixeff_rs::stats::{
-    profile_confint_payload, BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit,
-    ModelComparisonMethod, ModelComparisonOptions, ModelComparisonRefitPolicy,
-    ModelComparisonTable, BOUNDARY_LRT_SCHEMA, BOUNDARY_LRT_SCHEMA_VERSION, FIT_SUMMARY_SCHEMA,
-    FIT_SUMMARY_SCHEMA_VERSION, PROFILE_LIKELIHOOD_CI_SCHEMA, PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION,
+    BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit, ModelComparisonMethod,
+    ModelComparisonOptions, ModelComparisonRefitPolicy, ModelComparisonTable, BOUNDARY_LRT_SCHEMA,
+    BOUNDARY_LRT_SCHEMA_VERSION, FIT_SUMMARY_SCHEMA, FIT_SUMMARY_SCHEMA_VERSION,
+    PROFILE_LIKELIHOOD_CI_SCHEMA, PROFILE_LIKELIHOOD_CI_SCHEMA_VERSION,
 };
 use mixeff_rs::types::Optimizer;
 use nalgebra::{DMatrix, DVector};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde_json::{json, Value};
+use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 // ---- caller optimizer controls (mm_control optimizer/tolerance/start) -------
 //
@@ -37,6 +45,22 @@ use std::collections::HashMap;
 // optimizer certificate by the engine.
 
 /// Map a caller optimizer name (mm_control(optimizer=)) to the engine enum.
+/// Error type for every fallible `#[extendr]` entry point.
+///
+/// extendr 0.9 raises a Rust error by passing its text to `Rf_error()` as the
+/// *format string*, so a `%` in a message (from a user's column name, a
+/// formula such as `a %in% b`, ...) was interpreted as a printf directive:
+/// garbled text at best, an out-of-bounds read for `%s`/`%n`. Displaying the
+/// message with every `%` doubled makes it a literal format string.
+#[derive(Debug)]
+pub struct MmBridgeError(String);
+
+impl std::fmt::Display for MmBridgeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0.replace('%', "%%"))
+    }
+}
+
 fn parse_optimizer_name(name: &str) -> std::result::Result<Optimizer, String> {
     match name.trim().to_ascii_lowercase().as_str() {
         "bobyqa" | "nlopt_bobyqa" => Ok(Optimizer::NloptBobyqa),
@@ -72,6 +96,57 @@ fn control_f64_vec(value: &Value) -> std::result::Result<Vec<f64>, String> {
                 .ok_or_else(|| "mm_arg_error: control vector entries must be numeric".to_string())
         })
         .collect()
+}
+
+/// Apply lme4 2.1-0's `glmerControl()` dispersion controls from the
+/// mm_control() JSON (`disp_method`, `disp_dof_correction`, `max_phi_iter`)
+/// to a GLMM before it is fitted. Absent fields keep the engine defaults
+/// (moment method, dof correction on, 100 phi iterations, as lme4 2.1-0).
+/// The engine ignores them for families without a free dispersion. The R
+/// side validates the values; malformed ones are refused here too.
+fn apply_glmm_dispersion_control(
+    model: &mut GeneralizedLinearMixedModel,
+    control: &Value,
+) -> std::result::Result<(), String> {
+    let present = |key: &str| control.get(key).filter(|v| !v.is_null());
+    if let Some(v) = present("disp_method") {
+        let method = match v.as_str() {
+            Some("moment") => GlmmDispersionMethod::Moment,
+            Some("old/buggy") => GlmmDispersionMethod::Legacy,
+            _ => {
+                return Err(format!(
+                    "mm_arg_error: disp_method must be \"moment\" or \"old/buggy\", got {}",
+                    v
+                ))
+            }
+        };
+        model.set_dispersion_method(method);
+    }
+    if let Some(v) = present("disp_dof_correction") {
+        let correct = v.as_bool().ok_or_else(|| {
+            format!(
+                "mm_arg_error: disp_dof_correction must be TRUE or FALSE, got {}",
+                v
+            )
+        })?;
+        model.set_dispersion_dof_correction(correct);
+    }
+    if let Some(v) = present("max_phi_iter") {
+        let n = v
+            .as_u64()
+            .filter(|n| *n >= 1)
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or_else(|| {
+                format!(
+                    "mm_arg_error: max_phi_iter must be a positive integer, got {}",
+                    v
+                )
+            })?;
+        model
+            .set_max_phi_iter(n)
+            .map_err(|e| format!("mm_arg_error: {}", e))?;
+    }
+    Ok(())
 }
 
 /// Build an engine `OptimizerControl` from the mm_control() JSON. Every field is
@@ -122,6 +197,136 @@ fn parse_optimizer_control(control: &Value) -> std::result::Result<OptimizerCont
 }
 
 mod data;
+
+// ---------------------------------------------------------------------------
+// Native handles (pre-CRAN checklist §5.2(c), §5.9)
+//
+// Two process-local caches cross the bridge as R external pointers:
+//
+// * `CompiledSpecSlot` -- the compiled, audited model spec `lmm()`/`glmm()`
+//   build once before fitting. The fit entry point `take()`s it and builds
+//   the model with `from_compiled`, so the formula is compiled and the design
+//   audited once per fit (the R side also translates the data once).
+// * `FittedLmmHandle` / `FittedGlmmHandle` -- the fitted engine model, kept
+//   on the R fit object as `fit$rust_handle`. Follow-on computations
+//   (contrasts, term tables, predictions, profiles, bootstraps, comparisons)
+//   run on it instead of refitting the model cold from the stored data. The
+//   read-only ones borrow it; the mutating ones (profile, convergence
+//   verification) work on a clone, so the cached model never changes.
+//
+// External pointers do not survive serialization (they come back as NULL
+// pointers) and the R side only passes a handle it has checked with
+// `mm_handle_alive()`; every entry point falls back to the cold refit when
+// the handle is absent, so a dead handle only costs time, never results.
+// Every handle is created, read, and dropped on the R main thread. The
+// fitted model keeps the R interrupt callback it was fitted with (which is a
+// no-op off the R main thread), so follow-ons on the handle -- and on its
+// clones -- stay interruptible exactly like the cold refits.
+
+/// The compiled spec `lmm()`/`glmm()` hand from the compile step to the fit.
+/// `None` after the fit consumed it.
+pub struct CompiledSpecSlot(RefCell<Option<CompiledModelSpec<'static>>>);
+
+/// A fitted LMM cached for follow-on computations.
+pub struct FittedLmmHandle(LinearMixedModel);
+
+/// A fitted GLMM cached for follow-on computations.
+pub struct FittedGlmmHandle(GeneralizedLinearMixedModel);
+
+/// Number of follow-on computations served from a live handle (no refit).
+/// Test/diagnostic counter, read through `mm_handle_hits()`.
+static HANDLE_HITS: AtomicUsize = AtomicUsize::new(0);
+
+/// Borrow the `T` behind `handle` when it is a live (non-NULL) external
+/// pointer created by this bridge for `T`. The type tag is checked before
+/// the address is dereferenced, so a foreign or NULL external pointer is
+/// rejected without touching its address.
+fn handle_ref<T: 'static>(handle: &Robj) -> Option<&T> {
+    if !handle.is_external_pointer() {
+        return None;
+    }
+    // SAFETY: `handle` is an EXTPTRSXP; reading its tag is always valid.
+    let tag = unsafe { handle.external_ptr_tag() };
+    if tag.as_str() != Some(std::any::type_name::<T>()) {
+        return None;
+    }
+    let ptr = <&ExternalPtr<T>>::try_from(handle).ok()?;
+    ptr.try_addr().ok()
+}
+
+fn live_lmm(handle: &Robj) -> Option<&LinearMixedModel> {
+    handle_ref::<FittedLmmHandle>(handle).map(|h| &h.0)
+}
+
+fn live_glmm(handle: &Robj) -> Option<&GeneralizedLinearMixedModel> {
+    handle_ref::<FittedGlmmHandle>(handle).map(|h| &h.0)
+}
+
+/// The live LMM behind `handle`, or a cold refit when the handle is absent
+/// or dead.
+fn lmm_or_refit<'a>(
+    handle: &'a Robj,
+    refit: impl FnOnce() -> std::result::Result<LinearMixedModel, String>,
+) -> std::result::Result<Cow<'a, LinearMixedModel>, String> {
+    match live_lmm(handle) {
+        Some(model) => {
+            HANDLE_HITS.fetch_add(1, AtomicOrdering::Relaxed);
+            Ok(Cow::Borrowed(model))
+        }
+        None => refit().map(Cow::Owned),
+    }
+}
+
+/// GLMM counterpart of [`lmm_or_refit`].
+fn glmm_or_refit<'a>(
+    handle: &'a Robj,
+    refit: impl FnOnce() -> std::result::Result<GeneralizedLinearMixedModel, String>,
+) -> std::result::Result<Cow<'a, GeneralizedLinearMixedModel>, String> {
+    match live_glmm(handle) {
+        Some(model) => {
+            HANDLE_HITS.fetch_add(1, AtomicOrdering::Relaxed);
+            Ok(Cow::Borrowed(model))
+        }
+        None => refit().map(Cow::Owned),
+    }
+}
+
+/// Take the compiled spec out of a spec handle (once). `None` when the
+/// handle is absent, foreign, or already consumed.
+fn take_compiled_spec(handle: &Robj) -> Option<CompiledModelSpec<'static>> {
+    handle_ref::<CompiledSpecSlot>(handle).and_then(|slot| slot.0.borrow_mut().take())
+}
+
+/// The `handle` element of a bridge payload list (NULL when absent).
+fn payload_handle(payload: &Robj) -> Robj {
+    List::try_from(payload)
+        .ok()
+        .and_then(|list| {
+            list.iter()
+                .find(|(name, _)| *name == "handle")
+                .map(|(_, value)| value)
+        })
+        .unwrap_or_else(|| ().into())
+}
+
+/// `TRUE` when `ptr` is a live fitted-model handle created by this bridge
+/// (an LMM or GLMM). `FALSE` for NULL, for an external pointer restored by
+/// `readRDS()` (its address is NULL), and for foreign external pointers.
+///
+/// @noRd
+#[extendr]
+fn mm_handle_alive(ptr: Robj) -> bool {
+    live_lmm(&ptr).is_some() || live_glmm(&ptr).is_some()
+}
+
+/// Number of follow-on bridge computations served from a live fitted-model
+/// handle since the package was loaded (diagnostic; used by the tests).
+///
+/// @noRd
+#[extendr]
+fn mm_handle_hits() -> f64 {
+    HANDLE_HITS.load(AtomicOrdering::Relaxed) as f64
+}
 
 // ---------------------------------------------------------------------------
 // Schema versions
@@ -191,28 +396,67 @@ const KNOWN_SCHEMAS: &[(&str, &str)] = &[
 // ---------------------------------------------------------------------------
 // Interrupt bridge
 //
-// extendr_api 0.9 does not wrap R_CheckUserInterrupt; declare the binding
-// directly. Calling it inside a long-running Rust loop gives R a chance to
-// terminate the call when the user presses Ctrl-C. R_CheckUserInterrupt
-// longjmps out to R's error handler when a pending interrupt is observed,
-// so callers do not need to handle a return value.
-//
-// Phase 0 ships only the bridge primitive plus a tiny demo (`mm_interrupt_demo`).
-// Phase 1+ will use the same hook from inside `lmm()` / `glmm()` fit loops
-// so that long PLS / PIRLS optimizations remain interruptible.
+// R_CheckUserInterrupt() longjmps to R's top level when an interrupt is
+// pending. Calling it directly from Rust would unwind through Rust frames
+// without running destructors (undefined behaviour for Rust, and it leaks
+// the engine state). Instead it is called inside R_ToplevelExec(), which
+// catches the jump and reports it as FALSE: the Rust side only ever sees a
+// boolean, and the engine's progress-callback hook turns it into
+// MixedModelError::Interrupted, which returns through normal `Result`
+// propagation. The R layer re-raises it as a typed `mm_interrupted`
+// condition.
 
 extern "C" {
     fn R_CheckUserInterrupt();
+    fn R_ToplevelExec(
+        fun: Option<unsafe extern "C" fn(*mut std::os::raw::c_void)>,
+        data: *mut std::os::raw::c_void,
+    ) -> std::os::raw::c_int;
 }
 
+unsafe extern "C" fn check_interrupt_trampoline(_data: *mut std::os::raw::c_void) {
+    R_CheckUserInterrupt();
+}
+
+/// `true` when the user has requested an interrupt (Ctrl-C / Esc). Never
+/// longjmps. Must be called from the R main thread (the engine runs the fit
+/// loops on the calling thread).
 #[inline]
-fn check_user_interrupt() {
-    // SAFETY: R_CheckUserInterrupt is a stable, side-effect-only R API
-    // function; the only thing it does on a pending interrupt is
-    // longjmp out, which unwinds the Rust stack on the way to R's
-    // error handler. No locals to drop because we're at a clean
-    // suspension point.
-    unsafe { R_CheckUserInterrupt() };
+fn r_interrupt_pending() -> bool {
+    // SAFETY: R_ToplevelExec runs the trampoline in a fresh top-level
+    // context and returns FALSE (0) if it was exited by a longjmp (the
+    // pending interrupt); no Rust frames are inside that context.
+    unsafe { R_ToplevelExec(Some(check_interrupt_trampoline), std::ptr::null_mut()) == 0 }
+}
+
+const INTERRUPT_MESSAGE: &str = "user interrupt (Ctrl-C)";
+
+/// Engine progress callback that stops the active loop when R has a pending
+/// interrupt. Attached to every fit the bridge starts; refits (bootstrap,
+/// profile, comparison) inherit it.
+///
+/// The callback captures the thread that created it (the R main thread: every
+/// bridge entry point runs there) and is a no-op on any other thread, so an
+/// engine worker thread that inherits it through a model clone can never call
+/// into R. The engine's threaded bootstrap/profile drivers already keep the
+/// callback on the calling thread; this guard makes that a hard invariant.
+fn r_interrupt_callback() -> FitProgressCallback {
+    let r_thread = std::thread::current().id();
+    FitProgressCallback::new(move |_progress| {
+        if std::thread::current().id() != r_thread {
+            return Ok(());
+        }
+        if r_interrupt_pending() {
+            Err(MixedModelError::Interrupted(INTERRUPT_MESSAGE.to_string()))
+        } else {
+            Ok(())
+        }
+    })
+}
+
+/// Error text for a bridge-side interrupt check outside an engine loop.
+fn interrupted_error() -> String {
+    format!("mm_interrupted: Operation interrupted: {INTERRUPT_MESSAGE}")
 }
 
 // ---------------------------------------------------------------------------
@@ -228,10 +472,13 @@ fn check_user_interrupt() {
 ///
 /// @noRd
 #[extendr]
-fn mm_parse_formula(formula: &str) -> std::result::Result<String, String> {
-    parse_formula(formula)
-        .map(|f| format!("{}", f))
-        .map_err(|e| format!("mm_formula_error: {}", e))
+fn mm_parse_formula(formula: &str) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        parse_formula(formula)
+            .map(|f| format!("{}", f))
+            .map_err(|e| format!("mm_formula_error: {}", e))
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Return the package's formula manifest.
@@ -358,19 +605,22 @@ fn mm_formula_manifest() -> List {
 ///
 /// @noRd
 #[extendr]
-fn mm_json_negotiate_one(name: &str, version: &str) -> std::result::Result<bool, String> {
-    for (n, v) in KNOWN_SCHEMAS {
-        if *n == name {
-            if *v == version {
-                return Ok(true);
+fn mm_json_negotiate_one(name: &str, version: &str) -> std::result::Result<bool, MmBridgeError> {
+    (|| -> std::result::Result<bool, String> {
+        for (n, v) in KNOWN_SCHEMAS {
+            if *n == name {
+                if *v == version {
+                    return Ok(true);
+                }
+                return Err(format!(
+                    "mm_schema_error: schema '{}' version mismatch (wrapper expects '{}', got '{}')",
+                    name, v, version
+                ));
             }
-            return Err(format!(
-                "mm_schema_error: schema '{}' version mismatch (wrapper expects '{}', got '{}')",
-                name, v, version
-            ));
         }
-    }
-    Err(format!("mm_schema_error: unknown schema '{}'", name))
+        Err(format!("mm_schema_error: unknown schema '{}'", name))
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Return the closed list of (schema_name, schema_version) the wrapper
@@ -415,22 +665,79 @@ fn mm_compile_model_json(
     categorical_values: List,
     categorical_levels: List,
     categorical_ordered: Strings,
-) -> std::result::Result<String, String> {
-    let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
-    let semantic = compile_formula_ir(&parsed);
-    let df = data::build_dataframe(
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &column_order,
-    )?;
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
+        let semantic = compile_formula_ir(&parsed);
+        let df = data::build_dataframe(
+            &numeric_columns,
+            &categorical_values,
+            &categorical_levels,
+            &categorical_ordered,
+            &column_order,
+        )?;
 
-    let mut artifact = CompiledModelArtifact::new(parsed.to_string(), semantic);
-    artifact.attach_design_audit(&df);
+        let mut artifact = CompiledModelArtifact::new(parsed.to_string(), semantic);
+        artifact.attach_design_audit(&df);
 
-    serde_json::to_string(&artifact)
-        .map_err(|e| format!("mm_schema_error: failed to serialize artifact: {}", e))
+        serde_json::to_string(&artifact)
+            .map_err(|e| format!("mm_schema_error: failed to serialize artifact: {}", e))
+    })()
+    .map_err(MmBridgeError)
+}
+
+/// Compile a model for an immediately following fit (`lmm()` / `glmm()`).
+///
+/// Compiles and audits the formula against the data once through the
+/// engine's `CompiledModelSpec` and returns the pre-fit artifact JSON plus an
+/// external pointer to the owned spec (`list(json = , handle = )`). The fit
+/// entry point consumes the spec, so the model is built without a second
+/// compile/audit or a second data translation. The artifact is the one the
+/// fitted model starts from.
+///
+/// When the engine refuses to compile (e.g. no random-effect term, an
+/// in-formula transform that cannot be evaluated) this falls back to the
+/// `mm_compile_model_json` artifact with `handle = NULL`, so the fit takes the
+/// one-step path and raises the same typed error it always did.
+///
+/// @noRd
+#[extendr]
+fn mm_compile_model_spec(
+    formula: &str,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    categorical_ordered: Strings,
+) -> std::result::Result<Robj, MmBridgeError> {
+    (|| -> std::result::Result<Robj, String> {
+        let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
+        let df = data::build_dataframe(
+            &numeric_columns,
+            &categorical_values,
+            &categorical_levels,
+            &categorical_ordered,
+            &column_order,
+        )?;
+        match CompiledModelSpec::compile(parsed.clone(), &df) {
+            Ok(spec) => {
+                let json = serde_json::to_string(spec.artifact())
+                    .map_err(|e| format!("mm_schema_error: failed to serialize artifact: {}", e))?;
+                let handle =
+                    ExternalPtr::new(CompiledSpecSlot(RefCell::new(Some(spec.into_owned()))));
+                Ok(list!(json = json, handle = handle).into())
+            }
+            Err(_) => {
+                let semantic = compile_formula_ir(&parsed);
+                let mut artifact = CompiledModelArtifact::new(parsed.to_string(), semantic);
+                artifact.attach_design_audit(&df);
+                let json = serde_json::to_string(&artifact)
+                    .map_err(|e| format!("mm_schema_error: failed to serialize artifact: {}", e))?;
+                Ok(list!(json = json, handle = ()).into())
+            }
+        }
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Fit a linear mixed-effects model and return the fit payload JSON.
@@ -453,109 +760,143 @@ fn mm_fit_lmm_json(
     categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
-) -> std::result::Result<String, String> {
-    let _control: Value = serde_json::from_str(control_json)
-        .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
-    let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
-    let df = data::build_dataframe(
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &column_order,
-    )?;
-    let weights = optional_case_weights(&weights, df.nrow())?;
-
-    let mut model = LinearMixedModel::new(parsed, &df, weights.as_deref())
+    #[extendr(default = "NULL")] spec_handle: Robj,
+    #[extendr(default = "FALSE")] keep_handle: bool,
+) -> std::result::Result<Robj, MmBridgeError> {
+    (|| -> std::result::Result<Robj, String> {
+        let _control: Value = serde_json::from_str(control_json)
+            .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
+        // Build from the spec `lmm()` compiled (no second compile/audit, no
+        // data on the wire); without one, compile from the data here.
+        let mut model = match take_compiled_spec(&spec_handle) {
+            Some(spec) => {
+                let weights = optional_case_weights(&weights, spec.nrow())?;
+                LinearMixedModel::from_compiled(spec, weights.as_deref())
+            }
+            None => {
+                let parsed =
+                    parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
+                let df = data::build_dataframe(
+                    &numeric_columns,
+                    &categorical_values,
+                    &categorical_levels,
+                    &categorical_ordered,
+                    &column_order,
+                )?;
+                let weights = optional_case_weights(&weights, df.nrow())?;
+                LinearMixedModel::new(parsed, &df, weights.as_deref())
+            }
+        }
         .map_err(|e| format!("mm_fit_error: failed to construct LMM: {}", e))?;
-    // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval);
-    // default keeps the driver's automatic selection. Applied here and in the
-    // recompute helper so refits (predict/inference) reproduce the same fit.
-    let optimizer_control = parse_optimizer_control(&_control)?;
-    let fit_options = if reml {
-        FitOptions::reml()
-    } else {
-        FitOptions::ml()
-    }
-    .with_optimizer_control(optimizer_control);
-    model
-        .fit_with_options(fit_options)
-        .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
+        // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval);
+        // default keeps the driver's automatic selection. Applied here and in the
+        // recompute helper so refits (predict/inference) reproduce the same fit.
+        let optimizer_control = parse_optimizer_control(&_control)?;
+        let fit_options = if reml {
+            FitOptions::reml()
+        } else {
+            FitOptions::ml()
+        }
+        .with_optimizer_control(optimizer_control)
+        .with_progress_callback(r_interrupt_callback());
+        model
+            .fit_with_options(fit_options)
+            .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
 
-    let artifact_json = serde_json::to_string(model.compiler_artifact()).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize post-fit artifact: {}",
-            e
-        )
-    })?;
-    let artifact_value: Value = serde_json::from_str(&artifact_json).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to inspect post-fit artifact JSON: {}",
-            e
-        )
-    })?;
-    let fit_status = artifact_value
-        .get("optimizer_certificate")
-        .and_then(|x| x.get("status"))
-        .and_then(Value::as_str)
-        .unwrap_or("not_assessed");
-
-    let beta = model.coef();
-    let beta_names = model.coef_names();
-    let std_errors = model.stderror();
-    let fixed_fitted = model.fixed_effect_fitted();
-    let log_likelihood = model.loglikelihood();
-    let dof = model.dof();
-    let nobs = model.nobs();
-    let df_residual = nobs.saturating_sub(dof);
-
-    let opt = model.opt_summary();
-    let fit_summary =
-        serde_json::to_value(FitSummaryPayload::from_linear_model(&model)).map_err(|e| {
+        let artifact_json = serde_json::to_string(model.compiler_artifact()).map_err(|e| {
             format!(
-                "mm_schema_error: failed to serialize fit-summary payload: {}",
+                "mm_schema_error: failed to serialize post-fit artifact: {}",
                 e
             )
         })?;
-    let payload = json!({
-        "schema": {
-            "schema_name": "mixeff.lmm_fit_result",
-            "schema_version": 1
-        },
-        "artifact_json": artifact_json,
-        "formula": model.formula().to_string(),
-        "reml": reml,
-        "beta": beta.iter().copied().collect::<Vec<_>>(),
-        "beta_names": beta_names,
-        "theta": model.theta(),
-        "sigma": model.sigma(),
-        "log_likelihood": log_likelihood,
-        "deviance": -2.0 * log_likelihood,
-        "aic": model.aic(),
-        "bic": model.bic(),
-        "nobs": nobs,
-        "dof": dof,
-        "df_residual": df_residual,
-        "fit_status": fit_status,
-        "std_errors": std_errors.iter().copied().collect::<Vec<_>>(),
-        "fixed_fitted": fixed_fitted.iter().copied().collect::<Vec<_>>(),
-        "fitted": model.fitted().iter().copied().collect::<Vec<_>>(),
-        "residuals": model.residuals().iter().copied().collect::<Vec<_>>(),
-        "ranef": random_effects_json(&model),
-        "varcorr": varcorr_json(&model),
-        "fit_summary": fit_summary,
-        "optimizer": {
-            "backend": opt.backend_name(),
-            "algorithm": opt.optimizer_name(),
-            "return_value": opt.return_value.as_str(),
-            "function_evaluations": opt.feval,
-            "objective": opt.fmin,
-            "reml": opt.reml
-        }
-    });
+        let artifact_value: Value = serde_json::from_str(&artifact_json).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to inspect post-fit artifact JSON: {}",
+                e
+            )
+        })?;
+        let fit_status = artifact_value
+            .get("optimizer_certificate")
+            .and_then(|x| x.get("status"))
+            .and_then(Value::as_str)
+            .unwrap_or("not_assessed");
 
-    serde_json::to_string(&payload)
-        .map_err(|e| format!("mm_schema_error: failed to serialize fit result: {}", e))
+        let beta = model.coef();
+        let beta_names = model.coef_names();
+        let std_errors = model.stderror();
+        let fixed_fitted = model.fixed_effect_fitted();
+        let log_likelihood = model.loglikelihood();
+        let dof = model.dof();
+        let nobs = model.nobs();
+        let df_residual = nobs.saturating_sub(dof);
+
+        let opt = model.opt_summary();
+        let fit_summary = serde_json::to_value(FitSummaryPayload::from_linear_model(&model))
+            .map_err(|e| {
+                format!(
+                    "mm_schema_error: failed to serialize fit-summary payload: {}",
+                    e
+                )
+            })?;
+        let payload = json!({
+            "schema": {
+                "schema_name": "mixeff.lmm_fit_result",
+                "schema_version": 1
+            },
+            "artifact_json": artifact_json,
+            "formula": model.formula().to_string(),
+            "reml": reml,
+            "beta": beta.iter().copied().collect::<Vec<_>>(),
+            "beta_names": beta_names,
+            // Columns pivoted out for rank deficiency (R's rule: the earlier of two
+            // collinear columns is kept); `beta` carries 0 for them.
+            "dropped_coef_names": model.dropped_coef_names(),
+            "theta": model.theta(),
+            "sigma": model.sigma(),
+            "log_likelihood": log_likelihood,
+            "deviance": -2.0 * log_likelihood,
+            "aic": model.aic(),
+            "bic": model.bic(),
+            "nobs": nobs,
+            "dof": dof,
+            "df_residual": df_residual,
+            "fit_status": fit_status,
+            "std_errors": std_errors.iter().copied().collect::<Vec<_>>(),
+            "ranef": random_effects_json(&model),
+            "varcorr": varcorr_json(&model),
+            "fit_summary": fit_summary,
+            "optimizer": {
+                "backend": opt.backend_name(),
+                "algorithm": opt.optimizer_name(),
+                "return_value": opt.return_value.as_str(),
+                "function_evaluations": opt.feval,
+                "objective": opt.fmin,
+                "reml": opt.reml
+            }
+        });
+
+        let json = serde_json::to_string(&payload)
+            .map_err(|e| format!("mm_schema_error: failed to serialize fit result: {}", e))?;
+        // The n-length vectors cross as R doubles, not JSON text: formatting and
+        // re-parsing them dominated the bridge cost on large data.
+        let fixed_fitted = Doubles::from_values(fixed_fitted.iter().copied());
+        let fitted = Doubles::from_values(model.fitted().iter().copied());
+        let residuals = Doubles::from_values(model.residuals().iter().copied());
+        let handle: Robj = if keep_handle {
+            ExternalPtr::new(FittedLmmHandle(model)).into()
+        } else {
+            ().into()
+        };
+        Ok(list!(
+            json = json,
+            fixed_fitted = fixed_fitted,
+            fitted = fitted,
+            residuals = residuals,
+            handle = handle
+        )
+        .into())
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Fit a generalized linear mixed-effects model and return the fit payload JSON.
@@ -583,132 +924,168 @@ fn mm_fit_glmm_json(
     weights: Doubles,
     offset: Doubles,
     control_json: &str,
-) -> std::result::Result<String, String> {
-    let _control: Value = serde_json::from_str(control_json)
-        .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
-    let parsed = parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?;
-    let df = data::build_dataframe(
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &column_order,
-    )?;
-    let family_spec = glmm_family(family)?;
-    let family = family_spec.0;
-    let link = glmm_link(link)?;
-    let (fast, method_label) = glmm_method(method, n_agq)?;
-    let n_agq = usize::try_from(n_agq)
-        .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
+    #[extendr(default = "NULL")] spec_handle: Robj,
+    #[extendr(default = "FALSE")] keep_handle: bool,
+) -> std::result::Result<Robj, MmBridgeError> {
+    (|| -> std::result::Result<Robj, String> {
+        let _control: Value = serde_json::from_str(control_json)
+            .map_err(|e| format!("mm_fit_error: invalid control JSON: {}", e))?;
+        // Build from the spec `glmm()` compiled when there is one (no second
+        // compile/audit, no data on the wire); otherwise from the data.
+        let compiled = take_compiled_spec(&spec_handle);
+        let df = match compiled {
+            Some(_) => None,
+            None => Some(data::build_dataframe(
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &column_order,
+            )?),
+        };
+        let source = match (compiled, df.as_ref()) {
+            (Some(spec), _) => GlmmSource::Compiled(spec),
+            (None, Some(df)) => GlmmSource::Raw(
+                parse_formula(formula).map_err(|e| format!("mm_formula_error: {}", e))?,
+                df,
+            ),
+            (None, None) => unreachable!("a data frame is built whenever no spec is supplied"),
+        };
+        let nrow = source.nrow();
+        let family_spec = glmm_family(family)?;
+        let family = family_spec.0;
+        let link = glmm_link(link)?;
+        let (fast, method_label) = glmm_method(method, n_agq)?;
+        let n_agq = usize::try_from(n_agq)
+            .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
 
-    // Prior weights (e.g. binomial trial counts) and a fixed linear-predictor
-    // offset are both supported by the engine (empty Doubles => None); the
-    // builder also carries the negative-binomial theta modes.
-    let weights = optional_case_weights(&weights, df.nrow())?;
-    let offset = optional_offset(&offset, df.nrow())?;
-    let mut model = build_glmm_model(parsed, &df, family_spec, link, weights, offset)?;
+        // Prior weights (e.g. binomial trial counts) and a fixed linear-predictor
+        // offset are both supported by the engine (empty Doubles => None); the
+        // builder also carries the negative-binomial theta modes.
+        let weights = optional_case_weights(&weights, nrow)?;
+        let offset = optional_offset(&offset, nrow)?;
+        let mut model = build_glmm_model(source, family_spec, link, weights, offset)?;
+        apply_glmm_dispersion_control(&mut model, &_control)?;
 
-    // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval)
-    // route through the GLMM optimizer-control surface; absent fields keep the
-    // driver's automatic selection. max_feval still caps the joint path's
-    // otherwise engine-chosen budget, now via OptimizerControl rather than a
-    // direct optsum poke.
-    let optimizer_control = parse_optimizer_control(&_control)?;
-    let glmm_options = if fast {
-        GlmmFitOptions::fast_laplace()
-    } else {
-        GlmmFitOptions::joint_laplace()
-    }
-    .with_n_agq(n_agq)
-    .with_verbose(false)
-    .with_optimizer_control(optimizer_control);
-    model
-        .fit_with_glmm_options(glmm_options)
-        .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
+        // Caller optimizer controls (mm_control optimizer/tolerance/start/max_feval)
+        // route through the GLMM optimizer-control surface; absent fields keep the
+        // driver's automatic selection. max_feval still caps the joint path's
+        // otherwise engine-chosen budget, now via OptimizerControl rather than a
+        // direct optsum poke.
+        let optimizer_control = parse_optimizer_control(&_control)?;
+        let glmm_options = if fast {
+            GlmmFitOptions::fast_laplace()
+        } else {
+            GlmmFitOptions::joint_laplace()
+        }
+        .with_n_agq(n_agq)
+        .with_verbose(false)
+        .with_optimizer_control(optimizer_control)
+        .with_progress_callback(r_interrupt_callback());
+        model
+            .fit_with_glmm_options(glmm_options)
+            .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
 
-    let artifact_json = serde_json::to_string(model.compiler_artifact()).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize GLMM post-fit artifact: {}",
-            e
-        )
-    })?;
-    let artifact_value: Value = serde_json::from_str(&artifact_json).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to inspect GLMM post-fit artifact JSON: {}",
-            e
-        )
-    })?;
-    let fit_status = artifact_value
-        .get("optimizer_certificate")
-        .and_then(|x| x.get("status"))
-        .and_then(Value::as_str)
-        .unwrap_or("not_assessed");
+        let artifact_json = serde_json::to_string(model.compiler_artifact()).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize GLMM post-fit artifact: {}",
+                e
+            )
+        })?;
+        let artifact_value: Value = serde_json::from_str(&artifact_json).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to inspect GLMM post-fit artifact JSON: {}",
+                e
+            )
+        })?;
+        let fit_status = artifact_value
+            .get("optimizer_certificate")
+            .and_then(|x| x.get("status"))
+            .and_then(Value::as_str)
+            .unwrap_or("not_assessed");
 
-    let beta = model.coef();
-    let beta_names = model.coef_names();
-    let std_errors = model.stderror();
-    let log_likelihood = model.loglikelihood();
-    let dof = model.dof();
-    let nobs = model.nobs();
-    let df_residual = nobs.saturating_sub(dof);
-    let opt = model.opt_summary();
-    let fit_summary = serde_json::to_value(FitSummaryPayload::from_generalized_model(&model))
-        .map_err(|e| {
+        let beta = model.coef();
+        let beta_names = model.coef_names();
+        let std_errors = model.stderror();
+        let log_likelihood = model.loglikelihood();
+        let dof = model.dof();
+        let nobs = model.nobs();
+        let df_residual = nobs.saturating_sub(dof);
+        let opt = model.opt_summary();
+        let fit_summary = serde_json::to_value(FitSummaryPayload::from_generalized_model(&model))
+            .map_err(|e| {
             format!(
                 "mm_schema_error: failed to serialize GLMM fit-summary payload: {}",
                 e
             )
         })?;
 
-    let payload = json!({
-        "schema": {
-            "schema_name": "mixeff.glmm_fit_result",
-            "schema_version": 1
-        },
-        "artifact_json": artifact_json,
-        "formula": model.formula_label().unwrap_or_else(|| formula.to_string()),
-        "family": glmm_family_label(family),
-        "link": glmm_link_label(link),
-        "method": method_label,
-        "n_agq": n_agq,
-        // NB2 size parameter: the fitted (or fixed) theta and whether it was
-        // estimated glmer.nb-style. Null for non-negative-binomial families.
-        "nb_theta": model.negative_binomial_theta(),
-        "nb_theta_estimated": model.negative_binomial_theta_estimated(),
-        "beta": beta.iter().copied().collect::<Vec<_>>(),
-        "beta_names": beta_names,
-        "theta": model.theta(),
-        "dispersion": model.dispersion(false),
-        "log_likelihood": log_likelihood,
-        "deviance": -2.0 * log_likelihood,
-        "aic": model.aic(),
-        "bic": model.bic(),
-        "nobs": nobs,
-        "dof": dof,
-        "df_residual": df_residual,
-        "fit_status": fit_status,
-        "std_errors": std_errors.iter().copied().collect::<Vec<_>>(),
-        "fitted": model.fitted().iter().copied().collect::<Vec<_>>(),
-        "residuals": model.residuals().iter().copied().collect::<Vec<_>>(),
-        "ranef": random_effects_json_glmm(&model),
-        "varcorr": varcorr_json_glmm(&model),
-        "fit_summary": fit_summary,
-        "optimizer": {
-            "backend": opt.backend_name(),
-            "algorithm": opt.optimizer_name(),
-            "return_value": opt.return_value.as_str(),
-            "function_evaluations": opt.feval,
-            "objective": opt.fmin,
-            "reml": opt.reml
-        }
-    });
+        let payload = json!({
+            "schema": {
+                "schema_name": "mixeff.glmm_fit_result",
+                "schema_version": 1
+            },
+            "artifact_json": artifact_json,
+            "formula": model.formula_label().unwrap_or_else(|| formula.to_string()),
+            "family": glmm_family_label(family),
+            "link": glmm_link_label(link),
+            "method": method_label,
+            "n_agq": n_agq,
+            // NB2 size parameter: the fitted (or fixed) theta and whether it was
+            // estimated glmer.nb-style. Null for non-negative-binomial families.
+            "nb_theta": model.negative_binomial_theta(),
+            "nb_theta_estimated": model.negative_binomial_theta_estimated(),
+            "beta": beta.iter().copied().collect::<Vec<_>>(),
+            "beta_names": beta_names,
+            // Columns pivoted out for rank deficiency (R's rule: the earlier of two
+            // collinear columns is kept); `beta` carries 0 for them.
+            "dropped_coef_names": model.dropped_coef_names(),
+            "theta": model.theta(),
+            "dispersion": model.dispersion(false),
+            "log_likelihood": log_likelihood,
+            "deviance": -2.0 * log_likelihood,
+            "aic": model.aic(),
+            "bic": model.bic(),
+            "nobs": nobs,
+            "dof": dof,
+            "df_residual": df_residual,
+            "fit_status": fit_status,
+            "std_errors": std_errors.iter().copied().collect::<Vec<_>>(),
+            "ranef": random_effects_json_glmm(&model),
+            "varcorr": varcorr_json_glmm(&model),
+            "fit_summary": fit_summary,
+            "optimizer": {
+                "backend": opt.backend_name(),
+                "algorithm": opt.optimizer_name(),
+                "return_value": opt.return_value.as_str(),
+                "function_evaluations": opt.feval,
+                "objective": opt.fmin,
+                "reml": opt.reml
+            }
+        });
 
-    serde_json::to_string(&payload).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize GLMM fit result: {}",
-            e
+        let json = serde_json::to_string(&payload).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize GLMM fit result: {}",
+                e
+            )
+        })?;
+        let fitted = Doubles::from_values(model.fitted().iter().copied());
+        let residuals = Doubles::from_values(model.residuals().iter().copied());
+        let handle: Robj = if keep_handle {
+            ExternalPtr::new(FittedGlmmHandle(model)).into()
+        } else {
+            ().into()
+        };
+        Ok(list!(
+            json = json,
+            fitted = fitted,
+            residuals = residuals,
+            handle = handle
         )
-    })
+        .into())
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Evaluate fixed-effect contrast rows through the Rust inference contract.
@@ -731,23 +1108,104 @@ fn mm_fixed_effect_contrast_json(
     labels: Strings,
     rhs: Doubles,
     method: &str,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
-    let method = fixed_effect_test_method(method)?;
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
+        let method = fixed_effect_test_method(method)?;
 
-    serde_json::to_string(&model.fixed_effect_contrast_inference_table(hypotheses, method))
-        .map_err(|e| format!("mm_schema_error: failed to serialize contrast table: {}", e))
+        serde_json::to_string(&model.fixed_effect_contrast_inference_table(hypotheses, method))
+            .map_err(|e| format!("mm_schema_error: failed to serialize contrast table: {}", e))
+    })()
+    .map_err(MmBridgeError)
+}
+
+/// Evaluate ONE joint fixed-effect hypothesis `L beta = rhs` (all rows of
+/// `L` together, an F test for Satterthwaite / Kenward-Roger) through the
+/// Rust inference contract. Used for KRmodcomp-style nested model
+/// comparison. Returns a fixed-effect inference table with a single term row.
+///
+/// @noRd
+#[extendr]
+fn mm_fixed_effect_joint_test_json(
+    formula: &str,
+    reml: bool,
+    column_order: Strings,
+    numeric_columns: List,
+    categorical_values: List,
+    categorical_levels: List,
+    categorical_ordered: Strings,
+    weights: Doubles,
+    control_json: &str,
+    l_values: Doubles,
+    nrow: i32,
+    ncol: i32,
+    label: &str,
+    rhs: Doubles,
+    method: &str,
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let nrow = usize::try_from(nrow)
+            .map_err(|_| "mm_inference_unavailable: contrast row count must be non-negative")?;
+        let ncol = usize::try_from(ncol)
+            .map_err(|_| "mm_inference_unavailable: contrast column count must be non-negative")?;
+        let l_values = l_values.iter().map(|value| value.0).collect::<Vec<_>>();
+        let rhs = rhs.iter().map(|value| value.0).collect::<Vec<_>>();
+        if nrow == 0 || l_values.len() != nrow * ncol || rhs.len() != nrow {
+            return Err(format!(
+                "mm_inference_unavailable: joint contrast has {} value(s) and {} rhs value(s), expected {} and {nrow}",
+                l_values.len(),
+                rhs.len(),
+                nrow * ncol
+            ));
+        }
+        let l = ContrastMatrix::new(DMatrix::from_row_slice(nrow, ncol, &l_values))
+            .map_err(|e| format!("mm_inference_unavailable: {e}"))?;
+        let rhs = ContrastRhs::new(DVector::from_row_slice(&rhs))
+            .map_err(|e| format!("mm_inference_unavailable: {e}"))?;
+        let hypothesis = FixedEffectHypothesis::new(label.to_string(), l, rhs)
+            .map_err(|e| format!("mm_inference_unavailable: {e}"))?;
+        let method = fixed_effect_test_method(method)?;
+        let row = model.fixed_effect_contrast_inference_row(
+            FixedEffectInferenceRowKind::Term,
+            hypothesis,
+            method,
+        );
+        serde_json::to_string(&FixedEffectInferenceTable::new(vec![row])).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize joint test table: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Evaluate fixed-effect-null bootstrap contrast rows through Rust.
@@ -770,28 +1228,36 @@ fn mm_fixed_effect_bootstrap_contrast_json(
     labels: Strings,
     rhs: Doubles,
     bootstrap_options_json: &str,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
-    let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
+        let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
 
-    serde_json::to_string(&model.fixed_effect_null_bootstrap_inference_table(hypotheses, options))
+        serde_json::to_string(
+            &model.fixed_effect_null_bootstrap_inference_table(hypotheses, options),
+        )
         .map_err(|e| {
             format!(
                 "mm_schema_error: failed to serialize bootstrap contrast table: {}",
                 e
             )
         })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Evaluate a full-model bootstrap contrast payload for fixed-effect
@@ -818,121 +1284,135 @@ fn mm_full_model_bootstrap_contrast_json(
     rhs: Doubles,
     bootstrap_options_json: &str,
     levels: Doubles,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let mut hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
-    if hypotheses.len() != 1 {
-        return Err(
-            "mm_inference_unavailable: full-model bootstrap intervals are currently certified only for scalar contrasts"
-                .to_string(),
-        );
-    }
-    let hypothesis = hypotheses.remove(0);
-    let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
-    let level_values: Vec<f64> = levels.iter().map(|v| v.0).collect();
-
-    // Single-row contrast: extract L row and observed contrast estimate (L * beta).
-    let l_row: Vec<f64> = hypothesis.l.values.row(0).iter().copied().collect();
-    let contrast_label = hypothesis.label.clone();
-    let beta_observed = model.beta();
-    let observed_estimate: f64 = l_row
-        .iter()
-        .zip(beta_observed.iter())
-        .map(|(l, b)| l * b)
-        .sum();
-
-    let (mut rng, seed_record) = make_bootstrap_rng(options.seed);
-    let bsamp = parametricbootstrap(&mut rng, options.requested_replicates, &model);
-
-    // Contrast statistic per replicate: L * beta_b.
-    let replicate_stats: Vec<f64> = bsamp
-        .fits
-        .iter()
-        .map(|fit| {
-            if fit.beta.iter().any(|x| !x.is_finite()) {
-                f64::NAN
-            } else {
-                l_row.iter().zip(fit.beta.iter()).map(|(l, b)| l * b).sum()
-            }
-        })
-        .collect();
-    let mut finite_stats: Vec<f64> = replicate_stats
-        .iter()
-        .copied()
-        .filter(|v| v.is_finite())
-        .collect();
-    if finite_stats.is_empty() {
-        return Err(
-            "mm_inference_unavailable: bootstrap produced no finite contrast statistics"
-                .to_string(),
-        );
-    }
-    finite_stats.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let n_finite = finite_stats.len();
-
-    let mut intervals = Vec::with_capacity(level_values.len() * 2);
-    for &level in &level_values {
-        if !(0.0 < level && level < 1.0) {
-            return Err(format!(
-                "mm_inference_unavailable: bootstrap level must be in (0, 1); got {level}"
-            ));
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let mut hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
+        if hypotheses.len() != 1 {
+            return Err(
+                "mm_inference_unavailable: full-model bootstrap intervals are currently certified only for scalar contrasts"
+                    .to_string(),
+            );
         }
-        let alpha = (1.0 - level) / 2.0;
-        let lower_q = quantile_sorted(&finite_stats, alpha);
-        let upper_q = quantile_sorted(&finite_stats, 1.0 - alpha);
-        intervals.push(json!({
-            "method": "percentile",
-            "level": level,
-            "lower": lower_q,
-            "upper": upper_q,
-            "n": n_finite,
-        }));
-        intervals.push(json!({
-            "method": "basic",
-            "level": level,
-            "lower": 2.0 * observed_estimate - upper_q,
-            "upper": 2.0 * observed_estimate - lower_q,
-            "n": n_finite,
-        }));
-    }
+        let hypothesis = hypotheses.remove(0);
+        let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
+        let level_values: Vec<f64> = levels.iter().map(|v| v.0).collect();
 
-    let refit_options = BootstrapRefitOptions::from_model(&model);
-    let metadata = bsamp.run_metadata_for_model(
-        &model,
-        BootstrapTarget::full_model_distribution(format!("contrast: {}", contrast_label)),
-        options.requested_replicates,
-        options.failed_refit_policy,
-        seed_record,
-        refit_options,
-        Some(format!("contrast: {}", contrast_label)),
-        Some(&replicate_stats),
-        None,
-    );
+        // Single-row contrast: extract L row and observed contrast estimate (L * beta).
+        let l_row: Vec<f64> = hypothesis.l.values.row(0).iter().copied().collect();
+        let contrast_label = hypothesis.label.clone();
+        let beta_observed = model.beta();
+        let observed_estimate: f64 = l_row
+            .iter()
+            .zip(beta_observed.iter())
+            .map(|(l, b)| l * b)
+            .sum();
 
-    let payload = json!({
-        "intervals": intervals,
-        "metadata": metadata,
-        "replicate_statistics": replicate_stats,
-        "observed_estimate": observed_estimate,
-        "contrast_label": contrast_label,
-    });
-
-    serde_json::to_string(&payload).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize full-model bootstrap contrast payload: {}",
-            e
+        let (mut rng, seed_record) = make_bootstrap_rng(options.seed);
+        let bsamp = parametricbootstrap_with_options(
+            &mut rng,
+            options.requested_replicates,
+            &model,
+            &BootstrapExecutionOptions {
+                threads: options.threads,
+            },
         )
-    })
+        .map_err(|e| engine_run_error("parametric bootstrap", e))?;
+
+        // Contrast statistic per replicate: L * beta_b.
+        let replicate_stats: Vec<f64> = bsamp
+            .fits
+            .iter()
+            .map(|fit| {
+                if fit.beta.iter().any(|x| !x.is_finite()) {
+                    f64::NAN
+                } else {
+                    l_row.iter().zip(fit.beta.iter()).map(|(l, b)| l * b).sum()
+                }
+            })
+            .collect();
+        let mut finite_stats: Vec<f64> = replicate_stats
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .collect();
+        if finite_stats.is_empty() {
+            return Err(
+                "mm_inference_unavailable: bootstrap produced no finite contrast statistics"
+                    .to_string(),
+            );
+        }
+        finite_stats.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let n_finite = finite_stats.len();
+
+        let mut intervals = Vec::with_capacity(level_values.len() * 2);
+        for &level in &level_values {
+            if !(0.0 < level && level < 1.0) {
+                return Err(format!(
+                    "mm_inference_unavailable: bootstrap level must be in (0, 1); got {level}"
+                ));
+            }
+            let alpha = (1.0 - level) / 2.0;
+            let lower_q = quantile_sorted(&finite_stats, alpha);
+            let upper_q = quantile_sorted(&finite_stats, 1.0 - alpha);
+            intervals.push(json!({
+                "method": "percentile",
+                "level": level,
+                "lower": lower_q,
+                "upper": upper_q,
+                "n": n_finite,
+            }));
+            intervals.push(json!({
+                "method": "basic",
+                "level": level,
+                "lower": 2.0 * observed_estimate - upper_q,
+                "upper": 2.0 * observed_estimate - lower_q,
+                "n": n_finite,
+            }));
+        }
+
+        let refit_options = BootstrapRefitOptions::from_model(&model);
+        let metadata = bsamp.run_metadata_for_model(
+            &model,
+            BootstrapTarget::full_model_distribution(format!("contrast: {}", contrast_label)),
+            options.requested_replicates,
+            options.failed_refit_policy,
+            seed_record,
+            refit_options,
+            Some(format!("contrast: {}", contrast_label)),
+            Some(&replicate_stats),
+            None,
+        );
+
+        let payload = json!({
+            "intervals": intervals,
+            "metadata": metadata,
+            "replicate_statistics": replicate_stats,
+            "observed_estimate": observed_estimate,
+            "contrast_label": contrast_label,
+        });
+
+        serde_json::to_string(&payload).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize full-model bootstrap contrast payload: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Evaluate a fixed-effect-null bootstrap *term* row (joint Wald/F over an
@@ -960,64 +1440,70 @@ fn mm_fixed_effect_bootstrap_term_json(
     label: &str,
     rhs: Doubles,
     bootstrap_options_json: &str,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let nrow_us = usize::try_from(nrow)
-        .map_err(|_| "mm_inference_unavailable: contrast row count must be non-negative")?;
-    let ncol_us = usize::try_from(ncol)
-        .map_err(|_| "mm_inference_unavailable: contrast column count must be non-negative")?;
-    let l_vec = l_values.iter().map(|v| v.0).collect::<Vec<_>>();
-    let rhs_vec = rhs.iter().map(|v| v.0).collect::<Vec<_>>();
-    if l_vec.len() != nrow_us * ncol_us {
-        return Err(format!(
-            "mm_inference_unavailable: term contrast has {} value(s), expected {}",
-            l_vec.len(),
-            nrow_us * ncol_us
-        ));
-    }
-    if rhs_vec.len() != nrow_us {
-        return Err(format!(
-            "mm_inference_unavailable: term contrast rhs has length {}, expected {}",
-            rhs_vec.len(),
-            nrow_us
-        ));
-    }
-    let l_matrix = DMatrix::from_row_slice(nrow_us, ncol_us, &l_vec);
-    let contrast = ContrastMatrix::new(l_matrix)
-        .map_err(|e| format!("mm_inference_unavailable: invalid contrast matrix: {}", e))?;
-    let rhs_struct = ContrastRhs::new(DVector::from_vec(rhs_vec))
-        .map_err(|e| format!("mm_inference_unavailable: invalid rhs: {}", e))?;
-    let hypothesis =
-        FixedEffectHypothesis::new(label.to_string(), contrast, rhs_struct).map_err(|e| {
-            format!(
-                "mm_inference_unavailable: invalid term hypothesis '{}': {}",
-                label, e
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
             )
         })?;
-    let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
+        let nrow_us = usize::try_from(nrow)
+            .map_err(|_| "mm_inference_unavailable: contrast row count must be non-negative")?;
+        let ncol_us = usize::try_from(ncol)
+            .map_err(|_| "mm_inference_unavailable: contrast column count must be non-negative")?;
+        let l_vec = l_values.iter().map(|v| v.0).collect::<Vec<_>>();
+        let rhs_vec = rhs.iter().map(|v| v.0).collect::<Vec<_>>();
+        if l_vec.len() != nrow_us * ncol_us {
+            return Err(format!(
+                "mm_inference_unavailable: term contrast has {} value(s), expected {}",
+                l_vec.len(),
+                nrow_us * ncol_us
+            ));
+        }
+        if rhs_vec.len() != nrow_us {
+            return Err(format!(
+                "mm_inference_unavailable: term contrast rhs has length {}, expected {}",
+                rhs_vec.len(),
+                nrow_us
+            ));
+        }
+        let l_matrix = DMatrix::from_row_slice(nrow_us, ncol_us, &l_vec);
+        let contrast = ContrastMatrix::new(l_matrix)
+            .map_err(|e| format!("mm_inference_unavailable: invalid contrast matrix: {}", e))?;
+        let rhs_struct = ContrastRhs::new(DVector::from_vec(rhs_vec))
+            .map_err(|e| format!("mm_inference_unavailable: invalid rhs: {}", e))?;
+        let hypothesis = FixedEffectHypothesis::new(label.to_string(), contrast, rhs_struct)
+            .map_err(|e| {
+                format!(
+                    "mm_inference_unavailable: invalid term hypothesis '{}': {}",
+                    label, e
+                )
+            })?;
+        let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
 
-    let row = model.fixed_effect_null_bootstrap_inference_row(
-        FixedEffectInferenceRowKind::Term,
-        hypothesis,
-        &options,
-    );
-    let table = FixedEffectInferenceTable::new(vec![row]);
-    serde_json::to_string(&table).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize bootstrap term table: {}",
-            e
-        )
-    })
+        let row = model.fixed_effect_null_bootstrap_inference_row(
+            FixedEffectInferenceRowKind::Term,
+            hypothesis,
+            &options,
+        );
+        let table = FixedEffectInferenceTable::new(vec![row]);
+        serde_json::to_string(&table).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize bootstrap term table: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Evaluate fixed-effect term rows through Rust-owned term hypotheses.
@@ -1036,23 +1522,31 @@ fn mm_fixed_effect_term_json(
     control_json: &str,
     method: &str,
     term_test_type: &str,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let method = fixed_effect_test_method(method)?;
-    let term_test_type = fixed_effect_term_test_type(term_test_type)?;
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let method = fixed_effect_test_method(method)?;
+        let term_test_type = fixed_effect_term_test_type(term_test_type)?;
 
-    serde_json::to_string(&model.fixed_effect_term_inference_table_for_type(method, term_test_type))
+        serde_json::to_string(
+            &model.fixed_effect_term_inference_table_for_type(method, term_test_type),
+        )
         .map_err(|e| format!("mm_schema_error: failed to serialize term table: {}", e))
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Run a parametric bootstrap likelihood-ratio test between two LMMs fitted
@@ -1072,135 +1566,157 @@ fn mm_bootstrap_lrt_json(
     weights: Doubles,
     control_json: &str,
     bootstrap_options_json: &str,
-) -> std::result::Result<String, String> {
-    let reduced = fit_lmm_from_bridge_data(
-        reduced_formula,
-        false,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let alternative = fit_lmm_from_bridge_data(
-        alternative_formula,
-        false,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
+    #[extendr(default = "NULL")] alternative_handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let reduced = fit_lmm_from_bridge_data(
+            reduced_formula,
+            false,
+            &column_order,
+            &numeric_columns,
+            &categorical_values,
+            &categorical_levels,
+            &categorical_ordered,
+            &weights,
+            control_json,
+        )?;
+        // The alternative is the caller's ML fit: reuse its live model when
+        // the handle is alive (the R side only passes it for an ML fit).
+        let alternative = lmm_or_refit(&alternative_handle, || {
+            fit_lmm_from_bridge_data(
+                alternative_formula,
+                false,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let options = fixed_effect_bootstrap_options(bootstrap_options_json)?;
 
-    let observed_logl_red = reduced.loglikelihood();
-    let observed_logl_alt = alternative.loglikelihood();
-    let observed_lrt = 2.0 * (observed_logl_alt - observed_logl_red);
-    if !observed_lrt.is_finite() {
-        return Err("mm_inference_unavailable: observed LRT statistic is not finite".to_string());
-    }
-
-    let (mut rng, seed_record) = make_bootstrap_rng(options.seed);
-
-    // Custom bootstrap loop: simulate from the reduced (null) model, refit
-    // both reduced and alternative on the simulated response, record the LRT.
-    // We still build a MixedModelBootstrap recording the *reduced* refit
-    // history so the existing run_metadata_for_model() telemetry path stays
-    // intact (boundary counts, failed-refits, mcse).
-    let mut fits: Vec<BootstrapReplicate> = Vec::with_capacity(options.requested_replicates);
-    let mut replicate_stats: Vec<f64> = Vec::with_capacity(options.requested_replicates);
-
-    for _ in 0..options.requested_replicates {
-        let y_sim = reduced.simulate(&mut rng);
-        let mut work_red = reduced.clone();
-        let mut work_alt = alternative.clone();
-        let refit_red = work_red.refit(y_sim.as_slice());
-        let refit_alt = work_alt.refit(y_sim.as_slice());
-
-        let stat = match (&refit_red, &refit_alt) {
-            (Ok(()), Ok(())) => {
-                let s = 2.0 * (work_alt.loglikelihood() - work_red.loglikelihood());
-                if s.is_finite() {
-                    s
-                } else {
-                    f64::NAN
-                }
-            }
-            _ => f64::NAN,
-        };
-        replicate_stats.push(stat);
-
-        let beta = work_red.beta();
-        if refit_red.is_ok() {
-            fits.push(BootstrapReplicate {
-                objective: work_red.objective(),
-                sigma: work_red.sigma(),
-                beta,
-                se: work_red.stderror(),
-                theta: work_red.theta(),
-            });
-        } else {
-            let n_beta = beta.len();
-            fits.push(BootstrapReplicate {
-                objective: f64::NAN,
-                sigma: f64::NAN,
-                se: DVector::from_element(n_beta, f64::NAN),
-                beta,
-                theta: work_red.theta(),
-            });
+        let observed_logl_red = reduced.loglikelihood();
+        let observed_logl_alt = alternative.loglikelihood();
+        let observed_lrt = 2.0 * (observed_logl_alt - observed_logl_red);
+        if !observed_lrt.is_finite() {
+            return Err(
+                "mm_inference_unavailable: observed LRT statistic is not finite".to_string(),
+            );
         }
-    }
 
-    let bsamp = MixedModelBootstrap { fits };
-    let successful: usize = replicate_stats.iter().filter(|v| v.is_finite()).count();
-    let p_value = if successful > 0 {
-        let count_ge = replicate_stats
-            .iter()
-            .filter(|v| v.is_finite() && **v >= observed_lrt)
-            .count();
-        // (b + 1) / (n + 1): the standard Monte-Carlo p-value (Davison &
-        // Hinkley), matching upstream stats::parametric_bootstrap_lrt and the
-        // contrast() bootstrap route. Never returns an exact 0 from a finite
-        // replicate count.
-        Some(((count_ge + 1) as f64) / ((successful + 1) as f64))
-    } else {
-        None
-    };
-    let mcse = p_value.map(|p| (p * (1.0 - p) / successful as f64).sqrt());
+        let (mut rng, seed_record) = make_bootstrap_rng(options.seed);
 
-    let refit_options = BootstrapRefitOptions::from_model(&reduced);
-    let metadata = bsamp.run_metadata_for_model(
-        &reduced,
-        BootstrapTarget::fixed_effect_null(
-            "bootstrap likelihood-ratio test",
-            "alternative vs. reduced",
-        ),
-        options.requested_replicates,
-        options.failed_refit_policy,
-        seed_record,
-        refit_options,
-        Some("lrt_chi_square".to_string()),
-        Some(&replicate_stats),
-        p_value,
-    );
+        // Custom bootstrap loop: simulate from the reduced (null) model, refit
+        // both reduced and alternative on the simulated response, record the LRT.
+        // We still build a MixedModelBootstrap recording the *reduced* refit
+        // history so the existing run_metadata_for_model() telemetry path stays
+        // intact (boundary counts, failed-refits, mcse).
+        // Responses are simulated serially on this thread in the serial RNG
+        // order (refits never draw from `rng`), then each replicate refits
+        // fresh clones of both templates -- independently, so the replicates
+        // are identical for every `threads` value.
+        let n_rep = options.requested_replicates;
+        let mut y_sims: Vec<DVector<f64>> = Vec::with_capacity(n_rep);
+        for _ in 0..n_rep {
+            y_sims.push(reduced.simulate(&mut rng));
+        }
+        let one_replicate = |y_sim: &DVector<f64>| -> (f64, BootstrapReplicate) {
+            let mut work_red = reduced.clone();
+            let mut work_alt = LinearMixedModel::clone(&alternative);
+            let refit_red = work_red.refit(y_sim.as_slice());
+            let refit_alt = work_alt.refit(y_sim.as_slice());
 
-    let payload = json!({
-        "observed_statistic": observed_lrt,
-        "p_value": p_value,
-        "mcse": mcse,
-        "notes": metadata.notes,
-        "payload": {
-            "metadata": metadata,
-            "replicate_statistics": replicate_stats,
-        },
-    });
+            let stat = match (&refit_red, &refit_alt) {
+                (Ok(()), Ok(())) => {
+                    let s = 2.0 * (work_alt.loglikelihood() - work_red.loglikelihood());
+                    if s.is_finite() {
+                        s
+                    } else {
+                        f64::NAN
+                    }
+                }
+                _ => f64::NAN,
+            };
 
-    serde_json::to_string(&payload)
-        .map_err(|e| format!("mm_schema_error: failed to serialize bootstrap LRT: {}", e))
+            let beta = work_red.beta();
+            let replicate = if refit_red.is_ok() {
+                BootstrapReplicate {
+                    objective: work_red.objective(),
+                    sigma: work_red.sigma(),
+                    beta,
+                    se: work_red.stderror(),
+                    theta: work_red.theta(),
+                }
+            } else {
+                let n_beta = beta.len();
+                BootstrapReplicate {
+                    objective: f64::NAN,
+                    sigma: f64::NAN,
+                    se: DVector::from_element(n_beta, f64::NAN),
+                    beta,
+                    theta: work_red.theta(),
+                }
+            };
+            (stat, replicate)
+        };
+        let results = run_replicates_polled(&y_sims, options.threads, &one_replicate)?;
+        let mut fits: Vec<BootstrapReplicate> = Vec::with_capacity(n_rep);
+        let mut replicate_stats: Vec<f64> = Vec::with_capacity(n_rep);
+        for (stat, replicate) in results {
+            replicate_stats.push(stat);
+            fits.push(replicate);
+        }
+
+        let bsamp = MixedModelBootstrap { fits };
+        let successful: usize = replicate_stats.iter().filter(|v| v.is_finite()).count();
+        let p_value = if successful > 0 {
+            let count_ge = replicate_stats
+                .iter()
+                .filter(|v| v.is_finite() && **v >= observed_lrt)
+                .count();
+            // (b + 1) / (n + 1): the standard Monte-Carlo p-value (Davison &
+            // Hinkley), matching upstream stats::parametric_bootstrap_lrt and the
+            // contrast() bootstrap route. Never returns an exact 0 from a finite
+            // replicate count.
+            Some(((count_ge + 1) as f64) / ((successful + 1) as f64))
+        } else {
+            None
+        };
+        let mcse = p_value.map(|p| (p * (1.0 - p) / successful as f64).sqrt());
+
+        let refit_options = BootstrapRefitOptions::from_model(&reduced);
+        let metadata = bsamp.run_metadata_for_model(
+            &reduced,
+            BootstrapTarget::fixed_effect_null(
+                "bootstrap likelihood-ratio test",
+                "alternative vs. reduced",
+            ),
+            options.requested_replicates,
+            options.failed_refit_policy,
+            seed_record,
+            refit_options,
+            Some("lrt_chi_square".to_string()),
+            Some(&replicate_stats),
+            p_value,
+        );
+
+        let payload = json!({
+            "observed_statistic": observed_lrt,
+            "p_value": p_value,
+            "mcse": mcse,
+            "notes": metadata.notes,
+            "payload": {
+                "metadata": metadata,
+                "replicate_statistics": replicate_stats,
+            },
+        });
+
+        serde_json::to_string(&payload)
+            .map_err(|e| format!("mm_schema_error: failed to serialize bootstrap LRT: {}", e))
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Build an upstream model-comparison table for fitted LMM payloads.
@@ -1216,46 +1732,53 @@ fn mm_compare_models_json(
     model_payloads: List,
     method: &str,
     refit_policy: &str,
-) -> std::result::Result<String, String> {
-    if model_payloads.len() < 2 {
-        return Err(
-            "mm_arg_error: model comparison requires at least two fitted models".to_string(),
-        );
-    }
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        if model_payloads.len() < 2 {
+            return Err(
+                "mm_arg_error: model comparison requires at least two fitted models".to_string(),
+            );
+        }
 
-    let method = model_comparison_method(method)?;
-    let refit_policy = model_comparison_refit_policy(refit_policy)?;
-    let mut models: Vec<LinearMixedModel> = Vec::with_capacity(model_payloads.len());
-    for (idx, payload) in model_payloads.values().enumerate() {
-        models.push(fit_lmm_from_bridge_payload_robj(&payload, idx + 1)?);
-    }
-    let model_refs = models
-        .iter()
-        .map(|model| model as &dyn MixedModelFit)
-        .collect::<Vec<_>>();
+        let method = model_comparison_method(method)?;
+        let refit_policy = model_comparison_refit_policy(refit_policy)?;
+        let payloads: Vec<Robj> = model_payloads.values().collect();
+        let handles: Vec<Robj> = payloads.iter().map(payload_handle).collect();
+        let mut models: Vec<Cow<'_, LinearMixedModel>> = Vec::with_capacity(payloads.len());
+        for (idx, (payload, handle)) in payloads.iter().zip(handles.iter()).enumerate() {
+            models.push(lmm_or_refit(handle, || {
+                fit_lmm_from_bridge_payload_robj(payload, idx + 1)
+            })?);
+        }
+        let model_refs = models
+            .iter()
+            .map(|model| model.as_ref() as &dyn MixedModelFit)
+            .collect::<Vec<_>>();
 
-    let table = ModelComparisonTable::compare_with_options(
-        &model_refs,
-        ModelComparisonOptions {
-            method,
-            refit_policy,
-        },
-    )
-    .map_err(|e| format!("mm_inference_unavailable: model comparison failed: {}", e))?;
-
-    let payload = json!({
-        "schema": {
-            "schema_name": SCHEMA_NAME_MODEL_COMPARISON_TABLE,
-            "schema_version": SCHEMA_VERSION_MODEL_COMPARISON_TABLE,
-        },
-        "payload": table,
-    });
-    serde_json::to_string(&payload).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize model comparison: {}",
-            e
+        let table = ModelComparisonTable::compare_with_options(
+            &model_refs,
+            ModelComparisonOptions {
+                method,
+                refit_policy,
+            },
         )
-    })
+        .map_err(|e| format!("mm_inference_unavailable: model comparison failed: {}", e))?;
+
+        let payload = json!({
+            "schema": {
+                "schema_name": SCHEMA_NAME_MODEL_COMPARISON_TABLE,
+                "schema_version": SCHEMA_VERSION_MODEL_COMPARISON_TABLE,
+            },
+            "payload": table,
+        });
+        serde_json::to_string(&payload).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize model comparison: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Boundary-aware variance-component likelihood-ratio test.
@@ -1271,23 +1794,35 @@ fn mm_boundary_lrt_json(
     reduced_payload: Robj,
     full_payload: Robj,
     reduced_formula: &str,
-) -> std::result::Result<String, String> {
-    let full = fit_lmm_from_bridge_payload_robj(&full_payload, 2)?;
-    let result = if reduced_payload.is_null() {
-        let reduced = LinearModelFit::fit(
-            full.response().clone(),
-            full.model_matrix().clone(),
-            Some(reduced_formula.to_string()),
-        )
-        .map_err(|e| format!("mm_inference_unavailable: boundary LRT reduced LM failed: {e}"))?;
-        BoundaryLikelihoodRatioTest::variance_component(&reduced, &full)
-    } else {
-        let reduced = fit_lmm_from_bridge_payload_robj(&reduced_payload, 1)?;
-        BoundaryLikelihoodRatioTest::variance_component(&reduced, &full)
-    };
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let full_handle = payload_handle(&full_payload);
+        let full = lmm_or_refit(&full_handle, || {
+            fit_lmm_from_bridge_payload_robj(&full_payload, 2)
+        })?;
+        let full: &LinearMixedModel = &full;
+        let result = if reduced_payload.is_null() {
+            let reduced = LinearModelFit::fit(
+                full.response().clone(),
+                full.model_matrix().clone(),
+                Some(reduced_formula.to_string()),
+            )
+            .map_err(|e| {
+                format!("mm_inference_unavailable: boundary LRT reduced LM failed: {e}")
+            })?;
+            BoundaryLikelihoodRatioTest::variance_component(&reduced, full)
+        } else {
+            let reduced_handle = payload_handle(&reduced_payload);
+            let reduced = lmm_or_refit(&reduced_handle, || {
+                fit_lmm_from_bridge_payload_robj(&reduced_payload, 1)
+            })?;
+            BoundaryLikelihoodRatioTest::variance_component(&*reduced, full)
+        };
 
-    serde_json::to_string(&result)
-        .map_err(|e| format!("mm_schema_error: failed to serialize boundary LRT: {e}"))
+        serde_json::to_string(&result)
+            .map_err(|e| format!("mm_schema_error: failed to serialize boundary LRT: {e}"))
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Bounded convergence verification for a fitted LMM.
@@ -1305,61 +1840,70 @@ fn mm_boundary_lrt_json(
 fn mm_verify_convergence_json(
     fit_payload: Robj,
     options_json: &str,
-) -> std::result::Result<String, String> {
-    let overrides: Value = serde_json::from_str(options_json)
-        .map_err(|e| format!("mm_arg_error: invalid verification options JSON: {}", e))?;
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let overrides: Value = serde_json::from_str(options_json)
+            .map_err(|e| format!("mm_arg_error: invalid verification options JSON: {}", e))?;
 
-    let mut options = ConvergenceVerificationOptions::default();
-    if let Some(v) = overrides
-        .get("restart_from_optimum")
-        .and_then(Value::as_bool)
-    {
-        options.restart_from_optimum = v;
-    }
-    if let Some(v) = overrides.get("jitter_starts").and_then(Value::as_u64) {
-        options.jitter_starts = v as usize;
-    }
-    if let Some(v) = overrides.get("jitter_scale").and_then(Value::as_f64) {
-        options.jitter_scale = v;
-    }
-    if let Some(v) = overrides
-        .get("run_optimizer_consensus")
-        .and_then(Value::as_bool)
-    {
-        options.run_optimizer_consensus = v;
-    }
-    if let Some(v) = overrides
-        .get("max_function_evaluations")
-        .and_then(Value::as_u64)
-    {
-        options.max_function_evaluations = v as usize;
-    }
-    if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
-        options.objective_tolerance = v;
-    }
-    if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
-        options.theta_tolerance = v;
-    }
-    if let Some(v) = overrides.get("beta_tolerance").and_then(Value::as_f64) {
-        options.beta_tolerance = v;
-    }
+        let mut options = ConvergenceVerificationOptions::default();
+        if let Some(v) = overrides
+            .get("restart_from_optimum")
+            .and_then(Value::as_bool)
+        {
+            options.restart_from_optimum = v;
+        }
+        if let Some(v) = overrides.get("jitter_starts").and_then(Value::as_u64) {
+            options.jitter_starts = v as usize;
+        }
+        if let Some(v) = overrides.get("jitter_scale").and_then(Value::as_f64) {
+            options.jitter_scale = v;
+        }
+        if let Some(v) = overrides
+            .get("run_optimizer_consensus")
+            .and_then(Value::as_bool)
+        {
+            options.run_optimizer_consensus = v;
+        }
+        if let Some(v) = overrides
+            .get("max_function_evaluations")
+            .and_then(Value::as_u64)
+        {
+            options.max_function_evaluations = v as usize;
+        }
+        if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
+            options.objective_tolerance = v;
+        }
+        if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
+            options.theta_tolerance = v;
+        }
+        if let Some(v) = overrides.get("beta_tolerance").and_then(Value::as_f64) {
+            options.beta_tolerance = v;
+        }
 
-    let mut model = fit_lmm_from_bridge_payload_robj(&fit_payload, 1)?;
-    let verification = model
-        .verify_convergence_with_options(options)
-        .map_err(|e| {
+        // Verification refits from the optimum and jittered starts, mutating
+        // the model: run it on a clone of the live model, never on the cache.
+        let handle = payload_handle(&fit_payload);
+        let mut model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_payload_robj(&fit_payload, 1)
+        })?
+        .into_owned();
+        let verification = model
+            .verify_convergence_with_options(options)
+            .map_err(|e| {
+                format!(
+                    "mm_inference_unavailable: convergence verification failed: {}",
+                    e
+                )
+            })?;
+
+        serde_json::to_string(&verification).map_err(|e| {
             format!(
-                "mm_inference_unavailable: convergence verification failed: {}",
+                "mm_schema_error: failed to serialize convergence verification: {}",
                 e
             )
-        })?;
-
-    serde_json::to_string(&verification).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize convergence verification: {}",
-            e
-        )
-    })
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// GLMM convergence verification through
@@ -1382,61 +1926,68 @@ fn mm_verify_convergence_json(
 fn mm_verify_convergence_glmm_json(
     fit_payload: Robj,
     options_json: &str,
-) -> std::result::Result<String, String> {
-    let overrides: Value = serde_json::from_str(options_json)
-        .map_err(|e| format!("mm_arg_error: invalid verification options JSON: {}", e))?;
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let overrides: Value = serde_json::from_str(options_json)
+            .map_err(|e| format!("mm_arg_error: invalid verification options JSON: {}", e))?;
 
-    let mut options = ConvergenceVerificationOptions::glmm_defaults();
-    if let Some(v) = overrides
-        .get("restart_from_optimum")
-        .and_then(Value::as_bool)
-    {
-        options.restart_from_optimum = v;
-    }
-    if let Some(v) = overrides.get("jitter_starts").and_then(Value::as_u64) {
-        options.jitter_starts = v as usize;
-    }
-    if let Some(v) = overrides.get("jitter_scale").and_then(Value::as_f64) {
-        options.jitter_scale = v;
-    }
-    if let Some(v) = overrides
-        .get("run_optimizer_consensus")
-        .and_then(Value::as_bool)
-    {
-        options.run_optimizer_consensus = v;
-    }
-    if let Some(v) = overrides
-        .get("max_function_evaluations")
-        .and_then(Value::as_u64)
-    {
-        options.max_function_evaluations = v as usize;
-    }
-    if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
-        options.objective_tolerance = v;
-    }
-    if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
-        options.theta_tolerance = v;
-    }
-    if let Some(v) = overrides.get("beta_tolerance").and_then(Value::as_f64) {
-        options.beta_tolerance = v;
-    }
+        let mut options = ConvergenceVerificationOptions::glmm_defaults();
+        if let Some(v) = overrides
+            .get("restart_from_optimum")
+            .and_then(Value::as_bool)
+        {
+            options.restart_from_optimum = v;
+        }
+        if let Some(v) = overrides.get("jitter_starts").and_then(Value::as_u64) {
+            options.jitter_starts = v as usize;
+        }
+        if let Some(v) = overrides.get("jitter_scale").and_then(Value::as_f64) {
+            options.jitter_scale = v;
+        }
+        if let Some(v) = overrides
+            .get("run_optimizer_consensus")
+            .and_then(Value::as_bool)
+        {
+            options.run_optimizer_consensus = v;
+        }
+        if let Some(v) = overrides
+            .get("max_function_evaluations")
+            .and_then(Value::as_u64)
+        {
+            options.max_function_evaluations = v as usize;
+        }
+        if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
+            options.objective_tolerance = v;
+        }
+        if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
+            options.theta_tolerance = v;
+        }
+        if let Some(v) = overrides.get("beta_tolerance").and_then(Value::as_f64) {
+            options.beta_tolerance = v;
+        }
 
-    let mut model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
-    let verification = model
-        .verify_convergence_with_options(options)
-        .map_err(|e| {
+        let handle = payload_handle(&fit_payload);
+        let mut model = glmm_or_refit(&handle, || {
+            fit_glmm_from_bridge_payload_robj(&fit_payload, 1)
+        })?
+        .into_owned();
+        let verification = model
+            .verify_convergence_with_options(options)
+            .map_err(|e| {
+                format!(
+                    "mm_inference_unavailable: convergence verification failed: {}",
+                    e
+                )
+            })?;
+
+        serde_json::to_string(&verification).map_err(|e| {
             format!(
-                "mm_inference_unavailable: convergence verification failed: {}",
+                "mm_schema_error: failed to serialize convergence verification: {}",
                 e
             )
-        })?;
-
-    serde_json::to_string(&verification).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize convergence verification: {}",
-            e
-        )
-    })
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// GLMM parametric bootstrap through
@@ -1456,49 +2007,57 @@ fn mm_verify_convergence_glmm_json(
 fn mm_glmm_parametric_bootstrap_json(
     fit_payload: Robj,
     options_json: &str,
-) -> std::result::Result<String, String> {
-    let opts: Value = serde_json::from_str(options_json)
-        .map_err(|e| format!("mm_arg_error: invalid bootstrap options JSON: {}", e))?;
-    let nsim = opts
-        .get("nsim")
-        .and_then(Value::as_u64)
-        .filter(|v| *v >= 1)
-        .ok_or_else(|| "mm_arg_error: bootstrap nsim must be a positive integer".to_string())?
-        as usize;
-    let seed = opts
-        .get("seed")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| "mm_arg_error: bootstrap seed must be a non-negative integer".to_string())?;
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let opts: Value = serde_json::from_str(options_json)
+            .map_err(|e| format!("mm_arg_error: invalid bootstrap options JSON: {}", e))?;
+        let nsim = opts
+            .get("nsim")
+            .and_then(Value::as_u64)
+            .filter(|v| *v >= 1)
+            .ok_or_else(|| "mm_arg_error: bootstrap nsim must be a positive integer".to_string())?
+            as usize;
+        let seed = opts.get("seed").and_then(Value::as_u64).ok_or_else(|| {
+            "mm_arg_error: bootstrap seed must be a non-negative integer".to_string()
+        })?;
 
-    let model = fit_glmm_from_bridge_payload_robj(&fit_payload, 1)?;
-    let beta_names = model.coef_names();
-    let mut rng = StdRng::seed_from_u64(seed);
-    let boot = mixeff_rs::stats::bootstrap::parametricbootstrap_glmm(&mut rng, nsim, &model)
-        .map_err(|e| {
+        let threads = bridge_threads(&opts)?;
+        let handle = payload_handle(&fit_payload);
+        let model = glmm_or_refit(&handle, || {
+            fit_glmm_from_bridge_payload_robj(&fit_payload, 1)
+        })?;
+        let model: &GeneralizedLinearMixedModel = &model;
+        let beta_names = model.coef_names();
+        let mut rng = StdRng::seed_from_u64(seed);
+        let boot = mixeff_rs::stats::bootstrap::parametricbootstrap_glmm_with_options(
+            &mut rng,
+            nsim,
+            model,
+            &BootstrapExecutionOptions { threads },
+        )
+        .map_err(|e| engine_run_error("GLMM parametric bootstrap", e))?;
+
+        let boot_json = serde_json::to_value(&boot).map_err(|e| {
             format!(
-                "mm_inference_unavailable: GLMM parametric bootstrap failed: {}",
+                "mm_schema_error: failed to serialize GLMM bootstrap replicates: {}",
                 e
             )
         })?;
-
-    let boot_json = serde_json::to_value(&boot).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize GLMM bootstrap replicates: {}",
-            e
-        )
-    })?;
-    serde_json::to_string(&serde_json::json!({
-        "beta_names": beta_names,
-        "requested": nsim,
-        "seed": seed,
-        "bootstrap": boot_json,
-    }))
-    .map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize GLMM bootstrap payload: {}",
-            e
-        )
-    })
+        serde_json::to_string(&serde_json::json!({
+            "beta_names": beta_names,
+            "requested": nsim,
+            "seed": seed,
+            "threads": threads,
+            "bootstrap": boot_json,
+        }))
+        .map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize GLMM bootstrap payload: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 fn fit_glmm_from_bridge_payload_robj(
@@ -1587,7 +2146,8 @@ fn fit_lmm_from_bridge_data(
     } else {
         FitOptions::ml()
     }
-    .with_optimizer_control(optimizer_control);
+    .with_optimizer_control(optimizer_control)
+    .with_progress_callback(r_interrupt_callback());
     model
         .fit_with_options(fit_options)
         .map_err(|e| format!("mm_fit_error: failed to fit LMM: {}", e))?;
@@ -1663,23 +2223,48 @@ fn glmm_family(family: &str) -> std::result::Result<GlmmFamilySpec, String> {
         "binomial" => Family::Binomial,
         "poisson" => Family::Poisson,
         "gamma" => Family::Gamma,
+        "inverse_gaussian" => Family::InverseGaussian,
+        // Non-identity Gaussian links only: the engine refuses
+        // gaussian/identity (that model is an LMM; use lmm()).
+        "gaussian" => Family::Normal,
         other => return Err(format!("mm_fit_error: unsupported GLMM family `{other}`")),
     };
     Ok((fam, None, false))
 }
 
+/// What a GLMM is built from: a formula + data (compiled by the builder) or
+/// a spec `glmm()` already compiled.
+enum GlmmSource<'a> {
+    Raw(mixeff_rs::formula::Formula, &'a mixeff_rs::model::DataFrame),
+    Compiled(CompiledModelSpec<'a>),
+}
+
+impl GlmmSource<'_> {
+    fn nrow(&self) -> usize {
+        match self {
+            GlmmSource::Raw(_, df) => df.nrow(),
+            GlmmSource::Compiled(spec) => spec.nrow(),
+        }
+    }
+}
+
 /// Construct an (unfitted) GLMM through the builder so every option —
 /// weights, offset, and the NB theta modes — routes through one path.
 fn build_glmm_model(
-    parsed: mixeff_rs::formula::Formula,
-    df: &mixeff_rs::model::DataFrame,
+    source: GlmmSource<'_>,
     spec: GlmmFamilySpec,
     link: LinkFunction,
     weights: Option<Vec<f64>>,
     offset: Option<Vec<f64>>,
 ) -> std::result::Result<GeneralizedLinearMixedModel, String> {
     let (family, nb_theta, nb_estimate) = spec;
-    let mut builder = GeneralizedLinearMixedModelBuilder::new(parsed, df, family).link(link);
+    let builder = match source {
+        GlmmSource::Raw(parsed, df) => GeneralizedLinearMixedModelBuilder::new(parsed, df, family),
+        GlmmSource::Compiled(compiled) => {
+            GeneralizedLinearMixedModelBuilder::from_compiled(compiled, family)
+        }
+    };
+    let mut builder = builder.link(link);
     if nb_estimate {
         builder = builder.estimate_negative_binomial_theta(nb_theta);
     } else if let Some(theta) = nb_theta {
@@ -2022,7 +2607,31 @@ fn fixed_effect_bootstrap_options(
         requested_replicates,
         failed_refit_policy,
         seed,
+        threads: bridge_threads(&value)?,
     })
+}
+
+/// Worker-thread count from a bridge options object (`"threads"`, default 1).
+/// The engine's threaded drivers are bit-identical to the serial run for
+/// every count; the R layer validates the value, this re-checks the wire.
+fn bridge_threads(value: &Value) -> std::result::Result<usize, String> {
+    match value.get("threads") {
+        None | Some(Value::Null) => Ok(1),
+        Some(v) => v
+            .as_u64()
+            .filter(|t| *t >= 1)
+            .map(|t| t as usize)
+            .ok_or_else(|| format!("mm_arg_error: `threads` must be a positive integer; got {v}")),
+    }
+}
+
+/// Map an engine error from a threaded bootstrap/profile driver to the bridge
+/// error text (interrupts keep their typed `mm_interrupted` prefix).
+fn engine_run_error(context: &str, e: MixedModelError) -> String {
+    match e {
+        MixedModelError::Interrupted(_) => interrupted_error(),
+        other => format!("mm_inference_unavailable: {context} failed: {other}"),
+    }
 }
 
 fn random_effects_json(model: &LinearMixedModel) -> Value {
@@ -2117,10 +2726,13 @@ fn varcorr_value(vc: &mixeff_rs::stats::VarCorr) -> Value {
 ///
 /// @noRd
 #[extendr]
-fn mm_audit_report_text(artifact_json: &str) -> std::result::Result<String, String> {
-    let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
-        .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
-    Ok(artifact.audit_report().to_text())
+fn mm_audit_report_text(artifact_json: &str) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
+            .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
+        Ok(artifact.audit_report().to_text())
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Render the compact `audit_design()` summary as text.
@@ -2133,10 +2745,13 @@ fn mm_audit_report_text(artifact_json: &str) -> std::result::Result<String, Stri
 ///
 /// @noRd
 #[extendr]
-fn mm_audit_report_summary_text(artifact_json: &str) -> std::result::Result<String, String> {
-    let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
-        .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
-    Ok(artifact.audit_report().render_summary())
+fn mm_audit_report_summary_text(artifact_json: &str) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
+            .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
+        Ok(artifact.audit_report().render_summary())
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Serialize the structured `ModelAuditReport` for an `audit_design()` artifact.
@@ -2147,29 +2762,34 @@ fn mm_audit_report_summary_text(artifact_json: &str) -> std::result::Result<Stri
 ///
 /// @noRd
 #[extendr]
-fn mm_audit_report_json(artifact_json: &str) -> std::result::Result<String, String> {
-    let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
-        .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
-    serde_json::to_string(&artifact.audit_report())
-        .map_err(|e| format!("mm_schema_error: failed to serialize audit report: {}", e))
+fn mm_audit_report_json(artifact_json: &str) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let artifact: CompiledModelArtifact = serde_json::from_str(artifact_json)
+            .map_err(|e| format!("mm_schema_error: failed to deserialize artifact: {}", e))?;
+        serde_json::to_string(&artifact.audit_report())
+            .map_err(|e| format!("mm_schema_error: failed to serialize audit report: {}", e))
+    })()
+    .map_err(MmBridgeError)
 }
 
-/// Demo of the interrupt bridge — a no-op loop that yields to R between
-/// iterations so Ctrl-C can terminate it. Returns `iters` on clean
-/// completion.
-///
-/// Used in Phase 0 only as a smoke test that the interrupt FFI binding is
-/// linked correctly. Phase 1+ replaces this with the hook called from
-/// inside fit / inference loops.
+/// Demo of the interrupt bridge — a no-op loop that checks for a pending
+/// R interrupt between iterations (safely, via R_ToplevelExec) and returns
+/// an `mm_interrupted` error when one is seen. Returns `iters` on clean
+/// completion. A smoke test for the check the fit loops use.
 ///
 /// @noRd
 #[extendr]
-fn mm_interrupt_demo(iters: i32) -> i32 {
-    let n = iters.max(0);
-    for _ in 0..n {
-        check_user_interrupt();
-    }
-    n
+fn mm_interrupt_demo(iters: i32) -> std::result::Result<i32, MmBridgeError> {
+    (|| -> std::result::Result<i32, String> {
+        let n = iters.max(0);
+        for _ in 0..n {
+            if r_interrupt_pending() {
+                return Err(interrupted_error());
+            }
+        }
+        Ok(n)
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Conditional variance matrices of the random effects, serialized for R.
@@ -2192,60 +2812,66 @@ fn mm_lmm_cond_var_json(
     categorical_ordered: Strings,
     weights: Doubles,
     control_json: &str,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let condvar = model.cond_var();
-    let terms: Vec<Value> = model
-        .reterms()
-        .iter()
-        .zip(condvar.iter())
-        .map(|(rt, blocks)| {
-            let p = rt.vsize;
-            let n = blocks.len();
-            // Column-major flatten: R's array(x, dim = c(p,p,n)) reads
-            // the slice row-by-row within each column, columns within each
-            // slice. That maps to mat[(row, col)] in DMatrix iteration.
-            let mut postvar: Vec<f64> = Vec::with_capacity(p * p * n);
-            for level_idx in 0..n {
-                let mat = &blocks[level_idx];
-                for col in 0..p {
-                    for row in 0..p {
-                        postvar.push(mat[(row, col)]);
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let condvar = model.cond_var();
+        let terms: Vec<Value> = model
+            .reterms()
+            .iter()
+            .zip(condvar.iter())
+            .map(|(rt, blocks)| {
+                let p = rt.vsize;
+                let n = blocks.len();
+                // Column-major flatten: R's array(x, dim = c(p,p,n)) reads
+                // the slice row-by-row within each column, columns within each
+                // slice. That maps to mat[(row, col)] in DMatrix iteration.
+                let mut postvar: Vec<f64> = Vec::with_capacity(p * p * n);
+                for level_idx in 0..n {
+                    let mat = &blocks[level_idx];
+                    for col in 0..p {
+                        for row in 0..p {
+                            postvar.push(mat[(row, col)]);
+                        }
                     }
                 }
-            }
-            json!({
-                "group": rt.grouping_name.as_str(),
-                "names": rt.cnames.clone(),
-                "levels": rt.levels.clone(),
-                "postvar": postvar,
-                "dim": [p, p, n],
+                json!({
+                    "group": rt.grouping_name.as_str(),
+                    "names": rt.cnames.clone(),
+                    "levels": rt.levels.clone(),
+                    "postvar": postvar,
+                    "dim": [p, p, n],
+                })
             })
+            .collect();
+        let payload = json!({
+            "schema": {
+                "schema_name": "mixeff.lmm_cond_var",
+                "schema_version": 1,
+            },
+            "terms": terms,
+        });
+        serde_json::to_string(&payload).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize cond_var payload: {}",
+                e
+            )
         })
-        .collect();
-    let payload = json!({
-        "schema": {
-            "schema_name": "mixeff.lmm_cond_var",
-            "schema_version": 1,
-        },
-        "terms": terms,
-    });
-    serde_json::to_string(&payload).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize cond_var payload: {}",
-            e
-        )
-    })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// New-data predictions through `LinearMixedModel::predict_new`.
@@ -2279,61 +2905,67 @@ fn mm_lmm_predict_new_json(
     new_categorical_levels: List,
     new_categorical_ordered: Strings,
     allow_new_levels_policy: &str,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let newdf = data::build_dataframe(
-        &new_numeric_columns,
-        &new_categorical_values,
-        &new_categorical_levels,
-        &new_categorical_ordered,
-        &new_column_order,
-    )?;
-    let policy = match allow_new_levels_policy {
-        "error" => NewReLevels::Error,
-        "population" => NewReLevels::Population,
-        "missing" => NewReLevels::Missing,
-        other => {
-            return Err(format!(
-                "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
-                other
-            ));
-        }
-    };
-    let predictions = model
-        .predict_new(&newdf, policy)
-        .map_err(|e| format!("mm_inference_unavailable: predict_new failed: {}", e))?;
-    let pred_array: Vec<Value> = predictions
-        .iter()
-        .map(|o| match o {
-            Some(v) => json!(*v),
-            None => Value::Null,
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
+        let newdf = data::build_dataframe(
+            &new_numeric_columns,
+            &new_categorical_values,
+            &new_categorical_levels,
+            &new_categorical_ordered,
+            &new_column_order,
+        )?;
+        let policy = match allow_new_levels_policy {
+            "error" => NewReLevels::Error,
+            "population" => NewReLevels::Population,
+            "missing" => NewReLevels::Missing,
+            other => {
+                return Err(format!(
+                    "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
+                    other
+                ));
+            }
+        };
+        let predictions = model
+            .predict_new(&newdf, policy)
+            .map_err(|e| format!("mm_inference_unavailable: predict_new failed: {}", e))?;
+        let pred_array: Vec<Value> = predictions
+            .iter()
+            .map(|o| match o {
+                Some(v) => json!(*v),
+                None => Value::Null,
+            })
+            .collect();
+        let payload = json!({
+            "schema": {
+                "schema_name": "mixeff.lmm_predict_new",
+                "schema_version": 1,
+            },
+            "predictions": pred_array,
+            "policy": allow_new_levels_policy,
+            "n_new": predictions.len(),
+        });
+        serde_json::to_string(&payload).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize predict_new payload: {}",
+                e
+            )
         })
-        .collect();
-    let payload = json!({
-        "schema": {
-            "schema_name": "mixeff.lmm_predict_new",
-            "schema_version": 1,
-        },
-        "predictions": pred_array,
-        "policy": allow_new_levels_policy,
-        "n_new": predictions.len(),
-    });
-    serde_json::to_string(&payload).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize predict_new payload: {}",
-            e
-        )
-    })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// New-data prediction VARIANCE / intervals through
@@ -2369,50 +3001,56 @@ fn mm_lmm_predict_new_variance_json(
     new_categorical_ordered: Strings,
     allow_new_levels_policy: &str,
     level: f64,
-) -> std::result::Result<String, String> {
-    let model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let newdf = data::build_dataframe(
-        &new_numeric_columns,
-        &new_categorical_values,
-        &new_categorical_levels,
-        &new_categorical_ordered,
-        &new_column_order,
-    )?;
-    let policy = match allow_new_levels_policy {
-        "error" => NewReLevels::Error,
-        "population" => NewReLevels::Population,
-        "missing" => NewReLevels::Missing,
-        other => {
-            return Err(format!(
-                "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
-                other
-            ));
-        }
-    };
-    let payload = model
-        .predict_new_variance_with_level(&newdf, policy, level)
-        .map_err(|e| {
-            format!(
-                "mm_inference_unavailable: predict_new_variance failed: {}",
-                e
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
             )
         })?;
-    serde_json::to_string(&payload).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize predict_new_variance payload: {}",
-            e
-        )
-    })
+        let newdf = data::build_dataframe(
+            &new_numeric_columns,
+            &new_categorical_values,
+            &new_categorical_levels,
+            &new_categorical_ordered,
+            &new_column_order,
+        )?;
+        let policy = match allow_new_levels_policy {
+            "error" => NewReLevels::Error,
+            "population" => NewReLevels::Population,
+            "missing" => NewReLevels::Missing,
+            other => {
+                return Err(format!(
+                    "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
+                    other
+                ));
+            }
+        };
+        let payload = model
+            .predict_new_variance_with_level(&newdf, policy, level)
+            .map_err(|e| {
+                format!(
+                    "mm_inference_unavailable: predict_new_variance failed: {}",
+                    e
+                )
+            })?;
+        serde_json::to_string(&payload).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize predict_new_variance payload: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Reconstruct and fit a `GeneralizedLinearMixedModel` from R-side bridge data.
@@ -2452,7 +3090,14 @@ fn fit_glmm_from_bridge_data(
         .map_err(|_| "mm_arg_error: nAGQ must be a positive integer".to_string())?;
     let weights = optional_case_weights(weights, df.nrow())?;
     let offset = optional_offset(offset, df.nrow())?;
-    let mut model = build_glmm_model(parsed, &df, family_spec, link, weights, offset)?;
+    let mut model = build_glmm_model(
+        GlmmSource::Raw(parsed, &df),
+        family_spec,
+        link,
+        weights,
+        offset,
+    )?;
+    apply_glmm_dispersion_control(&mut model, &_control)?;
     let optimizer_control = parse_optimizer_control(&_control)?;
     let glmm_options = if fast {
         GlmmFitOptions::fast_laplace()
@@ -2461,7 +3106,8 @@ fn fit_glmm_from_bridge_data(
     }
     .with_n_agq(n_agq)
     .with_verbose(false)
-    .with_optimizer_control(optimizer_control);
+    .with_optimizer_control(optimizer_control)
+    .with_progress_callback(r_interrupt_callback());
     model
         .fit_with_glmm_options(glmm_options)
         .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
@@ -2502,64 +3148,70 @@ fn mm_glmm_predict_new_variance_json(
     scale: &str,
     allow_new_levels_policy: &str,
     level: f64,
-) -> std::result::Result<String, String> {
-    let model = fit_glmm_from_bridge_data(
-        formula,
-        family,
-        link,
-        method,
-        n_agq,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        &offset,
-        control_json,
-    )?;
-    let newdf = data::build_dataframe(
-        &new_numeric_columns,
-        &new_categorical_values,
-        &new_categorical_levels,
-        &new_categorical_ordered,
-        &new_column_order,
-    )?;
-    let scale = match scale {
-        "link" => GlmmPredictionScale::Link,
-        "response" => GlmmPredictionScale::Response,
-        other => {
-            return Err(format!(
-                "mm_arg_error: unsupported prediction scale `{}`; expected one of link|response",
-                other
-            ));
-        }
-    };
-    let policy = match allow_new_levels_policy {
-        "error" => NewReLevels::Error,
-        "population" => NewReLevels::Population,
-        "missing" => NewReLevels::Missing,
-        other => {
-            return Err(format!(
-                "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
-                other
-            ));
-        }
-    };
-    let payload = model
-        .predict_new_variance_with_level(&newdf, scale, policy, level)
-        .map_err(|e| {
-            format!(
-                "mm_inference_unavailable: GLMM predict_new_variance failed: {}",
-                e
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        let model = glmm_or_refit(&handle, || {
+            fit_glmm_from_bridge_data(
+                formula,
+                family,
+                link,
+                method,
+                n_agq,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                &offset,
+                control_json,
             )
         })?;
-    serde_json::to_string(&payload).map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize GLMM predict_new_variance payload: {}",
-            e
-        )
-    })
+        let newdf = data::build_dataframe(
+            &new_numeric_columns,
+            &new_categorical_values,
+            &new_categorical_levels,
+            &new_categorical_ordered,
+            &new_column_order,
+        )?;
+        let scale = match scale {
+            "link" => GlmmPredictionScale::Link,
+            "response" => GlmmPredictionScale::Response,
+            other => {
+                return Err(format!(
+                    "mm_arg_error: unsupported prediction scale `{}`; expected one of link|response",
+                    other
+                ));
+            }
+        };
+        let policy = match allow_new_levels_policy {
+            "error" => NewReLevels::Error,
+            "population" => NewReLevels::Population,
+            "missing" => NewReLevels::Missing,
+            other => {
+                return Err(format!(
+                    "mm_arg_error: unsupported allow_new_levels policy `{}`; expected one of error|population|missing",
+                    other
+                ));
+            }
+        };
+        let payload = model
+            .predict_new_variance_with_level(&newdf, scale, policy, level)
+            .map_err(|e| {
+                format!(
+                    "mm_inference_unavailable: GLMM predict_new_variance failed: {}",
+                    e
+                )
+            })?;
+        serde_json::to_string(&payload).map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize GLMM predict_new_variance payload: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
 }
 
 /// Profile-likelihood confidence intervals through
@@ -2584,36 +3236,139 @@ fn mm_lmm_profile_confint_json(
     weights: Doubles,
     control_json: &str,
     level: f64,
-) -> std::result::Result<String, String> {
-    if !(level > 0.0 && level < 1.0) {
-        return Err(format!(
-            "mm_arg_error: profile confint level must be in (0, 1); got {}",
-            level
-        ));
+    threads: i32,
+    #[extendr(default = "NULL")] handle: Robj,
+) -> std::result::Result<String, MmBridgeError> {
+    (|| -> std::result::Result<String, String> {
+        if !(level > 0.0 && level < 1.0) {
+            return Err(format!(
+                "mm_arg_error: profile confint level must be in (0, 1); got {}",
+                level
+            ));
+        }
+        let mut model = lmm_or_refit(&handle, || {
+            fit_lmm_from_bridge_data(
+                formula,
+                reml,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?
+        .into_owned();
+        if threads < 1 {
+            return Err(format!(
+                "mm_arg_error: `threads` must be a positive integer; got {threads}"
+            ));
+        }
+        // Workers never touch R: the engine polls the host interrupt callback
+        // on this (the R main) thread while the per-parameter profiles run.
+        let payload = profile_confint_payload_with_options(
+            &mut model,
+            level,
+            &ProfileOptions {
+                threads: threads as usize,
+            },
+        )
+        .map_err(|e| engine_run_error("profile_confint_payload", e))?;
+        payload.to_json().map_err(|e| {
+            format!(
+                "mm_schema_error: failed to serialize profile CI payload: {}",
+                e
+            )
+        })
+    })()
+    .map_err(MmBridgeError)
+}
+
+/// Run `f` over `inputs`, in order, on `threads` workers (1 = serially on
+/// this thread). The R interrupt is polled only on the calling (R main)
+/// thread: per replicate when serial, every 20 ms while workers run. Workers
+/// never call into R (the bridge interrupt callback is a no-op off the main
+/// thread). Results are returned in input order, so the output is identical
+/// for every thread count.
+fn run_replicates_polled<I, T, F>(
+    inputs: &[I],
+    threads: usize,
+    f: &F,
+) -> std::result::Result<Vec<T>, String>
+where
+    I: Sync,
+    T: Send,
+    F: Fn(&I) -> T + Sync,
+{
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{mpsc, Mutex};
+
+    if threads <= 1 || inputs.len() <= 1 {
+        let mut out = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            if r_interrupt_pending() {
+                return Err(interrupted_error());
+            }
+            out.push(f(input));
+        }
+        return Ok(out);
     }
-    let mut model = fit_lmm_from_bridge_data(
-        formula,
-        reml,
-        &column_order,
-        &numeric_columns,
-        &categorical_values,
-        &categorical_levels,
-        &categorical_ordered,
-        &weights,
-        control_json,
-    )?;
-    let payload = profile_confint_payload(&mut model, level).map_err(|e| {
-        format!(
-            "mm_inference_unavailable: profile_confint_payload failed: {}",
-            e
-        )
-    })?;
-    payload.to_json().map_err(|e| {
-        format!(
-            "mm_schema_error: failed to serialize profile CI payload: {}",
-            e
-        )
-    })
+
+    let n = inputs.len();
+    let next = AtomicUsize::new(0);
+    let stop = AtomicBool::new(false);
+    let slots: Mutex<Vec<Option<T>>> = Mutex::new((0..n).map(|_| None).collect());
+    let (done_tx, done_rx) = mpsc::channel::<()>();
+    let mut interrupted = false;
+    std::thread::scope(|scope| {
+        for _ in 0..threads.min(n) {
+            let done_tx = done_tx.clone();
+            let (next, stop, slots) = (&next, &stop, &slots);
+            scope.spawn(move || {
+                loop {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    if i >= n {
+                        break;
+                    }
+                    let value = f(&inputs[i]);
+                    slots.lock().unwrap_or_else(|p| p.into_inner())[i] = Some(value);
+                }
+                let _ = done_tx.send(());
+            });
+        }
+        drop(done_tx);
+        let mut finished = 0usize;
+        let workers = threads.min(n);
+        while finished < workers {
+            match done_rx.recv_timeout(std::time::Duration::from_millis(20)) {
+                Ok(()) => finished += 1,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if !interrupted && r_interrupt_pending() {
+                        interrupted = true;
+                        stop.store(true, Ordering::Relaxed);
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+    });
+    if interrupted {
+        return Err(interrupted_error());
+    }
+    let slots = slots.into_inner().unwrap_or_else(|p| p.into_inner());
+    slots
+        .into_iter()
+        .map(|v| {
+            v.ok_or_else(|| {
+                "mm_inference_unavailable: a bootstrap worker did not return a replicate"
+                    .to_string()
+            })
+        })
+        .collect()
 }
 
 fn make_bootstrap_rng(seed: Option<u64>) -> (StdRng, BootstrapSeedRecord) {
@@ -2647,9 +3402,13 @@ extendr_module! {
     fn mm_json_negotiate_one;
     fn mm_json_known_schemas;
     fn mm_compile_model_json;
+    fn mm_compile_model_spec;
+    fn mm_handle_alive;
+    fn mm_handle_hits;
     fn mm_fit_lmm_json;
     fn mm_fit_glmm_json;
     fn mm_fixed_effect_contrast_json;
+    fn mm_fixed_effect_joint_test_json;
     fn mm_fixed_effect_bootstrap_contrast_json;
     fn mm_full_model_bootstrap_contrast_json;
     fn mm_fixed_effect_bootstrap_term_json;

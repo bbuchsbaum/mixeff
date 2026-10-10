@@ -84,6 +84,8 @@ mm_translate_data <- function(data) {
       if (is.ordered(col)) {
         mm_assert_ordered_contrast_policy(nm, col)
         categorical_ordered <- c(categorical_ordered, nm)
+      } else {
+        mm_assert_unordered_contrast_policy(nm, col)
       }
     } else if (is.character(col)) {
       vals <- as.character(col)
@@ -186,14 +188,78 @@ mm_assert_ordered_contrast_policy <- function(nm, col, .call = rlang::caller_env
   invisible(TRUE)
 }
 
+#' Refuse unordered factors whose contrast coding mixeff cannot honour
+#'
+#' The engine codes unordered factors with treatment contrasts (first level
+#' as reference), which is lme4's result only under R's default
+#' `contr.treatment`. A different global unordered-contrast option, or a
+#' contrast attached to the factor (`contrasts(f) <- contr.sum(3)`), would
+#' make lme4 fit a different parameterisation, so mixeff refuses instead of
+#' silently fitting treatment coding.
+#'
+#' @keywords internal
+#' @noRd
+mm_assert_unordered_contrast_policy <- function(nm, col, .call = rlang::caller_env()) {
+  opt <- getOption("contrasts")
+  global_unordered <- if (!is.null(names(opt)) && "unordered" %in% names(opt)) {
+    opt[["unordered"]]
+  } else if (length(opt) >= 1L) {
+    as.character(opt)[[1L]]
+  } else {
+    NA_character_
+  }
+  if (!identical(as.character(global_unordered), "contr.treatment")) {
+    shown <- if (length(global_unordered) != 1L || is.na(global_unordered)) {
+      "not contr.treatment"
+    } else {
+      as.character(global_unordered)
+    }
+    mm_abort(
+      message = sprintf(
+        paste0(
+          "Factor `%s` would be coded with treatment contrasts, but the global ",
+          "unordered-factor contrast option resolves to `%s`, so lme4 would fit ",
+          "a different parameterisation. mixeff supports treatment coding for ",
+          "unordered factors only; reset it with ",
+          "options(contrasts = c(\"contr.treatment\", \"contr.poly\")), or build ",
+          "the coded columns yourself as numeric predictors."
+        ),
+        nm, shown
+      ),
+      class = "mm_arg_error",
+      column = nm,
+      call = .call
+    )
+  }
+  col_contrasts <- attr(col, "contrasts")
+  if (!is.null(col_contrasts) && !identical(col_contrasts, "contr.treatment")) {
+    mm_abort(
+      message = sprintf(
+        paste0(
+          "Factor `%s` carries a `contrasts` attribute other than the string ",
+          "\"contr.treatment\". mixeff codes unordered factors with treatment ",
+          "contrasts (first level as reference) and will not silently replace ",
+          "the requested coding. Drop it with `attr(%s, \"contrasts\") <- NULL` ",
+          "(use relevel() to choose the reference level), or build the coded ",
+          "columns yourself as numeric predictors."
+        ),
+        nm, nm
+      ),
+      class = "mm_arg_error",
+      column = nm,
+      call = .call
+    )
+  }
+  invisible(TRUE)
+}
+
 #' Refuse compilation when a design variable contains NA
 #'
-#' mixeff is no-silent-surgery: it does not silently drop rows with NA
-#' in design variables. Users must `na.omit()` (or more carefully select
-#' complete cases) explicitly before handing data to `compile_model()` /
-#' `lmm()`. This helper enumerates the offending columns and raises one
-#' typed `mm_data_error` listing all of them rather than failing on the
-#' first.
+#' `compile_model()` audits the data exactly as given and never drops rows.
+#' (`lmm()`/`glmm()` apply `na.action` first, announcing any dropped rows;
+#' see `mm_apply_na_action()`.) This helper enumerates the offending columns
+#' and raises one typed `mm_data_error` listing all of them rather than
+#' failing on the first.
 #'
 #' @keywords internal
 #' @noRd
@@ -213,7 +279,7 @@ mm_check_no_na <- function(data, vars, .call = rlang::caller_env()) {
   )
   mm_abort(
     message = sprintf(
-      "Missing values in design variable(s): %s. mixeff requires complete cases; pass na.omit(data) explicitly before fitting.",
+      "Missing values in design variable(s): %s. compile_model() audits complete cases only; lmm()/glmm() drop incomplete rows under `na.action` (default getOption(\"na.action\"), i.e. na.omit), or pass na.omit(data).",
       details
     ),
     class = "mm_data_error",

@@ -21,14 +21,13 @@
 #' not carry a valid compiled artifact.
 #'
 #' @examples
-#' \dontrun{
+#' set.seed(1)
 #' df <- data.frame(
 #'   y = rnorm(20),
 #'   t = rep(0:3, 5),
 #'   s = factor(rep(1:5, each = 4))
 #' )
 #' explain_model(compile_model(y ~ t + (1 | s), df))
-#' }
 #'
 #' @seealso [compile_model()], [audit()].
 #'
@@ -44,7 +43,9 @@ explain_model <- function(spec) {
 
   audit <- mm_audit_impl(spec)
   out <- list(
-    text                   = mm_explanation_text(spec, audit),
+    text                   = mm_expansion_display_text(
+      mm_explanation_text(spec, audit), spec$expansion
+    ),
     cards                  = audit$random_term_cards,
     cross_card_constraints = audit$cross_card_constraints,
     diagnostics            = audit$diagnostics,

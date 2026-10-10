@@ -137,7 +137,7 @@ test_that("joint_laplace tracks glmer on correlated-random-slope wait models", {
     expect_lt(abs(as.numeric(logLik(m)) - as.numeric(logLik(g))), 5e-2)  # logLik
 
     cg <- summary(g)$coefficients
-    cm <- summary(m, tests = "coefficients")$coefficients
+    cm <- summary(m, tests = "coefficients")$coef_table
     p_col <- intersect(c("Pr(>|z|)", "p.value"), names(cm))[1L]
     expect_true(all(cm$method == "asymptotic_wald_z"))
     expect_true(all(is.finite(cm[["Std. Error"]]) & cm[["Std. Error"]] > 0))
@@ -188,7 +188,7 @@ test_that("GLMM Wald inference is certified on a real-data random-intercept mode
   m <- glmm(fo, data = d1,
             family = binomial("logit"), method = "joint_laplace",
             control = mm_jl())
-  ct <- summary(m, tests = "coefficients")$coefficients
+  ct <- summary(m, tests = "coefficients")$coef_table
   gt <- summary(g)$coefficients
   p_col <- intersect(c("Pr(>|z|)", "p.value"), names(ct))[1L]
 

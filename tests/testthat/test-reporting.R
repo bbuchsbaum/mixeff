@@ -164,7 +164,7 @@ test_that("random-effect report consumes Rust fit-summary VarCorr payload", {
   unavailable <- model_report(fit)$unavailable
 
   expect_identical(fit$fit_summary$schema_name, "mixedmodels.fit_summary")
-  expect_identical(fit$fit_summary$schema_version, "1.0.0")
+  expect_identical(fit$fit_summary$schema_version, "1.1.0")
   expect_true(any(random_effects$kind == "variance"))
   expect_true(any(random_effects$group == "Residual"))
   expect_true(all(random_effects$status == "available"))
@@ -240,7 +240,7 @@ test_that("reporting_table and model_report work on GLMM fits", {
   utils::data("cbpp", package = "lme4", envir = env)
   g <- glmm(cbind(incidence, size - incidence) ~ period + (1 | herd),
             get("cbpp", envir = env), family = binomial(),
-            control = mm_control(verbose = -1))
+            method = "pirls_profiled", control = mm_control(verbose = -1))
 
   fixed <- rt_tbl(g, "fixed_effects", view = "audit")
   expect_true(all(c("term", "estimate", "method", "status") %in% names(fixed)))

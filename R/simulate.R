@@ -1,17 +1,39 @@
-#' Refit a mixeff LMM with a new response
+#' Refit a mixeff model with a new response
 #'
-#' `refit()` fits the same model formula to a new response by calling [lmm()]
-#' with the stored model frame and `REML` setting. Refitting is implemented
-#' for linear mixed models only; calling `refit()` on a GLMM fit signals a
-#' typed `mm_inference_unavailable` error.
+#' `refit()` fits the same model to a new response, keeping every other
+#' setting of the original fit, like `lme4::refit()`. For an `mm_lmm` it calls
+#' [lmm()] with the stored model frame, `REML` setting and prior weights; for
+#' an `mm_glmm` it calls [glmm()] with the stored family (negative-binomial
+#' fits re-estimate theta when the original did), prior weights, offset,
+#' `method`, `nAGQ` and control settings (verbosity silenced).
 #'
-#' @param object A fitted `mm_lmm`.
-#' @param newresp Numeric response for `refit()`.
-#' @param ... Reserved for future methods.
+#' `newresp` may be a numeric vector, or a one-column data frame such as the
+#' output of [simulate()] with `nsim = 1`. For binomial GLMMs it may also be a
+#' two-column `(successes, failures)` matrix (the shape `simulate()` returns
+#' for a `cbind()` response; the trial counts become the new prior weights),
+#' a two-level factor, or a logical vector.
 #'
-#' @return A new `mm_lmm`.
+#' As in lme4, `newresp` is on the scale of the model's response: for a
+#' transformed response such as `log(y) ~ ...` it replaces `log(y)`, and the
+#' refit's formula names it `.mm_refit_response`.
 #'
-#' @export
+#' @param object A fitted `mm_lmm` or `mm_glmm`.
+#' @param newresp The new response (see Details).
+#' @param ... `control =` to override the stored control settings.
+#'
+#' @return A new fit of the same class as `object`.
+#'
+#' @examples
+#' set.seed(1)
+#' df <- data.frame(
+#'   y = rpois(60, 3), x = rnorm(60),
+#'   g = factor(rep(seq_len(10), each = 6))
+#' )
+#' fit <- glmm(y ~ x + (1 | g), df, family = poisson(),
+#'             control = mm_control(verbose = -1))
+#' ystar <- simulate(fit, nsim = 1, seed = 2)
+#' fixef(refit(fit, ystar))
+#'
 refit <- function(object, newresp, ...) {
   UseMethod("refit")
 }
@@ -19,31 +41,16 @@ refit <- function(object, newresp, ...) {
 #' @rdname refit
 #' @export
 refit.default <- function(object, newresp, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    if (missing(newresp)) {
-      return(lme4::refit(object, ...))
-    }
-    return(lme4::refit(object, newresp, ...))
+  fwd <- if (missing(newresp)) {
+    mm_forward_foreign_generic("refit", object, ...)
+  } else {
+    mm_forward_foreign_generic("refit", object, newresp, ...)
   }
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`refit()` has no method for this object.",
     class = "mm_arg_error",
     input = object
-  )
-}
-
-#' @rdname refit
-#' @method refit mm_glmm
-#' @export
-refit.mm_glmm <- function(object, newresp, ...) {
-  mm_abort(
-    message = paste(
-      "`refit()` is not implemented for GLMM fits.",
-      "Refit the model with `glmm()` on the modified data instead."
-    ),
-    class = "mm_inference_unavailable",
-    reason_code = "glmm_refit_unimplemented",
-    input = class(object)[[1L]]
   )
 }
 
@@ -54,6 +61,7 @@ refit.mm_lmm <- function(object, newresp, ...) {
     list(...), "refit",
     c(newweights = "changing prior weights on refit is not supported; refit with lmm(..., weights = ).")
   )
+  newresp <- mm_refit_unwrap_resp(newresp)
   if (!is.numeric(newresp) || length(newresp) != nobs(object) ||
       anyNA(newresp)) {
     mm_abort(
@@ -63,10 +71,27 @@ refit.mm_lmm <- function(object, newresp, ...) {
     )
   }
   data <- object$model_frame
-  data[[mm_response_name(object)]] <- as.numeric(newresp)
-  control <- list(...)$control %||% mm_control(verbose = -1)
-  fit <- lmm(object$formula, data, REML = isTRUE(object$REML),
-             weights = object$weights, control = control)
+  formula <- object$formula
+  lhs <- formula[[2L]]
+  newresp <- as.numeric(newresp)
+  if (is.name(lhs)) {
+    # With an LMM offset the engine fits the adjusted response, but the user's
+    # response column is what lmm() reads; it re-applies the offset.
+    data[[as.character(lhs)]] <- newresp
+  } else {
+    # A transformed response (`log(y) ~ ...`): as in lme4, `newresp` is the
+    # response on the model's (transformed) scale. Writing it into the raw
+    # column would be re-transformed, and writing it under the label
+    # "log(y)" would be ignored (the original fit came back unchanged), so
+    # the refit uses a dedicated response column instead.
+    data[[".mm_refit_response"]] <- newresp
+    formula[[2L]] <- as.name(".mm_refit_response")
+  }
+  control <- list(...)$control %||% mm_internal_control(object)
+  fit <- mm_internal_lmm(formula, data, REML = isTRUE(object$REML),
+                         weights = object$weights,
+                         offset = mm_fit_offset_arg(object),
+                         control = control)
   fit$refit <- list(
     source = "refit",
     original_fit_status = fit_status(object)
@@ -74,123 +99,138 @@ refit.mm_lmm <- function(object, newresp, ...) {
   fit
 }
 
-#' Simulate from a mixeff LMM
+#' Simulate responses from a mixeff fit
 #'
-#' Draws Gaussian responses from the stored fixed effects, random-effect
-#' covariance summaries, and residual scale. Simulation is implemented for
-#' linear mixed models only; calling `simulate()` on a GLMM fit signals a
-#' typed `mm_inference_unavailable` error with reason code
-#' `glmm_simulate_unimplemented`.
+#' Draws responses from a fitted `mm_lmm` or `mm_glmm` following the
+#' semantics of `lme4::simulate.merMod()`:
 #'
-#' @param object A fitted `mm_lmm`.
+#' * `re.form = NA` (the default) or `~0`, equivalently `use.u = FALSE`,
+#'   draws **new** random effects from the fitted random-effect covariance
+#'   for every simulation (unconditional, parametric-bootstrap simulation);
+#' * `re.form = NULL`, equivalently `use.u = TRUE`, conditions on the fitted
+#'   conditional modes (BLUPs) and simulates only the response noise around
+#'   `fitted(object)`.
+#'
+#' Partial random-effect formulas are refused with a typed
+#' `mm_inference_unavailable` error.
+#'
+#' LMM responses are Gaussian with standard deviation `sigma / sqrt(w)` for
+#' prior weights `w` (lme4 ignores the prior weights here). GLMM responses are
+#' family-aware: binomial draws use the prior weights as trial counts and
+#' return proportions (`y / w`, 0/1 values for Bernoulli fits), or a
+#' two-column `(successes, failures)` matrix per simulation when the model was
+#' fitted with a `cbind()` response, as lme4 does; Poisson and
+#' negative-binomial (fitted `theta`) draws return counts. For the families
+#' with a free dispersion `phi = sigma(object)^2` the draws follow the
+#' fitted variance function: Gamma draws use shape `w / phi`
+#' (`Var(y) = phi mu^2 / w`), inverse-Gaussian draws use
+#' `statmod::rinvgauss()` with shape `w / phi` (`Var(y) = phi mu^3 / w`;
+#' needs the statmod package), and Gaussian non-identity-link draws have
+#' standard deviation `sigma / sqrt(w)`. New random effects are drawn on the
+#' absolute scale of `VarCorr()`, as lme4 >= 2.1-0 does (its theta is the
+#' absolute random-effect SD for every GLMM).
+#'
+#' Compared with lme4 2.1-0's `simulate.merMod()`: Gamma draws and Gaussian
+#' draws without prior weights agree draw for draw (same RNG use) when the
+#' estimates agree. lme4 ignores prior weights for Gaussian responses (with a
+#' warning); mixeff uses them, as for LMMs. For the inverse Gaussian lme4
+#' passes shape `w / sigma(object)` -- `sqrt(phi)`, not `phi` -- so its draws
+#' have variance `sigma mu^3 / w` rather than the fitted `phi mu^3 / w`;
+#' mixeff uses the fitted variance, as `stats::inverse.gaussian()$simulate`
+#' does. A binomial fit whose response was a factor is simulated as 0/1
+#' numeric (lme4 returns a factor).
+#'
+#' The random-number stream is consumed in lme4's order (all random-effect
+#' draws first, terms in lme4's internal order, then the response draws), so
+#' when the estimates agree a seeded `simulate()` reproduces lme4's draws.
+#' Unlike lme4, a supplied `seed` does not leave the global RNG state changed.
+#'
+#' @param object A fitted `mm_lmm` or `mm_glmm`.
 #' @param nsim Number of simulated responses.
 #' @param seed Optional random seed.
-#' @param re.form Random-effects conditioning. `NULL` simulates new random
-#'   effects; `NA` simulates from the population-level mean only.
-#' @param ... Reserved for future methods.
+#' @param use.u Logical; `TRUE` is the same as `re.form = NULL` and `FALSE`
+#'   the same as `re.form = NA`. Specify at most one of `use.u` and `re.form`.
+#' @param re.form `NA` or `~0` (default `NA`) to simulate new random effects,
+#'   `NULL` to condition on the fitted random effects, or a formula such as
+#'   `~ (1 | g)` to condition on those terms' fitted random effects and draw
+#'   new ones for the others (as lme4).
+#' @param ... Reserved; lme4 arguments that cannot be honoured (`newdata`,
+#'   `newparams`, ...) are refused with a typed error.
 #'
-#' @return A data frame of simulated responses.
+#' @return A data frame with one column per simulation (`sim_1`, ...), rows
+#'   named like the model frame. For a binomial `cbind()` fit each column is a
+#'   two-column matrix. Attributes `seed`, `mm_method` and `mm_re_form` record
+#'   the seed, the simulation route, and the resolved conditioning
+#'   (`"unconditional"`, `"conditional"` or `"partial"`). Following
+#'   `stats::simulate`, attribute `"seed"` is the `.Random.seed` in force
+#'   before simulation when `seed = NULL`, otherwise `seed` with the RNG kind
+#'   as attribute `"kind"`.
+#'
+#' @examples
+#' set.seed(1)
+#' df <- data.frame(
+#'   y = rnorm(60), x = rnorm(60),
+#'   g = factor(rep(seq_len(10), each = 6))
+#' )
+#' fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+#' head(simulate(fit, nsim = 2, seed = 1))
+#' # condition on the fitted random effects
+#' head(simulate(fit, nsim = 1, seed = 1, re.form = NULL))
+#'
+#' df$count <- rpois(60, 2)
+#' gfit <- glmm(count ~ x + (1 | g), df, family = poisson(),
+#'              control = mm_control(verbose = -1))
+#' head(simulate(gfit, nsim = 2, seed = 1))
 #'
 #' @importFrom stats simulate
 #' @method simulate mm_lmm
 #' @export
-simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, re.form = NULL, ...) {
+simulate.mm_lmm <- function(object, nsim = 1, seed = NULL, use.u = FALSE,
+                            re.form = NA, ...) {
   mm_reject_unsupported_dots(
     list(...), "simulate",
     c(newparams = "simulating from user-supplied parameters is not yet supported; refit the model you want to simulate from.",
-      newdata = "simulating on new data is not yet supported; the simulation uses the fitted model frame.",
-      use.u = paste0(
-        "conditioning on the fitted random effects (`use.u`) is not yet ",
-        "supported; use `re.form = NULL` (new draws) or `re.form = NA` ",
-        "(population)."
-      ))
+      newdata = "simulating on new data is not yet supported; the simulation uses the fitted model frame.")
   )
-  if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 1) {
-    mm_abort(
-      message = "`nsim` must be a positive integer.",
-      class = "mm_arg_error",
-      input = nsim
-    )
-  }
-  nsim <- as.integer(nsim)
-  target <- mm_prediction_target(re.form)
-  if (!target %in% c("conditional", "population")) {
-    mm_abort(
-      message = "`re.form` requests beyond NULL and NA are not available for simulation.",
-      class = "mm_inference_unavailable",
-      input = re.form
-    )
-  }
-
+  nsim <- mm_simulate_check_nsim(nsim)
+  target <- mm_simulate_target(re.form, use.u, missing(re.form), missing(use.u))
+  n <- nobs(object)
+  # Prior weights scale the residual variance: sigma^2 / w.
+  w <- object$weights %||% rep(1, n)
+  resolved <- mm_simulate_resolve_partial(object, target, re.form)
+  target <- resolved$target
+  rng_state <- mm_rng_state(seed)
   out <- mm_with_seed(seed, {
-    sims <- replicate(nsim, mm_simulate_once(object, target), simplify = FALSE)
-    as.data.frame(stats::setNames(sims, paste0("sim_", seq_len(nsim))),
-                  check.names = FALSE)
+    eta <- if (identical(target, "conditional")) {
+      matrix(mm_insample(object, fitted(object)), n, nsim)
+    } else if (identical(target, "partial")) {
+      mm_simulate_partial_eta(object, resolved, nsim)
+    } else {
+      mm_simulate_fixed_eta(object) + mm_simulate_new_re(object, nsim)
+    }
+    eta + matrix(stats::rnorm(n * nsim), n, nsim) * (object$sigma / sqrt(w))
   })
+  out <- as.data.frame(out)
+  names(out) <- paste0("sim_", seq_len(nsim))
   rownames(out) <- rownames(object$model_frame)
-  attr(out, "seed") <- seed
+  # stats::simulate convention (as in simulate.lm): with `seed = NULL` the
+  # attribute is the `.Random.seed` in force before simulating; otherwise the
+  # seed itself with the RNG kind recorded as attribute `kind`.
+  attr(out, "seed") <- rng_state
   attr(out, "mm_method") <- "r_side_gaussian_parametric"
+  attr(out, "mm_re_form") <- target
   out
 }
 
-#' @rdname simulate.mm_lmm
-#' @method simulate mm_glmm
-#' @export
-simulate.mm_glmm <- function(object, nsim = 1, seed = NULL, re.form = NULL, ...) {
-  mm_abort(
-    message = paste(
-      "`simulate()` is not implemented for GLMM fits.",
-      "The Gaussian simulation path does not apply to a non-Gaussian",
-      "response; a family-aware GLMM simulation route has not been built."
-    ),
-    class = "mm_inference_unavailable",
-    reason_code = "glmm_simulate_unimplemented",
-    input = class(object)[[1L]]
-  )
-}
-
-mm_simulate_once <- function(fit, target) {
-  eta <- if (identical(target, "population")) {
-    fit$fixed_fitted
-  } else {
-    mm_simulate_random_mean(fit)
-  }
-  as.numeric(eta + stats::rnorm(nobs(fit), sd = fit$sigma))
-}
-
-mm_simulate_random_mean <- function(fit) {
-  eta <- as.numeric(fit$fixed_fitted)
-  terms <- fit$artifact$semantic_model$random_terms %||% list()
-  for (i in seq_along(terms)) {
-    term <- terms[[i]]
-    term_id <- term$id %||% sprintf("r%d", i - 1L)
-    group_label <- mm_random_term_group_label(fit, term, i)
-    group <- mm_group_factor(fit$model_frame, group_label)
-    levels <- levels(group)
-    basis <- term$basis %||% list()
-    basis_labels <- vapply(basis, mm_basis_label, character(1))
-    basis_values <- lapply(basis, mm_basis_values, frame = fit$model_frame)
-    if (!length(basis_values)) {
-      basis_labels <- "(Intercept)"
-      basis_values <- list(rep(1, nobs(fit)))
-    }
-    Sigma <- mm_random_term_covariance(fit, term_id, basis_labels)
-    draws <- mm_rmvnorm(length(levels), Sigma)
-    idx <- as.integer(group)
-    for (j in seq_along(basis_values)) {
-      eta <- eta + basis_values[[j]] * draws[idx, j]
-    }
-  }
-  eta
-}
-
-mm_random_term_covariance <- function(fit, term_id, basis_labels) {
+mm_random_term_covariance <- function(fit, term_id, basis_labels,
+                                      group_label = NULL) {
   p <- length(basis_labels)
   if (!p) return(matrix(0, 0, 0))
   labels <- ifelse(basis_labels == "(Intercept)", "intercept", basis_labels)
   Sigma <- diag(0, p)
   dimnames(Sigma) <- list(basis_labels, basis_labels)
 
+  seen <- stats::setNames(rep(FALSE, p), basis_labels)
   traces <- fit$artifact$covariance_parameter_traces %||% list()
   traces <- traces[vapply(traces, function(x) identical(x$term_id, term_id), logical(1))]
   entries <- unlist(lapply(traces, function(x) x$varcorr_entries %||% list()),
@@ -204,6 +244,7 @@ mm_random_term_covariance <- function(fit, term_id, basis_labels) {
     if (identical(kind, "standard_deviation") && length(basis) == 1L &&
         basis %in% basis_labels) {
       Sigma[basis, basis] <- value^2
+      seen[[basis]] <- TRUE
     }
   }
   for (entry in entries) {
@@ -221,9 +262,24 @@ mm_random_term_covariance <- function(fit, term_id, basis_labels) {
     }
   }
 
-  missing_diag <- diag(Sigma) <= 0
+  # Engine trace SDs -> lme4 2.1-0's scale (see mm_glmm_re_sd_scale()).
+  scale <- mm_glmm_re_sd_scale(fit)
+  if (!identical(scale, 1)) Sigma <- Sigma * scale^2
+
+  # Fall back to the VarCorr table only for a standard deviation the traces
+  # did not report at all. A reported SD of exactly 0 (a singular fit) is a
+  # real value, and the lookup must stay within this term's grouping factor:
+  # matching on the coefficient name alone would borrow another term's
+  # variance (e.g. the subject intercept for a zero-variance item intercept).
+  missing_diag <- !seen
   if (any(missing_diag)) {
     vc <- fit$varcorr$table
+    if (!is.null(group_label) && "group" %in% names(vc) &&
+        any(vc$group == group_label)) {
+      vc <- vc[vc$group == group_label, , drop = FALSE]
+    } else if (length(unique(vc$group)) > 1L) {
+      vc <- vc[0L, , drop = FALSE]
+    }
     for (j in which(missing_diag)) {
       label <- labels[[j]]
       row <- vc[vc$name %in% c(label, basis_labels[[j]]) &
@@ -250,6 +306,20 @@ mm_rmvnorm <- function(n, Sigma) {
   }
   colnames(out) <- colnames(Sigma)
   out
+}
+
+# The stats::simulate "seed" attribute: `.Random.seed` before simulation when
+# `seed` is NULL (initialising the RNG first, as simulate.lm does), else the
+# seed with `kind = as.list(RNGkind())`.
+mm_rng_state <- function(seed) {
+  if (!exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+    stats::runif(1)
+  }
+  if (is.null(seed)) {
+    get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  } else {
+    structure(seed, kind = as.list(RNGkind()))
+  }
 }
 
 mm_with_seed <- function(seed, expr) {

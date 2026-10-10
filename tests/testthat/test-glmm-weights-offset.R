@@ -143,3 +143,26 @@ test_that("invalid weights/offset are rejected with a typed condition", {
   expect_error(glmm(y ~ x + (1 | g), d, family = poisson,
                     offset = rep(Inf, 50), control = ctl), class = "mm_arg_error")
 })
+
+test_that("glmm() evaluates weights and offset as columns of data (lme4 semantics)", {
+  set.seed(43)
+  n <- 240
+  d <- data.frame(x = rnorm(n), g = factor(rep(1:24, each = 10)),
+                  trials = sample(5:12, n, replace = TRUE),
+                  expo = runif(n, 0.5, 2))
+  b <- rnorm(24, sd = 0.4)
+  d$prop <- rbinom(n, d$trials, plogis(-0.2 + 0.5 * d$x + b[as.integer(d$g)])) /
+    d$trials
+  by_name <- glmm(prop ~ x + (1 | g), d, family = binomial, weights = trials,
+                  control = ctl)
+  by_value <- glmm(prop ~ x + (1 | g), d, family = binomial,
+                   weights = d$trials, control = ctl)
+  expect_equal(fixef(by_name), fixef(by_value))
+
+  d$count <- rpois(n, exp(0.3 + 0.5 * d$x + log(d$expo)))
+  off_name <- glmm(count ~ x + (1 | g), d, family = poisson,
+                   offset = log(expo), control = ctl)
+  off_value <- glmm(count ~ x + (1 | g), d, family = poisson,
+                    offset = log(d$expo), control = ctl)
+  expect_equal(fixef(off_name), fixef(off_value))
+})

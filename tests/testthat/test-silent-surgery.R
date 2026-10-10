@@ -28,12 +28,13 @@ test_that("predict refuses random.only and points to re.form", {
   expect_error(predict(m, random.only = TRUE), class = "mm_arg_error")
 })
 
-test_that("simulate refuses newparams / newdata / use.u", {
+test_that("simulate refuses newparams / newdata and use.u with re.form", {
   m <- mk_ss_fit()
   expect_error(simulate(m, newparams = list(beta = 1)), class = "mm_arg_error")
   expect_error(simulate(m, newdata = lme4::sleepstudy[1:5, ]),
                class = "mm_arg_error")
-  expect_error(simulate(m, use.u = TRUE), class = "mm_arg_error")
+  # use.u is supported (lme4 semantics) but conflicts with re.form.
+  expect_error(simulate(m, use.u = TRUE, re.form = NA), class = "mm_arg_error")
 })
 
 test_that("refit refuses newweights but still accepts control via ...", {
@@ -52,7 +53,10 @@ test_that("refit refuses newweights but still accepts control via ...", {
 test_that("residuals honor type and scaled", {
   m <- mk_ss_fit()
   raw <- residuals(m)
-  expect_equal(unname(residuals(m, type = "pearson")),
+  # lme4: Pearson residuals are sqrt(w) * (y - mu) (unit weights here);
+  # only scaled = TRUE divides by sigma.
+  expect_equal(unname(residuals(m, type = "pearson")), unname(raw))
+  expect_equal(unname(residuals(m, type = "pearson", scaled = TRUE)),
                unname(raw / sigma(m)))
   expect_equal(unname(residuals(m, scaled = TRUE)),
                unname(raw / sigma(m)))

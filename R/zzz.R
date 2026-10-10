@@ -21,6 +21,11 @@ mm_register_external_s3 <- function() {
     action = "append"
   )
   setHook(
+    packageEvent("lmerTest", "onLoad"),
+    function(...) mm_register_lmertest_s3(),
+    action = "append"
+  )
+  setHook(
     packageEvent("emmeans", "onLoad"),
     function(...) mm_register_emmeans_s3(),
     action = "append"
@@ -33,11 +38,39 @@ mm_register_external_s3 <- function() {
     function(...) mm_register_broom_s3(),
     action = "append"
   )
+  setHook(
+    packageEvent("lattice", "onLoad"),
+    function(...) mm_register_lattice_s3(),
+    action = "append"
+  )
   if ("lme4" %in% loadedNamespaces()) {
     mm_register_lme4_s3()
   }
+  if ("lattice" %in% loadedNamespaces()) {
+    mm_register_lattice_s3()
+  }
+  # performance::icc()/r2() and insight::get_variance() (both in Suggests).
+  setHook(
+    packageEvent("insight", "onLoad"),
+    function(...) mm_register_insight_s3(),
+    action = "append"
+  )
+  setHook(
+    packageEvent("performance", "onLoad"),
+    function(...) mm_register_performance_s3(),
+    action = "append"
+  )
+  if ("insight" %in% loadedNamespaces()) {
+    mm_register_insight_s3()
+  }
+  if ("performance" %in% loadedNamespaces()) {
+    mm_register_performance_s3()
+  }
   if ("emmeans" %in% loadedNamespaces()) {
     mm_register_emmeans_s3()
+  }
+  if ("lmerTest" %in% loadedNamespaces()) {
+    mm_register_lmertest_s3()
   }
   if ("generics" %in% loadedNamespaces()) {
     mm_register_broom_s3()
@@ -53,15 +86,37 @@ mm_register_lme4_s3 <- function() {
   registerS3method("VarCorr", "mm_lmm", VarCorr.mm_lmm, envir = ns)
   registerS3method("VarCorr", "mm_glmm", VarCorr.mm_glmm, envir = ns)
   registerS3method("getME", "mm_lmm", getME.mm_lmm, envir = ns)
+  registerS3method("getME", "mm_glmm", getME.mm_glmm, envir = ns)
   registerS3method("ngrps", "mm_lmm", ngrps.mm_lmm, envir = ns)
   registerS3method("ngrps", "mm_glmm", ngrps.mm_glmm, envir = ns)
   registerS3method("refit", "mm_lmm", refit.mm_lmm, envir = ns)
   registerS3method("refit", "mm_glmm", refit.mm_glmm, envir = ns)
+  registerS3method("rePCA", "mm_lmm", rePCA.mm_lmm, envir = ns)
+  registerS3method("rePCA", "mm_glmm", rePCA.mm_glmm, envir = ns)
+  invisible(TRUE)
+}
+
+mm_register_lmertest_s3 <- function() {
+  ns <- asNamespace("lmerTest")
+  if (exists("step", envir = ns, inherits = FALSE)) {
+    registerS3method("step", "mm_lmm", step.mm_lmm, envir = ns)
+  }
+  if (exists("get_model", envir = ns)) {
+    registerS3method("get_model", "mm_step", get_model.mm_step, envir = ns)
+  }
+  invisible(TRUE)
+}
+
+# lattice's dotplot()/qqmath() for ranef() output (lattice is in Suggests).
+mm_register_lattice_s3 <- function() {
+  ns <- asNamespace("lattice")
+  registerS3method("dotplot", "mm_ranef", dotplot.mm_ranef, envir = ns)
+  registerS3method("qqmath", "mm_ranef", qqmath.mm_ranef, envir = ns)
   invisible(TRUE)
 }
 
 mm_register_emmeans_s3 <- function() {
-  emmeans::.emm_register("mm_lmm", "mixeff")
+  emmeans::.emm_register(c("mm_lmm", "mm_glmm"), "mixeff")
   invisible(TRUE)
 }
 

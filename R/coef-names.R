@@ -28,12 +28,22 @@
 # "varTRUE"); numeric components pass through. `factor_vars` must be sorted
 # longest-first so a factor whose name prefixes another ("rec" vs "recipe")
 # matches greedily.
-mm_engine_encode_names <- function(r_names, factor_vars, logical_vars = character(0)) {
+#
+# `factor_suffixes` (optional) maps each factor to the column suffixes
+# model.matrix() can append to its name (its levels and contrast column
+# names). A component is only treated as a factor column when the remainder
+# is one of them, so a numeric `group_size` next to a factor `group` is left
+# alone instead of being mangled into "group: _size".
+mm_engine_encode_names <- function(r_names, factor_vars, logical_vars = character(0),
+                                   factor_suffixes = NULL) {
   translate_component <- function(comp) {
     for (v in factor_vars) {
       if (startsWith(comp, v)) {
         lev <- substring(comp, nchar(v) + 1L)
-        if (nzchar(lev)) return(paste0(v, ": ", lev))
+        allowed <- factor_suffixes[[v]]
+        if (nzchar(lev) && (is.null(allowed) || lev %in% allowed)) {
+          return(paste0(v, ": ", lev))
+        }
       }
     }
     for (v in logical_vars) {
@@ -86,7 +96,11 @@ mm_coef_name_map <- function(fit, engine_names = names(fit$beta)) {
   is_lgl <- vapply(fit$model_frame, is.logical, logical(1))
   logical_vars <- intersect(names(is_lgl)[is_lgl], fe_vars)
 
-  encoded <- mm_engine_encode_names(r_names, factor_vars, logical_vars)
+  factor_suffixes <- lapply(stats::setNames(nm = factor_vars), function(v) {
+    mm_factor_column_suffixes(fit$model_frame[[v]])
+  })
+  encoded <- mm_engine_encode_names(r_names, factor_vars, logical_vars,
+                                    factor_suffixes)
 
   # The engine pivots rank-deficient columns out of the fit (like lme4's
   # rank-deficiency drop), so engine_names may be a subset of R's columns.
@@ -108,12 +122,52 @@ mm_coef_name_map <- function(fit, engine_names = names(fit$beta)) {
     )
   }
 
+  lme4_names <- r_names[keep]
+  assign <- as.integer(x_assign[keep])
+  term_labels <- attr(stats::terms(rhs), "term.labels")
+  if (!is.null(fit$expansion)) {
+    # Stateful / expanded fixed terms: the design above is built on the
+    # synthetic columns; report lme4's names ("poly(x, 2)1", "factor(f)b"),
+    # order, term labels and assign index, which come from model.matrix()
+    # of the user's own fixed formula.
+    user_tt <- fit$expansion$terms
+    user_X <- withCallingHandlers(
+      stats::model.matrix(
+        user_tt,
+        stats::model.frame(user_tt, data = fit$model_frame,
+                           na.action = stats::na.pass)
+      ),
+      warning = muffle_contrasts_dropped
+    )
+    translated <- mm_expansion_user_names(lme4_names, fit$expansion)
+    pos <- match(colnames(user_X), translated)
+    if (anyNA(match(translated, colnames(user_X)))) {
+      mm_abort(
+        message = paste0(
+          "Could not map the expanded fixed-effect design back to the ",
+          "formula's coefficient names (",
+          paste(setdiff(translated, colnames(user_X)), collapse = ", "),
+          "); please report it with a reproducer."
+        ),
+        class = "mm_schema_error",
+        expected = colnames(user_X),
+        observed = translated
+      )
+    }
+    present <- !is.na(pos)
+    pos <- pos[present]
+    lme4_names <- translated[pos]
+    matched <- matched[pos]
+    assign <- as.integer(attr(user_X, "assign")[present])
+    term_labels <- attr(user_tt, "term.labels")
+  }
+
   list(
     engine_names = engine_names,
-    lme4_names   = r_names[keep],
+    lme4_names   = lme4_names,
     perm         = matched,
-    assign       = as.integer(x_assign[keep]),
-    term_labels  = attr(stats::terms(rhs), "term.labels")
+    assign       = assign,
+    term_labels  = term_labels
   )
 }
 
@@ -232,10 +286,29 @@ mm_apply_lme4_coef_naming <- function(fit) {
 # zero reads as "no effect" — the opposite of "not separately estimable".
 # Display surfaces show these as NA (R's lm() convention for aliased terms).
 mm_aliased_coefficients <- function(fit) {
+  # The engine's own list (mixeff-rs >= 2873312: R's rule, the earlier of
+  # two collinear columns is kept) is authoritative; the design audit is the
+  # fallback for fits saved by older versions.
+  dropped <- fit$fit$dropped_coef_names
+  if (!is.null(dropped)) {
+    dropped <- as.character(unlist(dropped, use.names = FALSE))
+    if (!length(dropped)) return(character())
+    return(mm_coef_engine_to_lme4(dropped, fit$coef_map))
+  }
   cols <- unlist(
     fit$artifact$design_audit$fixed_effects$aliased_columns %||% list(),
     use.names = FALSE
   )
   if (!length(cols)) return(character())
   mm_coef_engine_to_lme4(as.character(cols), fit$coef_map)
+}
+
+# Column suffixes model.matrix() may append to a factor's name: its levels
+# (treatment / full indicator coding) and the column names of its contrast
+# matrix (e.g. ".L", ".Q" for contr.poly, or a user matrix's colnames).
+mm_factor_column_suffixes <- function(col) {
+  lev <- levels(col)
+  ctr <- tryCatch(colnames(stats::contrasts(col)), error = function(e) NULL)
+  poly <- if (length(lev) > 1L) colnames(stats::contr.poly(length(lev))) else NULL
+  unique(c(lev, ctr, poly, as.character(seq_along(lev))))
 }

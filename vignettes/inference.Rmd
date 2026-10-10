@@ -83,7 +83,7 @@ vary.
 Start with the ordinary coefficient table.
 
 ```{r coefficient-summary}
-coef_table <- summary(fit, tests = "coefficients", method = "auto")$coefficients
+coef_table <- summary(fit, tests = "coefficients", method = "auto")$coef_table
 knitr::kable(coef_table, digits = 4)
 ```
 
@@ -522,7 +522,10 @@ because variances cannot be negative. In the simplest one-component case, the
 `0.5 * chi-square(0) + 0.5 * chi-square(1)`. In finite samples the true
 null distribution puts more mass at zero than the mixture, so the test
 runs conservative (Crainiceanu and Ruppert 2004); with 18 subjects here,
-read a marginal mixture p-value with that in mind.
+read a marginal mixture p-value with that in mind. A comparison that adds
+only correlation parameters — `(x || g)` against `(x | g)` — has no
+boundary (a zero correlation is interior), so it is referred to the
+ordinary chi-square, as `anova()` does.
 
 Fit a simpler random-intercept model by ML:
 
@@ -574,41 +577,45 @@ stopifnot(identical(fixed_boundary$table$reason_code,
 
 ## Profile confidence intervals
 
-Profile-likelihood intervals are available for variance parameters
-under both fitting criteria, but fixed-effect (beta) profile intervals
-require an ML fit: under the REML default, the beta rows are recorded
-as unavailable with the reason code
-`profile_beta_unavailable_under_reml`, not silently approximated.
+`confint(fit, method = "profile")` returns lme4's rows: `.sig01`, ...
+(random-effect standard deviations and correlations, numbered in lme4's
+term order), `.sigma`, then the fixed effects. As in lme4, the profile is
+of the ML deviance, so a REML fit's intervals are those of its ML refit,
+fixed effects included. The engine's relative-Cholesky `theta` rows
+(profiled on the fit's own criterion) stay in the attached table. Large
+models can pass `threads =`; the intervals are identical for every thread
+count.
 
 ```{r profile-ci}
 prof <- confint(fit, method = "profile")
 prof
 attr(prof, "mm_profile")$table[
   ,
-  c("parameter", "parameter_kind", "lower", "upper", "reason_code")
+  c("parameter", "parameter_kind", "lower", "upper", "profiled_criterion")
 ]
 ```
 
 ```{r profile-checks, include = FALSE}
 ptab <- attr(prof, "mm_profile")$table
-beta_rows <- ptab$parameter_kind == "beta"
-stopifnot(any(beta_rows), any(!beta_rows))
-stopifnot(all(is.na(ptab$lower[beta_rows])))
-stopifnot(all(ptab$reason_code[beta_rows] ==
-                "profile_beta_unavailable_under_reml"))
-stopifnot(all(is.finite(ptab$lower[!beta_rows])),
-          all(is.finite(ptab$upper[!beta_rows])))
+stopifnot(identical(rownames(prof)[1:2], c(".sig01", ".sigma")))
+lme4_rows <- ptab$parameter_kind %in% c("sd", "cor", "sigma", "beta")
+stopifnot(any(ptab$parameter_kind == "beta"))
+stopifnot(all(is.finite(ptab$lower[lme4_rows])),
+          all(is.finite(ptab$upper[lme4_rows])))
+stopifnot(all(ptab$profiled_criterion[lme4_rows] == "ML"))
 ```
 
-Refit with `REML = FALSE` when you want beta profile intervals. On
-boundary fits, profile intervals are refused outright
+On boundary fits, profile intervals are refused outright
 (`profile_ci_unavailable_at_boundary`), as the route map above showed.
 
 ## GLMM inference: the three-route contract
 
-For generalized linear mixed models the contract is stricter, because
-the default estimator is not certified for Wald inference. `glmm()`'s
-default `method = "pirls_profiled"` is a fast profiled PIRLS fitter: it
+For generalized linear mixed models the contract depends on the
+estimator. `glmm()`'s default `method = "joint_laplace"` is glmer's joint
+Laplace estimator and its Wald inference is certified. The opt-in
+`method = "pirls_profiled"` (lme4's `nAGQ = 0` analogue; also used, with a
+notice, for negative-binomial families and `nAGQ > 1`) is a fast profiled
+PIRLS fitter: it
 returns point estimates, fitted values, and variance components, but
 **refuses Wald standard errors, z statistics, p-values, and confidence
 intervals on every route**. Its covariance payload is a working Hessian
@@ -620,7 +627,7 @@ overdispersed models and models with observation-level random effects.
 Exactly three routes lead to reportable GLMM inference, and every
 refusal names them:
 
-1. **Certified joint Wald.** Refit with `method = "joint_laplace"`;
+1. **Certified joint Wald.** The default `method = "joint_laplace"`;
    standard errors, z tests, and Wald intervals come from a covariance
    the engine certifies. `vignette("glmm")` is the operational
    quickstart for this route, including its parity with `glmer()` and
@@ -640,12 +647,12 @@ refusal names them:
    (<https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html>)
    is the worked example of why this route is opt-in.
 
-The practical rule: explore with the default, report with
-`joint_laplace` or the bootstrap.
+The practical rule: report with the default `joint_laplace` fit or the
+bootstrap; treat profiled-fit point estimates as exploratory.
 
-Here is the contract on a small simulated binomial GLMM. On the
-default fit, `summary()` prints the estimates and withholds the
-inference columns:
+Here is the contract on a small simulated binomial GLMM. On a profiled
+fit, `summary()` prints the estimates and withholds the inference
+columns:
 
 ```{r glmm-data, include = FALSE}
 set.seed(7)
@@ -660,10 +667,11 @@ gfit <- glmm(
   y ~ x + (1 | g),
   trials,
   family = binomial(),
+  method = "pirls_profiled",
   control = mm_control(verbose = -1)
 )
 
-gtab <- summary(gfit, tests = "coefficients")$coefficients
+gtab <- summary(gfit, tests = "coefficients")$coef_table
 gtab
 ```
 
@@ -700,7 +708,7 @@ attr(gci, "mm_method")
 
 ```{r glmm-checks, include = FALSE}
 stopifnot(inherits(gfit, "mm_glmm"))
-# Default path: estimates present, inference withheld (all SEs NA).
+# Profiled path: estimates present, inference withheld (all SEs NA).
 stopifnot(!any(is.finite(gtab[, "Std. Error"])))
 # Wald confint refuses with a typed condition naming the alternatives.
 stopifnot(inherits(err, "mm_inference_unavailable"))
@@ -997,7 +1005,9 @@ attr(V, "mm_method")
 attr(V, "mm_status")
 ```
 
-For rank-deficient or otherwise uncertified fits, `vcov()` returns an
+For a rank-deficient design, `vcov()` covers the estimable coefficients
+only, as lme4's does (the dropped coefficient is omitted from `fixef()`
+too). For otherwise uncertified fits, `vcov()` returns an
 `NA` matrix carrying an `mm_unavailable_reason` attribute instead of
 fabricated numbers — the same available/unavailable/typed-error
 contract as every other surface in this vignette. Prediction standard

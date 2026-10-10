@@ -27,6 +27,7 @@ pub mod fixed_design;
 pub mod generalized;
 pub(crate) mod kernel;
 pub mod linear;
+pub(crate) mod snapshot;
 pub mod summary_estimates;
 pub mod traits;
 
@@ -35,20 +36,20 @@ pub use data::{
     EncodedCategoricalColumn,
 };
 pub use generalized::{
-    GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder, GlmmFitOptions,
-    GlmmPredictionScale,
+    GeneralizedLinearMixedModel, GeneralizedLinearMixedModelBuilder, GlmmDispersionMethod,
+    GlmmFitOptions, GlmmPredictionScale,
 };
 pub use linear::{
     parametricbootstrap, try_parametricbootstrap, ActiveFaceRefit, BootstrapFailedRefitPolicy,
     BootstrapInterval, BootstrapIntervalMethod, BootstrapQuantile, BootstrapRefitOptions,
     BootstrapReplicate, BootstrapRunMetadata, BootstrapRunPayload, BootstrapSeedRecord,
-    BootstrapTarget, BootstrapTargetKind, FitOptions, FitProgress, FitProgressCallback,
-    FitProgressPhase, FitToleranceOverrides, FixedEffectBootstrapOptions,
+    BootstrapTarget, BootstrapTargetKind, CompiledModelSpec, FitOptions, FitProgress,
+    FitProgressCallback, FitProgressPhase, FitToleranceOverrides, FixedEffectBootstrapOptions,
     FixedEffectNullBootstrapTarget, FixedEffectNullCovariancePolicy, LinearMixedModel,
     LinearMixedModelBuilder, MixedModelBootstrap, ModelCriterion, NewReLevels, OptimizerChoice,
     OptimizerControl, PredictionVarianceMethod, PredictionVariancePayload, PredictionVarianceRow,
-    PredictionVarianceStatus, TrustBqSampleReuse, TrustBqStartLadder, BOOTSTRAP_RUN_SCHEMA,
-    BOOTSTRAP_RUN_SCHEMA_VERSION,
+    PredictionVarianceStatus, RefitStart, TrustBqGradientOracle, TrustBqSampleReuse,
+    TrustBqStartLadder, BOOTSTRAP_RUN_SCHEMA, BOOTSTRAP_RUN_SCHEMA_VERSION,
 };
 pub use summary_estimates::{ResidualSource, SamplingVarianceScale, SummaryEstimateOptions};
 pub use traits::{Family, LinkFunction, MixedModelFit, RandomEffectTermInfo, WaldConfintRow};

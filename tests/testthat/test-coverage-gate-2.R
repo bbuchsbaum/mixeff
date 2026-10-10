@@ -100,8 +100,12 @@ test_that("predict.mm_lmm rejects bad allow.new.levels and unsupported re.form",
   expect_error(predict(fit, allow.new.levels = NA), class = "mm_arg_error")
   expect_error(predict(fit, allow.new.levels = c(TRUE, FALSE)),
                class = "mm_arg_error")
-  expect_error(predict(fit, re.form = ~(1 | g)),
-               class = "mm_inference_unavailable")
+  # re.form naming every random term is conditional (lme4); a grouping
+  # factor the model does not have is refused.
+  expect_equal(predict(fit, re.form = ~(1 | g)), predict(fit))
+  expect_error(predict(fit, re.form = ~(1 | not_a_group)),
+               class = "mm_arg_error")
+  expect_error(predict(fit, re.form = ~ x), class = "mm_arg_error")
   expect_error(predict(fit, random.only = TRUE), class = "mm_arg_error")
 })
 
@@ -145,8 +149,7 @@ test_that("predict.mm_lmm se.fit and interval shapes (conditional + population)"
 test_that("predict.mm_glmm guards and basic response/link paths", {
   fit <- mk_cg2_glmm()
   expect_error(predict(fit, allow.new.levels = NA), class = "mm_arg_error")
-  expect_error(predict(fit, re.form = ~(1 | g)),
-               class = "mm_inference_unavailable")
+  expect_equal(predict(fit, re.form = ~(1 | g)), predict(fit))
   expect_error(
     predict(fit, interval = "prediction", type = "link"),
     class = "mm_inference_unavailable"
@@ -177,7 +180,10 @@ test_that("residuals.mm_lmm pearson/scaled and fitted names", {
   rs <- residuals(fit, scaled = TRUE)
   expect_equal(length(r0), nobs(fit))
   expect_equal(length(rp), nobs(fit))
-  expect_false(isTRUE(all.equal(unname(r0), unname(rp))))
+  # lme4: unweighted Pearson residuals equal response residuals; only
+  # scaled = TRUE divides by sigma.
+  expect_equal(unname(r0), unname(rp))
+  expect_equal(unname(rs), unname(r0) / sigma(fit))
   expect_equal(length(rs), nobs(fit))
   expect_equal(length(fitted(fit)), nobs(fit))
 })
@@ -283,10 +289,12 @@ test_that("model.matrix, vcov, ngrps, sigma, logLik, formula, nobs, terms", {
   expect_equal(length(aic), 2L)
 })
 
-test_that("AIC/BIC refuse multi-object comparison", {
+test_that("AIC/BIC with several models return stats' data frame", {
   fit <- mk_cg2_lmm_simple()
-  expect_error(AIC(fit, fit), class = "mm_inference_unavailable")
-  expect_error(BIC(fit, fit), class = "mm_inference_unavailable")
+  a <- AIC(fit, fit)
+  expect_identical(names(a), c("df", "AIC"))
+  expect_equal(a$AIC, rep(AIC(fit), 2L))
+  expect_identical(names(BIC(fit, fit)), c("df", "BIC"))
   expect_true(is.finite(AIC(fit)))
   expect_true(is.finite(BIC(fit)))
 })
@@ -493,7 +501,7 @@ test_that("profile() print and confint.mm_profile edges", {
 
   mat <- confint(pr)
   expect_true(is.matrix(mat) && ncol(mat) == 2L)
-  mat2 <- confint(pr, parm = "sigma")
+  mat2 <- confint(pr, parm = ".sigma")  # lme4 row name
   expect_equal(nrow(mat2), 1L)
   expect_error(confint(pr, level = 0.5), class = "mm_arg_error")
 })
@@ -628,6 +636,12 @@ test_that("mm_json_parse_* cover missing schema and empty inference table", {
   ))
   expect_equal(nrow(empty$table), 0L)
   expect_true(inherits(empty, "mm_fixed_effect_inference_table"))
+  current <- mixeff:::mm_json_parse_fixed_effect_inference_table(list(
+    schema_name = "mixedmodels.fixed_effect_inference_table",
+    schema_version = "1.2.0",
+    rows = list()
+  ))
+  expect_equal(nrow(current$table), 0L)
 })
 
 # ---- fit-lmm / mm_control validation ----------------------------------------
@@ -666,8 +680,11 @@ test_that("simulate population path and re.form guard", {
   sims <- simulate(fit, nsim = 2L, seed = 1L, re.form = NA)
   expect_equal(ncol(sims), 2L)
   expect_equal(nrow(sims), nobs(fit))
-  expect_error(simulate(fit, re.form = ~(1 | g)),
-               class = "mm_inference_unavailable")
+  # Naming every random term is conditional simulation; a non-formula
+  # re.form is an argument error.
+  expect_identical(attr(simulate(fit, re.form = ~(1 | g)), "mm_re_form"),
+                   "conditional")
+  expect_error(simulate(fit, re.form = "g"), class = "mm_arg_error")
 })
 
 test_that("diagnostics filters and fit_status on fit and spec", {

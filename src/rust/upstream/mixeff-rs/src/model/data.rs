@@ -3,6 +3,7 @@
 use crate::error::{MixedModelError, Result};
 use indexmap::IndexMap;
 use nalgebra::DMatrix;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// A simple column-oriented table for feeding data to mixed models.
@@ -42,7 +43,7 @@ pub struct CategoricalColumn {
 }
 
 /// Stable source label for a categorical contrast basis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ContrastSource {
     /// Treatment/dummy coding.
@@ -74,7 +75,7 @@ impl ContrastSource {
 }
 
 /// Categorical coding mode used when no explicit contrast basis is supplied.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum CategoricalCoding {
     /// Drop the first level as a reference category.
@@ -87,7 +88,7 @@ pub enum CategoricalCoding {
 ///
 /// Rows are in categorical level order and columns are the encoded basis
 /// columns used in fixed-effect and random-effect design construction.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CategoricalContrast {
     /// Level order corresponding to matrix rows.
@@ -381,6 +382,65 @@ impl CategoricalColumn {
 }
 
 impl DataFrame {
+    pub(crate) fn snapshot_frame(&self) -> crate::model::snapshot::FrameSnapshot {
+        crate::model::snapshot::FrameSnapshot {
+            columns: self
+                .columns
+                .iter()
+                .map(|(name, column)| match column {
+                    Column::Numeric(values) => crate::model::snapshot::SnapshotColumn::Numeric {
+                        name: name.clone(),
+                        values: values.clone(),
+                    },
+                    Column::Categorical(cat) => {
+                        crate::model::snapshot::SnapshotColumn::Categorical {
+                            name: name.clone(),
+                            values: cat.values.clone(),
+                            levels: cat.levels.clone(),
+                            refs: cat.refs.clone(),
+                            contrast: cat.contrast.clone(),
+                        }
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    pub(crate) fn from_snapshot_frame(
+        frame: &crate::model::snapshot::FrameSnapshot,
+    ) -> Result<Self> {
+        let mut out = Self::new();
+        for column in &frame.columns {
+            match column {
+                crate::model::snapshot::SnapshotColumn::Numeric { name, values } => {
+                    out.add_numeric(name, values.clone())?;
+                }
+                crate::model::snapshot::SnapshotColumn::Categorical {
+                    name,
+                    values,
+                    levels,
+                    refs,
+                    contrast,
+                } => {
+                    let rebuilt = match contrast {
+                        Some(contrast) => CategoricalColumn::with_levels_and_contrast(
+                            values.clone(),
+                            levels.clone(),
+                            contrast.clone(),
+                        )?,
+                        None => CategoricalColumn::with_levels(values.clone(), levels.clone())?,
+                    };
+                    if rebuilt.refs != *refs {
+                        return Err(MixedModelError::InvalidArgument(format!("snapshot categorical column `{name}` has references inconsistent with values and levels")));
+                    }
+                    out.validate_new_column_len(name, rebuilt.values.len())?;
+                    out.columns
+                        .insert(name.clone(), Column::Categorical(rebuilt));
+                }
+            }
+        }
+        Ok(out)
+    }
     /// Create a new empty DataFrame.
     pub fn new() -> Self {
         DataFrame {
@@ -562,11 +622,74 @@ impl DataFrame {
     ///
     /// Duplicate sampled clusters are relabeled with draw-local unique levels
     /// so refitted random effects remain independent bootstrap clusters.
+    ///
+    /// Every other categorical column that is nested within `group` (each of
+    /// its levels occurs inside a single cluster, e.g. classroom ids within
+    /// schools) is relabeled with the same draw-local suffix, so the two
+    /// copies of a cluster drawn twice do not merge their nested units into
+    /// one level. Use [`DataFrame::cluster_resample_with_nested`] to name the
+    /// nested columns explicitly instead.
     pub fn cluster_resample<R: rand::Rng>(
         &self,
         group: &str,
         rng: &mut R,
     ) -> Result<(Self, ClusterResampleDraw)> {
+        let nested = self.categorical_columns_nested_within(group)?;
+        self.cluster_resample_with_nested(group, &nested, rng)
+    }
+
+    /// Names of the categorical columns (other than `group`) whose every
+    /// level occurs inside exactly one level of `group`.
+    pub fn categorical_columns_nested_within(&self, group: &str) -> Result<Vec<String>> {
+        let group_column = self.categorical(group).ok_or_else(|| {
+            MixedModelError::InvalidArgument(format!(
+                "cluster resampling group `{group}` must be an observed categorical column"
+            ))
+        })?;
+        let mut nested = Vec::new();
+        for (name, column) in &self.columns {
+            if name == group {
+                continue;
+            }
+            let Column::Categorical(cat) = column else {
+                continue;
+            };
+            let mut owner: Vec<Option<u32>> = vec![None; cat.levels.len()];
+            let mut is_nested = true;
+            for (&level, &cluster) in cat.refs.iter().zip(&group_column.refs) {
+                match &mut owner[level as usize] {
+                    slot @ None => *slot = Some(cluster),
+                    Some(existing) if *existing == cluster => {}
+                    Some(_) => {
+                        is_nested = false;
+                        break;
+                    }
+                }
+            }
+            if is_nested {
+                nested.push(name.clone());
+            }
+        }
+        Ok(nested)
+    }
+
+    /// [`DataFrame::cluster_resample`] with an explicit list of categorical
+    /// columns nested within `group` that are relabeled per draw alongside
+    /// the cluster column. Columns not listed keep their original labels
+    /// (e.g. crossed factors such as items shared by every subject).
+    pub fn cluster_resample_with_nested<R: rand::Rng>(
+        &self,
+        group: &str,
+        nested: &[String],
+        rng: &mut R,
+    ) -> Result<(Self, ClusterResampleDraw)> {
+        for name in nested {
+            if name == group || self.categorical(name).is_none() {
+                return Err(MixedModelError::InvalidArgument(format!(
+                    "cluster resampling nested column `{name}` must be a categorical column other than the cluster `{group}`"
+                )));
+            }
+        }
         let group_column = self.categorical(group).ok_or_else(|| {
             MixedModelError::InvalidArgument(format!(
                 "cluster resampling group `{group}` must be an observed categorical column"
@@ -618,6 +741,21 @@ impl DataFrame {
             group.to_string(),
             Column::Categorical(CategoricalColumn::new(resampled_group_values)),
         );
+        for name in nested {
+            let cat = self
+                .categorical(name)
+                .expect("nested columns validated as categorical above");
+            let mut values = Vec::with_capacity(row_indices.len());
+            for (draw_index, &level) in sampled_indices.iter().enumerate() {
+                for &row in &rows_by_level[level] {
+                    values.push(format!("{}__boot{}", cat.values[row], draw_index + 1));
+                }
+            }
+            out.columns.insert(
+                name.clone(),
+                Column::Categorical(CategoricalColumn::new(values)),
+            );
+        }
         let draw = ClusterResampleDraw {
             group: group.to_string(),
             original_level_count: group_column.levels.len(),
@@ -742,9 +880,9 @@ mod tests {
             [0.0, 2.0, -1.0],
             [0.0, 0.0, 3.0],
         ];
-        for i in 0..4 {
-            for j in 0..3 {
-                assert_eq!(c.matrix[(i, j)], expected[i][j], "({i},{j})");
+        for (i, expected_row) in expected.iter().enumerate() {
+            for (j, &expected_value) in expected_row.iter().enumerate() {
+                assert_eq!(c.matrix[(i, j)], expected_value, "({i},{j})");
             }
         }
     }
@@ -915,5 +1053,61 @@ mod tests {
         assert_eq!(group.values.len(), 4);
         assert_eq!(group.n_levels(), 2);
         assert!(group.values.iter().all(|value| value.contains("__boot")));
+    }
+
+    #[test]
+    fn test_cluster_resample_relabels_nested_factors_per_draw() {
+        use rand::SeedableRng;
+
+        // school/class with globally unique class ids (implicitly nested),
+        // plus an item factor crossed with school.
+        let mut df = DataFrame::new();
+        df.add_numeric("y", vec![1.0; 8]).unwrap();
+        df.add_categorical(
+            "school",
+            ["s1", "s1", "s1", "s1", "s2", "s2", "s2", "s2"]
+                .map(String::from)
+                .to_vec(),
+        )
+        .unwrap();
+        df.add_categorical(
+            "class",
+            ["c1", "c1", "c2", "c2", "c3", "c3", "c4", "c4"]
+                .map(String::from)
+                .to_vec(),
+        )
+        .unwrap();
+        df.add_categorical(
+            "item",
+            ["i1", "i2", "i1", "i2", "i1", "i2", "i1", "i2"]
+                .map(String::from)
+                .to_vec(),
+        )
+        .unwrap();
+        assert_eq!(
+            df.categorical_columns_nested_within("school").unwrap(),
+            vec!["class".to_string()]
+        );
+
+        // Find a seed that draws the same school twice.
+        let mut seed = 0;
+        let (resampled, draw) = loop {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let out = df.cluster_resample("school", &mut rng).unwrap();
+            if out.1.duplicate_count > 0 {
+                break out;
+            }
+            seed += 1;
+        };
+        assert_eq!(draw.distinct_sampled_level_count, 1);
+        let school = resampled.categorical("school").unwrap();
+        let class = resampled.categorical("class").unwrap();
+        let item = resampled.categorical("item").unwrap();
+        assert_eq!(school.n_levels(), 2);
+        // Two copies of a school with two classes -> four distinct classes.
+        assert_eq!(class.n_levels(), 4);
+        // Crossed factor keeps its labels.
+        assert_eq!(item.n_levels(), 2);
+        assert!(item.values.iter().all(|v| !v.contains("__boot")));
     }
 }

@@ -41,14 +41,14 @@ test_that("summary(mm_glmm, tests='none') still works", {
   expect_null(s_none$inference)
   ## The 'none' path should give a coefficient table with NA stats
   expect_true("Estimate" %in% colnames(s_none$coefficients))
-  expect_true(all(is.na(s_none$coefficients$df) |
-                  is.numeric(s_none$coefficients$df)))
+  expect_true(all(is.na(s_none$coef_table$df) |
+                  is.numeric(s_none$coef_table$df)))
 })
 
 test_that("Wald z = beta / SE and p = 2*pnorm(|z|) match mm_lincomb()", {
   fit <- mk_summary_glmm()
   s <- summary(fit, tests = "coefficients")
-  coef <- s$coefficients
+  coef <- s$coef_table
 
   ## Compute the Wald z for each row via mm_lincomb and compare
   bnms <- names(fixef(fit))
@@ -100,7 +100,7 @@ test_that("summary keeps fast-PIRLS GLMM Wald rows explicitly unavailable", {
     nAGQ = 1L,
     control = mm_control(verbose = -1)
   )
-  coef <- summary(fit, tests = "coefficients")$coefficients
+  coef <- summary(fit, tests = "coefficients")$coef_table
   expect_true(all(coef$method == "not_computed"))
   expect_true(all(is.na(coef[["Pr(>|z|)"]])))
 })

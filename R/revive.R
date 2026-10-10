@@ -3,8 +3,12 @@
 #' `revive()` restores the process-local parts of a `mixeff` object after
 #' `saveRDS()` / `readRDS()` or a worker restart. The fitted artifact and flat
 #' extractor values are the durable source of truth; the Rust handle is only a
-#' cache and may be absent. In the current bridge, revival recreates the lazy
-#' R-side cache and explicitly leaves `rust_handle = NULL`.
+#' cache and may be absent. Revival recreates the lazy R-side cache, keeps a
+#' live native handle, and clears a dead one (an external pointer restored by
+#' `readRDS()`); it does not refit the model. Without a live handle,
+#' computations that need the engine model (contrasts, `summary()` tests,
+#' predictions with intervals, profiles, bootstraps) refit it from the stored
+#' model frame, with identical results.
 #'
 #' @param fit A fitted `mm_fit` object.
 #' @param ... Reserved for future methods.
@@ -45,7 +49,9 @@ revive.mm_fit <- function(fit, ...) {
   }
 
   fit$schema <- fit$schema %||% mm_object_schema(fit$artifact)
-  fit$rust_handle <- NULL
+  if (!isTRUE(mm_handle_alive(fit$rust_handle))) {
+    fit$rust_handle <- NULL
+  }
   fit$lazy_cache <- mm_empty_lazy_cache()
   class(fit) <- unique(c(class(fit), "mm_fit", "mm_compiled"))
   fit
@@ -62,10 +68,19 @@ revive.default <- function(fit, ...) {
 
 #' Test whether a mixeff fit has a live native handle
 #'
-#' The native handle is a process-local cache. A `FALSE` result does not mean
-#' the fit is unusable: extractors read from the durable artifact and
-#' flat R-side payload, and [revive()] recreates the lazy cache after
-#' serialization.
+#' The native handle is a process-local cache of the fitted engine model,
+#' created by [lmm()] and [glmm()]. While it is alive, computations that need
+#' the engine model (contrasts, `summary()` tests, predictions with intervals,
+#' `ranef(condVar = TRUE)`, profiles, bootstraps, model comparison,
+#' [verify_convergence()]) reuse it instead of refitting. A `FALSE` result
+#' does not mean the fit is unusable: the handle does not survive
+#' `saveRDS()` / `readRDS()` or a new R process, and those computations then
+#' refit the model from the stored model frame, with identical results;
+#' extractors read from the durable artifact and flat R-side payload, and
+#' [revive()] recreates the lazy cache after serialization. Set
+#' `options(mixeff.keep_handle = FALSE)` before fitting to not keep handles
+#' (each one holds a copy of the model data for as long as the fit object
+#' lives).
 #'
 #' @param fit A fitted `mm_fit` object.
 #' @param ... Reserved for future methods.
@@ -80,8 +95,7 @@ fit_handle_alive <- function(fit, ...) {
 #' @rdname fit_handle_alive
 #' @export
 fit_handle_alive.mm_fit <- function(fit, ...) {
-  ptr <- fit$rust_handle
-  !is.null(ptr) && identical(typeof(ptr), "externalptr")
+  isTRUE(mm_handle_alive(fit$rust_handle))
 }
 
 #' @export
@@ -91,19 +105,47 @@ fit_handle_alive.default <- function(fit, ...) {
 
 #' Extract low-level model components
 #'
-#' `getME()` provides a small, honest subset of the familiar lme4 extractor.
-#' The fixed-effect design (`"X"`), random-effect design (`"Z"`), relative
-#' covariance factor (`"Lambda"` / `"Lambdat"`), grouping factors (`"flist"`),
-#' random coefficient names (`"cnms"`), response (`"y"`), fixed coefficients
-#' (`"beta"` / `"fixef"`), and theta vector (`"theta"`) are rebuilt lazily
-#' from the serialized R object.
+#' `getME()` mirrors `lme4::getME()` for [lmm()] and [glmm()] fits. Every
+#' component is rebuilt R-side from quantities the fit stores (fixed
+#' effects, theta and its map, conditional modes, fitted values, the model
+#' frame), so it works on fits restored with `readRDS()`.
 #'
-#' @param object A fitted `mm_lmm` object.
-#' @param name Component name, or a character vector of names.
+#' Supported components: `"X"`, `"Z"`, `"Zt"`, `"Ztlist"`, `"mmList"`,
+#' `"y"`, `"mu"`, `"u"`, `"b"`, `"Gp"`, `"Tp"`, `"L"`, `"Lambda"`,
+#' `"Lambdat"`, `"Lind"`, `"Tlist"`, `"ST"`, `"A"`, `"RX"`, `"RZX"`,
+#' `"sigma"`, `"flist"`, `"fixef"`, `"beta"`, `"theta"`, `"REML"`,
+#' `"is_REML"`, `"n_rtrms"`, `"n_rfacs"`, `"N"`, `"n"`, `"p"`, `"q"`,
+#' `"p_i"`, `"l_i"`, `"q_i"`, `"k"`, `"m_i"`, `"m"`, `"cnms"`, `"devcomp"`,
+#' `"offset"`, `"weights"`, `"lower"`, `"glmer.nb.theta"` (negative-binomial
+#' GLMMs), and `"ALL"` (a named list of every available component).
+#'
+#' `"L"` is the sparse Cholesky factor (a `Matrix` `CHMfactor`, with the same
+#' fill-reducing permutation lme4 uses) of `Lambda'Z'WZ Lambda + I`, where
+#' `W` holds the prior weights for an LMM and the final PIRLS working weights
+#' for a GLMM. `"RZX"`, `"RX"`, `"u"` and `"devcomp"` (`cmp` and `dims`) are
+#' computed from the same decomposition at the fitted parameters. `"u"` is
+#' the minimum-norm spherical mode with `b = Lambda u`, which is the
+#' penalized optimum also when `Lambda` is singular.
+#'
+#' `"devfun"` is refused: the optimizer runs inside the Rust engine and no R
+#' deviance function exists. Refusals, and requests for unknown components,
+#' raise an `mm_inference_unavailable` condition with
+#' `reason_code = "getme_component_unavailable"` naming the component.
+#'
+#' @param object A fitted `mm_lmm` or `mm_glmm` object.
+#' @param name Component name, or a character vector of names, or `"ALL"`.
 #' @param ... Reserved for future methods.
 #'
 #' @return The requested component, or a named list for multiple names.
 #'
+#' @examples
+#' set.seed(1)
+#' df <- data.frame(y = rnorm(60), x = rnorm(60),
+#'                  g = factor(rep(seq_len(10), each = 6)))
+#' fit <- lmm(y ~ x + (1 | g), df, control = mm_control(verbose = -1))
+#' getME(fit, "theta")
+#' getME(fit, "lower")
+#' getME(fit, "devcomp")$cmp
 #' @export
 getME <- function(object, name, ...) {
   UseMethod("getME")
@@ -112,47 +154,21 @@ getME <- function(object, name, ...) {
 #' @rdname getME
 #' @export
 getME.mm_lmm <- function(object, name, ...) {
-  if (missing(name) || !is.character(name) || !length(name)) {
-    mm_abort(
-      message = "`name` must be a non-empty character vector.",
-      class = "mm_arg_error",
-      input = name
-    )
-  }
+  mm_getme(object, name)
+}
 
-  values <- lapply(name, function(one) {
-    switch(
-      one,
-      X = stats::model.matrix(object, type = "fixed"),
-      Z = stats::model.matrix(object, type = "random"),
-      Zt = Matrix::t(stats::model.matrix(object, type = "random")),
-      Lambda = .mm_lazy(object, "Lambda", mm_lambda_matrix),
-      Lambdat = Matrix::t(.mm_lazy(object, "Lambda", mm_lambda_matrix)),
-      theta = object$theta,
-      beta = object$beta,
-      fixef = object$beta,
-      y = mm_response_vector(object),
-      mu = fitted(object),
-      flist = .mm_lazy(object, "flist", mm_random_flist),
-      cnms = .mm_lazy(object, "cnms", mm_random_cnms),
-      mm_abort(
-        message = sprintf("`getME()` component `%s` is not available.", one),
-        class = "mm_arg_error",
-        input = one
-      )
-    )
-  })
-  names(values) <- name
-  if (length(values) == 1L) values[[1L]] else values
+#' @rdname getME
+#' @export
+getME.mm_glmm <- function(object, name, ...) {
+  mm_getme(object, name)
 }
 
 #' @export
 getME.default <- function(object, name, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::getME(object, name, ...))
-  }
+  fwd <- mm_forward_foreign_generic("getME", object, name, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
-    message = "`getME()` expects a fitted mixeff LMM.",
+    message = "`getME()` expects a fitted mixeff model.",
     class = "mm_arg_error",
     input = object
   )
@@ -170,7 +186,13 @@ model.matrix.mm_lmm <- function(object, type = c("fixed", "random"), ...) {
   switch(
     type,
     fixed = .mm_lazy(object, "X", mm_fixed_model_matrix),
-    random = .mm_lazy(object, "Z", mm_random_model_matrix)
+    random = .mm_lazy(object, "Z", function(fit) {
+      # Columns in the engine's (lme4's) term order, consistent with
+      # getME(fit, "Lambda") and fit$theta; older fits without a theta map
+      # fall back to the formula-order rebuild.
+      tryCatch(Matrix::t(mm_re_zt(fit)),
+               error = function(cnd) mm_random_model_matrix(fit))
+    })
   )
 }
 
@@ -201,6 +223,20 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
       object$std_errors,
       coef_map = object$coef_map
     )
+  dropped <- intersect(mm_aliased_coefficients(object), names(object$beta))
+  if (length(dropped)) {
+    # lme4: the covariance of the estimable coefficients only. The engine
+    # withholds its matrix for a rank-deficient design, so rebuild it from
+    # the penalized least-squares factor on the kept columns,
+    # sigma^2 (RX'RX)^-1, exactly as lme4's vcov.merMod does.
+    kept <- setdiff(names(object$beta), dropped)
+    Vk <- V[kept, kept, drop = FALSE]
+    if (anyNA(Vk)) {
+      Vk <- tryCatch(mm_rank_deficient_vcov(object, kept),
+                     error = function(cnd) Vk)
+    }
+    V <- Vk
+  }
   if (isTRUE(correlation)) {
     # Match lme4: attach the correlation matrix as a "correlation" attribute.
     attr(V, "correlation") <- stats::cov2cor(V)
@@ -210,7 +246,60 @@ vcov.mm_lmm <- function(object, type = c("fixed", "theta"),
 
 #' @rdname mm_lmm-methods
 #' @export
-vcov.mm_glmm <- vcov.mm_lmm
+vcov.mm_glmm <- function(object, type = c("fixed", "theta"),
+                         correlation = FALSE, ...) {
+  V <- vcov.mm_lmm(object, type = type, correlation = correlation, ...)
+  if (mm_glmm_is_rx_fallback(attr(V, "mm_method"))) {
+    # glmer (use.hessian = TRUE) warns and falls back to RX in this
+    # situation; say the same thing, with the engine's own notes.
+    rlang::warn(
+      mm_glmm_rx_fallback_message(attr(V, "mm_notes")),
+      class = c("mm_vcov_rx_fallback", "mm_condition")
+    )
+  }
+  V
+}
+
+# Engine afc7c36+: a joint-Laplace fit whose active Hessian is unusable gets
+# fixed-effect covariance from RX conditional on theta.
+mm_glmm_rx_fallback_method <- "laplace_rx_conditional_on_theta"
+mm_glmm_rx_fallback_reason <- "glmm_laplace_rx_conditional_on_theta_wald"
+
+mm_glmm_is_rx_fallback <- function(method) {
+  identical(as.character(method %||% NA_character_)[1L],
+            mm_glmm_rx_fallback_method)
+}
+
+mm_glmm_rx_fallback_message <- function(notes = character()) {
+  notes <- as.character(notes %||% character())
+  notes <- notes[!is.na(notes) & nzchar(notes)]
+  paste0(
+    "The joint-Laplace Hessian is not usable for the fixed-effect ",
+    "covariance (not positive definite or unavailable); falling back to ",
+    "var-cov estimated from RX conditional on the covariance parameters, ",
+    "as glmer's vcov(use.hessian = FALSE). These standard errors ignore ",
+    "uncertainty in theta (reliability low).",
+    if (length(notes)) paste0(" Engine notes: ", paste(notes, collapse = " "))
+  )
+}
+
+mm_rank_deficient_vcov <- function(object, kept) {
+  RX <- mm_pls(object)$RX
+  # GLMM RX already carries the 1/phi working weights (engine unsc()).
+  s2 <- if (inherits(object, "mm_glmm")) 1 else as.numeric(sigma(object))^2
+  V <- s2 * chol2inv(RX)
+  dimnames(V) <- list(colnames(RX), colnames(RX))
+  V <- V[kept, kept, drop = FALSE]
+  # Cross-check against the engine's own standard errors.
+  se <- object$std_errors[kept]
+  if (any(is.finite(se)) &&
+      !isTRUE(all.equal(sqrt(diag(V))[is.finite(se)], se[is.finite(se)],
+                        tolerance = 1e-3, check.attributes = FALSE))) {
+    stop("rebuilt covariance does not match the engine standard errors")
+  }
+  attr(V, "mm_method") <- "pls_rebuild_rank_deficient"
+  V
+}
 
 mm_fixed_effect_vcov_from_payload <- function(payload, beta, std_errors,
                                               coef_map = NULL) {
@@ -629,8 +718,17 @@ print.mm_reproducibility <- function(x, ...) {
 
 #' Test whether a fit is singular or reduced-rank
 #'
-#' @param x A fitted `mm_lmm`.
-#' @param tol Reserved for compatibility with lme4's `isSingular()`.
+#' Follows `lme4::isSingular()`: a fit is singular when any covariance
+#' parameter with a lower bound of zero (a diagonal element of a relative
+#' covariance factor, `getME(x, "lower") == 0`) is below `tol`. Works for
+#' [lmm()] and [glmm()] fits. `lme4::isSingular()` is a plain function, so
+#' it cannot dispatch on mixeff fits; call `is_singular()` instead. Fits
+#' without a stored theta map (very old serialized objects) fall back to the
+#' engine's fit-status and effective-covariance labels.
+#'
+#' @param x A fitted `mm_lmm` or `mm_glmm`.
+#' @param tol Tolerance on the zero-bounded theta values (default `1e-4`,
+#'   as in lme4).
 #' @param ... Reserved for future methods.
 #'
 #' @return A length-one logical value.
@@ -643,6 +741,17 @@ is_singular <- function(x, tol = 1e-4, ...) {
 #' @rdname is_singular
 #' @export
 is_singular.mm_lmm <- function(x, tol = 1e-4, ...) {
+  if (!is.numeric(tol) || length(tol) != 1L || is.na(tol) || tol < 0) {
+    mm_abort(
+      message = "`tol` must be a single non-negative number.",
+      class = "mm_arg_error",
+      input = tol
+    )
+  }
+  by_theta <- mm_is_singular_theta(x, tol)
+  if (!is.na(by_theta)) {
+    return(by_theta)
+  }
   status <- tolower(fit_status(x))
   cov_status <- vapply(
     x$artifact$effective_covariance %||% list(),
@@ -654,10 +763,14 @@ is_singular.mm_lmm <- function(x, tol = 1e-4, ...) {
     any(cov_status %in% c("boundary", "reduced_rank", "singular"))
 }
 
+#' @rdname is_singular
+#' @export
+is_singular.mm_glmm <- is_singular.mm_lmm
+
 #' @export
 is_singular.default <- function(x, tol = 1e-4, ...) {
   mm_abort(
-    message = "`is_singular()` expects a fitted mixeff LMM.",
+    message = "`is_singular()` expects a fitted mixeff model.",
     class = "mm_arg_error",
     input = x
   )
@@ -701,7 +814,11 @@ mm_object_schema <- function(artifact) {
 }
 
 mm_fixed_model_matrix <- function(fit) {
-  stats::model.matrix(mm_fixed_formula(fit), data = fit$model_frame)
+  X <- stats::model.matrix(mm_fixed_formula(fit), data = fit$model_frame)
+  if (!is.null(fit$expansion)) {
+    colnames(X) <- mm_expansion_user_names(colnames(X), fit$expansion)
+  }
+  X
 }
 
 mm_fixed_formula <- function(fit) {
@@ -733,6 +850,15 @@ mm_response_name <- function(fit) {
 
 mm_response_vector <- function(fit) {
   out <- fit$model_frame[[mm_response_name(fit)]]
+  if (is.null(out) && inherits(fit$formula, "formula") &&
+      length(fit$formula) == 3L) {
+    # Transformed response (e.g. log(y)): the stored frame holds the raw
+    # variables, so evaluate the left-hand side in it.
+    out <- tryCatch(
+      eval(fit$formula[[2L]], fit$model_frame, environment(fit$formula)),
+      error = function(cnd) NULL
+    )
+  }
   names(out) <- rownames(fit$model_frame)
   out
 }
@@ -868,50 +994,6 @@ mm_random_cnms <- function(fit) {
   out
 }
 
-mm_lambda_matrix <- function(fit) {
-  terms <- fit$artifact$semantic_model$random_terms %||% list()
-  if (!length(terms)) {
-    return(Matrix::Matrix(numeric(), nrow = 0L, ncol = 0L, sparse = TRUE))
-  }
-  theta <- as.numeric(fit$theta)
-  offset <- 0L
-  blocks <- vector("list", length(terms))
-  for (i in seq_along(terms)) {
-    term <- terms[[i]]
-    group <- mm_group_factor(fit$model_frame, mm_random_term_group_label(fit, term, i))
-    p <- length(term$basis %||% list())
-    if (!p) p <- 1L
-    family <- mm_scalar_text(term$covariance, "full")
-    n_theta <- switch(
-      family,
-      full = p * (p + 1L) / 2L,
-      diagonal = p,
-      diag = p,
-      scalar = 1L,
-      p * (p + 1L) / 2L
-    )
-    available <- max(0L, length(theta) - offset)
-    piece <- theta[seq.int(offset + 1L, length.out = min(n_theta, available))]
-    offset <- offset + n_theta
-    if (!length(piece)) piece <- 1
-    L <- matrix(0, nrow = p, ncol = p)
-    if (identical(family, "scalar")) {
-      diag(L) <- piece[[1L]]
-    } else if (family %in% c("diagonal", "diag")) {
-      diag(L) <- rep(piece, length.out = p)
-    } else {
-      L[lower.tri(L, diag = TRUE)] <- rep(piece, length.out = p * (p + 1L) / 2L)
-    }
-    blocks[[i]] <- kronecker(
-      Matrix::Diagonal(n = length(levels(group))),
-      Matrix::Matrix(L, sparse = TRUE)
-    )
-  }
-  out <- do.call(Matrix::bdiag, blocks)
-  attr(out, "mm_method") <- "rebuilt_from_stored_theta"
-  out
-}
-
 mm_random_block_row <- function(term) {
   group <- term$group %||% list()
   budget <- term$information_budget %||% list()
@@ -991,8 +1073,8 @@ mm_repro_threshold_table <- function(thresholds) {
   do.call(rbind, rows)
 }
 
-# Recompute an inference table by dispatching one contrast() per fixed-effect
-# term with an explicit method. Used by inference_table(method != "auto") and,
+# Recompute an inference table with one contrast() call (L = identity) using
+# an explicit method. Used by inference_table(method != "auto") and,
 # transitively, by summary(method != "auto") so the user's method request is
 # honored instead of silently replaced by the auto-resolved cached row.
 mm_inference_table_recompute <- function(fit, method) {
@@ -1005,12 +1087,15 @@ mm_inference_table_recompute <- function(fit, method) {
     class(obj) <- "mm_inference_table"
     return(obj)
   }
+  # One bridge call for all coefficients (L = identity): each contrast row is
+  # evaluated independently by the engine, so this matches k single-row
+  # calls while refitting the model once instead of k times.
+  L <- diag(k)
+  dimnames(L) <- list(terms, terms)
+  ct <- contrast(fit, L, method = method)
   rows <- lapply(seq_len(k), function(i) {
-    L <- rep(0, k)
-    L[i] <- 1
-    names(L) <- terms
-    ct <- contrast(fit, L, method = method)
-    mm_inference_row_from_contrast(ct$table, term = terms[[i]])
+    mm_inference_row_from_contrast(ct$table[i, , drop = FALSE],
+                                   term = terms[[i]])
   })
   tbl <- do.call(rbind, rows)
   rownames(tbl) <- NULL

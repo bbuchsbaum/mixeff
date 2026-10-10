@@ -31,6 +31,26 @@ test_that("declared minima parse despite commas inside parentheses", {
   expect_false(is.na(env$mm_msrv_declared_minimum(shipped, "rustc")))
 })
 
+test_that("declared minimum covers the bundled crates' rust-version", {
+  env <- mm_msrv_env()
+  desc <- read.dcf(test_path("../../DESCRIPTION"))
+  declared <- env$mm_msrv_declared_minimum(desc[, "SystemRequirements"], "rustc")
+  manifests <- c(test_path("../../src/rust/Cargo.toml"),
+                 test_path("../../src/rust/upstream/mixeff-rs/Cargo.toml"))
+  manifests <- manifests[file.exists(manifests)]
+  skip_if(length(manifests) == 0L, "Rust manifests are not available")
+  for (path in manifests) {
+    line <- grep("^rust-version\\s*=", readLines(path, warn = FALSE), value = TRUE)
+    if (!length(line)) next
+    required <- gsub("[^0-9.]", "", sub("^[^=]*=", "", line[[1L]]))
+    expect_true(
+      utils::compareVersion(declared, required) >= 0,
+      info = sprintf("%s requires rustc %s but DESCRIPTION declares %s",
+                     path, required, declared)
+    )
+  }
+})
+
 test_that("version comparison enforces minima with clear failures", {
   env <- mm_msrv_env()
   expect_true(env$mm_msrv_check_minimum("rustc", "rustc 1.82.0 (f6e511eec)",

@@ -79,7 +79,11 @@ test_that("standard extractors return stored fit quantities", {
   expect_equal(BIC(fit), fit$BIC)
   expect_equal(deviance(fit), fit$deviance)
   expect_identical(formula(fit), y ~ x + (1 | subject))
-  expect_identical(model.frame(fit), fit$model_frame)
+  # lme4 shape: the variables of the formula plus a terms attribute.
+  mf <- model.frame(fit)
+  expect_false(is.null(attr(mf, "terms")))
+  expect_equal(as.list(mf), as.list(fit$model_frame[names(mf)]),
+               ignore_attr = TRUE)
 
   expect_equal(fitted(fit), stats::predict(fit), ignore_attr = TRUE)
   expect_equal(residuals(fit), df$y - fitted(fit), tolerance = 1e-8,
@@ -162,8 +166,8 @@ test_that("revived extractor paths return typed values", {
 
   pred <- stats::predict(fit, newdata = df)
   expect_equal(unname(pred), unname(fitted(fit)), tolerance = 1e-8)
-  expect_error(stats::predict(fit, re.form = ~(1 | subject)),
-               class = "mm_inference_unavailable")
+  expect_equal(stats::predict(fit, re.form = ~(1 | subject)),
+               stats::predict(fit))
 })
 
 test_that("lmm()/glmm() advise rescaling when a predictor is far from unit scale", {

@@ -483,6 +483,10 @@ impl LinearMixedModel {
         offsets
     }
 
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "the lower-triangular Lambda transpose product keeps matrix row indices explicit and accumulates in reference order"
+    )]
     fn prediction_variance_components_for_obs(
         &self,
         obs: usize,
@@ -587,15 +591,12 @@ impl LinearMixedModel {
                 rhs[idx] = v[offsets[j] + idx];
             }
             for m in 0..j {
-                let l_jm = self.l_blocks[block_index(j, m)].as_dense();
                 let nranef_m = self.reterms[m].n_ranef();
-                for row in 0..nranef_j {
-                    let mut dot = 0.0;
-                    for col in 0..nranef_m {
-                        dot += l_jm[(row, col)] * w[offsets[m] + col];
-                    }
-                    rhs[row] -= dot;
-                }
+                subtract_block_times_slice(
+                    &self.l_blocks[block_index(j, m)],
+                    &w[offsets[m]..offsets[m] + nranef_m],
+                    &mut rhs,
+                );
             }
 
             solve_lower_block_against_rhs(&self.l_blocks[block_index(j, j)], &mut rhs);
@@ -607,15 +608,12 @@ impl LinearMixedModel {
         let mut rhs_k = vec![0.0f64; pp1];
         rhs_k.copy_from_slice(&v[nranef_total..nranef_total + pp1]);
         for j in 0..k {
-            let l_kj = self.l_blocks[block_index(k, j)].as_dense();
             let nranef_j = self.reterms[j].n_ranef();
-            for row in 0..pp1 {
-                let mut dot = 0.0;
-                for col in 0..nranef_j {
-                    dot += l_kj[(row, col)] * w[offsets[j] + col];
-                }
-                rhs_k[row] -= dot;
-            }
+            subtract_block_times_slice(
+                &self.l_blocks[block_index(k, j)],
+                &w[offsets[j]..offsets[j] + nranef_j],
+                &mut rhs_k,
+            );
         }
 
         let l_kk = self.l_blocks[block_index(k, k)].as_dense();
@@ -751,26 +749,8 @@ fn random_term_z_for_obs(
     data: &DataFrame,
     obs: usize,
 ) -> Result<(Vec<f64>, Vec<String>)> {
-    use crate::formula::FixedTerm;
-
-    let mut z = Vec::new();
-    let mut cnames = Vec::new();
-    let has_intercept =
-        rt.terms.iter().any(|t| matches!(t, FixedTerm::Intercept)) || rt.terms.is_empty();
-    if has_intercept {
-        z.push(1.0);
-        cnames.push("(Intercept)".to_string());
-    }
-
-    let basis_coding = random_effect_basis_coding(rt);
-    for term in &rt.terms {
-        for (col, name) in random_effect_basis_columns(term, data, data.nrow(), basis_coding)? {
-            z.push(col[obs]);
-            cnames.push(name);
-        }
-    }
-
-    Ok((z, cnames))
+    let (columns, cnames) = super::random_term_basis(rt, data)?;
+    Ok((columns.iter().map(|column| column[obs]).collect(), cnames))
 }
 
 /// Build the fixed-effects model matrix from formula and data.

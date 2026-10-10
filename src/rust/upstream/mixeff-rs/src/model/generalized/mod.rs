@@ -31,10 +31,11 @@ use crate::compiler::{
 use crate::error::{MixedModelError, Result};
 use crate::formula::Formula;
 use crate::model::data::DataFrame;
+use crate::model::fixed_design::FixedDesignBuildPolicy;
 use crate::model::linear::{
-    prediction_interval_cutoff, CovarianceKktClassification, FitProgressCallback, FitProgressPhase,
-    LinearMixedModel, NewReLevels, OptimizerControl, PredictionVarianceMethod,
-    PredictionVariancePayload, PredictionVarianceStatus,
+    prediction_interval_cutoff, CompiledModelSpec, CovarianceKktClassification,
+    FitProgressCallback, FitProgressPhase, LinearMixedModel, NewReLevels, OptimizerControl,
+    PredictionVarianceMethod, PredictionVariancePayload, PredictionVarianceStatus, RecipeFrame,
 };
 use crate::model::traits::{Family, LinkFunction, MixedModelFit, RandomEffectTermInfo};
 use crate::optimizer::trust_bq::{
@@ -44,6 +45,7 @@ use crate::optimizer::trust_bq::{
 use crate::stats::{BlockDescription, MixedModelProfile, ModelSummary, VarCorr};
 use crate::types::{gh_norm, FitLogEntry, MatrixBlock, OptSummary, Optimizer, ReMat};
 mod certify;
+mod dispersion;
 mod joint;
 mod metadata;
 mod optimizer;
@@ -51,9 +53,12 @@ mod pirls;
 mod predictive;
 mod verify;
 pub(crate) use certify::*;
+pub use dispersion::GlmmDispersionMethod;
+pub(crate) use dispersion::*;
 pub(crate) use joint::*;
 pub(crate) use optimizer::*;
 pub(crate) use pirls::*;
+mod snapshot;
 // The predictive free helpers are only called from within `predictive` itself
 // in the library build; `tests.rs` still reaches them through `use super::*`.
 #[cfg(test)]
@@ -64,6 +69,10 @@ pub(crate) use predictive::*;
 #[non_exhaustive]
 #[allow(dead_code)] // beta0/u0 reserved for step-halving; devc/devc0/sd/mult reserved for AGQ
 pub struct GeneralizedLinearMixedModel {
+    /// Identity of the successful fitted state. Public response/family fields
+    /// can otherwise be edited directly after fitting; snapshots refuse such
+    /// stale state rather than certifying a contradictory payload.
+    fitted_state_seal: Option<snapshot::FittedStateSeal>,
     /// Internal linear mixed model (local Laplace approximation).
     pub(crate) lmm: LinearMixedModel,
 
@@ -127,11 +136,69 @@ pub struct GeneralizedLinearMixedModel {
     /// fits leave this `None` and certify through the joint Hessian instead.
     pirls_profiled_optimum_certificate:
         Option<std::result::Result<PirlsProfiledOptimumCertificate, String>>,
+    /// The profiled-optimum certificate is deferred (Phase 7 T7.2): its
+    /// finite-difference PIRLS probes cost 25-40% of a fit and most fits are
+    /// never inspected. `true` while the certificate, its diagnostic and the
+    /// optimizer certificate's derivative evidence still have to be
+    /// produced; `complete_pirls_certificate` does so in place and
+    /// `glmm_inspection` does so on a clone for `&self` readers.
+    pirls_certificate_pending: bool,
+    /// Where the deferred certificate diagnostic is inserted on completion,
+    /// so the diagnostics list reads exactly as the eager path wrote it.
+    pirls_certificate_diagnostic_slot: usize,
+    /// The joint-Laplace fixed-effect inference artifacts (the finite-
+    /// difference joint Hessian behind the Wald table, the covariance payload
+    /// and the inference-availability boundary) are deferred: the Hessian is
+    /// ~51 PIRLS probes on cbpp, about a quarter of the joint fit, and most
+    /// fits are never inspected. `true` while they still have to be
+    /// produced; `complete_joint_laplace_inference` does so in place and
+    /// `glmm_inspection` on a clone for `&self` readers. Both paths run the
+    /// Hessian on a clone, so its PIRLS probes never move the fitted modes.
+    joint_inference_pending: bool,
+    /// Completed view for `&self` readers while the certificate or the
+    /// joint inference artifacts are pending.
+    inspection: std::sync::OnceLock<GlmmInspection>,
+    /// Contracted first optimizer step for a warm-started refit
+    /// (`refit_with_start`), consumed by the θ drivers; `None` for cold
+    /// starts.
+    warm_refit_step: Option<Vec<f64>>,
 
     /// Callback failure captured inside an optimizer API whose objective
     /// callback cannot return `Result`. The driver takes and returns it as soon
     /// as the external optimizer yields control.
     pending_progress_error: Option<String>,
+
+    /// Per-observation response normalising constants (the `ln Γ` terms of
+    /// the retained-constant log-likelihood) for the response and prior
+    /// weights they were computed from. Built on first use by
+    /// `deviance_with_response_constants` and reused only while `y`, `wt`
+    /// and the family still match the recorded copies, so a refit with a new
+    /// response, a simulated response, or a direct write to the public
+    /// `y`/`wt` fields can never read stale constants.
+    response_log_constants: Option<pirls::ResponseLogConstants>,
+
+    /// lme4 2.1 `glmerControl` dispersion controls (`disp_method`,
+    /// `disp_dof_correction`, `maxPhiIter`).
+    dispersion_control: DispersionControl,
+    /// The dispersion φ the PIRLS working weights and criterion are divided
+    /// by. Profiled per objective evaluation for estimated-dispersion
+    /// families under [`GlmmDispersionMethod::Moment`]; otherwise unused (1).
+    pirls_phi: f64,
+    /// `rank([X, Z])` for the dispersion dof correction (`None` when too
+    /// costly to compute), computed on first use.
+    design_rank_cache: std::sync::OnceLock<Option<usize>>,
+    /// Transient tighter β-varying PIRLS tolerance, set only while the
+    /// surrogate φ trajectory samples its interpolation nodes.
+    pirls_tolerance_override: Option<f64>,
+}
+
+/// The artifact and profiled-optimum certificate as callers should see them
+/// while the certificate or the joint inference artifacts are deferred:
+/// produced once, on a clone, by the first `&self` inspection.
+#[derive(Debug, Clone)]
+struct GlmmInspection {
+    artifact: CompiledModelArtifact,
+    pirls_certificate: Option<std::result::Result<PirlsProfiledOptimumCertificate, String>>,
 }
 
 /// Options controlling how a GLMM is fit.
@@ -260,8 +327,7 @@ impl GlmmFitOptions {
 /// # }
 /// ```
 pub struct GeneralizedLinearMixedModelBuilder<'a> {
-    formula: Formula,
-    data: &'a DataFrame,
+    source: GlmmBuilderSource<'a>,
     family: Family,
     link: Option<LinkFunction>,
     negative_binomial_theta: Option<f64>,
@@ -271,12 +337,37 @@ pub struct GeneralizedLinearMixedModelBuilder<'a> {
     compiler_policy: Option<CompilerPolicy>,
 }
 
+/// What a [`GeneralizedLinearMixedModelBuilder`] builds from.
+enum GlmmBuilderSource<'a> {
+    Raw {
+        formula: Formula,
+        data: &'a DataFrame,
+    },
+    Compiled(Box<CompiledModelSpec<'a>>),
+}
+
 impl<'a> GeneralizedLinearMixedModelBuilder<'a> {
     /// Start a builder for `formula` over `data` with the given `family`.
     pub fn new(formula: Formula, data: &'a DataFrame, family: Family) -> Self {
+        Self::with_source(GlmmBuilderSource::Raw { formula, data }, family)
+    }
+
+    /// Start a builder from an already compiled and audited
+    /// [`CompiledModelSpec`]: the model is built without a second compile
+    /// or design audit, and is the same model [`new`](Self::new) builds
+    /// from the spec's formula and data.
+    ///
+    /// The spec's compiler policy is fixed at compile time
+    /// ([`CompiledModelSpec::compile_with_policy`]); combining this with
+    /// [`compiler_policy`](Self::compiler_policy) is refused at
+    /// [`build`](Self::build).
+    pub fn from_compiled(spec: CompiledModelSpec<'a>, family: Family) -> Self {
+        Self::with_source(GlmmBuilderSource::Compiled(Box::new(spec)), family)
+    }
+
+    fn with_source(source: GlmmBuilderSource<'a>, family: Family) -> Self {
         Self {
-            formula,
-            data,
+            source,
             family,
             link: None,
             negative_binomial_theta: None,
@@ -335,16 +426,36 @@ impl<'a> GeneralizedLinearMixedModelBuilder<'a> {
 
     /// Construct the (unfitted) model.
     pub fn build(self) -> Result<GeneralizedLinearMixedModel> {
-        let policy = self.compiler_policy.unwrap_or_default();
-        let mut model = GeneralizedLinearMixedModel::new_with_policy_internal(
-            self.formula,
-            self.data,
-            self.family,
-            self.link,
-            self.negative_binomial_theta,
-            self.negative_binomial_estimate_theta,
-            policy,
-        )?;
+        let mut model = match self.source {
+            GlmmBuilderSource::Raw { formula, data } => {
+                GeneralizedLinearMixedModel::new_with_policy_internal(
+                    formula,
+                    data,
+                    self.family,
+                    self.link,
+                    self.negative_binomial_theta,
+                    self.negative_binomial_estimate_theta,
+                    self.compiler_policy.unwrap_or_default(),
+                )?
+            }
+            GlmmBuilderSource::Compiled(spec) => {
+                if self.compiler_policy.is_some() {
+                    return Err(MixedModelError::InvalidArgument(
+                        "a compiled spec carries its compiler policy; compile it with \
+                         CompiledModelSpec::compile_with_policy instead of setting one on \
+                         the builder"
+                            .to_string(),
+                    ));
+                }
+                GeneralizedLinearMixedModel::from_compiled_internal(
+                    *spec,
+                    self.family,
+                    self.link,
+                    self.negative_binomial_theta,
+                    self.negative_binomial_estimate_theta,
+                )?
+            }
+        };
         if let Some(offset) = self.offset {
             model.set_offset(offset)?;
         }
@@ -377,8 +488,7 @@ impl<'a> GeneralizedLinearMixedModelBuilder<'a> {
 impl GeneralizedLinearMixedModel {
     fn fixed_effect_inference_standard_errors(&self) -> Option<DVector<f64>> {
         let table = self
-            .lmm
-            .compiler_artifact
+            .inference_artifact()
             .fixed_effect_inference_table
             .as_ref()?;
         let names = self.coef_names();
@@ -409,13 +519,34 @@ impl GeneralizedLinearMixedModel {
     /// inference: downstream summaries use their finiteness to separate
     /// successful refits from failed ones. When the refit carries a fully
     /// certified Wald table its SEs are recorded; otherwise (fast-PIRLS
-    /// fits, refused or partially refused tables) the working-covariance
-    /// standard errors are recorded instead of NaN refusals.
+    /// fits, refused or partially refused tables) the standard errors of
+    /// [`vcov`](MixedModelFit::vcov) — the working covariance rescaled to
+    /// the GLMM dispersion convention — are recorded instead of NaN
+    /// refusals.
     pub(crate) fn bootstrap_replicate_standard_errors(&self) -> DVector<f64> {
         match self.fixed_effect_inference_standard_errors() {
             Some(se) if se.iter().all(|value| value.is_finite()) => se,
-            _ => self.lmm.stderror(),
+            _ => self.covariance_standard_errors(),
         }
+    }
+
+    /// Standard errors from [`vcov`](MixedModelFit::vcov): the recorded
+    /// (joint) covariance, else the PIRLS working covariance rescaled to the
+    /// GLMM dispersion convention. The unscaled working-LMM covariance is
+    /// used only when no GLMM-scale covariance can be formed.
+    fn covariance_standard_errors(&self) -> DVector<f64> {
+        let vcov = self.vcov();
+        DVector::from_iterator(
+            vcov.nrows(),
+            (0..vcov.nrows()).map(|i| {
+                let variance = vcov[(i, i)];
+                if variance.is_finite() && variance >= 0.0 {
+                    variance.sqrt()
+                } else {
+                    f64::NAN
+                }
+            }),
+        )
     }
 
     unstable_internal_method! {
@@ -438,6 +569,9 @@ impl GeneralizedLinearMixedModel {
     /// feature; otherwise `pub(crate)`. Not part of the stable 1.0 API.
     #[allow(dead_code)]
     unstable_vis fn lmm_mut(&mut self) -> &mut LinearMixedModel {
+        // Callers may move the fitted state; deferred post-fit evidence is
+        // produced from it first.
+        self.complete_deferred_inspection();
         &mut self.lmm
     }
     }
@@ -456,6 +590,8 @@ impl GeneralizedLinearMixedModel {
         theta: &[f64],
         n_agq: usize,
     ) -> Result<f64> {
+        // Probes move beta, theta and the modes off the fit.
+        self.complete_deferred_inspection();
         self.update_pirls_at_theta(theta, true)?;
         Ok(self.deviance_with_response_constants(n_agq))
     }
@@ -475,6 +611,8 @@ impl GeneralizedLinearMixedModel {
         n_agq: usize,
         max_iter: usize,
     ) -> Result<f64> {
+        // Probes move beta, theta and the modes off the fit.
+        self.complete_deferred_inspection();
         self.update_pirls_at_theta_with_options(theta, true, max_iter, true)?;
         Ok(self.deviance_with_response_constants(n_agq))
     }
@@ -496,6 +634,8 @@ impl GeneralizedLinearMixedModel {
         theta: &[f64],
         n_agq: usize,
     ) -> Result<f64> {
+        // Probes move beta, theta and the modes off the fit.
+        self.complete_deferred_inspection();
         self.update_pirls_at_theta(theta, true)?;
         let n_beta = self.beta.len();
         let mut params = self.beta.as_slice().to_vec();
@@ -719,30 +859,59 @@ impl GeneralizedLinearMixedModel {
         // it MUST call `self.lmm.formula.materialize(newdata)` before
         // building the fixed-effects matrix; bypassing the seam would
         // silently omit transform re-evaluation on newdata.
-        let materialized = formula.materialize(data)?;
-        let data = &materialized;
+        let materialized = formula.materialize_cow(data)?;
+        let data: &DataFrame = &materialized;
+        validate_glmm_response(family, link, &formula, data)?;
+        // The working LMM has always been compiled from the lowered frame
+        // (its own lowering then re-verifies the derived columns); compile
+        // that here and build through the same path as `from_compiled`.
+        let spec = CompiledModelSpec::compile_with_policy(formula, data, compiler_policy)?;
+        Self::from_compiled_internal(
+            spec,
+            family,
+            Some(link),
+            negative_binomial_theta,
+            negative_binomial_estimate_theta,
+        )
+    }
 
-        if let Some(y) = data.numeric(&formula.response) {
-            validate_glmm_response_domain(family, link, y)?;
-            if let Some(&first) = y.first() {
-                if y.iter().all(|&value| value == first) {
-                    return Err(MixedModelError::InvalidArgument(
-                        "response is constant; GLMM construction requires variation in the response"
-                            .to_string(),
-                    ));
-                }
-            }
+    /// Build an unfitted GLMM from a compiled spec (see
+    /// [`GeneralizedLinearMixedModelBuilder::from_compiled`]).
+    fn from_compiled_internal(
+        spec: CompiledModelSpec<'_>,
+        family: Family,
+        link: Option<LinkFunction>,
+        negative_binomial_theta: Option<f64>,
+        negative_binomial_estimate_theta: bool,
+    ) -> Result<Self> {
+        let link = link.unwrap_or_else(|| family.canonical_link());
+        if family == Family::Normal && link == LinkFunction::Identity {
+            return Err(MixedModelError::InvalidArgument(
+                "Use LinearMixedModel for Normal distribution with IdentityLink".to_string(),
+            ));
         }
+        validate_supported_glmm_family_link(family, link)?;
+        validate_negative_binomial_theta_request(
+            family,
+            negative_binomial_theta,
+            negative_binomial_estimate_theta,
+        )?;
+        let data = spec.data();
+        validate_glmm_response(family, link, &spec.source_formula, data)?;
         let negative_binomial_theta = initialize_negative_binomial_theta(
             family,
             negative_binomial_theta,
             negative_binomial_estimate_theta,
-            data.numeric(&formula.response),
+            data.numeric(&spec.source_formula.response),
         )?;
 
         // Build the internal LMM
-        let mut lmm =
-            LinearMixedModel::new_with_compiler_policy(formula, data, None, compiler_policy)?;
+        let mut lmm = LinearMixedModel::from_compiled_internal(
+            spec,
+            None,
+            FixedDesignBuildPolicy::default(),
+            RecipeFrame::Design,
+        )?;
         lmm.compiler_artifact
             .set_model_boundary(ModelBoundary::glmm(
                 family_label(family),
@@ -782,6 +951,7 @@ impl GeneralizedLinearMixedModel {
         };
 
         let mut model = GeneralizedLinearMixedModel {
+            fitted_state_seal: None,
             lmm,
             beta: beta.clone(),
             beta0: beta,
@@ -804,7 +974,17 @@ impl GeneralizedLinearMixedModel {
             sd: vec![0.0; agq_len],
             mult: vec![0.0; agq_len],
             pirls_profiled_optimum_certificate: None,
+            pirls_certificate_pending: false,
+            pirls_certificate_diagnostic_slot: 0,
+            joint_inference_pending: false,
+            inspection: std::sync::OnceLock::new(),
+            warm_refit_step: None,
             pending_progress_error: None,
+            response_log_constants: None,
+            dispersion_control: DispersionControl::default(),
+            pirls_phi: 1.0,
+            design_rank_cache: std::sync::OnceLock::new(),
+            pirls_tolerance_override: None,
         };
         model.initialize_beta_from_response();
         Ok(model)
@@ -841,7 +1021,9 @@ impl GeneralizedLinearMixedModel {
     }
 
     pub(crate) fn random_effect_scale(&self) -> f64 {
-        if self.family.has_dispersion() {
+        // Under the moment method u ~ N(0, I) on the absolute link scale
+        // (lme4 2.1 VarCorr reports theta unscaled for every GLMM).
+        if self.family.has_dispersion() && !self.profiles_dispersion() {
             self.dispersion(false)
         } else {
             1.0
@@ -853,8 +1035,96 @@ impl GeneralizedLinearMixedModel {
     }
 
     /// Round-trippable compiler artifact attached to the internal model.
+    ///
+    /// While the profiled-optimum certificate or the joint-Laplace inference
+    /// artifacts are deferred, the first call completes them on a clone and
+    /// caches the completed artifact, so every reader sees exactly what the
+    /// eager path produced.
     pub fn compiler_artifact(&self) -> &CompiledModelArtifact {
-        self.lmm.compiler_artifact()
+        match self.glmm_inspection() {
+            Some(inspection) => &inspection.artifact,
+            None => self.lmm.compiler_artifact(),
+        }
+    }
+
+    unstable_internal_method! {
+    /// The compiler artifact *without* completing a deferred profiled-optimum
+    /// (PIRLS) certificate; deferred joint-Laplace fixed-effect inference is
+    /// still completed, since the coefficient table and covariance need it.
+    ///
+    /// See [`LinearMixedModel::compiler_artifact_deferred`]: while
+    /// [`certificate_evidence_pending`](Self::certificate_evidence_pending)
+    /// the certificate's derivative evidence, its provenance diagnostic and
+    /// therefore its `status` are provisional; every other field matches
+    /// [`compiler_artifact`](Self::compiler_artifact).
+    #[allow(dead_code)]
+    unstable_vis fn compiler_artifact_deferred(&self) -> &CompiledModelArtifact {
+        if self.lmm.derivative_evidence_pending {
+            return self.compiler_artifact();
+        }
+        self.inference_artifact()
+    }
+    }
+
+    /// Whether certificate evidence is still deferred (completed lazily by
+    /// [`compiler_artifact`](Self::compiler_artifact) or in place by
+    /// [`complete_certificate_evidence`](Self::complete_certificate_evidence)).
+    pub fn certificate_evidence_pending(&self) -> bool {
+        self.pirls_certificate_pending || self.lmm.derivative_evidence_pending
+    }
+
+    /// Complete every deferred post-fit computation (profiled-optimum
+    /// certificate, joint-Laplace inference) in place, so the stored
+    /// artifact equals [`compiler_artifact`](Self::compiler_artifact). The
+    /// fitted state is unchanged.
+    pub fn complete_certificate_evidence(&mut self) {
+        self.complete_deferred_inspection();
+        self.lmm.ensure_derivative_evidence();
+    }
+
+    /// The artifact for readers of the fixed-effect inference payloads
+    /// (`fixed_effect_inference_table`, `fixed_effect_covariance_matrix`,
+    /// `model_boundary.inference_availability`): completes only the deferred
+    /// joint-Laplace inference, never the profiled-optimum certificate,
+    /// which does not touch those fields. The two deferrals are exclusive
+    /// (a joint fit clears the profiled one), so a fast fit's `vcov()` or
+    /// `stderror()` stays free of certificate probes.
+    pub(crate) fn inference_artifact(&self) -> &CompiledModelArtifact {
+        if self.joint_inference_pending {
+            if let Some(inspection) = self.glmm_inspection() {
+                return &inspection.artifact;
+            }
+        }
+        &self.lmm.compiler_artifact
+    }
+
+    /// The completed view while the certificate or the joint inference is
+    /// pending; `None` when nothing is deferred (the stored state is
+    /// current).
+    fn glmm_inspection(&self) -> Option<&GlmmInspection> {
+        if !self.pirls_certificate_pending && !self.joint_inference_pending {
+            return None;
+        }
+        Some(self.inspection.get_or_init(|| {
+            let mut probe = self.clone();
+            probe.complete_pirls_certificate();
+            probe.issue_deferred_joint_laplace_inference();
+            GlmmInspection {
+                artifact: probe.lmm.compiler_artifact.clone(),
+                pirls_certificate: probe.pirls_profiled_optimum_certificate.clone(),
+            }
+        }))
+    }
+
+    /// The profiled-optimum certificate as callers should see it (completed
+    /// on first inspection while deferred).
+    pub(crate) fn pirls_profiled_optimum_certificate(
+        &self,
+    ) -> &Option<std::result::Result<PirlsProfiledOptimumCertificate, String>> {
+        match self.glmm_inspection() {
+            Some(inspection) => &inspection.pirls_certificate,
+            None => &self.pirls_profiled_optimum_certificate,
+        }
     }
 
     /// Compiler policy attached to the internal compiled artifact.
@@ -876,7 +1146,7 @@ impl GeneralizedLinearMixedModel {
 
     /// Stable user-facing audit report derived from the compiler artifact.
     pub fn audit_report(&self) -> ModelAuditReport {
-        self.lmm.audit_report()
+        self.compiler_artifact().audit_report()
     }
 
     /// Explicit refusal for GLMM residual-scale profile likelihood.
@@ -901,12 +1171,12 @@ impl GeneralizedLinearMixedModel {
 
     /// Compact default print summary (PRD § 15).
     pub fn print_summary(&self) -> crate::compiler::ModelPrint {
-        self.lmm.print_summary()
+        self.compiler_artifact().print_summary()
     }
 
     /// Source-to-fitted parameterization drilldown (PRD § 15).
     pub fn parameterization(&self) -> crate::compiler::ParameterizationDrilldown {
-        self.lmm.parameterization()
+        self.compiler_artifact().parameterization()
     }
 
     /// Replace the fixed linear predictor offset before fitting.
@@ -952,22 +1222,56 @@ impl GeneralizedLinearMixedModel {
 
     /// Update the linear predictor η and conditional mean μ.
     pub fn update_eta(&mut self) {
+        self.update_eta_given_fixed(None);
+    }
+
+    /// The fixed part of the linear predictor, `offset + Xβ`, at the
+    /// current β.
+    pub(super) fn fixed_linear_predictor(&self) -> DVector<f64> {
+        &self.offset + self.lmm.feterm.full_rank_x() * &self.beta
+    }
+
+    /// [`update_eta`](Self::update_eta) with `offset + Xβ` supplied by a
+    /// caller that holds β fixed across many updates (fixed-β PIRLS);
+    /// `fixed` must equal [`fixed_linear_predictor`](Self::fixed_linear_predictor)
+    /// at the current β. `None` recomputes it.
+    pub(super) fn update_eta_given_fixed(&mut self, fixed: Option<&DVector<f64>>) {
         let n = self.eta.len();
-        let x = self.lmm.feterm.full_rank_x();
 
         // η = offset + X * β
-        self.eta = &self.offset + x * &self.beta;
+        match fixed {
+            Some(fixed) => {
+                debug_assert_eq!(fixed.len(), n);
+                self.eta.copy_from(fixed);
+            }
+            None => self.eta = self.fixed_linear_predictor(),
+        }
 
         // Add random effects: η += Z_i * b_i
         for (i, rt) in self.lmm.reterms.iter().enumerate() {
-            // b_i = λ_i * u_i
-            self.b[i] = &rt.lambda * &self.u[i];
-            // Multiply Z * vec(b) using refs for sparse multiplication
-            let bvec = DVector::from_column_slice(self.b[i].as_slice());
-            for (obs, &ref_idx) in rt.refs.iter().enumerate() {
-                let r = ref_idx as usize;
-                for s in 0..rt.vsize {
-                    self.eta[obs] += rt.z[(s, obs)] * bvec[r * rt.vsize + s];
+            // b_i = λ_i * u_i, written into the existing buffer (this runs
+            // on every η update of every PIRLS iteration and AGQ node).
+            let u = &self.u[i];
+            let b = &mut self.b[i];
+            if b.shape() == (rt.lambda.nrows(), u.ncols()) {
+                rt.lambda.mul_to(u, b);
+            } else {
+                *b = &rt.lambda * u;
+            }
+            // η += Z vec(b) via the grouping references; `z` is
+            // `vsize × n` column-major, so observation `obs` is one
+            // contiguous chunk.
+            let vsize = rt.vsize;
+            let b = b.as_slice();
+            let eta = self.eta.as_mut_slice();
+            for ((eta_obs, &ref_idx), z_obs) in eta
+                .iter_mut()
+                .zip(&rt.refs)
+                .zip(rt.z.as_slice().chunks_exact(vsize))
+            {
+                let base = ref_idx as usize * vsize;
+                for (s, &z) in z_obs.iter().enumerate() {
+                    *eta_obs += z * b[base + s];
                 }
             }
         }
@@ -982,7 +1286,7 @@ impl GeneralizedLinearMixedModel {
     pub fn varcorr(&self) -> VarCorr {
         let scale = self.random_effect_scale();
         let residual_sd = if self.family.has_dispersion() {
-            Some(scale)
+            Some(self.dispersion(false))
         } else {
             None
         };
@@ -1175,6 +1479,8 @@ impl GeneralizedLinearMixedModel {
             probe_gradient,
             escalated_indices,
             unassessable_indices,
+            base_objective: f64::NAN,
+            curvature_probes: Vec::new(),
         }
     }
 
@@ -1297,28 +1603,29 @@ impl GeneralizedLinearMixedModel {
     /// interior-theta Hessian.
     fn certify_pirls_profiled_optimum(
         &mut self,
-    ) -> std::result::Result<PirlsProfiledOptimumCertificate, String> {
+    ) -> std::result::Result<PirlsProfiledOptimumCertificate, ProfiledCertificateError> {
         let theta = self.lmm.optsum.final_params.clone();
         if theta.len() != self.theta.len() {
-            return Err(format!(
+            return Err(ProfiledCertificateError::Unavailable(format!(
                 "profiled fast-PIRLS final parameter vector has length {}, expected {} covariance parameters",
                 theta.len(),
                 self.theta.len()
-            ));
+            )));
         }
         if theta.len() > PIRLS_PROFILED_CERTIFICATE_MAX_THETA {
-            return Err(format!(
+            return Err(ProfiledCertificateError::Skipped(format!(
                 "profiled-optimum certificate skipped: {} covariance parameters exceed the certification budget of {PIRLS_PROFILED_CERTIFICATE_MAX_THETA}",
                 theta.len()
-            ));
+            )));
         }
         let n_agq = self.lmm.optsum.n_agq.max(1);
         let lower_bounds = self.lmm.lower_bounds();
         let outcome = self.certify_pirls_profiled_optimum_probes(&theta, n_agq, &lower_bounds);
         // Probes left PIRLS state at an off-optimum theta; restore the fitted
         // state exactly the way finalize_theta_after_optimizer leaves it.
+        // PIRLS leaves β at its accepted iterate (the working factorization
+        // is refreshed past it), so β is not re-read from the working LMM.
         let _ = self.penalized_pirls_deviance_at_theta(&theta, n_agq);
-        self.beta = self.lmm.beta();
         self.refresh_dispersion();
         outcome
     }
@@ -1328,7 +1635,7 @@ impl GeneralizedLinearMixedModel {
         theta: &[f64],
         n_agq: usize,
         lower_bounds: &[f64],
-    ) -> std::result::Result<PirlsProfiledOptimumCertificate, String> {
+    ) -> std::result::Result<PirlsProfiledOptimumCertificate, ProfiledCertificateError> {
         let mut boundary_theta_indices = Vec::new();
         let mut interior_indices = Vec::new();
         for (index, &value) in theta.iter().enumerate() {
@@ -1356,17 +1663,17 @@ impl GeneralizedLinearMixedModel {
                 .map(|index| (index + 1).to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            return Err(format!(
+            return Err(ProfiledCertificateError::Unavailable(format!(
                 "profiled fast-PIRLS stationarity is not assessable for covariance parameter(s) {labels}: escalated finite-difference readings disagreed"
-            ));
+            )));
         }
         let mut gradient_max_abs = 0.0_f64;
         for (index, &value) in certification.gradient.iter().enumerate() {
             if !value.is_finite() {
-                return Err(format!(
+                return Err(ProfiledCertificateError::Unavailable(format!(
                     "profiled fast-PIRLS stationarity gradient is non-finite for covariance parameter {}",
                     index + 1
-                ));
+                )));
             }
             let boundary = boundary_theta_indices.contains(&(index + 1));
             let fails = if boundary {
@@ -1378,23 +1685,22 @@ impl GeneralizedLinearMixedModel {
                 value.abs() > PIRLS_PROFILED_CERTIFICATE_GRADIENT_TOLERANCE
             };
             if fails {
-                return Err(format!(
+                return Err(ProfiledCertificateError::Failed(format!(
                     "profiled fast-PIRLS stationarity gradient {value:.6e} for covariance parameter {} exceeds tolerance {PIRLS_PROFILED_CERTIFICATE_GRADIENT_TOLERANCE:.1e}",
                     index + 1
-                ));
+                )));
             }
             gradient_max_abs = gradient_max_abs.max(value.abs());
         }
 
         if interior_indices.is_empty() {
-            return Err(
-                "all covariance parameters sit at their lower bounds; the profiled curvature certificate is not assessable for a fully boundary optimum"
-                    .to_string(),
-            );
+            return Err(ProfiledCertificateError::Skipped("all covariance parameters sit at their lower bounds; the profiled curvature certificate is not assessable for a fully boundary optimum"
+                    .to_string()));
         }
         let hessian =
             self.finite_difference_pirls_profiled_hessian(theta, &interior_indices, n_agq)?;
-        let curvature = certify_glmm_joint_hessian(&hessian, "profiled fast-PIRLS theta Hessian")?;
+        let curvature = certify_glmm_joint_hessian(&hessian, "profiled fast-PIRLS theta Hessian")
+            .map_err(ProfiledCertificateError::Failed)?;
 
         Ok(PirlsProfiledOptimumCertificate {
             gradient_max_abs,
@@ -1486,6 +1792,7 @@ impl GeneralizedLinearMixedModel {
             .into_iter()
             .enumerate()
             .map(|(index, label)| FixedEffectInferenceRow {
+                covariance_method: crate::stats::InferenceCovarianceMethod::Unavailable,
                 label: label.clone(),
                 kind: FixedEffectInferenceRowKind::Coefficient,
                 estimate: estimates
@@ -1525,6 +1832,9 @@ struct AgqRestoreGuard<'a> {
     glmm: &'a mut GeneralizedLinearMixedModel,
     /// `u[0]` snapshot at the conditional modes (flat, length `n_levels`).
     u0_flat: Vec<f64>,
+    /// `offset + Xβ`, constant over the sweep (β is not perturbed), or
+    /// `None` to recompute it on restore.
+    fixed: Option<DVector<f64>>,
 }
 
 impl std::ops::Deref for AgqRestoreGuard<'_> {
@@ -1545,7 +1855,10 @@ impl Drop for AgqRestoreGuard<'_> {
         for (g, &uv) in self.u0_flat.iter().enumerate() {
             self.glmm.u[0][(0, g)] = uv;
         }
-        self.glmm.update_eta();
+        match self.fixed.take() {
+            Some(fixed) => self.glmm.update_eta_given_fixed(Some(&fixed)),
+            None => self.glmm.update_eta(),
+        }
     }
 }
 
@@ -1613,6 +1926,9 @@ impl MixedModelFit for GeneralizedLinearMixedModel {
     }
 
     fn coef(&self) -> DVector<f64> {
+        // Dropped (aliased) columns are 0, the value every contrast and
+        // prediction (L * coef) needs; `dropped_coef_names()` identifies them
+        // so hosts can report NA, as lme4's fixef(add.dropped = TRUE) does.
         let mut full = DVector::from_element(self.lmm.feterm.piv.len(), 0.0);
         for (i, &val) in self.beta.iter().enumerate() {
             if i < self.lmm.feterm.piv.len() {
@@ -1625,6 +1941,10 @@ impl MixedModelFit for GeneralizedLinearMixedModel {
     fn fixef(&self) -> DVector<f64> {
         self.beta.clone()
     }
+
+    fn dropped_coef_names(&self) -> Vec<String> {
+        self.lmm.feterm.dropped_coef_names()
+    }
     fn coef_names(&self) -> Vec<String> {
         self.lmm.coef_names()
     }
@@ -1634,8 +1954,11 @@ impl MixedModelFit for GeneralizedLinearMixedModel {
             .unwrap_or_else(|| self.lmm.vcov())
     }
     fn stderror(&self) -> DVector<f64> {
+        // A recorded inference table is authoritative, including its NaN
+        // refusals; without one, use the GLMM-scale covariance (never the
+        // unscaled working-LMM standard errors).
         self.fixed_effect_inference_standard_errors()
-            .unwrap_or_else(|| self.lmm.stderror())
+            .unwrap_or_else(|| self.covariance_standard_errors())
     }
     fn fitted(&self) -> DVector<f64> {
         self.mu.clone()
@@ -1719,6 +2042,28 @@ impl MixedModelFit for GeneralizedLinearMixedModel {
     fn link_kind(&self) -> Option<crate::model::traits::LinkFunction> {
         Some(self.link)
     }
+}
+
+/// Response checks every GLMM construction runs on the design data: the
+/// family/link response domain and a non-constant response.
+fn validate_glmm_response(
+    family: Family,
+    link: LinkFunction,
+    formula: &Formula,
+    data: &DataFrame,
+) -> Result<()> {
+    if let Some(y) = data.numeric(&formula.response) {
+        validate_glmm_response_domain(family, link, y)?;
+        if let Some(&first) = y.first() {
+            if y.iter().all(|&value| value == first) {
+                return Err(MixedModelError::InvalidArgument(
+                    "response is constant; GLMM construction requires variation in the response"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

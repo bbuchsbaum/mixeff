@@ -45,11 +45,12 @@ test_that("mm_lmm methods dispatch through lme4 generics when lme4 masks mixeff"
   expect_equal(unname(mixeff::getME(m4, "theta")), unname(lme4::getME(m4, "theta")))
 
   # lme4 masks mixeff::refit() after attachment. Delayed registration must
-  # preserve the typed GLMM refusal through lme4's copy of the generic.
+  # route lme4's copy of the generic to mixeff's GLMM method (which signals a
+  # typed argument error when `newresp` is missing).
   glmm_stub <- structure(list(), class = c("mm_glmm", "mm_fit"))
   expect_error(
-    lme4::refit(glmm_stub, numeric()),
-    class = "mm_inference_unavailable"
+    lme4::refit(glmm_stub),
+    class = "mm_arg_error"
   )
 })
 

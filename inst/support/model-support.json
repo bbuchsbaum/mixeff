@@ -17,9 +17,21 @@
     },
     {
       "family": "Gamma",
-      "links": ["log"],
+      "links": ["inverse", "log"],
       "estimators": ["pirls_profiled", "joint_laplace"],
-      "notes": ""
+      "notes": "inverse is R's default Gamma link."
+    },
+    {
+      "family": "inverse.gaussian",
+      "links": ["inverse", "log"],
+      "estimators": ["pirls_profiled", "joint_laplace"],
+      "notes": "R's default 1/mu^2 link is not available in the engine and is refused; pass link = \"inverse\" or \"log\"."
+    },
+    {
+      "family": "gaussian",
+      "links": ["log", "inverse", "sqrt"],
+      "estimators": ["pirls_profiled", "joint_laplace"],
+      "notes": "Non-identity links only; gaussian/identity is an LMM and is refused with a pointer to lmm()."
     },
     {
       "family": "negative_binomial",
@@ -48,30 +60,40 @@
     },
     {
       "feature": "offset",
-      "lmm": "unsupported",
+      "lmm": "supported",
       "glmm": "supported",
-      "notes": "lmm() has no offset argument; glmm(offset =) is supported."
+      "notes": "offset = argument and offset() formula terms. LMMs fit y - offset and add the offset back to fitted values and predictions (lmer semantics). predict(newdata) evaluates formula offsets from newdata; an offset = argument offset must be resupplied via predict(offset =)."
     },
     {
       "feature": "simulate",
       "lmm": "supported",
-      "glmm": "refused",
-      "condition_class": "mm_inference_unavailable",
-      "notes": "GLMM simulation is not implemented in this version."
+      "glmm": "supported",
+      "notes": "lme4 re.form/use.u semantics (default NA: new random effects; NULL: conditional on the BLUPs). GLMM draws are family-aware (binomial, Poisson, Gamma, negative binomial); partial re.form formulas, newdata and newparams are refused."
     },
     {
       "feature": "refit",
       "lmm": "supported",
-      "glmm": "refused",
-      "condition_class": "mm_inference_unavailable",
-      "notes": "Refit GLMMs by calling glmm() on the modified data."
+      "glmm": "supported",
+      "notes": "Re-fits with the stored settings; binomial fits accept a (successes, failures) matrix, a two-level factor or 0/1 values."
     },
     {
-      "feature": "subset / random / custom na.action / custom contrasts (GLMM)",
-      "lmm": "see notes",
+      "feature": "subset / na.action / contrasts",
+      "lmm": "supported",
+      "glmm": "supported",
+      "notes": "Same data preparation for lmm() and glmm(): na.action defaults to getOption(\"na.action\") (na.omit) as in lme4, applied to the model variables, weights and offset only; dropped rows are announced (typed mm_rows_dropped message) and recorded in na.action(fit); na.exclude also pads fitted/residuals/predict; na.fail and na.pass raise mm_data_error. Unused factor levels are dropped after subset/NA removal. contrasts = is honoured only when it names the engine coding (contr.treatment / contr.poly)."
+    },
+    {
+      "feature": "random = (GLMM)",
+      "lmm": "not applicable",
       "glmm": "refused",
       "condition_class": "mm_fit_error",
-      "notes": "Reserved arguments on glmm(); recode data before fitting. LMMs: default refuses NA unless na.action = na.omit; non-default contrast codings are refused at compile time."
+      "notes": "Reserved argument on glmm(); write random terms in the formula."
+    },
+    {
+      "feature": "stateful fixed-effect terms (factor(), poly(), scale(), ns()/bs(), cut(), relevel(), offset(), ^, %in%, parenthesised groups)",
+      "lmm": "supported",
+      "glmm": "supported",
+      "notes": "Evaluated in R as stats::model.frame() does and sent to the engine as synthetic columns; coefficient names match lme4 and predict(newdata) reuses the training basis. Such terms inside random-effect bars are refused by the engine."
     },
     {
       "feature": "marginal means verbs (mm_means / mm_comparisons / mm_grid / mm_predictions / test_effect)",
@@ -83,9 +105,9 @@
     },
     {
       "feature": "double-bar || with factor terms",
-      "lmm": "mixeff semantics",
-      "glmm": "mixeff semantics",
-      "notes": "mixeff fixes every covariance in the block at zero, including among a factor's level contrasts (matching MixedModels.jl zerocorr()); lme4's || leaves factor terms intact. Announced at compile time (covariance_assumption / double_bar_factor_term); the migration vignette gives the lme4-equivalent expansion."
+      "lmm": "supported",
+      "glmm": "supported",
+      "notes": "Expanded like lme4: (1 + x + f || g) is (1 | g) + (0 + x | g) + (0 + f | g), the factor keeping its own block (model.matrix() coding); VarCorr() lists g, g.1, ... as lme4. diag(1 + f | g) fixes every covariance at zero (MixedModels.jl zerocorr()). Noted at compile time (covariance_assumption / double_bar_factor_term)."
     }
   ],
   "non_goals": [

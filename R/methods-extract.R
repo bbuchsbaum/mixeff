@@ -12,12 +12,74 @@
 #' @param correlation Logical; accepted for S3 compatibility with [vcov()].
 #' @param condVar Logical; when `TRUE`, attach a `postVar` array of conditional
 #'   variances to each random-effects table. Gaussian [lmm()] fits receive the
-#'   conditional covariances computed by the engine. [glmm()] fits, and any fit
-#'   whose conditional-variance computation refuses, receive an all-`NA`
-#'   `postVar` plus an `mm_unavailable_reason` attribute rather than fabricated
+#'   conditional covariances computed by the engine. [glmm()] fits receive
+#'   lme4's Laplace-approximation conditional covariances
+#'   `sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda'` at the fitted
+#'   modes, with `W` the final PIRLS working weights. A fit whose
+#'   conditional-variance computation refuses receives an all-`NA` `postVar`
+#'   plus an `mm_unavailable_reason` attribute rather than fabricated
 #'   conditional variances.
+#' @param fixed.only For `model.frame()`: return only the fixed-effect
+#'   variables, as `lme4::model.frame.merMod()`.
 #' @param k Penalty per parameter for [AIC()].
-#' @param ... Reserved for generic compatibility.
+#' @param ... Reserved for generic compatibility. For [AIC()] and [BIC()],
+#'   further fitted models: with several models the result is the data frame
+#'   `stats::AIC()` returns (`df` and `AIC`/`BIC`, rows named after the
+#'   arguments).
+#'
+#' @details
+#' These methods follow lme4's shapes. `coef()` returns, per grouping factor,
+#' every fixed-effect column (fixed-only columns repeated) plus the
+#' conditional modes, in lme4's column order. `VarCorr()` returns lme4's
+#' `VarCorr.merMod` structure: a named list of covariance matrices (one per
+#' random-effect term, so `VarCorr(fit)$Subject` is a matrix) with
+#' `"stddev"` and `"correlation"` attributes and list attributes `"sc"`
+#' (`sigma()`) and `"useSc"` (`TRUE` for LMMs; `FALSE` for every GLMM, as in
+#' lme4 >= 2.1-0, so GLMM random-effect SDs are absolute and no Residual row
+#' is printed); it prints like lme4 and
+#' `as.data.frame()` gives lme4's long form. mixeff's full-precision long
+#' table remains available as `VarCorr(fit)$table` (with `$residual_sd`).
+#' `sigma()` of a binomial, Poisson or negative-binomial GLMM is 1, as in
+#' lme4 (the negative-binomial theta is `getME(fit, "glmer.nb.theta")`). For
+#' GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and
+#' Gaussian with a non-identity link) it is `sqrt(phi)` with
+#' `phi = sum(deviance residuals^2) / (n - rank([X, Z]))`, the dispersion
+#' profiled during the fit, as in lme4 >= 2.1-0 (`glmerControl()` defaults
+#' `disp_method = "moment"`, `disp_dof_correction = TRUE`; lme4 < 2.1-0 used
+#' a different, biased estimate). `mm_control(disp_dof_correction = FALSE)`
+#' divides by `n` instead, and `mm_control(max_phi_iter = )` caps the `phi`
+#' iterations. With `mm_control(disp_method = "old/buggy")` the fit
+#' reproduces lme4 2.1-0's `disp_method = "old/buggy"`: PIRLS runs with
+#' `phi = 1`, so `weights(fit, "working")` does not carry `1/phi`, and
+#' `VarCorr()` reports theta itself as the random-effect SD, as lme4 2.1-0
+#' does. Under lme4 < 2.1-0 that SD was `sigma() * theta`. `deviance()` of a GLMM is the sum of squared deviance
+#' residuals, as `lme4::deviance.merMod()`; `-2 * logLik()` is the Laplace
+#' objective reported in `anova()`. `model.frame()` returns lme4's frame
+#' (transformed columns such as `log(y)`, a `terms` attribute, `(weights)`
+#' and `(offset)` columns); the raw variables the engine used are in
+#' `fit$model_frame`.
+#'
+#' `vcov()` of a joint-Laplace GLMM is the inverse of the finite-difference
+#' Hessian over the fixed effects and covariance parameters, glmer's default
+#' (`use.hessian = TRUE`). When that Hessian is not positive definite (or
+#' unavailable) the engine falls back to the fixed-effect block RX of the
+#' Laplace penalized least-squares factorization at the optimum,
+#' conditional on the covariance parameters -- glmer's
+#' `vcov(fit, use.hessian = FALSE)`, which glmer also falls back to with a
+#' warning. mixeff does the same: the matrix carries
+#' `attr(, "mm_method") == "laplace_rx_conditional_on_theta"`, reliability
+#' `"low"` and the engine's notes (`attr(, "mm_notes")`), and `vcov()` warns
+#' (class `mm_vcov_rx_fallback`). Such standard errors ignore the
+#' uncertainty in the covariance parameters.
+#'
+#' Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+#' (Gamma, inverse Gaussian, Gaussian with a non-identity link) the
+#' penalized least-squares factor already carries the `1 / phi` working
+#' weights, so mixeff's RX-based `vcov()` (`nAGQ = 0` fits, and the
+#' fallback above) is `unsc()` with no further `sigma^2` factor. lme4 >= 2.1-0
+#' still multiplies by `sigma()^2` there (and in `ranef(condVar = TRUE)`), so
+#' those values differ from lme4 2.1's by the factor `phi = sigma()^2`;
+#' Hessian-based `vcov()` values agree.
 #'
 #' @examples
 #' set.seed(1)
@@ -42,16 +104,41 @@ fixef <- function(object, ...) {
   UseMethod("fixef")
 }
 
-# mixeff exports its own generics for the lme4 verb set, so when mixeff is
-# attached after lme4 these mask lme4's. Each default delegates foreign fits
-# back through lme4's generic (whose dispatch table holds the merMod
-# methods), so attach order does not break lme4's own objects.
+# mixeff exports its own generics for the lme4/nlme verb set, so when mixeff
+# is attached after lme4 or nlme these mask theirs. Each default delegates
+# foreign fits back through the owning package's generic (whose dispatch
+# table holds the merMod / lme / lmList / gls methods), so attach order does
+# not break lme4's or nlme's own objects.
+mm_foreign_owner <- c(merMod = "lme4", lmList4 = "lme4", lme = "nlme",
+                      lmList = "nlme", nlme = "nlme", gls = "nlme",
+                      nlsList = "nlme", gnls = "nlme")
+
+# Returns list(value = ) when a loaded lme4/nlme generic has a method for
+# `object`, else NULL.
+mm_forward_foreign_generic <- function(generic, object, ...) {
+  # S4 fits (lme4's lmerMod) dispatch S3 methods on their superclasses too.
+  classes <- if (isS4(object)) methods::is(object) else class(object)
+  owners <- unique(stats::na.omit(mm_foreign_owner[classes]))
+  for (pkg in owners) requireNamespace(pkg, quietly = TRUE)
+  for (pkg in unique(c(owners, "lme4", "nlme"))) {
+    if (!isNamespaceLoaded(pkg)) next
+    ns <- asNamespace(pkg)
+    # lme4 re-uses nlme's fixef/ranef/VarCorr generics via imports.
+    if (!exists(generic, envir = ns)) next
+    fun <- get(generic, envir = ns)
+    if (!is.function(fun)) next
+    has_method <- any(vapply(classes, function(cl) {
+      !is.null(utils::getS3method(generic, cl, optional = TRUE, envir = ns))
+    }, logical(1)))
+    if (has_method) return(list(value = fun(object, ...)))
+  }
+  NULL
+}
 #' @rdname mm_lmm-methods
 #' @export
 fixef.default <- function(object, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::fixef(object, ...))
-  }
+  fwd <- mm_forward_foreign_generic("fixef", object, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`fixef()` has no method for this object.",
     class = "mm_arg_error",
@@ -59,10 +146,23 @@ fixef.default <- function(object, ...) {
   )
 }
 
+#' @param add.dropped For `fixef()`: if `TRUE`, coefficients dropped for
+#'   rank deficiency are included as `NA` (lme4's `add.dropped`); by default
+#'   they are omitted, as in lme4.
 #' @rdname mm_lmm-methods
 #' @export
-fixef.mm_lmm <- function(object, ...) {
-  object$beta
+fixef.mm_lmm <- function(object, add.dropped = FALSE, ...) {
+  # lme4: coefficients dropped for rank deficiency are omitted, or NA with
+  # add.dropped = TRUE. (The fit stores them as 0 in `$beta` so contrasts
+  # and predictions over the full design stay correct.)
+  beta <- object$beta
+  dropped <- intersect(mm_aliased_coefficients(object), names(beta))
+  if (!length(dropped)) return(beta)
+  if (isTRUE(add.dropped)) {
+    beta[dropped] <- NA_real_
+    return(beta)
+  }
+  beta[setdiff(names(beta), dropped)]
 }
 
 #' @rdname mm_lmm-methods
@@ -78,9 +178,8 @@ ranef <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ranef.default <- function(object, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::ranef(object, ...))
-  }
+  fwd <- mm_forward_foreign_generic("ranef", object, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`ranef()` has no method for this object.",
     class = "mm_arg_error",
@@ -91,6 +190,7 @@ ranef.default <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ranef.mm_lmm <- function(object, condVar = FALSE, ...) {
+  object$random_effects <- mm_ranef_lme4_order(object, object$random_effects)
   if (isTRUE(condVar)) {
     postvars <- tryCatch(
       mm_cond_var_postvars(object),
@@ -114,18 +214,54 @@ ranef.mm_lmm <- function(object, condVar = FALSE, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ranef.mm_glmm <- function(object, condVar = FALSE, ...) {
+  object$random_effects <- mm_ranef_lme4_order(object, object$random_effects)
   if (isTRUE(condVar)) {
-    out <- lapply(
-      object$random_effects,
-      mm_attach_ranef_postvar_unavailable,
-      reason = "random_effect_conditional_variance_unavailable_for_glmm"
+    # Conditional variances from the Laplace approximation at the fitted
+    # modes: Lambda (Lambda'Z'WZ Lambda + I)^{-1} Lambda' with the final
+    # PIRLS working weights W (lme4's condVar for glmer fits; W carries
+    # 1/phi for free-dispersion families).
+    postvars <- tryCatch(
+      mm_r_cond_var_postvars(object),
+      error = function(cnd) cnd
     )
+    if (inherits(postvars, "condition")) {
+      out <- lapply(object$random_effects, mm_attach_ranef_postvar_unavailable,
+                    reason = conditionMessage(postvars))
+      class(out) <- class(object$random_effects)
+      attr(out, "mm_unavailable_reason") <-
+        "random_effect_conditional_variance_unavailable"
+      return(out)
+    }
+    out <- mm_attach_ranef_postvars(object$random_effects, postvars)
     class(out) <- class(object$random_effects)
-    attr(out, "mm_unavailable_reason") <-
-      "random_effect_conditional_variance_unavailable_for_glmm"
     return(out)
   }
   object$random_effects
+}
+
+# lme4's ranef() layout: one data frame per grouping factor in the order the
+# factors first appear among the (lme4-ordered) random-effect terms, columns
+# in term order (`(0 + x | g) + (1 | g)` gives `x`, `(Intercept)`). The
+# engine stores its own (decreasing-size) order; values are unchanged.
+mm_ranef_lme4_order <- function(fit, re) {
+  st <- tryCatch(mm_re_structure(fit), error = function(cnd) NULL)
+  if (is.null(st) || !length(re)) return(re)
+  groups <- unique(vapply(st$terms, `[[`, character(1), "group"))
+  if (!setequal(groups, names(re))) return(re)
+  out <- lapply(groups, function(g) {
+    df <- re[[g]]
+    cols <- unique(unlist(lapply(st$terms, function(tm) {
+      if (identical(tm$group, g)) tm$cnames
+    }), use.names = FALSE))
+    if (setequal(cols, names(df)) && !identical(cols, names(df))) {
+      df <- df[, cols, drop = FALSE]
+    }
+    df
+  })
+  names(out) <- groups
+  attributes(out) <- c(attributes(out),
+                       attributes(re)[setdiff(names(attributes(re)), "names")])
+  out
 }
 
 # Fallback postvar attachment used when the Rust cond_var() bridge fails
@@ -197,10 +333,11 @@ mm_cond_var_postvars <- function(fit) {
 }
 
 mm_compute_cond_var_postvars <- function(fit) {
-  spec_data <- mm_translate_data(fit$model_frame)
-  formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- jsonlite::toJSON(unclass(fit$control %||% mm_control()),
-                                   auto_unbox = TRUE, null = "null")
+  formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
+  control_json <- mm_refit_control_json(fit)
+  handle <- mm_lmm_live_handle(fit, formula_string = formula_string,
+                               control_json = control_json)
+  spec_data <- mm_bridge_spec_data(fit, handle)
 
   json <- tryCatch(
     .Call(
@@ -213,7 +350,8 @@ mm_compute_cond_var_postvars <- function(fit) {
       spec_data$categorical_levels,
       spec_data$categorical_ordered,
       mm_bridge_weights(fit$weights),
-      as.character(control_json)
+      as.character(control_json),
+      handle
     ),
     error = function(cnd) cnd
   )
@@ -267,7 +405,7 @@ mm_compute_cond_var_postvars <- function(fit) {
       out[[group]] <- mm_merge_block_diag_postvar(out[[group]], arr, group)
     }
   }
-  out
+  mm_rename_postvar_groups(out, fit$group_map)
 }
 
 mm_merge_block_diag_postvar <- function(existing, incoming, group) {
@@ -299,16 +437,26 @@ mm_merge_block_diag_postvar <- function(existing, incoming, group) {
 #' @rdname mm_lmm-methods
 #' @export
 coef.mm_lmm <- function(object, ...) {
+  # lme4::coef.merMod: every fixed-effect column appears for every group
+  # (fixed-only columns repeated), random-only columns are prepended with a
+  # zero fixed part, and the column order follows fixef().
   re <- ranef(object)
   fixed <- fixef(object)
+  fef <- data.frame(rbind(fixed), check.names = FALSE)
+  refnames <- unlist(lapply(re, colnames), use.names = FALSE)
+  missnames <- setdiff(refnames, names(fef))
+  if (length(missnames)) {
+    fill <- stats::setNames(data.frame(rbind(rep(0, length(missnames)))),
+                            missnames)
+    fef <- cbind(fill, fef)
+  }
   out <- lapply(re, function(df) {
-    df_out <- df
-    for (nm in names(df_out)) {
-      if (nm %in% names(fixed)) {
-        df_out[[nm]] <- df_out[[nm]] + fixed[[nm]]
-      }
+    val <- fef[rep.int(1L, nrow(df)), , drop = FALSE]
+    row.names(val) <- row.names(df)
+    for (nm in colnames(df)) {
+      val[[nm]] <- val[[nm]] + df[[nm]]
     }
-    df_out
+    val
   })
   class(out) <- c("mm_coef", "list")
   out
@@ -327,9 +475,8 @@ VarCorr <- function(x, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 VarCorr.default <- function(x, ...) {
-  if (inherits(x, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::VarCorr(x, ...))
-  }
+  fwd <- mm_forward_foreign_generic("VarCorr", x, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`VarCorr()` has no method for this object.",
     class = "mm_arg_error",
@@ -340,7 +487,7 @@ VarCorr.default <- function(x, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 VarCorr.mm_lmm <- function(x, ...) {
-  mm_varcorr_with_design_notes(x)
+  mm_varcorr_lme4(mm_varcorr_with_design_notes(x), x)
 }
 
 #' @rdname mm_lmm-methods
@@ -396,7 +543,72 @@ sigma.mm_lmm <- function(object, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
-sigma.mm_glmm <- sigma.mm_lmm
+sigma.mm_glmm <- function(object, ...) {
+  # lme4: sigma() is the residual scale only for families with a free scale
+  # parameter (Gamma, inverse Gaussian, Gaussian with a non-identity link),
+  # where lme4 >= 2.1-0 and the engine report sqrt(phi) with
+  # phi = deviance / (n - rank([X, Z])); binomial, Poisson and
+  # negative-binomial fits return 1.
+  # The negative-binomial theta is getME(fit, "glmer.nb.theta").
+  if (mm_glmm_free_dispersion(object)) {
+    return(object$sigma)
+  }
+  1
+}
+
+# TRUE when a GLMM's family has a free (estimated) dispersion parameter phi:
+# Gamma, inverse Gaussian, and Gaussian with a non-identity link (a Gaussian
+# identity-link model is an LMM). For these lme4 >= 2.1-0 profiles phi,
+# divides the PIRLS working weights by it, reports sigma() = sqrt(phi) and
+# unscaled random-effect SDs; the engine does the same.
+mm_glmm_free_dispersion <- function(fit) {
+  fam <- fit$family
+  family <- as.character(fam$family %||% "")
+  if (family %in% c("gamma", "Gamma", "inverse_gaussian", "inverse.gaussian")) {
+    return(TRUE)
+  }
+  identical(family, "gaussian") &&
+    !identical(as.character(fam$link %||% "identity"), "identity")
+}
+
+# TRUE for a free-dispersion GLMM fitted with mm_control(disp_method =
+# "old/buggy") (lme4 2.1-0 glmerControl(disp_method = "old/buggy")): PIRLS
+# ran with phi = 1, so the working weights do not carry 1/phi.
+mm_glmm_legacy_dispersion <- function(fit) {
+  inherits(fit, "mm_glmm") && mm_glmm_free_dispersion(fit) &&
+    identical(fit$control$disp_method, "old/buggy")
+}
+
+# The dispersion phi dividing a GLMM's PIRLS working weights: sigma()^2 for
+# a free-dispersion family under the (default) moment method, else 1.
+mm_glmm_pirls_phi <- function(fit) {
+  if (mm_glmm_free_dispersion(fit) && !mm_glmm_legacy_dispersion(fit)) {
+    as.numeric(sigma(fit))^2
+  } else {
+    1
+  }
+}
+
+# Scale applied to the engine's random-effect SDs so that they are lme4
+# 2.1-0's: under disp_method = "old/buggy" the engine reports
+# sigma * theta (theta relative to sigma, the lme4 < 2.1 convention) while
+# lme4 2.1-0 reports theta itself, the SD of b = Lambda u; 1 otherwise.
+mm_glmm_re_sd_scale <- function(fit) {
+  if (mm_glmm_legacy_dispersion(fit)) 1 / as.numeric(sigma(fit)) else 1
+}
+
+mm_varcorr_rescale <- function(vc, scale) {
+  if (identical(scale, 1) || is.null(vc)) return(vc)
+  if (!is.null(vc$table) && nrow(vc$table)) {
+    vc$table$std_dev <- vc$table$std_dev * scale
+    vc$table$variance <- vc$table$variance * scale^2
+  }
+  vc$components_raw <- lapply(vc$components_raw, function(cmp) {
+    cmp$std_dev <- cmp$std_dev * scale
+    cmp
+  })
+  vc
+}
 
 # Refuse recognized-but-unsupported lme4 arguments that `...` would otherwise
 # swallow silently, returning a plausible-but-wrong value (no silent surgery;
@@ -465,21 +677,22 @@ deviance.mm_lmm <- function(object, REML = NULL, ...) {
 
 #' @rdname mm_lmm-methods
 #' @export
-deviance.mm_glmm <- deviance.mm_lmm
+deviance.mm_glmm <- function(object, ...) {
+  # lme4::deviance.merMod for GLMMs: the sum of squared deviance residuals
+  # at the conditional modes (not -2 * logLik, which is the Laplace
+  # objective reported by logLik() and in anova() tables).
+  sum(mm_glmm_residuals(object, "deviance")^2)
+}
 
 #' @rdname mm_lmm-methods
 #' @export
 AIC.mm_lmm <- function(object, ..., k = 2) {
-  dots <- list(...)
-  if (length(dots)) {
-    mm_abort(
-      message = paste(
-        "AIC comparison across multiple objects is not supported;",
-        "call `AIC()` per model and compare with `compare()`."
-      ),
-      class = "mm_inference_unavailable",
-      input = dots
-    )
+  if (...length()) {
+    # stats::AIC() with several models: a data frame with df and AIC, rows
+    # named after the arguments.
+    labels <- as.character(match.call()[-1L])
+    labels <- labels[names(match.call())[-1L] != "k"]
+    return(mm_information_table(list(object, ...), labels, k, "AIC"))
   }
   -2 * object$logLik + k * object$dof
 }
@@ -491,16 +704,9 @@ AIC.mm_glmm <- AIC.mm_lmm
 #' @rdname mm_lmm-methods
 #' @export
 BIC.mm_lmm <- function(object, ...) {
-  dots <- list(...)
-  if (length(dots)) {
-    mm_abort(
-      message = paste(
-        "BIC comparison across multiple objects is not supported;",
-        "call `BIC()` per model and compare with `compare()`."
-      ),
-      class = "mm_inference_unavailable",
-      input = dots
-    )
+  if (...length()) {
+    labels <- as.character(match.call()[-1L])
+    return(mm_information_table(list(object, ...), labels, NA, "BIC"))
   }
   object$BIC
 }
@@ -541,8 +747,19 @@ formula.mm_glmm <- formula.mm_lmm
 
 #' @rdname mm_lmm-methods
 #' @export
-model.frame.mm_lmm <- function(formula, ...) {
-  formula$model_frame
+model.frame.mm_lmm <- function(formula, fixed.only = FALSE, ...) {
+  # lme4::model.frame.merMod shape: one column per variable expression of
+  # the formula with random-effect bars replaced by `+` (so `log(y)` is a
+  # transformed column), a `terms` attribute carrying lme4's
+  # predvars.fixed / varnames.fixed / predvars.random, and `(weights)` /
+  # `(offset)` columns when the fit has them. The raw variables the engine
+  # saw stay in `fit$model_frame`.
+  fr <- .mm_lazy(formula, "lme4_model_frame", mm_lme4_model_frame)
+  if (isTRUE(fixed.only)) {
+    vars <- attr(attr(fr, "terms"), "varnames.fixed") %||% names(fr)
+    fr <- fr[intersect(vars, names(fr))]
+  }
+  fr
 }
 
 #' @rdname mm_lmm-methods
@@ -564,9 +781,8 @@ ngrps <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ngrps.default <- function(object, ...) {
-  if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE)) {
-    return(lme4::ngrps(object, ...))
-  }
+  fwd <- mm_forward_foreign_generic("ngrps", object, ...)
+  if (!is.null(fwd)) return(fwd$value)
   mm_abort(
     message = "`ngrps()` has no method for this object.",
     class = "mm_arg_error",
@@ -577,24 +793,13 @@ ngrps.default <- function(object, ...) {
 #' @rdname mm_lmm-methods
 #' @export
 ngrps.mm_lmm <- function(object, ...) {
-  re <- object$random_effects %||% list()
+  re <- mm_ranef_lme4_order(object, object$random_effects %||% list())
   vapply(re, nrow, integer(1L))
 }
 
 #' @rdname mm_lmm-methods
 #' @export
 ngrps.mm_glmm <- ngrps.mm_lmm
-
-#' @rdname mm_lmm-methods
-#' @importFrom stats weights
-#' @export
-weights.mm_lmm <- function(object, ...) {
-  object$weights
-}
-
-#' @rdname mm_lmm-methods
-#' @export
-weights.mm_glmm <- weights.mm_lmm
 
 #' @rdname mm_lmm-methods
 #' @importFrom stats extractAIC
@@ -612,6 +817,20 @@ extractAIC.mm_glmm <- extractAIC.mm_lmm
 #' @importFrom stats terms
 #' @export
 terms.mm_lmm <- function(x, ...) {
+  if (!is.null(x$expansion)) {
+    # Fixed-effect terms as the user wrote them (poly(), factor(), offset(),
+    # ...), with `predvars` holding the training basis, like terms(lmer_fit).
+    tt <- x$expansion$terms
+    return(stats::terms(stats::reformulate(
+      c(attr(tt, "term.labels"),
+        vapply(attr(tt, "offset") %||% integer(),
+               function(i) deparse1(attr(tt, "variables")[[i + 1L]]),
+               character(1))),
+      response = x$formula[[2L]],
+      intercept = attr(tt, "intercept") == 1L,
+      env = environment(x$formula)
+    )))
+  }
   stats::terms(mm_fixed_formula(x))
 }
 
@@ -650,11 +869,12 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
       vcov <- c(vcov, sd[i]^2)
       sdcor <- c(sdcor, sd[i])
     }
-    # Covariance (off-diagonal) rows; correlations are stored row-major in the
-    # strict lower triangle (see mm_varcorr_correlation_values()).
-    for (i in seq_len(p)) {
-      offset <- (i - 1L) * (i - 2L) / 2L
-      for (j in seq_len(i - 1L)) {
+    # Covariance (off-diagonal) rows in lme4's order (var1 outer, var2
+    # inner); correlations are stored row-major in the strict lower triangle
+    # (see mm_varcorr_correlation_values()).
+    for (j in seq_len(max(p - 1L, 0L))) {
+      for (i in seq.int(j + 1L, p)) {
+        offset <- (i - 1L) * (i - 2L) / 2L
         r <- corr[offset + j]
         grp <- c(grp, comp$group)
         var1 <- c(var1, nm[j])
@@ -664,13 +884,18 @@ as.data.frame.mm_varcorr <- function(x, row.names = NULL, optional = FALSE,
       }
     }
   }
-  if (!is.null(x$residual_sd) && length(x$residual_sd) == 1L &&
-      is.finite(x$residual_sd)) {
+  residual <- if (!is.null(attr(x, "useSc"))) {
+    # lme4 shape: a Residual row exactly when the family has a free scale.
+    if (isTRUE(attr(x, "useSc"))) as.numeric(attr(x, "sc")) else NULL
+  } else {
+    x$residual_sd
+  }
+  if (!is.null(residual) && length(residual) == 1L && is.finite(residual)) {
     grp <- c(grp, "Residual")
     var1 <- c(var1, NA_character_)
     var2 <- c(var2, NA_character_)
-    vcov <- c(vcov, x$residual_sd^2)
-    sdcor <- c(sdcor, x$residual_sd)
+    vcov <- c(vcov, residual^2)
+    sdcor <- c(sdcor, residual)
   }
   data.frame(grp = grp, var1 = var1, var2 = var2, vcov = vcov, sdcor = sdcor,
              stringsAsFactors = FALSE)
@@ -912,4 +1137,57 @@ mm_varcorr_correlation_display <- function(table) {
     },
     character(1)
   )
+}
+
+# lme4::subbars(): `(a | g)` -> `(a + g)`, so model.frame() collects every
+# variable the model uses.
+mm_subbars <- function(term) {
+  if (!is.call(term)) return(term)
+  if (identical(term[[1L]], as.name("|")) ||
+      identical(term[[1L]], as.name("||"))) {
+    term[[1L]] <- as.name("+")
+  }
+  for (j in seq_along(term)[-1L]) {
+    term[[j]] <- mm_subbars(term[[j]])
+  }
+  term
+}
+
+mm_lme4_model_frame <- function(fit) {
+  frame <- fit$model_frame
+  form <- fit$formula
+  sub <- mm_subbars(form)
+  env <- environment(form) %||% parent.frame()
+  mf <- tryCatch(
+    stats::model.frame(stats::as.formula(sub, env = env), data = frame,
+                       na.action = stats::na.pass),
+    error = function(cnd) NULL
+  )
+  if (is.null(mf) || nrow(mf) != nrow(frame)) {
+    mf <- frame
+    attr(mf, "terms") <- tryCatch(
+      stats::terms(stats::as.formula(sub, env = env), data = frame),
+      error = function(cnd) NULL
+    )
+  }
+  trm <- attr(mf, "terms")
+  if (!is.null(trm)) {
+    fixed <- tryCatch(mm_fixed_formula(fit), error = function(cnd) NULL)
+    if (!is.null(fixed) && length(fixed) == 3L) {
+      fixed_vars <- c(deparse1(form[[2L]]),
+                      attr(stats::terms(fixed), "term.labels"))
+      fixed_vars <- intersect(fixed_vars, names(mf))
+      attr(trm, "varnames.fixed") <- fixed_vars
+      attr(trm, "predvars.fixed") <- as.call(c(
+        as.name("list"), lapply(fixed_vars, str2lang)
+      ))
+    }
+    attr(mf, "terms") <- trm
+  }
+  if (!is.null(fit$weights)) mf[["(weights)"]] <- as.numeric(fit$weights)
+  if (!is.null(fit$offset)) mf[["(offset)"]] <- as.numeric(fit$offset)
+  rownames(mf) <- rownames(frame)
+  # lme4: the rows dropped by `na.action` ride on the model frame.
+  if (!is.null(fit$na.action)) attr(mf, "na.action") <- fit$na.action
+  mf
 }

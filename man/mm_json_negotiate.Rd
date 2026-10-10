@@ -48,10 +48,8 @@ conditions for \code{cnd_header()} formatting.)
 
 \examples{
 mm_json_negotiate(list(schema_name = "formula", schema_version = "v0"))
-\dontrun{
 # Raises mm_schema_error:
-mm_json_negotiate(list(schema_name = "formula", schema_version = "v99"))
-}
+try(mm_json_negotiate(list(schema_name = "formula", schema_version = "v99")))
 
 }
 \seealso{

@@ -38,9 +38,9 @@ test_that("GLMM surfaces emit only rubric grades across all three routes", {
   eta <- -0.2 + 0.7 * x + rep(rnorm(12, sd = 0.5), each = 10)
   d <- data.frame(y = rbinom(120, 1, plogis(eta)), x = x, g = g)
 
-  profiled <- glmm(y ~ x + (1 | g), d, family = binomial(),
+  profiled <- glmm(y ~ x + (1 | g), d, family = binomial(), method = "pirls_profiled",
                    control = mm_control(verbose = -1))
-  opted <- glmm(y ~ x + (1 | g), d, family = binomial(),
+  opted <- glmm(y ~ x + (1 | g), d, family = binomial(), method = "pirls_profiled",
                 inference = "working_hessian",
                 control = mm_control(verbose = -1))
   joint <- glmm(y ~ x + (1 | g), d, family = binomial(),

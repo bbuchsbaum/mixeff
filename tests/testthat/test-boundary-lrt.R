@@ -82,3 +82,30 @@ test_that("boundary_lrt refuses multi-parameter random-effect geometry", {
   expect_match(row$reason, "certifies only one added boundary", fixed = TRUE)
   expect_identical(row$theta_parameters, 3L)
 })
+
+test_that("a correlation-only boundary LRT is labelled as an ordinary chi-square", {
+  # mixeff-rs 2873312: comparisons adding only correlations (`||` vs `|`)
+  # use the plain chi-square(df) reference -- one weight-1 component.
+  payload <- list(
+    schema_name = "mixedmodels.boundary_lrt", schema_version = "1.0.0",
+    status = "available", statistic = 0.0639, ordinary_chisq_dof = 1L,
+    pvalue = stats::pchisq(0.0639, 1, lower.tail = FALSE),
+    mixture = list(list(weight = 1, chisq_df = 1L))
+  )
+  term <- list(term = "(1 + Days | Subject)", term_id = "r0",
+               group = "Subject", theta_parameters = 3L)
+  full <- list(formula = Reaction ~ Days + (Days | Subject))
+  row <- mm_boundary_lrt_table(payload, term,
+                               Reaction ~ Days + (Days || Subject),
+                               full, NULL, FALSE)
+  expect_identical(row$method, "boundary_lrt_ordinary_chisq")
+  expect_identical(row$statistic_name, "chi_square")
+  expect_identical(row$reference_distribution, "1 * chi-square(1)")
+  expect_equal(row$p_value, stats::pchisq(0.0639, 1, lower.tail = FALSE))
+
+  payload$mixture <- list(list(weight = 0.5, point_mass_at = 0),
+                          list(weight = 0.5, chisq_df = 1L))
+  row <- mm_boundary_lrt_table(payload, term, Reaction ~ Days, full, NULL, FALSE)
+  expect_identical(row$method, "boundary_lrt_self_liang_mixture")
+  expect_identical(row$statistic_name, "chi_bar_square")
+})

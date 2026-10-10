@@ -19,12 +19,23 @@ reference:
   contents:
   - mm_lmm-methods
   - getME
+  - REMLcrit
+  - mm_family
   - is_singular
   - predict.mm_lmm
   - predict.mm_glmm
   - update.mm
   - refit
   - simulate.mm_lmm
+  - rePCA
+  - mm_lmlist
+- title: Diagnostics and influence
+  desc: Residual and random-effect plots, leverage, influence, R2 and ICC.
+  contents:
+  - plot.mm_fit
+  - plot.mm_ranef
+  - mm_influence
+  - mm_variance_components
 - title: Inference
   desc: Contrasts, term tests, degrees of freedom, intervals, and bootstrap.
   contents:
@@ -35,6 +46,7 @@ reference:
   - anova.mm_glmm
   - drop1.mm_lmm
   - drop1.mm_glmm
+  - confint.mm_lmm
   - confint.mm_glmm
   - profile.mm_lmm
   - df_for_contrast
@@ -43,6 +55,7 @@ reference:
   - inference_table
   - bootstrap_control
   - parametric_bootstrap
+  - mm_bootmer
 - title: Marginal effects & emmeans
   contents:
   - mm_grid
@@ -52,6 +65,9 @@ reference:
   contents:
   - compare
   - compare_covariance
+  - step
+  - step.mm_lmm
+  - mm_allfit
   - model_report
 - title: Audit-first verbs
   desc: Make the model's design, reductions, and optimizer state explicit.

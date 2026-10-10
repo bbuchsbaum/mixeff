@@ -78,7 +78,7 @@ test_that("GLMM Wald standard errors match glmer on OSF statcheck", {
   m <- glmm(fo, data = d,
             family = binomial("logit"), method = "joint_laplace",
             control = mm_jl())
-  ct <- summary(m, tests = "coefficients")$coefficients
+  ct <- summary(m, tests = "coefficients")$coef_table
   gt <- summary(g)$coefficients
   p_col <- intersect(c("Pr(>|z|)", "p.value"), names(ct))[1L]
 

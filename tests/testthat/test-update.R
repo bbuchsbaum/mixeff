@@ -194,3 +194,65 @@ test_that("update.mm_lmm matches an lme4 update() formula edit", {
                unname(lme4::fixef(l2)),
                tolerance = 1e-3)
 })
+
+test_that("update() adding a variable re-evaluates the original data (lme4 semantics)", {
+  set.seed(77)
+  upd_df <- data.frame(
+    y = rnorm(80), x = rnorm(80), z = rnorm(80),
+    g = factor(rep(seq_len(10), each = 8))
+  )
+  fit <- lmm(y ~ x + (1 | g), upd_df, control = mm_control(verbose = -1))
+  expect_false("z" %in% names(model.frame(fit)))
+  bigger <- update(fit, . ~ . + z)
+  direct <- lmm(y ~ x + z + (1 | g), upd_df, control = mm_control(verbose = -1))
+  expect_equal(fixef(bigger), fixef(direct), tolerance = 1e-8)
+})
+
+test_that("update() refuses arguments it cannot carry over instead of dropping them", {
+  set.seed(78)
+  upd_df <- data.frame(
+    y = rnorm(80), x = rnorm(80),
+    g = factor(rep(seq_len(10), each = 8))
+  )
+  fit <- lmm(y ~ x + (1 | g), upd_df, control = mm_control(verbose = -1))
+  expect_error(update(fit, subset = x > 0), class = "mm_arg_error")
+  expect_error(update(fit, contrasts = list(x = "contr.sum")),
+               class = "mm_arg_error")
+})
+
+test_that("update() refuses unnamed extra arguments", {
+  set.seed(79)
+  upd_df <- data.frame(y = rnorm(60), x = rnorm(60),
+                       g = factor(rep(seq_len(10), each = 6)))
+  fit <- lmm(y ~ x + (1 | g), upd_df, control = mm_control(verbose = -1))
+  expect_error(update(fit, . ~ ., TRUE), class = "mm_arg_error")
+})
+
+test_that("update() asks for data when the original rows cannot be recovered", {
+  set.seed(80)
+  upd_df <- data.frame(y = rnorm(60), x = rnorm(60), z = rnorm(60),
+                       g = factor(rep(seq_len(10), each = 6)))
+  fit <- lmm(y ~ x + (1 | g), upd_df, subset = x > -1,
+             control = mm_control(verbose = -1))
+  expect_error(update(fit, . ~ . + z), class = "mm_arg_error",
+               regexp = "data = d")
+  # Supplying the data explicitly works.
+  kept <- upd_df[upd_df$x > -1, ]
+  bigger <- update(fit, . ~ . + z, data = kept)
+  expect_true("z" %in% names(fixef(bigger)))
+  # A call whose data cannot be re-evaluated at all is refused too.
+  fit2 <- fit
+  fit2$call$data <- quote(no_such_object_anywhere)
+  expect_error(update(fit2, . ~ . + z), class = "mm_arg_error")
+})
+
+test_that("update.mm_glmm re-evaluates data and refuses unsupported arguments", {
+  d <- mm_update_binom_data()
+  fit <- glmm(y ~ x + (1 | g), d, family = binomial,
+              control = mm_control(verbose = -1))
+  bigger <- update(fit, . ~ . + z)
+  direct <- glmm(y ~ x + z + (1 | g), d, family = binomial,
+                 control = mm_control(verbose = -1))
+  expect_equal(fixef(bigger), fixef(direct), tolerance = 1e-6)
+  expect_error(update(fit, subset = x > 0), class = "mm_arg_error")
+})

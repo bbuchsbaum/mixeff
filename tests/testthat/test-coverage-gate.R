@@ -77,7 +77,7 @@ test_that("print.mm_lmm and extractors produce character output", {
 
   out_vc <- capture.output(print(VarCorr(fit)))
   expect_true(is.character(out_vc) && length(out_vc) > 0L)
-  expect_match(paste(out_vc, collapse = "\n"), "Variance components")
+  expect_match(paste(out_vc, collapse = "\n"), "Groups +Name +Std\\.Dev\\.")
 
   out_re <- capture.output(print(ranef(fit)))
   expect_true(is.character(out_re) && length(out_re) > 0L)
@@ -101,7 +101,7 @@ test_that("print.mm_anova and print.mm_drop1 produce character output", {
   av <- anova(fit)
   out_av <- capture.output(print(av))
   expect_true(is.character(out_av) && length(out_av) > 0L)
-  expect_match(paste(out_av, collapse = "\n"), "analysis of fixed effects")
+  expect_match(paste(out_av, collapse = "\n"), "Analysis of Variance Table")
 
   d1 <- drop1(fit, test = "Chisq")
   out_d1 <- capture.output(print(d1))
@@ -271,9 +271,16 @@ test_that("glmm validates family and nAGQ", {
          control = mm_control(verbose = -1)),
     class = "mm_arg_error"
   )
+  # nAGQ = 0 (lme4's fast estimate) is now accepted on the profiled path;
+  # negative or fractional nAGQ, and joint_laplace + nAGQ = 0, are refused.
+  expect_error(
+    glmm(y ~ x + (1 | g), df, family = binomial(), nAGQ = -1,
+         control = mm_control(verbose = -1)),
+    class = "mm_arg_error"
+  )
   expect_error(
     glmm(y ~ x + (1 | g), df, family = binomial(), nAGQ = 0,
-         control = mm_control(verbose = -1)),
+         method = "joint_laplace", control = mm_control(verbose = -1)),
     class = "mm_arg_error"
   )
   expect_error(
@@ -321,15 +328,13 @@ test_that("audit.default refuses non-compiled objects", {
 
 # ---- Happy paths ------------------------------------------------------------
 
-test_that("ranef(glmm, condVar=TRUE) returns unavailable postVar path", {
+test_that("ranef(glmm, condVar=TRUE) attaches Laplace conditional variances", {
   fit <- mk_cov_glmm()
   re <- ranef(fit, condVar = TRUE)
-  expect_identical(
-    attr(re, "mm_unavailable_reason"),
-    "random_effect_conditional_variance_unavailable_for_glmm"
-  )
+  expect_null(attr(re, "mm_unavailable_reason"))
   expect_true(is.array(attr(re[[1L]], "postVar")))
-  expect_true(all(is.na(attr(re[[1L]], "postVar"))))
+  expect_true(all(is.finite(attr(re[[1L]], "postVar"))))
+  expect_true(all(attr(re[[1L]], "postVar") >= 0))
   out <- capture.output(print(re))
   expect_true(is.character(out) && length(out) > 0L)
 })
@@ -421,7 +426,7 @@ test_that("refit and simulate arg guards on LMM/GLMM", {
   expect_error(simulate(fit, nsim = 0), class = "mm_arg_error")
 
   gfit <- mk_cov_glmm()
-  expect_error(refit(gfit, rbinom(nobs(gfit), 1, 0.5)),
-               class = "mm_inference_unavailable")
-  expect_error(simulate(gfit, nsim = 1), class = "mm_inference_unavailable")
+  expect_error(refit(gfit, 1:3), class = "mm_arg_error")
+  expect_error(simulate(gfit, nsim = 0), class = "mm_arg_error")
+  expect_error(simulate(gfit, re.form = "g"), class = "mm_arg_error")
 })

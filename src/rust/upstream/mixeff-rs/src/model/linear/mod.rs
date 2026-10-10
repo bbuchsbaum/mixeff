@@ -49,6 +49,7 @@ use crate::model::traits::MixedModelFit;
 #[cfg(feature = "prima")]
 use crate::optimizer::prima::{minimize_bobyqa, PrimaBobyqaOptions};
 use crate::optimizer::trust_bq::{
+    minimize_with_gradient_and_progress as minimize_trust_bq_with_gradient_and_progress,
     minimize_with_progress as minimize_trust_bq_with_progress, TrustBqOptions, TrustBqProgress,
     TrustBqStopReason,
 };
@@ -63,11 +64,19 @@ use crate::types::{FeMat, FeTerm, FitLogEntry, OptSummary, Optimizer, OptimizerS
 mod active_face;
 
 mod blocks;
+// Cache-friendly dense Cholesky / triangular-solve / downdate kernels.
+mod dense_kernels;
+// Kenward-Roger adjustment through the Woodbury identity (no n x n).
+mod kenward_roger;
+// Analytic profiled-deviance gradient (Phase 5).
+mod gradient;
 pub(crate) use blocks::*;
+pub(crate) use gradient::ProfiledGradientInputs;
 
 mod bootstrap;
 pub use bootstrap::{
-    parametricbootstrap, try_parametricbootstrap, BootstrapFailedRefitPolicy, BootstrapInterval,
+    parametricbootstrap, parametricbootstrap_with_options, try_parametricbootstrap,
+    BootstrapExecutionOptions, BootstrapFailedRefitPolicy, BootstrapInterval,
     BootstrapIntervalMethod, BootstrapQuantile, BootstrapRefitOptions, BootstrapReplicate,
     BootstrapRunMetadata, BootstrapRunPayload, BootstrapSeedRecord, BootstrapTarget,
     BootstrapTargetKind, FixedEffectBootstrapOptions, FixedEffectNullBootstrapTarget,
@@ -76,7 +85,11 @@ pub use bootstrap::{
 };
 use bootstrap::{quantile_sorted, validate_level};
 
+mod compiled;
+pub use compiled::CompiledModelSpec;
+pub(crate) use compiled::RecipeFrame;
 mod predict;
+mod snapshot;
 
 pub(in crate::model) mod optimizer;
 use optimizer::*;
@@ -96,6 +109,9 @@ pub enum FitProgressPhase {
     Pirls,
     /// A parametric or resampling bootstrap replicate loop.
     Bootstrap,
+    /// A profile-likelihood sweep running on worker threads; the calling
+    /// thread polls the callback while it waits (`current` counts polls).
+    Profile,
 }
 
 /// One throttled progress event emitted by a long-running fit loop.
@@ -198,6 +214,9 @@ impl FitProgressCallback {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct LinearMixedModel {
+    /// Immutable construction inputs retained for durable restoration. Captured
+    /// before formula materialization and policy reductions.
+    pub(crate) training_recipe: std::sync::Arc<crate::model::snapshot::TrainingRecipe>,
     pub(crate) formula: Formula,
     pub(crate) reterms: Vec<ReMat>,
     pub(crate) xy_mat: FeMat,
@@ -232,11 +251,90 @@ pub struct LinearMixedModel {
     /// [`OptimizerControl::trust_bq_sample_reuse`]. Defaults to the family
     /// policy.
     pub(crate) trust_bq_sample_reuse: TrustBqSampleReuse,
+    /// Analytic-gradient oracle override for native TrustBQ, carried from
+    /// [`OptimizerControl::trust_bq_gradient_oracle`]. Defaults to the family
+    /// policy.
+    pub(crate) trust_bq_gradient_oracle: TrustBqGradientOracle,
     /// Opt-in post-fit active-face refit for singular vector blocks, carried
     /// from [`OptimizerControl::active_face_refit`]. Defaults to `Off`.
     pub(crate) active_face_refit: ActiveFaceRefit,
     /// Optional host progress/interrupt callback inherited by refits.
     pub(crate) progress_callback: Option<FitProgressCallback>,
+    /// Wall-clock split of the most recent `fit` into optimizer search and
+    /// post-optimizer finalization. `None` until a fit has run. Diagnostic
+    /// only; never part of any parity or serialized contract.
+    pub(crate) fit_phase_timings: Option<FitPhaseTimings>,
+    /// True while the optimizer certificate in `compiler_artifact` still
+    /// lacks its finite-difference gradient/Hessian evidence. The fit tail
+    /// defers that evidence (≈2·d² objective evaluations) until something
+    /// inspects the certificate; see `inspection_artifact`.
+    pub(crate) derivative_evidence_pending: bool,
+    /// Lazily completed copy of `compiler_artifact` with the deferred
+    /// derivative evidence applied, built on first inspection through a
+    /// `&self` accessor. Cleared whenever the certificate is refreshed or
+    /// completed in place.
+    pub(crate) inspection_artifact: std::sync::OnceLock<CompiledModelArtifact>,
+    /// Cached structural sparsity patterns (keyed by A-block index) for the
+    /// scalar-intercept `Z_a' Z_b` cross blocks, built on the first weighted
+    /// rebuild so PIRLS iterations refresh values in place. The patterns
+    /// depend only on the grouping references, which never change.
+    pub(crate) re_cross_sparse_patterns:
+        std::collections::HashMap<usize, blocks::ScalarCrossPattern>,
+    /// Reused row-major copy of the weighted `[X|y]` for the weighted
+    /// A-block rebuild (scratch only; contents are meaningless between
+    /// rebuilds).
+    pub(crate) wtxy_rows_scratch: Vec<f64>,
+    /// Memo of the hypothesis-independent Satterthwaite ingredients for
+    /// the current fitted state (see `satterthwaite_ingredients`).
+    pub(crate) satterthwaite_cache: inference::SatterthwaiteCache,
+    /// True while the `[X|y]` rows of `a_blocks` (`A[k, 0..=k]`) do not
+    /// reflect the current `wtz`/`wtxy`. Set only by
+    /// [`update_irls_weights_re_only`](Self::update_irls_weights_re_only)
+    /// (fixed-β conditional-mode PIRLS, whose iterations read only the RE
+    /// rows); cleared by any full A rebuild or by
+    /// [`refresh_stale_fe_blocks`](Self::refresh_stale_fe_blocks).
+    pub(crate) fe_a_blocks_stale: bool,
+    /// True while the `[X|y]` row of `l_blocks` (`L[k, 0..=k]`) does not
+    /// reflect the current `A` and Λ. Set by the RE-rows-only factor update
+    /// [`update_l_re_only`](Self::update_l_re_only); cleared by a full
+    /// [`update_l`](Self::update_l) or by
+    /// [`refresh_stale_fe_blocks`](Self::refresh_stale_fe_blocks).
+    pub(crate) fe_l_row_stale: bool,
+}
+
+/// Where a refit starts its θ search. See
+/// [`LinearMixedModel::refit_with_start`].
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum RefitStart {
+    /// The model's recorded initial θ (`refit!` semantics; the default).
+    Initial,
+    /// The model's current fitted θ.
+    Fitted,
+    /// An explicit θ, e.g. a bootstrap template's optimum.
+    From(Vec<f64>),
+}
+
+/// Optimizer first-step size used by warm-started refits (a contraction of
+/// the 0.75 default). The replicate optimum is expected within a fraction
+/// of the parameter scale of the template optimum; the trust region or
+/// BOBYQA radius still grows if it is not.
+pub const WARM_REFIT_INITIAL_STEP: f64 = 0.75 / 8.0;
+
+/// Wall-clock split of one `fit` call, for benchmarking and profiling.
+///
+/// `optimizer` covers the initial objective evaluation and the θ search;
+/// `post_fit` covers everything after the optimizer returns (boundary
+/// restart, certificate derivative checks, covariance and inference
+/// refreshes). Model construction is not included: time
+/// [`LinearMixedModel::new`] separately.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[non_exhaustive]
+pub struct FitPhaseTimings {
+    /// Time spent in the optimizer search (including the initial objective).
+    pub optimizer: std::time::Duration,
+    /// Time spent finalizing the fit after the optimizer returned.
+    pub post_fit: std::time::Duration,
 }
 
 /// Snapshot of a training categorical column's encoding contract: the
@@ -574,6 +672,22 @@ pub struct KenwardRogerLbDdf {
     pub notes: Vec<String>,
 }
 
+impl KenwardRogerLbDdf {
+    /// Kenward & Roger (1997) F scaling factor λ, as `pbkrtest`'s
+    /// `.KR_adjust`: `λ = ddf · (1 − A2/q) / (ddf − 2)`, with `λ = 1` when
+    /// `|ddf − 2| < 0.01`. For a single restriction (`q = 1`) `A1 = A2` and
+    /// λ is 1 up to rounding.
+    pub fn f_scaling(&self) -> f64 {
+        let q = self.restriction_rank as f64;
+        let ddf = self.denominator_df;
+        if (ddf - 2.0).abs() < 1e-2 {
+            1.0
+        } else {
+            ddf * (1.0 - self.a2 / q) / (ddf - 2.0)
+        }
+    }
+}
+
 /// Controls the bounded verification workflow run after a fitted model.
 #[doc(hidden)]
 #[derive(Debug, Clone)]
@@ -767,6 +881,38 @@ impl TrustBqSampleReuse {
     }
 }
 
+/// Analytic-gradient oracle policy for the native TrustBQ path.
+///
+/// The default, [`TrustBqGradientOracle::FamilyPolicy`], lets the central
+/// TrustBQ model-family policy decide (today: the analytic gradient drives
+/// every θ family whose blocked gradient can be formed). The other modes
+/// exist for A/B benchmark runs and diagnostics; they change the optimizer
+/// trace and the reported evaluation count, not the certified optimum.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TrustBqGradientOracle {
+    /// Use the model-family policy in `trust_bq_model_family_policy`.
+    #[default]
+    FamilyPolicy,
+    /// Never use the analytic gradient; every family keeps the
+    /// finite-difference interpolation model.
+    Disabled,
+    /// Use the analytic gradient for every family that can form it.
+    AllFamilies,
+}
+
+impl TrustBqGradientOracle {
+    /// Resolve the effective flag for one TrustBQ solve, given the value the
+    /// model-family policy would otherwise use.
+    pub(crate) fn resolve(self, family_policy_oracle: bool) -> bool {
+        match self {
+            TrustBqGradientOracle::FamilyPolicy => family_policy_oracle,
+            TrustBqGradientOracle::Disabled => false,
+            TrustBqGradientOracle::AllFamilies => true,
+        }
+    }
+}
+
 /// Opt-in post-fit active-face refit for singular vector random-effect
 /// blocks.
 ///
@@ -809,6 +955,9 @@ pub struct OptimizerControl {
     /// Opt-in exact-sample reuse override for native TrustBQ. Defaults to
     /// [`TrustBqSampleReuse::FamilyPolicy`].
     pub trust_bq_sample_reuse: TrustBqSampleReuse,
+    /// Analytic-gradient oracle override for native TrustBQ. Defaults to
+    /// [`TrustBqGradientOracle::FamilyPolicy`].
+    pub trust_bq_gradient_oracle: TrustBqGradientOracle,
     /// Opt-in post-fit active-face refit for singular vector blocks.
     /// Defaults to [`ActiveFaceRefit::Off`].
     pub active_face_refit: ActiveFaceRefit,
@@ -856,6 +1005,12 @@ impl OptimizerControl {
         self
     }
 
+    /// Override the analytic-gradient oracle policy for native TrustBQ.
+    pub fn with_trust_bq_gradient_oracle(mut self, oracle: TrustBqGradientOracle) -> Self {
+        self.trust_bq_gradient_oracle = oracle;
+        self
+    }
+
     /// Opt into the experimental post-fit active-face refit.
     pub fn with_active_face_refit(mut self, refit: ActiveFaceRefit) -> Self {
         self.active_face_refit = refit;
@@ -893,6 +1048,9 @@ impl OptimizerControl {
         }
         if self.trust_bq_sample_reuse != TrustBqSampleReuse::FamilyPolicy {
             fields.push("trust_bq_sample_reuse".to_string());
+        }
+        if self.trust_bq_gradient_oracle != TrustBqGradientOracle::FamilyPolicy {
+            fields.push("trust_bq_gradient_oracle".to_string());
         }
         if self.active_face_refit != ActiveFaceRefit::Off {
             fields.push("active_face_refit".to_string());
@@ -1097,26 +1255,40 @@ impl LinearMixedModel {
         compiler_policy: CompilerPolicy,
         fixed_design_policy: FixedDesignBuildPolicy,
     ) -> Result<Self> {
-        if formula.random_terms.is_empty() {
-            return Err(MixedModelError::NoRandomEffects);
-        }
+        // Construction is "compile, then build from the compiled spec": the
+        // compile-once route (`CompiledModelSpec` + `from_compiled`) is the
+        // same code, not a parallel implementation.
+        let spec = CompiledModelSpec::compile_with_policy(formula, data, compiler_policy)?;
+        Self::from_compiled_internal(spec, weights, fixed_design_policy, RecipeFrame::Source)
+    }
 
-        // Data-boundary seam: lower the stateless in-formula transforms
-        // (`I(days^2)`, `log(reaction)`, …) into synthetic numeric columns
-        // before any design construction. Above this point everything keeps
-        // seeing "a column by name"; the formula's term/response references
-        // already carry the canonical labels. See
-        // `docs/formula_transform_seam.md`.
-        let materialized = formula.materialize(data)?;
-        let data = &materialized;
-
-        let semantic_model = compile_formula_ir(&formula);
-        let mut compiler_artifact = CompiledModelArtifact::new_with_policy(
-            formula.to_string(),
-            semantic_model,
-            compiler_policy,
+    pub(crate) fn from_compiled_internal(
+        spec: CompiledModelSpec<'_>,
+        weights: Option<&[f64]>,
+        fixed_design_policy: FixedDesignBuildPolicy,
+        recipe_frame: RecipeFrame,
+    ) -> Result<Self> {
+        let CompiledModelSpec {
+            source_formula,
+            source,
+            materialized,
+            formula,
+            artifact: mut compiler_artifact,
+            audit_fixed_matrix,
+            audit_fixed_pivot,
+        } = spec;
+        let design_data: &DataFrame = materialized.as_ref().unwrap_or(&source);
+        let training_recipe = crate::model::snapshot::TrainingRecipe::new(
+            source_formula,
+            match recipe_frame {
+                RecipeFrame::Source => &source,
+                RecipeFrame::Design => design_data,
+            },
+            compiler_artifact.compiler_policy.clone(),
+            weights.map(ToOwned::to_owned),
         );
-        compiler_artifact.attach_design_audit(data);
+        let data = design_data;
+
         let mut effective_formula = formula.clone();
         if compiler_artifact
             .compiler_policy
@@ -1126,6 +1298,8 @@ impl LinearMixedModel {
                 &mut effective_formula,
                 &compiler_artifact.policy_recommendations,
             )?;
+            // A covariance reduction may have made a factor term `||`.
+            expand_zerocorr_factor_terms(&mut effective_formula, data);
             if !reductions.is_empty() {
                 let effective_semantic_model = compile_formula_ir(&effective_formula);
                 compiler_artifact.set_effective_model(
@@ -1168,8 +1342,23 @@ impl LinearMixedModel {
             &raw_fixed_design,
             &mut compiler_artifact,
             fixed_design_policy,
+            Some((&audit_fixed_matrix, audit_fixed_pivot.as_slice())),
         );
-        let fixed_design = raw_fixed_design.select_columns(&feterm.piv[..feterm.rank])?;
+        drop((audit_fixed_matrix, audit_fixed_pivot));
+        // A full-rank design with the identity pivot selects every column in
+        // place: the raw design already is the solver design, so take it
+        // rather than copying it column by column.
+        let selects_all_columns_in_place = feterm.rank == feterm.x.ncols()
+            && feterm
+                .piv
+                .iter()
+                .enumerate()
+                .all(|(new_col, &orig_col)| new_col == orig_col);
+        let fixed_design = if selects_all_columns_in_place {
+            raw_fixed_design
+        } else {
+            raw_fixed_design.select_columns(&feterm.piv[..feterm.rank])?
+        };
         if fixed_design.storage() == FixedDesignStorage::Streamed {
             compiler_artifact
                 .diagnostics
@@ -1212,6 +1401,7 @@ impl LinearMixedModel {
         // Apply weights: scale each row of X, Z, and y by sqrt(w_i).
         let mut sqrtwts_dvec = None;
         let sqrtwts = if let Some(wts) = weights {
+            validate_lmm_prior_weights(wts, y.len())?;
             let sw: Vec<f64> = wts.iter().map(|w| w.sqrt()).collect();
             let sw_dvec = DVector::from_vec(sw.clone());
             xy_mat.reweight(&sw_dvec);
@@ -1245,6 +1435,7 @@ impl LinearMixedModel {
         let training_categorical = predict::snapshot_training_categorical(data);
 
         let mut model = LinearMixedModel {
+            training_recipe,
             formula: effective_formula,
             reterms,
             xy_mat,
@@ -1263,8 +1454,17 @@ impl LinearMixedModel {
             suppress_derivative_diagnostics: false,
             trust_bq_start_ladder: TrustBqStartLadder::default(),
             trust_bq_sample_reuse: TrustBqSampleReuse::default(),
+            trust_bq_gradient_oracle: TrustBqGradientOracle::default(),
             active_face_refit: ActiveFaceRefit::default(),
             progress_callback: None,
+            fit_phase_timings: None,
+            derivative_evidence_pending: false,
+            inspection_artifact: std::sync::OnceLock::new(),
+            re_cross_sparse_patterns: std::collections::HashMap::new(),
+            wtxy_rows_scratch: Vec::new(),
+            satterthwaite_cache: inference::SatterthwaiteCache::default(),
+            fe_a_blocks_stale: false,
+            fe_l_row_stale: false,
         };
         debug_assert_eq!(
             model.dims.p, model.feterm.rank,
@@ -1316,8 +1516,66 @@ impl LinearMixedModel {
     }
 
     /// Round-trippable compiler artifact attached at construction time.
+    ///
+    /// After a fit this is the inspected view: any deferred optimizer
+    /// certificate derivative evidence is completed on first access.
     pub fn compiler_artifact(&self) -> &CompiledModelArtifact {
+        self.inspection_artifact()
+    }
+
+    /// The artifact as callers should see it. While derivative evidence is
+    /// pending, the first call clones the artifact, completes the
+    /// certificate's finite-difference gradient/Hessian evidence from
+    /// `&self`, and caches the result; otherwise the stored artifact is
+    /// returned directly. Mutating fit paths call
+    /// `ensure_derivative_evidence` instead, which completes in place.
+    pub(crate) fn inspection_artifact(&self) -> &CompiledModelArtifact {
+        if !self.derivative_evidence_pending {
+            return &self.compiler_artifact;
+        }
+        self.inspection_artifact.get_or_init(|| {
+            let mut artifact = self.compiler_artifact.clone();
+            if let Some(certificate) = artifact.optimizer_certificate.as_mut() {
+                if Self::certificate_derivatives_deferred(certificate) {
+                    self.complete_certificate_derivatives(certificate);
+                }
+            }
+            artifact
+        })
+    }
+
+    unstable_internal_method! {
+    /// The stored compiler artifact, *without* completing deferred optimizer
+    /// certificate derivative evidence.
+    ///
+    /// A fit records its certificate's finite-difference gradient/Hessian
+    /// evidence as deferred ([`certificate_evidence_pending`](Self::certificate_evidence_pending))
+    /// and [`compiler_artifact`](Self::compiler_artifact) completes it on
+    /// first access. A host that keeps the fitted model alive can read this
+    /// view at fit time and complete the evidence only when the certificate
+    /// is actually inspected. While evidence is pending the certificate's
+    /// `status` is provisional: completed evidence can only add derivative
+    /// checks, and a material KKT/curvature failure downgrades the status to
+    /// `not_optimized` with an `optimizer_nonconvergence` warning. Every
+    /// other field is identical to the completed view.
+    #[allow(dead_code)]
+    unstable_vis fn compiler_artifact_deferred(&self) -> &CompiledModelArtifact {
         &self.compiler_artifact
+    }
+    }
+
+    /// Whether the optimizer certificate's derivative evidence is still
+    /// deferred (completed lazily by [`compiler_artifact`](Self::compiler_artifact)
+    /// or in place by [`complete_certificate_evidence`](Self::complete_certificate_evidence)).
+    pub fn certificate_evidence_pending(&self) -> bool {
+        self.derivative_evidence_pending
+    }
+
+    /// Complete any deferred certificate derivative evidence in place, so
+    /// the stored artifact equals [`compiler_artifact`](Self::compiler_artifact).
+    /// No-op when nothing is pending. Does not change the fitted state.
+    pub fn complete_certificate_evidence(&mut self) {
+        self.ensure_derivative_evidence();
     }
 
     unstable_internal_method! {
@@ -1434,32 +1692,32 @@ impl LinearMixedModel {
 
     /// Fit-time optimizer certificate attached to the compiler artifact, if available.
     pub fn optimizer_certificate(&self) -> Option<&OptimizerCertificate> {
-        self.compiler_artifact.optimizer_certificate.as_ref()
+        self.inspection_artifact().optimizer_certificate.as_ref()
     }
 
     /// Stable user-facing audit report derived from the compiler artifact.
     pub fn audit_report(&self) -> ModelAuditReport {
-        self.compiler_artifact.audit_report()
+        self.inspection_artifact().audit_report()
     }
 
     /// Compact default print summary (PRD § 15).
     pub fn print_summary(&self) -> crate::compiler::ModelPrint {
-        self.compiler_artifact.print_summary()
+        self.inspection_artifact().print_summary()
     }
 
     /// Source-to-fitted parameterization drilldown (PRD § 15).
     pub fn parameterization(&self) -> crate::compiler::ParameterizationDrilldown {
-        self.compiler_artifact.parameterization()
+        self.inspection_artifact().parameterization()
     }
 
     /// Requested, semantic, supported, and fitted model-state view.
     pub fn model_state_summary(&self) -> ModelStateSummary {
-        self.compiler_artifact.model_state_summary()
+        self.inspection_artifact().model_state_summary()
     }
 
     /// Recorded or recommended requested-to-fitted model changes.
     pub fn changes(&self) -> Vec<ModelStateChange> {
-        self.compiler_artifact.changes()
+        self.inspection_artifact().changes()
     }
 
     /// Get the response vector y (last column of xy_mat).
@@ -1497,6 +1755,14 @@ impl LinearMixedModel {
         &self.dims
     }
 
+    /// Wall-clock split of the most recent fit into optimizer search and
+    /// post-optimizer finalization, or `None` before any fit. Diagnostic
+    /// only (benchmarks and profiling); it is not part of any parity or
+    /// serialized contract. Construction time is not included.
+    pub fn fit_phase_timings(&self) -> Option<FitPhaseTimings> {
+        self.fit_phase_timings
+    }
+
     /// Borrow the optimization summary.
     ///
     /// Read-only mirror of [`MixedModelFit::opt_summary`]; mutating optimizer
@@ -1527,6 +1793,7 @@ impl LinearMixedModel {
 
         self.trust_bq_start_ladder = control.trust_bq_start_ladder;
         self.trust_bq_sample_reuse = control.trust_bq_sample_reuse;
+        self.trust_bq_gradient_oracle = control.trust_bq_gradient_oracle;
         self.active_face_refit = control.active_face_refit;
 
         if let Some(value) = control.tolerances.ftol_rel {
@@ -1625,6 +1892,79 @@ impl LinearMixedModel {
         Ok(())
     }
 
+    /// Install recorded response and covariance state without optimizer
+    /// dispatch. This is used only by the snapshot restoration boundary.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the snapshot boundary names each independently validated recorded state component"
+    )]
+    pub(crate) fn restore_fixed_state(
+        &mut self,
+        observed_response: &[f64],
+        working_response: &[f64],
+        theta: &[f64],
+        sqrtwts: &[f64],
+        optsum: crate::types::OptSummary,
+        artifact: crate::compiler::CompiledModelArtifact,
+        residual_source: crate::model::summary_estimates::ResidualSource,
+    ) -> Result<()> {
+        if theta.len() != self.parmap.len()
+            || theta
+                .iter()
+                .zip(self.lower_bounds())
+                .any(|(&value, lower)| !value.is_finite() || value < lower)
+        {
+            return Err(MixedModelError::InvalidArgument(
+                "snapshot theta violates its covariance parameter bounds".to_string(),
+            ));
+        }
+        if observed_response.len() != self.dims.n
+            || working_response.len() != self.dims.n
+            || (!sqrtwts.is_empty() && sqrtwts.len() != self.dims.n)
+            || observed_response
+                .iter()
+                .chain(working_response)
+                .any(|v| !v.is_finite())
+            || sqrtwts.iter().any(|v| !v.is_finite() || *v < 0.0)
+        {
+            return Err(MixedModelError::InvalidArgument(
+                "snapshot response or working weights are invalid".to_string(),
+            ));
+        }
+        if residual_source == crate::model::summary_estimates::ResidualSource::FixedSamplingVariance
+            && optsum.sigma != Some(1.0)
+        {
+            return Err(MixedModelError::InvalidArgument(
+                "fixed sampling-variance snapshot must record sigma = 1".to_string(),
+            ));
+        }
+        // The recorded artifact can carry a final compiler policy different
+        // from construction metadata.  Basis reconstruction already used the
+        // recipe policy; factorization must use the recorded final policy.
+        self.compiler_artifact = artifact.clone();
+        let unit_weights;
+        let working_weights = if sqrtwts.is_empty() {
+            unit_weights = vec![1.0; self.dims.n];
+            &unit_weights
+        } else {
+            sqrtwts
+        };
+        self.apply_irls_weights(working_weights, working_response);
+        if sqrtwts.is_empty() {
+            self.sqrtwts.clear();
+        }
+        self.y = DVector::from_column_slice(observed_response);
+        self.recompute_a_blocks()?;
+        self.set_theta(theta)?;
+        self.update_l()?;
+        self.optsum = optsum;
+        self.compiler_artifact = artifact;
+        self.residual_source = residual_source;
+        self.derivative_evidence_pending = false;
+        self.inspection_artifact = std::sync::OnceLock::new();
+        Ok(())
+    }
+
     /// Lower bounds on θ. Diagonal elements of λ are ≥ 0, off-diagonal are unconstrained.
     pub fn lower_bounds(&self) -> Vec<f64> {
         let mut lb = Vec::new();
@@ -1648,17 +1988,91 @@ impl LinearMixedModel {
     /// feature; otherwise `pub(crate)`. Not covered by the 1.0 SemVer
     /// guarantee.
     unstable_vis fn update_l(&mut self) -> Result<()> {
+        // A fixed-β PIRLS solve may have left the `[X|y]` rows of A behind
+        // the current weights; a full factor must never be built from them.
+        if self.fe_a_blocks_stale {
+            self.recompute_fe_a_blocks()?;
+        }
         let cholesky_zero_pad_tolerance = self
             .compiler_policy()
             .thresholds
             .cholesky_zero_pad_tolerance;
+        self.fe_l_row_stale = true;
         update_l_from_parts(
+            &self.a_blocks,
+            &mut self.l_blocks,
+            &self.reterms,
+            cholesky_zero_pad_tolerance,
+        )?;
+        self.fe_l_row_stale = false;
+        Ok(())
+    }
+    }
+
+    /// Update only the random-effects rows of `L` (`L[i, j]`, `i < k`) and
+    /// mark the `[X|y]` row stale.
+    ///
+    /// The RE rows are bit-identical to the ones [`update_l`](Self::update_l)
+    /// produces (the blocked factorization is left-looking; see
+    /// `update_l_re_rows_from_parts`). Callers must restore the `[X|y]` row
+    /// with [`refresh_stale_fe_blocks`](Self::refresh_stale_fe_blocks) before
+    /// anything that reads it (β, profiled residuals, `vcov`, the profiled
+    /// objective) runs.
+    pub(crate) fn update_l_re_only(&mut self) -> Result<()> {
+        let cholesky_zero_pad_tolerance = self
+            .compiler_policy()
+            .thresholds
+            .cholesky_zero_pad_tolerance;
+        self.fe_l_row_stale = true;
+        update_l_re_rows_from_parts(
             &self.a_blocks,
             &mut self.l_blocks,
             &self.reterms,
             cholesky_zero_pad_tolerance,
         )
     }
+
+    /// Whether any `[X|y]` block of `A` or `L` is behind the current
+    /// weights / Λ (see [`update_irls_weights_re_only`](Self::update_irls_weights_re_only)).
+    pub(crate) fn fe_blocks_stale(&self) -> bool {
+        self.fe_a_blocks_stale || self.fe_l_row_stale
+    }
+
+    /// Bring the `[X|y]` blocks of `A` and `L` up to date after
+    /// [`update_irls_weights_re_only`](Self::update_irls_weights_re_only) /
+    /// [`update_l_re_only`](Self::update_l_re_only). A no-op when nothing is
+    /// stale.
+    ///
+    /// Requires the RE rows of `L` to be factored for the current `A` and Λ
+    /// (the same contract every `L` reader already relies on); the result is
+    /// then bit-identical to a full `recompute_a_blocks` + `update_l`.
+    pub(crate) fn refresh_stale_fe_blocks(&mut self) -> Result<()> {
+        if self.fe_a_blocks_stale {
+            self.recompute_fe_a_blocks()?;
+            self.fe_l_row_stale = true;
+        }
+        if self.fe_l_row_stale {
+            let cholesky_zero_pad_tolerance = self
+                .compiler_policy()
+                .thresholds
+                .cholesky_zero_pad_tolerance;
+            update_l_fe_row_from_parts(
+                &self.a_blocks,
+                &mut self.l_blocks,
+                &self.reterms,
+                cholesky_zero_pad_tolerance,
+            )?;
+            self.fe_l_row_stale = false;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn debug_assert_fe_blocks_fresh(&self) {
+        debug_assert!(
+            !self.fe_blocks_stale(),
+            "read of the [X|y] A/L blocks while they are stale from a fixed-beta PIRLS update"
+        );
     }
 
     /// Update IRLS weights and working response, then rebuild A blocks.
@@ -1667,37 +2081,72 @@ impl LinearMixedModel {
     /// * `sqrtwts` - square-root of the IRLS weights (length n)
     /// * `working_y` - working response values (length n)
     pub fn update_irls_weights(&mut self, sqrtwts: &[f64], working_y: &[f64]) -> Result<()> {
+        self.apply_irls_weights(sqrtwts, working_y);
+        self.recompute_a_blocks()
+    }
+
+    /// [`update_irls_weights`](Self::update_irls_weights) for fixed-β
+    /// conditional-mode PIRLS: every weighted buffer (`sqrtwts`, `wtz`,
+    /// `wtxy`, the working response) is updated, but only the RE × RE blocks
+    /// of `A` are rebuilt. The `[X|y]` rows of `A` (and hence of `L`) are
+    /// marked stale; [`refresh_stale_fe_blocks`](Self::refresh_stale_fe_blocks)
+    /// or a full [`update_l`](Self::update_l) restores them.
+    pub(crate) fn update_irls_weights_re_only(&mut self, sqrtwts: &[f64], working_y: &[f64]) {
+        self.apply_irls_weights(sqrtwts, working_y);
+        self.recompute_re_a_blocks();
+        self.fe_a_blocks_stale = true;
+        self.fe_l_row_stale = true;
+    }
+
+    fn apply_irls_weights(&mut self, sqrtwts: &[f64], working_y: &[f64]) {
         let n = self.dims.n;
         debug_assert_eq!(sqrtwts.len(), n);
         debug_assert_eq!(working_y.len(), n);
 
-        self.sqrtwts = sqrtwts.to_vec();
+        // Reuse the existing buffer across PIRLS iterations.
+        self.sqrtwts.clear();
+        self.sqrtwts.extend_from_slice(sqrtwts);
 
-        // Update wtz for every RE term: wtz[s, obs] = sqrtwts[obs] * z[s, obs]
+        // Update wtz for every RE term: wtz[s, obs] = sqrtwts[obs] * z[s, obs].
+        // `z`/`wtz` are `vsize × n` column-major, so observation `obs` is the
+        // contiguous chunk `[obs * vsize, (obs + 1) * vsize)`.
         for rt in &mut self.reterms {
             let vsize = rt.vsize;
-            for obs in 0..n {
-                for s in 0..vsize {
-                    rt.wtz[(s, obs)] = sqrtwts[obs] * rt.z[(s, obs)];
+            let z = rt.z.as_slice();
+            let wtz = rt.wtz.as_mut_slice();
+            for ((z_obs, wtz_obs), &sw) in z
+                .chunks_exact(vsize)
+                .zip(wtz.chunks_exact_mut(vsize))
+                .zip(sqrtwts)
+            {
+                for (w, &value) in wtz_obs.iter_mut().zip(z_obs) {
+                    *w = sw * value;
                 }
             }
         }
 
-        // Update wtxy: first `rank` columns from X, last column from working_y
+        // Update wtxy: first `rank` columns from X, last column from
+        // working_y (column-major, so each column is a contiguous slice).
         let rank = self.feterm.rank;
-        for obs in 0..n {
-            let sw = sqrtwts[obs];
-            for col in 0..rank {
-                self.xy_mat.wtxy[(obs, col)] = sw * self.feterm.x[(obs, col)];
+        for col in 0..rank {
+            let x_col = self.feterm.x.column(col);
+            let x_col = x_col.as_slice();
+            let mut wt_col = self.xy_mat.wtxy.column_mut(col);
+            for ((w, &value), &sw) in wt_col.as_mut_slice().iter_mut().zip(x_col).zip(sqrtwts) {
+                *w = sw * value;
             }
-            // y column (last)
-            self.xy_mat.wtxy[(obs, rank)] = sw * working_y[obs];
-            self.xy_mat.xy[(obs, rank)] = working_y[obs];
         }
-
-        // Rebuild A blocks
-        self.recompute_a_blocks()?;
-        Ok(())
+        {
+            let mut wt_y = self.xy_mat.wtxy.column_mut(rank);
+            for ((w, &value), &sw) in wt_y.as_mut_slice().iter_mut().zip(working_y).zip(sqrtwts) {
+                *w = sw * value;
+            }
+            self.xy_mat
+                .xy
+                .column_mut(rank)
+                .as_mut_slice()
+                .copy_from_slice(working_y);
+        }
     }
 
     unstable_internal_method! {
@@ -1707,8 +2156,95 @@ impl LinearMixedModel {
     /// Unstable internal surface: `pub` only with the `unstable-internals`
     /// feature; otherwise `pub(crate)`.
     unstable_vis fn recompute_a_blocks(&mut self) -> Result<()> {
+        self.recompute_re_a_blocks();
+        self.recompute_fe_a_blocks()
+    }
+    }
+
+    /// RE × RE blocks of `A` (`A[i, j]`, `j <= i < k`) from the current `wtz`.
+    fn recompute_re_a_blocks(&mut self) {
         let k = self.reterms.len();
         let mut idx = 0;
+
+        // RE × RE blocks. Scalar-intercept cross blocks keep a cached
+        // structural sparsity pattern (built on first use from the grouping
+        // references) and refresh their values in place; rebuilding the
+        // pattern through a keyed map every PIRLS iteration dominated the
+        // per-iteration cost on crossed Bernoulli fits.
+        // Every block is written into the existing A block's storage when
+        // its shape and variant are unchanged (bit-identical values).
+        for i in 0..k {
+            for j in 0..=i {
+                let target = &mut self.a_blocks[idx];
+                if i == j {
+                    let a = &self.reterms[i];
+                    blocks::compute_re_cross_product_into(a, a, target);
+                } else if self.reterms[i].vsize == 1 && self.reterms[j].vsize == 1 {
+                    let (a, b) = (&self.reterms[i], &self.reterms[j]);
+                    self.re_cross_sparse_patterns
+                        .entry(idx)
+                        .or_insert_with(|| blocks::ScalarCrossPattern::new(a, b))
+                        .refresh_into(a, b, target);
+                } else {
+                    blocks::compute_re_cross_product_into(
+                        &self.reterms[i],
+                        &self.reterms[j],
+                        target,
+                    );
+                }
+                idx += 1;
+            }
+        }
+    }
+
+    /// `[X|y]` rows of `A` (`A[k, 0..=k]`) from the current `wtz` / `wtxy`;
+    /// clears [`fe_a_blocks_stale`](Self::fe_a_blocks_stale) on success.
+    fn recompute_fe_a_blocks(&mut self) -> Result<()> {
+        self.recompute_fe_a_blocks_inner()?;
+        self.fe_a_blocks_stale = false;
+        Ok(())
+    }
+
+    fn recompute_fe_a_blocks_inner(&mut self) -> Result<()> {
+        let k = self.reterms.len();
+        let mut idx = k * (k + 1) / 2;
+
+        // Weighted dense designs (PIRLS iterations, weighted refits): the
+        // solver-side weighted `[X|y]` already exists as `xy_mat.wtxy`, so
+        // build the fixed blocks straight from it instead of materializing a
+        // weighted FixedDesign copy per call. Bit-identical to the
+        // FixedDesign route (see the kernels' docs).
+        let weighted_dense = !self.sqrtwts.is_empty()
+            && self.fixed_design.storage() != FixedDesignStorage::Streamed
+            && self.xy_mat.wtxy.ncols() == self.feterm.rank + 1;
+        if weighted_dense {
+            // One row-major copy of `wtxy` feeds every kernel (contiguous
+            // per-observation reads); blocks are written in place. Dense
+            // FE x RE blocks need no `finalize_fixed_re_block`.
+            let mut rows = std::mem::take(&mut self.wtxy_rows_scratch);
+            blocks::wtxy_to_rows(&self.xy_mat.wtxy, &mut rows);
+            let pp1 = self.xy_mat.wtxy.ncols();
+            for j in 0..k {
+                let target = &mut self.a_blocks[idx];
+                if !matches!(target, MatrixBlock::Dense(_)) {
+                    *target = MatrixBlock::Dense(DMatrix::zeros(0, 0));
+                }
+                if let MatrixBlock::Dense(out) = target {
+                    blocks::compute_wtxy_re_cross_product_into(&rows, pp1, &self.reterms[j], out);
+                }
+                idx += 1;
+            }
+            let target = &mut self.a_blocks[idx];
+            if !matches!(target, MatrixBlock::Dense(_)) {
+                *target = MatrixBlock::Dense(DMatrix::zeros(0, 0));
+            }
+            if let MatrixBlock::Dense(out) = target {
+                blocks::compute_wtxy_cross_product_into(&self.xy_mat.wtxy, &rows, out);
+            }
+            self.wtxy_rows_scratch = rows;
+            return Ok(());
+        }
+
         let sqrtwts = if self.sqrtwts.is_empty() {
             None
         } else {
@@ -1717,19 +2253,6 @@ impl LinearMixedModel {
         let weighted_fixed_design =
             weighted_fixed_design_for_solver(&self.fixed_design, sqrtwts.as_ref())?;
         let weighted_response = self.xy_mat.wtxy.column(self.feterm.rank).into_owned();
-
-        // RE × RE blocks
-        for i in 0..k {
-            for j in 0..=i {
-                let block = if i == j {
-                    compute_re_cross_product(&self.reterms[i], &self.reterms[i])
-                } else {
-                    compute_re_cross_product(&self.reterms[i], &self.reterms[j])
-                };
-                self.a_blocks[idx] = block;
-                idx += 1;
-            }
-        }
 
         // FE × RE blocks: [X|y]' Z_j
         for j in 0..k {
@@ -1750,9 +2273,9 @@ impl LinearMixedModel {
 
         Ok(())
     }
-    }
 
     fn determinant_term_and_pwrss_for_reml(&self, reml: bool) -> (f64, f64) {
+        self.debug_assert_fe_blocks_fresh();
         let k = self.reterms.len();
 
         let mut logdet = 0.0;
@@ -1760,18 +2283,34 @@ impl LinearMixedModel {
             logdet += logdet_block(&self.l_blocks[block_index(j, j)]);
         }
 
-        let l_dense = self.l_blocks[block_index(k, k)].as_dense();
+        // The trailing block is dense; read its diagonal in place (cloning
+        // it here was one allocation per objective evaluation).
+        let l_owned;
+        let l_dense: &DMatrix<f64> = match self.l_blocks[block_index(k, k)].as_dense_ref() {
+            Some(dense) => dense,
+            None => {
+                l_owned = self.l_blocks[block_index(k, k)].as_dense();
+                &l_owned
+            }
+        };
         let pp1 = l_dense.nrows();
         let last_diag = l_dense[(pp1 - 1, pp1 - 1)];
         let pwrss = last_diag * last_diag;
 
         if reml {
+            // `X` is reduced to its full-rank pivoted columns before the
+            // factorization, so every diagonal of `L_XX` must be strictly
+            // positive. A non-positive or non-finite pivot means the
+            // factorization broke down at this θ; skipping it would silently
+            // drop a term from the REML criterion, so mark the point as
+            // infeasible (objective +∞) instead.
             let mut logdet_lxx = 0.0;
             for i in 0..(pp1 - 1) {
                 let d = l_dense[(i, i)];
-                if d > 0.0 {
-                    logdet_lxx += d.ln();
+                if !(d.is_finite() && d > 0.0) {
+                    return (f64::INFINITY, pwrss);
                 }
+                logdet_lxx += d.ln();
             }
             logdet += 2.0 * logdet_lxx;
         }
@@ -2040,6 +2579,9 @@ impl LinearMixedModel {
     }
 
     unstable_internal_method! {
+    // Engine paths now use the analytic Jacobian; this stays as unstable
+    // inspection surface (and the finite-difference test oracle's input).
+    #[cfg_attr(not(any(test, feature = "unstable-internals")), allow(dead_code))]
     /// Evaluate the fixed-effect covariance matrix at `varpar = c(theta, sigma)`.
     ///
     /// This is the Rust analogue of `lmerTestR::get_covbeta`: at a trial
@@ -2082,6 +2624,7 @@ impl LinearMixedModel {
     }
     }
 
+    #[cfg_attr(not(any(test, feature = "unstable-internals")), allow(dead_code))]
     fn vcov_beta_varpar_fast(&self, varpar: &[f64]) -> Option<DMatrix<f64>> {
         let n_theta = self.n_theta();
         let theta = &varpar[..n_theta];
@@ -2101,16 +2644,82 @@ impl LinearMixedModel {
     }
 
     unstable_internal_method! {
-    /// Numerically differentiate `vcov_beta_varpar` with respect to `varpar`.
+    /// Differentiate `vcov_beta_varpar` with respect to `varpar`.
     ///
-    /// Returns one `p x p` matrix per `varpar` component. The first
-    /// implementation intentionally requires a feasible central-difference
-    /// stencil; boundary-active parameters return an explicit unavailable
-    /// reason instead of silently producing one-sided derivatives.
+    /// Returns one `p x p` matrix per `varpar` component. The θ derivatives
+    /// are analytic (`vcov · G'D_mG · vcov / σ²`, see
+    /// `vcov_active_theta_derivatives`) from one factorization at the
+    /// requested θ; the σ derivative is `2 vcov / σ`. This replaced a
+    /// central-difference Jacobian that refactored `2·len(varpar)` times
+    /// and cloned every L block per evaluation; the two agree to the
+    /// finite-difference truncation error (~1e-8 relative).
+    ///
+    /// The feasibility gate of the former central-difference stencil is
+    /// kept: boundary-active parameters still return an explicit
+    /// unavailable reason, so which hypotheses are assessed is unchanged.
     ///
     /// Unstable internal surface: `pub` only with the `unstable-internals`
     /// feature; otherwise `pub(crate)`.
     unstable_vis fn jac_vcov_beta_varpar(&mut self, varpar: &[f64]) -> Result<Vec<DMatrix<f64>>> {
+        self.validate_varpar(varpar)?;
+        self.ensure_central_stencil_feasible(varpar)?;
+
+        let n_theta = self.n_theta();
+        let theta = &varpar[..n_theta];
+        let sigma = varpar[n_theta];
+
+        let original_theta = self.theta();
+        let original_l_blocks = self.l_blocks.clone();
+        let result = (|| {
+            self.set_theta(theta)?;
+            self.update_l()?;
+            let vcov_active = self.vcov_active_with_sigma(sigma);
+            let mut active = self.vcov_active_theta_derivatives(sigma)?;
+            active.push(&vcov_active * (2.0 / sigma));
+            let mut jacobian = Vec::with_capacity(active.len());
+            for (index, derivative) in active.iter().enumerate() {
+                let derivative = self.unpivot_fixed_effect_covariance(derivative);
+                if !matrix_is_finite(&derivative) {
+                    return Err(MixedModelError::InvalidArgument(format!(
+                        "jac_vcov_beta derivative for varpar[{index}] contains non-finite entries"
+                    )));
+                }
+                jacobian.push(symmetrize_matrix(&derivative));
+            }
+            Ok(jacobian)
+        })();
+        self.set_theta(&original_theta)?;
+        self.l_blocks = original_l_blocks;
+        result
+    }
+    }
+
+    /// The central-difference stencil gate shared by the varpar Jacobian:
+    /// every component must admit a feasible central step.
+    fn ensure_central_stencil_feasible(&self, varpar: &[f64]) -> Result<()> {
+        let lower_bounds = self.varpar_lower_bounds();
+        let steps = finite_difference_steps(varpar, &lower_bounds, 1e-5);
+        for index in 0..varpar.len() {
+            let lower = lower_bounds
+                .get(index)
+                .copied()
+                .unwrap_or(f64::NEG_INFINITY);
+            if feasible_central_step(varpar[index], lower, steps[index]).is_none() {
+                return Err(MixedModelError::InvalidArgument(format!(
+                    "cannot compute central finite-difference derivative for varpar[{index}]: \
+                     value is at or too near lower bound {lower}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// The former central-difference Jacobian, kept as a test oracle.
+    #[cfg(test)]
+    pub(crate) fn jac_vcov_beta_varpar_finite_difference(
+        &mut self,
+        varpar: &[f64],
+    ) -> Result<Vec<DMatrix<f64>>> {
         self.validate_varpar(varpar)?;
 
         let lower_bounds = self.varpar_lower_bounds();
@@ -2122,32 +2731,18 @@ impl LinearMixedModel {
                 .get(index)
                 .copied()
                 .unwrap_or(f64::NEG_INFINITY);
-            let step =
-                feasible_central_step(varpar[index], lower, steps[index]).ok_or_else(|| {
-                    MixedModelError::InvalidArgument(format!(
-                        "cannot compute central finite-difference derivative for varpar[{index}]: \
-                     value is at or too near lower bound {lower}"
-                    ))
-                })?;
-
+            let step = feasible_central_step(varpar[index], lower, steps[index])
+                .expect("feasible central step");
             let mut plus = varpar.to_vec();
             let mut minus = varpar.to_vec();
             plus[index] += step;
             minus[index] -= step;
-
             let vcov_plus = self.vcov_beta_varpar(&plus)?;
             let vcov_minus = self.vcov_beta_varpar(&minus)?;
             let derivative = (&vcov_plus - &vcov_minus) * (0.5 / step);
-            if !matrix_is_finite(&derivative) {
-                return Err(MixedModelError::InvalidArgument(format!(
-                    "jac_vcov_beta derivative for varpar[{index}] contains non-finite entries"
-                )));
-            }
             jacobian.push(symmetrize_matrix(&derivative));
         }
-
         Ok(jacobian)
-    }
     }
 
     /// Estimate `vcov(varpar)` from the Hessian of `deviance_varpar`.
@@ -2238,6 +2833,9 @@ impl LinearMixedModel {
     }
 
     unstable_internal_method! {
+    // The adjusted covariance uses the low-rank route; this explicit n x n
+    // decomposition stays as unstable inspection surface and test oracle.
+    #[cfg_attr(not(any(test, feature = "unstable-internals")), allow(dead_code))]
     /// Build the Kenward-Roger response-covariance component decomposition.
     ///
     /// The returned matrices follow the `pbkrtest::get_SigmaG()` convention:
@@ -2392,14 +2990,15 @@ impl LinearMixedModel {
     /// Unstable internal surface: `pub` only with the `unstable-internals`
     /// feature; otherwise `pub(crate)`.
     unstable_vis fn kenward_roger_adjusted_vcov(&self) -> Result<KenwardRogerAdjustedVcov> {
-        let sigma_g = self.kenward_roger_sigma_g()?;
-        if !sigma_g.sigma_positive_definite {
-            return Err(MixedModelError::Singular(
-                "Kenward-Roger adjusted covariance requires a positive-definite response covariance"
-                    .to_string(),
-            ));
-        }
+        let (phi, x) = self.kenward_roger_phi_and_x()?;
+        let ingredients = self.kenward_roger_ingredients(&x)?;
+        self.kenward_roger_adjusted_from_ingredients(phi, ingredients)
+    }
+    }
 
+    /// Fitted active fixed-effect covariance `Φ` and active design `X`,
+    /// after the shared Kenward-Roger prerequisites.
+    fn kenward_roger_phi_and_x(&self) -> Result<(DMatrix<f64>, DMatrix<f64>)> {
         let phi = self.vcov_active_with_sigma(self.sigma());
         if !matrix_is_finite(&phi) {
             return Err(MixedModelError::InvalidArgument(
@@ -2415,37 +3014,81 @@ impl LinearMixedModel {
                 x.ncols()
             )));
         }
+        Ok((phi, x))
+    }
 
+    /// The original dense (`n × n`) Kenward-Roger ingredients through
+    /// `kenward_roger_sigma_g`, kept as the test oracle for the low-rank
+    /// formulation in `kenward_roger.rs`.
+    #[cfg(test)]
+    fn kenward_roger_ingredients_dense(
+        &self,
+        x: &DMatrix<f64>,
+    ) -> Result<kenward_roger::KenwardRogerIngredients> {
+        let sigma_g = self.kenward_roger_sigma_g()?;
+        if !sigma_g.sigma_positive_definite {
+            return Err(MixedModelError::Singular(
+                "Kenward-Roger adjusted covariance requires a positive-definite response covariance"
+                    .to_string(),
+            ));
+        }
         let sigma_inv = invert_spd_matrix(&sigma_g.sigma, "Kenward-Roger response covariance")?;
-        let tt = &sigma_inv * &x;
+        let tt = &sigma_inv * x;
         let n_components = sigma_g.components.len();
-        let p = phi.ncols();
 
         let mut hh = Vec::with_capacity(n_components);
         let mut oo = Vec::with_capacity(n_components);
         let mut p_matrices = Vec::with_capacity(n_components);
         for component in &sigma_g.components {
             let h = component * &sigma_inv;
-            let o = &h * &x;
+            let o = &h * x;
             let p_matrix = symmetrize_matrix(&(-o.transpose() * &tt));
             hh.push(h);
             oo.push(o);
             p_matrices.push(p_matrix);
         }
-
         let mut q_matrices = Vec::with_capacity(n_components.saturating_mul(n_components + 1) / 2);
+        let mut ktrace = DMatrix::zeros(n_components, n_components);
+        for rr in 0..n_components {
+            for ss in rr..n_components {
+                q_matrices.push(oo[rr].transpose() * &sigma_inv * &oo[ss]);
+                let value = matrix_elementwise_dot(&hh[rr].transpose(), &hh[ss]);
+                ktrace[(rr, ss)] = value;
+                ktrace[(ss, rr)] = value;
+            }
+        }
+        Ok(kenward_roger::KenwardRogerIngredients {
+            p_matrices,
+            q_matrices,
+            ktrace,
+            component_labels: sigma_g.component_labels,
+        })
+    }
+
+    /// The `p × p` tail of `pbkrtest::vcovAdj_internal()`: information
+    /// matrix, its (generalized) inverse `W`, and `Φ + 2ΦUΦ`.
+    fn kenward_roger_adjusted_from_ingredients(
+        &self,
+        phi: DMatrix<f64>,
+        ingredients: kenward_roger::KenwardRogerIngredients,
+    ) -> Result<KenwardRogerAdjustedVcov> {
+        let kenward_roger::KenwardRogerIngredients {
+            p_matrices,
+            q_matrices,
+            ktrace,
+            component_labels,
+        } = ingredients;
+        let n_components = p_matrices.len();
+        let p = phi.ncols();
+
         let mut information_matrix = DMatrix::zeros(n_components, n_components);
         for rr in 0..n_components {
             for ss in rr..n_components {
-                let q_matrix = oo[rr].transpose() * &sigma_inv * &oo[ss];
-                let q_index = q_matrices.len();
-                q_matrices.push(q_matrix);
-
-                let ktrace = matrix_elementwise_dot(&hh[rr].transpose(), &hh[ss]);
+                let q_index = symmetric_pair_index(rr, ss, n_components);
                 let phi_q = matrix_elementwise_dot(&phi, &q_matrices[q_index]);
                 let phi_p_rr = &phi * &p_matrices[rr];
                 let pp_term = matrix_elementwise_dot(&phi_p_rr, &(&p_matrices[ss] * &phi));
-                let value = ktrace - 2.0 * phi_q + pp_term;
+                let value = ktrace[(rr, ss)] - 2.0 * phi_q + pp_term;
                 information_matrix[(rr, ss)] = value;
                 information_matrix[(ss, rr)] = value;
             }
@@ -2515,9 +3158,6 @@ impl LinearMixedModel {
                 "Kenward-Roger information matrix used a generalized inverse at tolerance {generalized_inverse_tolerance}"
             ));
         }
-        if sigma_g.reliability != ReliabilityGrade::Moderate {
-            notes.extend(sigma_g.notes.clone());
-        }
 
         let reliability = if used_generalized_inverse {
             ReliabilityGrade::Low
@@ -2536,11 +3176,10 @@ impl LinearMixedModel {
             information_eigenvalues,
             condition_min_abs_eigenvalue,
             used_generalized_inverse,
-            component_labels: sigma_g.component_labels,
+            component_labels,
             reliability,
             notes,
         })
-    }
     }
 
     unstable_internal_method! {
@@ -2780,16 +3419,76 @@ impl LinearMixedModel {
         Ok(full)
     }
 
+    /// Gradient of `deviance_varpar` at `varpar = c(theta, sigma)`: the
+    /// analytic θ-gradient of the fixed-σ objective plus
+    /// `∂/∂σ = 2·denomdf/σ − 2·pwrss/σ³`, after the argument checks
+    /// (`varpar` shape/finiteness, positive σ). Leaves θ and `L` at the
+    /// evaluation point; the caller restores the fitted state.
+    fn gradient_deviance_varpar_checked_unrestored(
+        &mut self,
+        varpar: &[f64],
+        reml: bool,
+    ) -> Result<Vec<f64>> {
+        self.validate_varpar(varpar)?;
+        let n_theta = self.n_theta();
+        let sigma = varpar[n_theta];
+        if !(sigma.is_finite() && sigma > 0.0) {
+            return Err(MixedModelError::InvalidArgument(format!(
+                "sigma must be positive and finite, got {sigma}"
+            )));
+        }
+        self.gradient_deviance_varpar_unrestored(&varpar[..n_theta], sigma, reml)
+    }
+
+    /// Analytic varpar gradient of `deviance_varpar` at `(theta, sigma)`,
+    /// without a state save/restore: leaves θ and `L` at the evaluation
+    /// point. The Hessian sweep saves and restores once around all its
+    /// evaluations instead of cloning every L block per evaluation.
+    fn gradient_deviance_varpar_unrestored(
+        &mut self,
+        theta: &[f64],
+        sigma: f64,
+        reml: bool,
+    ) -> Result<Vec<f64>> {
+        let result = (|| {
+            self.set_theta(theta)?;
+            self.update_l()?;
+            let mut gradient = gradient::ProfiledGradientInputs {
+                a_blocks: &self.a_blocks,
+                l_blocks: &self.l_blocks,
+                reterms: &self.reterms,
+                dims: self.dims,
+                reml,
+                sigma: Some(sigma),
+                fe_blocks: None,
+                trailing_l: None,
+            }
+            .profiled_gradient()?;
+            let denomdf = if reml {
+                (self.dims.n - self.dims.p) as f64
+            } else {
+                self.dims.n as f64
+            };
+            let (_, pwrss) = self.determinant_term_and_pwrss_for_reml(reml);
+            gradient.push(2.0 * denomdf / sigma - 2.0 * pwrss / (sigma * sigma * sigma));
+            if gradient.iter().all(|value| value.is_finite()) {
+                Ok(gradient)
+            } else {
+                Err(MixedModelError::Optimization(
+                    "deviance_varpar gradient is non-finite".to_string(),
+                ))
+            }
+        })();
+        result
+    }
+
+    /// Hessian of `deviance_varpar`: symmetrized central differences of the
+    /// analytic varpar gradient (two gradient evaluations per coordinate
+    /// instead of four objective evaluations per entry).
     fn hessian_deviance_varpar(&mut self, varpar: &[f64], reml: bool) -> Result<DMatrix<f64>> {
         self.validate_varpar(varpar)?;
         let lower_bounds = self.varpar_lower_bounds();
         let steps = finite_difference_steps(varpar, &lower_bounds, 1e-4);
-        let f0 = self.deviance_varpar(varpar, reml)?;
-        if !f0.is_finite() {
-            return Err(MixedModelError::Optimization(
-                "deviance_varpar at fitted varpar is non-finite".to_string(),
-            ));
-        }
 
         let mut central_steps = Vec::with_capacity(varpar.len());
         for index in 0..varpar.len() {
@@ -2807,32 +3506,33 @@ impl LinearMixedModel {
             central_steps.push(step);
         }
 
-        let mut hessian = DMatrix::zeros(varpar.len(), varpar.len());
-        for row in 0..varpar.len() {
-            let h_row = central_steps[row];
-            let f_plus = finite_difference_deviance_varpar(self, varpar, row, h_row, reml)?;
-            let f_minus = finite_difference_deviance_varpar(self, varpar, row, -h_row, reml)?;
-            hessian[(row, row)] = (f_plus - 2.0 * f0 + f_minus) / (h_row * h_row);
-
-            for col in 0..row {
-                let h_col = central_steps[col];
-                let f_pp = finite_difference_deviance_varpar_2d(
-                    self, varpar, row, h_row, col, h_col, reml,
-                )?;
-                let f_pm = finite_difference_deviance_varpar_2d(
-                    self, varpar, row, h_row, col, -h_col, reml,
-                )?;
-                let f_mp = finite_difference_deviance_varpar_2d(
-                    self, varpar, row, -h_row, col, h_col, reml,
-                )?;
-                let f_mm = finite_difference_deviance_varpar_2d(
-                    self, varpar, row, -h_row, col, -h_col, reml,
-                )?;
-                let value = (f_pp - f_pm - f_mp + f_mm) / (4.0 * h_row * h_col);
-                hessian[(row, col)] = value;
-                hessian[(col, row)] = value;
+        let n = varpar.len();
+        let mut hessian = DMatrix::zeros(n, n);
+        // Save θ and L once for the whole sweep (each stencil point fully
+        // rebuilds L), instead of cloning every L block per evaluation.
+        let original_theta = self.theta();
+        let original_l_blocks = self.l_blocks.clone();
+        let sweep: Result<()> = (|| {
+            for col in 0..n {
+                let h = central_steps[col];
+                let mut plus = varpar.to_vec();
+                let mut minus = varpar.to_vec();
+                plus[col] += h;
+                minus[col] -= h;
+                let g_plus = self.gradient_deviance_varpar_checked_unrestored(&plus, reml)?;
+                let g_minus = self.gradient_deviance_varpar_checked_unrestored(&minus, reml)?;
+                for row in 0..n {
+                    hessian[(row, col)] = (g_plus[row] - g_minus[row]) / (2.0 * h);
+                }
             }
-        }
+            Ok(())
+        })();
+        self.set_theta(&original_theta)?;
+        self.l_blocks = original_l_blocks;
+        sweep?;
+        let transposed = hessian.transpose();
+        hessian += transposed;
+        hessian *= 0.5;
 
         if matrix_is_finite(&hessian) {
             Ok(hessian)
@@ -2888,6 +3588,7 @@ impl LinearMixedModel {
 
     /// Extract the fixed-effects coefficients β from the Cholesky factor.
     pub fn beta(&self) -> DVector<f64> {
+        self.debug_assert_fe_blocks_fresh();
         let k = self.reterms.len();
         let l_last = self.l_blocks[block_index(k, k)].as_dense();
         let pp1 = l_last.nrows();
@@ -2986,7 +3687,12 @@ impl LinearMixedModel {
     ///   - `L` is the blocked Cholesky factor stored in `self.l_blocks`
     ///
     /// Returns one matrix per RE term with shape `vsize × n_levels`.
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "the random-effect calculation mirrors block forward/back substitution and preserves the Julia accumulation order"
+    )]
     pub fn ranef_u(&self) -> Vec<DMatrix<f64>> {
+        self.debug_assert_fe_blocks_fresh();
         let k = self.reterms.len();
         let p = self.dims.p;
         let n = self.dims.n;
@@ -2995,12 +3701,12 @@ impl LinearMixedModel {
 
         // Step 1: weighted residuals wr[obs] = wy[obs] - wX[obs,:]*beta
         let mut wr = vec![0.0f64; n];
-        for obs in 0..n {
+        for (obs, wr_obs) in wr.iter_mut().enumerate() {
             let mut val = wtxy[(obs, p)]; // weighted y (last column)
             for q in 0..p {
                 val -= wtxy[(obs, q)] * beta[q];
             }
-            wr[obs] = val;
+            *wr_obs = val;
         }
 
         // Step 2: c_j = Λ_j' Z_j' wr  for each RE term j
@@ -3046,17 +3752,16 @@ impl LinearMixedModel {
 
             let mut rhs = c_vecs[j].clone();
 
-            // rhs -= L[j,m] * v_m  for all already-solved m < j
+            // rhs -= L[j,m] * v_m  for all already-solved m < j, on the
+            // block's own storage (sparse CSC stays sparse; bit-identical
+            // to the dense row-dot loop).
+            debug_assert_eq!(rhs.len(), nranef_j);
             for m in 0..j {
-                let l_jm = self.l_blocks[block_index(j, m)].as_dense();
-                let v_m = &v_vecs[m];
-                for row in 0..nranef_j {
-                    let mut dot = 0.0;
-                    for col in 0..v_m.len() {
-                        dot += l_jm[(row, col)] * v_m[col];
-                    }
-                    rhs[row] -= dot;
-                }
+                subtract_block_matvec(
+                    rhs.as_mut_slice(),
+                    &self.l_blocks[block_index(j, m)],
+                    v_vecs[m].as_slice(),
+                );
             }
 
             // Solve L[j,j] * v_j = rhs  (forward substitution)
@@ -3074,17 +3779,13 @@ impl LinearMixedModel {
             let mut rhs = v_vecs[j].clone();
 
             // rhs -= L[m,j]' * u_m  for all already-solved m > j
+            debug_assert_eq!(rhs.len(), nranef_j);
             for m in (j + 1)..k {
-                let l_mj = self.l_blocks[block_index(m, j)].as_dense();
-                let u_m = &u_vecs[m];
-                // L[m,j]' is nranef_j × nranef_m: rhs[row] -= sum_col l_mj[(col,row)] * u_m[col]
-                for row in 0..nranef_j {
-                    let mut dot = 0.0;
-                    for col in 0..u_m.len() {
-                        dot += l_mj[(col, row)] * u_m[col];
-                    }
-                    rhs[row] -= dot;
-                }
+                subtract_block_transpose_matvec(
+                    rhs.as_mut_slice(),
+                    &self.l_blocks[block_index(m, j)],
+                    u_vecs[m].as_slice(),
+                );
             }
 
             // Solve L[j,j]' * u_j = rhs  (backward substitution with L')
@@ -3279,10 +3980,12 @@ impl LinearMixedModel {
             }
         }
 
-        // Residual noise ε ~ N(0, σ²)
-        let eps_dist = Normal::new(0.0, sigma).unwrap();
+        // Residual noise ε_i ~ N(0, σ² / w_i): prior weights scale the
+        // residual variance (lme4's simulate.merMod uses sigma / sqrt(w)).
+        // X and Z are stored unweighted, so y_new is on the data scale.
         for i in 0..n {
-            y_new[i] += eps_dist.sample(rng);
+            let sd = self.sqrtwts.get(i).map_or(sigma, |sw| sigma / sw);
+            y_new[i] += sd * normal01.sample(rng);
         }
 
         Ok(y_new)
@@ -3403,11 +4106,29 @@ impl LinearMixedModel {
 
     /// Refit the model with a new response vector.
     ///
-    /// Replaces the response, rebuilds the cross-product matrices, and
-    /// re-runs the full optimization from the original initial parameters.
+    /// Replaces the response, refreshes the response-dependent
+    /// cross-product entries, and re-runs the full optimization from the
+    /// original initial parameters. Internal simulation loops (parametric
+    /// bootstrap, bootstrap likelihood-ratio tests) use
+    /// [`refit_with_start`](Self::refit_with_start) with a warm start
+    /// instead.
+    /// The template's optimizer controls and progress callback are retained.
     ///
     /// Mirrors `refit!(fm, new_y)` in Julia's MixedModels.jl.
     pub fn refit(&mut self, new_y: &[f64]) -> Result<()> {
+        self.refit_with_start(new_y, RefitStart::Initial)
+    }
+
+    /// [`refit`](Self::refit) with an explicit optimizer start.
+    ///
+    /// `RefitStart::Initial` reproduces `refit`. `Fitted` starts from this
+    /// model's current fitted θ and `From(theta)` from a caller-supplied θ
+    /// (the parametric bootstrap passes the template optimum for every
+    /// replicate, so replicates do not depend on refit order). Warm starts
+    /// also contract the optimizer's first step to
+    /// [`WARM_REFIT_INITIAL_STEP`] because the new optimum is expected
+    /// nearby; the search still expands if it is not.
+    pub fn refit_with_start(&mut self, new_y: &[f64], start: RefitStart) -> Result<()> {
         if new_y.len() != self.dims.n {
             return Err(MixedModelError::InvalidArgument(format!(
                 "Response length {} does not match model ({} observations)",
@@ -3424,29 +4145,128 @@ impl LinearMixedModel {
             ));
         }
 
-        let p = self.feterm.rank;
-        for obs in 0..self.dims.n {
-            let sw = if self.sqrtwts.is_empty() {
-                1.0
-            } else {
-                self.sqrtwts[obs]
-            };
-            self.y[obs] = new_y[obs];
-            self.xy_mat.xy[(obs, p)] = new_y[obs];
-            self.xy_mat.wtxy[(obs, p)] = sw * new_y[obs];
+        let warm = !matches!(start, RefitStart::Initial);
+        let start_theta = match start {
+            RefitStart::Initial => self.optsum.initial.clone(),
+            RefitStart::Fitted => self.theta(),
+            RefitStart::From(theta) => theta,
+        };
+        if warm {
+            let n_theta = self.n_theta();
+            if start_theta.len() != n_theta {
+                return Err(MixedModelError::InvalidArgument(format!(
+                    "refit start theta length {} does not match theta length {n_theta}",
+                    start_theta.len()
+                )));
+            }
+            let lower = self.lower_bounds();
+            if start_theta
+                .iter()
+                .zip(&lower)
+                .any(|(&value, &bound)| !value.is_finite() || value < bound)
+            {
+                return Err(MixedModelError::InvalidArgument(
+                    "refit start theta must be finite and within the lower bounds".to_string(),
+                ));
+            }
         }
 
-        self.recompute_a_blocks()?;
+        let p = self.feterm.rank;
+        {
+            let sqrtwts = &self.sqrtwts;
+            let y = self.y.as_mut_slice();
+            let mut xy_col = self.xy_mat.xy.column_mut(p);
+            let xy_col = xy_col.as_mut_slice();
+            let mut wtxy_col = self.xy_mat.wtxy.column_mut(p);
+            let wtxy_col = wtxy_col.as_mut_slice();
+            for (obs, &new_response) in new_y.iter().enumerate() {
+                let sw = if sqrtwts.is_empty() {
+                    1.0
+                } else {
+                    sqrtwts[obs]
+                };
+                y[obs] = new_response;
+                xy_col[obs] = new_response;
+                wtxy_col[obs] = sw * new_response;
+            }
+        }
+
+        // Only the response-dependent cross-product entries changed; the
+        // full rebuild is the fallback for block layouts the fast refresh
+        // does not cover.
+        if !self.recompute_response_blocks() {
+            self.recompute_a_blocks()?;
+        }
 
         // Reset fit state so fit() doesn't reject as AlreadyFitted
         let reml = self.optsum.reml;
         self.optsum.feval = 0;
 
-        // Re-optimize from initial θ
-        let initial = self.optsum.initial.clone();
-        self.set_theta(&initial)?;
-        self.fit(reml)?;
+        if warm {
+            self.optsum.initial = start_theta.clone();
+            self.optsum.initial_step = vec![WARM_REFIT_INITIAL_STEP; start_theta.len()];
+        }
+        self.set_theta(&start_theta)?;
+        crate::model::snapshot::record_optimizer_entry();
+        self.fit_with_current_controls(reml)?;
         Ok(())
+    }
+
+    /// Refresh the response-dependent A entries (`y'Z_j` rows of the
+    /// `[X|y]'Z_j` blocks and the `X'y` / `y'y` entries of `[X|y]'[X|y]`)
+    /// from the current weighted `[X|y]`, leaving the response-free blocks
+    /// untouched. Returns `false` when a fixed-effect block is not dense
+    /// (streamed sparse designs), in which case the caller rebuilds
+    /// everything. The refreshed entries are computed by the same kernels
+    /// as the full rebuild, so the result is bit-identical to it.
+    pub(crate) fn recompute_response_blocks(&mut self) -> bool {
+        // An in-place response-column patch needs the rest of the `[X|y]`
+        // rows current; stale rows take the full rebuild.
+        if self.fe_a_blocks_stale {
+            return false;
+        }
+        let k = self.reterms.len();
+        let base = k * (k + 1) / 2;
+        let pp1 = self.xy_mat.wtxy.ncols();
+        if pp1 == 0 || self.a_blocks.len() != base + k + 1 {
+            return false;
+        }
+        let p = pp1 - 1;
+        if (0..=k).any(|j| !matches!(self.a_blocks[base + j], MatrixBlock::Dense(_))) {
+            return false;
+        }
+
+        let wtxy = &self.xy_mat.wtxy;
+        let wty = wtxy.column(p);
+        let wty_slice = wty.as_slice();
+        for (j, re) in self.reterms.iter().enumerate() {
+            let yz = blocks::response_re_cross_product_vec(wty_slice, re);
+            if let MatrixBlock::Dense(block) = &mut self.a_blocks[base + j] {
+                if block.nrows() != pp1 || block.ncols() != yz.len() {
+                    return false;
+                }
+                let out = block.as_mut_slice();
+                for (col, &value) in yz.as_slice().iter().enumerate() {
+                    out[col * pp1 + p] = value;
+                }
+            }
+        }
+        if let MatrixBlock::Dense(block) = &mut self.a_blocks[base + k] {
+            if block.nrows() != pp1 || block.ncols() != pp1 {
+                return false;
+            }
+            for col in 0..p {
+                let x_col = wtxy.column(col);
+                let mut acc = 0.0;
+                for (&a, &b) in x_col.as_slice().iter().zip(wty_slice) {
+                    acc += a * b;
+                }
+                block[(col, p)] = acc;
+                block[(p, col)] = acc;
+            }
+            block[(p, p)] = wty.dot(&wty);
+        }
+        true
     }
 
     /// Hat matrix diagonal (leverage values) for each observation.
@@ -3456,6 +4276,10 @@ impl LinearMixedModel {
     /// model degrees of freedom (rank of X + RE θ parameters).
     ///
     /// Mirrors `leverage(fm)` in Julia's MixedModels.jl.
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "the leverage solve indexes packed random-effect and fixed-effect blocks through shared offsets"
+    )]
     pub fn leverage(&self) -> DVector<f64> {
         let k = self.reterms.len();
         let p = self.dims.p;
@@ -3465,8 +4289,8 @@ impl LinearMixedModel {
 
         // Cumulative column offsets into the stacked RE vector
         let mut offsets = vec![0usize; k + 1];
-        for j in 0..k {
-            offsets[j + 1] = offsets[j] + self.reterms[j].n_ranef();
+        for (j, reterm) in self.reterms.iter().enumerate() {
+            offsets[j + 1] = offsets[j] + reterm.n_ranef();
         }
         let nranef_total = offsets[k];
 
@@ -3509,15 +4333,12 @@ impl LinearMixedModel {
                     rhs[idx] = v[offsets[j] + idx];
                 }
                 for m in 0..j {
-                    let l_jm = self.l_blocks[block_index(j, m)].as_dense();
                     let nranef_m = self.reterms[m].n_ranef();
-                    for row in 0..nranef_j {
-                        let mut dot = 0.0;
-                        for col in 0..nranef_m {
-                            dot += l_jm[(row, col)] * w[offsets[m] + col];
-                        }
-                        rhs[row] -= dot;
-                    }
+                    subtract_block_times_slice(
+                        &self.l_blocks[block_index(j, m)],
+                        &w[offsets[m]..offsets[m] + nranef_m],
+                        &mut rhs,
+                    );
                 }
 
                 solve_lower_block_against_rhs(&self.l_blocks[block_index(j, j)], &mut rhs);
@@ -3531,15 +4352,12 @@ impl LinearMixedModel {
             let mut rhs_k = vec![0.0f64; pp1];
             rhs_k.copy_from_slice(&v[nranef_total..nranef_total + pp1]);
             for j in 0..k {
-                let l_kj = self.l_blocks[block_index(k, j)].as_dense();
                 let nranef_j = self.reterms[j].n_ranef();
-                for row in 0..pp1 {
-                    let mut dot = 0.0;
-                    for col in 0..nranef_j {
-                        dot += l_kj[(row, col)] * w[offsets[j] + col];
-                    }
-                    rhs_k[row] -= dot;
-                }
+                subtract_block_times_slice(
+                    &self.l_blocks[block_index(k, j)],
+                    &w[offsets[j]..offsets[j] + nranef_j],
+                    &mut rhs_k,
+                );
             }
             let mut w_k = vec![0.0f64; pp1];
             w_k.copy_from_slice(&rhs_k);
@@ -3561,6 +4379,10 @@ impl LinearMixedModel {
     /// factor.  The matrices are the diagonal blocks of `σ² Λ(Λ'Z'ZΛ+I)⁻¹Λ'`.
     ///
     /// Mirrors `condVar(m)` in Julia's MixedModels.jl.
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "conditional variance follows ordered sub-block forward solves with shared packed-block offsets"
+    )]
     pub fn cond_var(&self) -> Vec<Vec<DMatrix<f64>>> {
         let k = self.reterms.len();
         let sigma = self.sigma();
@@ -3698,6 +4520,9 @@ impl MixedModelFit for LinearMixedModel {
     }
 
     fn coef(&self) -> DVector<f64> {
+        // Dropped (aliased) columns are 0, the value every contrast and
+        // prediction (L * coef) needs; `dropped_coef_names()` identifies them
+        // so hosts can report NA, as lme4's fixef(add.dropped = TRUE) does.
         let beta = self.fixef();
         let mut full = DVector::from_element(self.feterm.piv.len(), 0.0);
         for (i, &val) in beta.iter().enumerate() {
@@ -3710,6 +4535,10 @@ impl MixedModelFit for LinearMixedModel {
 
     fn fixef(&self) -> DVector<f64> {
         self.beta()
+    }
+
+    fn dropped_coef_names(&self) -> Vec<String> {
+        self.feterm.dropped_coef_names()
     }
 
     fn coef_names(&self) -> Vec<String> {
@@ -3809,6 +4638,41 @@ impl MixedModelFit for LinearMixedModel {
     fn ranef(&self) -> Vec<DMatrix<f64>> {
         self.ranef_b()
     }
+
+    fn random_effect_terms(&self) -> Vec<crate::model::traits::RandomEffectTermInfo> {
+        random_effect_term_infos(&self.reterms)
+    }
+}
+
+/// Structural summary of the random-effect terms for model comparison.
+///
+/// Each returned entry is one unstructured covariance block. A diagonal
+/// (`||` / `diag(...)`) block is reported as one scalar entry per basis
+/// column, which is exactly lme4's `||` expansion `(1|g) + (0+x|g)`; this lets
+/// model-comparison helpers see that `(1 + x || g)` is nested in
+/// `(1 + x | g)` (it omits the covariance) and not the other way round.
+pub(crate) fn random_effect_term_infos(
+    reterms: &[ReMat],
+) -> Vec<crate::model::traits::RandomEffectTermInfo> {
+    use crate::model::traits::RandomEffectTermInfo;
+    let mut out = Vec::new();
+    for rt in reterms {
+        let diagonal = rt.vsize > 1 && rt.inds.len() == rt.vsize;
+        if diagonal {
+            for name in &rt.cnames {
+                out.push(RandomEffectTermInfo {
+                    group: rt.grouping_name.clone(),
+                    columns: vec![name.clone()],
+                });
+            }
+        } else {
+            out.push(RandomEffectTermInfo {
+                group: rt.grouping_name.clone(),
+                columns: rt.cnames.clone(),
+            });
+        }
+    }
+    out
 }
 
 pub(crate) fn prediction_interval_cutoff(level: f64) -> Result<f64> {
@@ -3846,12 +4710,26 @@ fn feterm_for_fixed_design(
     raw_fixed_design: &FixedDesign,
     compiler_artifact: &mut CompiledModelArtifact,
     policy: FixedDesignBuildPolicy,
+    audit_hint: Option<(&DMatrix<f64>, &[usize])>,
 ) -> FeTerm {
     if raw_fixed_design.storage() != FixedDesignStorage::Streamed {
-        return FeTerm::new(
-            raw_fixed_design.materialize_dense(),
-            raw_fixed_design.column_names().to_vec(),
-        );
+        let x = raw_fixed_design.materialize_dense();
+        let cnames = raw_fixed_design.column_names().to_vec();
+        // The design audit already ran `stats_rank` on the matrix it built.
+        // When that matrix is bit-identical to this design, the QR input is
+        // identical and so is its (rank, pivot); reuse it instead of
+        // factorizing the same matrix again. Any difference (a design-time
+        // reduction, a different column order) falls back to a fresh QR.
+        let audit_rank = compiler_artifact
+            .design_audit
+            .as_ref()
+            .and_then(|audit| audit.fixed_effects.rank.rank);
+        if let (Some((audit_matrix, pivot)), Some(rank)) = (audit_hint, audit_rank) {
+            if audit_matrix == &x && pivot.len() == x.ncols() {
+                return FeTerm::from_rank_and_pivot(x, cnames, rank, pivot.to_vec());
+            }
+        }
+        return FeTerm::new(x, cnames);
     }
 
     let certificate = crate::linalg::gram_full_rank_certificate(
@@ -3969,6 +4847,31 @@ fn streamed_rank_path_diagnostic(
     diagnostic
 }
 
+/// LMM prior weights scale the residual variance as sigma^2 / w_i, so each
+/// must be finite and strictly positive, and there must be one per
+/// observation. Checked before the weights reach the design (where a length
+/// mismatch would trip an assertion) or the log-determinant (where a zero
+/// weight would produce -inf).
+fn validate_lmm_prior_weights(weights: &[f64], n_obs: usize) -> Result<()> {
+    if weights.len() != n_obs {
+        return Err(MixedModelError::InvalidArgument(format!(
+            "prior weights length ({}) does not match number of observations ({n_obs})",
+            weights.len()
+        )));
+    }
+    if let Some((i, &w)) = weights
+        .iter()
+        .enumerate()
+        .find(|(_, w)| !w.is_finite() || **w <= 0.0)
+    {
+        return Err(MixedModelError::InvalidArgument(format!(
+            "prior weight at index {i} must be finite and positive (got {w}); \
+             drop observations with zero weight before fitting"
+        )));
+    }
+    Ok(())
+}
+
 fn use_direct_dense_fixed_design(
     formula: &Formula,
     data: &DataFrame,
@@ -3998,6 +4901,20 @@ fn build_fixed_effects_matrix(
 
 fn build_fixed_effects_design(formula: &Formula, data: &DataFrame) -> Result<DenseFixedDesign> {
     use crate::formula::FixedTerm;
+
+    // Categorical codings depend on R's marginality and no-intercept rules,
+    // which only the shared fixed-design builder implements. Fit-time and
+    // prediction-time designs must agree column for column (prediction looks
+    // coefficients up by name and treats an absent column as zero), so any
+    // design with a categorical term goes through that builder.
+    if !fixed_terms_are_numeric_only(formula, data) {
+        let streamed =
+            crate::model::fixed_design::build_streamed_fixed_effects_design(formula, data)?;
+        return DenseFixedDesign::new(
+            streamed.materialize_dense(),
+            streamed.column_names().to_vec(),
+        );
+    }
 
     let n = data.nrow();
     let mut columns: Vec<DVector<f64>> = Vec::new();
@@ -4071,51 +4988,21 @@ fn expand_interaction_factors(
     data: &DataFrame,
     n: usize,
 ) -> Result<Vec<Vec<(DVector<f64>, String)>>> {
-    expand_interaction_factors_with_coding(vars, data, n, BasisCoding::Treatment)
-}
-
-fn expand_interaction_factors_with_coding(
-    vars: &[String],
-    data: &DataFrame,
-    n: usize,
-    coding: BasisCoding,
-) -> Result<Vec<Vec<(DVector<f64>, String)>>> {
-    let mut per_var: Vec<Vec<(DVector<f64>, String)>> = Vec::with_capacity(vars.len());
-    for v in vars {
-        per_var.push(expand_factor_columns_with_coding(
-            v,
-            data,
-            "interaction term",
-            coding,
-        )?);
-    }
     let _ = n; // n only used by callers for sanity checks
-    Ok(per_var)
+    vars.iter()
+        .map(|v| expand_factor_columns(v, data, "interaction term"))
+        .collect()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BasisCoding {
-    Treatment,
-    CellMeans,
-}
-
-fn categorical_coding(coding: BasisCoding) -> CategoricalCoding {
-    match coding {
-        BasisCoding::Treatment => CategoricalCoding::Treatment,
-        BasisCoding::CellMeans => CategoricalCoding::CellMeans,
-    }
-}
-
-fn expand_factor_columns_with_coding(
+fn expand_factor_columns(
     name: &str,
     data: &DataFrame,
     context: &str,
-    coding: BasisCoding,
 ) -> Result<Vec<(DVector<f64>, String)>> {
     match data.column(name) {
         Some(Column::Numeric(arr)) => Ok(vec![(DVector::from_column_slice(arr), name.to_string())]),
         Some(Column::Categorical(cat)) => Ok(cat
-            .encoded_columns(name, categorical_coding(coding))
+            .encoded_columns(name, CategoricalCoding::Treatment)
             .into_iter()
             .map(|column| (DVector::from_column_slice(&column.values), column.name))
             .collect()),
@@ -4157,36 +5044,132 @@ fn cartesian_interaction(
     acc
 }
 
-fn random_effect_basis_columns(
-    term: &crate::formula::FixedTerm,
+/// Random-effect basis columns and names for one random term, coded by R's
+/// `model.matrix()` rules exactly like a fixed-effect design with the same
+/// terms (`lme4::mkReTrms` builds Z from `model.matrix(~ <lhs>, fr)`):
+/// with an intercept every factor uses contrasts; without one, the first
+/// factor gets full indicator columns and later factors use contrasts;
+/// interactions follow marginality.
+pub(super) fn random_term_basis(
+    rt: &crate::formula::RandomTerm,
     data: &DataFrame,
-    n: usize,
-    coding: BasisCoding,
-) -> Result<Vec<(DVector<f64>, String)>> {
+) -> Result<(Vec<DVector<f64>>, Vec<String>)> {
     use crate::formula::FixedTerm;
+    use crate::model::fixed_design::FixedDesignBackend;
 
+    let mut terms = rt.terms.clone();
+    if terms.is_empty() {
+        terms.push(FixedTerm::Intercept);
+    }
+    let basis_formula = Formula {
+        response: String::new(),
+        fixed_terms: terms,
+        random_terms: Vec::new(),
+        derived: Vec::new(),
+    };
+    let design =
+        crate::model::fixed_design::build_streamed_fixed_effects_design(&basis_formula, data)
+            .map_err(|err| match err {
+                MixedModelError::InvalidArgument(message) => MixedModelError::InvalidArgument(
+                    format!("random-effect basis for `{rt}`: {message}"),
+                ),
+                other => other,
+            })?;
+    let x = design.materialize_dense();
+    let columns = (0..x.ncols()).map(|j| x.column(j).into_owned()).collect();
+    Ok((columns, design.column_names().to_vec()))
+}
+
+/// Whether a random term's basis involves a categorical variable.
+fn random_term_has_factor(term: &crate::formula::FixedTerm, data: &DataFrame) -> bool {
+    use crate::formula::FixedTerm;
+    let is_factor = |name: &String| matches!(data.column(name), Some(Column::Categorical(_)));
     match term {
-        FixedTerm::Intercept | FixedTerm::NoIntercept => Ok(Vec::new()),
-        FixedTerm::Column(name) => {
-            expand_factor_columns_with_coding(name, data, "random-effect basis", coding)
-        }
-        FixedTerm::Interaction(vars) => {
-            let per_var = expand_interaction_factors_with_coding(vars, data, n, coding)?;
-            Ok(cartesian_interaction(&per_var, n))
-        }
+        FixedTerm::Column(name) => is_factor(name),
+        FixedTerm::Interaction(vars) => vars.iter().any(is_factor),
+        FixedTerm::Intercept | FixedTerm::NoIntercept => false,
     }
 }
 
-fn random_effect_basis_coding(rt: &crate::formula::RandomTerm) -> BasisCoding {
-    if rt
-        .terms
-        .iter()
-        .any(|term| matches!(term, crate::formula::FixedTerm::NoIntercept))
-    {
-        BasisCoding::CellMeans
-    } else {
-        BasisCoding::Treatment
+/// Expand zero-correlation (`||`) terms that contain a factor the way lme4
+/// does (`expandDoubleVerts`): `(1 + x + f || g)` becomes
+/// `(1 + x || g) + (0 + f | g)`. The intercept and numeric terms keep
+/// independent variances (one diagonal block, equivalent to lme4's separate
+/// scalar terms); each factor term becomes its own block with full
+/// indicator coding and an unstructured covariance among its levels.
+/// Without this, a factor inside `||` would be treatment-coded with
+/// independent contrast variances, a different model from lme4's.
+///
+/// Returns whether the formula changed. The expansion is recorded on each
+/// produced term's source so the compiler reports it.
+pub(crate) fn expand_zerocorr_factor_terms(formula: &mut Formula, data: &DataFrame) -> bool {
+    use crate::formula::{FixedTerm, RandomTermExpansion, RandomTermSource};
+
+    let mut changed = false;
+    let mut expanded = Vec::with_capacity(formula.random_terms.len());
+    for rt in formula.random_terms.drain(..) {
+        let splits = rt.zerocorr
+            && rt
+                .terms
+                .iter()
+                .any(|term| random_term_has_factor(term, data));
+        if !splits {
+            expanded.push(rt);
+            continue;
+        }
+        changed = true;
+        let source = Some(RandomTermSource {
+            written: rt
+                .source
+                .as_ref()
+                .map(|source| source.written.clone())
+                .unwrap_or_else(|| rt.to_string()),
+            expansion: Some(RandomTermExpansion::ZeroCorrelationFactorSplit),
+        });
+        let has_intercept = rt
+            .terms
+            .iter()
+            .any(|term| matches!(term, FixedTerm::Intercept));
+        let numeric_terms: Vec<FixedTerm> = rt
+            .terms
+            .iter()
+            .filter(|term| {
+                matches!(term, FixedTerm::Column(_) | FixedTerm::Interaction(_))
+                    && !random_term_has_factor(term, data)
+            })
+            .cloned()
+            .collect();
+        if has_intercept || !numeric_terms.is_empty() {
+            let mut terms = vec![if has_intercept {
+                FixedTerm::Intercept
+            } else {
+                FixedTerm::NoIntercept
+            }];
+            terms.extend(numeric_terms);
+            expanded.push(crate::formula::RandomTerm {
+                terms,
+                grouping: rt.grouping.clone(),
+                zerocorr: true,
+                covariance: RandomCovariance::Diagonal,
+                source: source.clone(),
+            });
+        }
+        for term in rt
+            .terms
+            .iter()
+            .filter(|term| random_term_has_factor(term, data))
+        {
+            expanded.push(crate::formula::RandomTerm {
+                terms: vec![FixedTerm::NoIntercept, term.clone()],
+                grouping: rt.grouping.clone(),
+                zerocorr: false,
+                covariance: RandomCovariance::Full,
+                source: source.clone(),
+            });
+        }
     }
+    formula.random_terms = expanded;
+    changed
 }
 
 fn refuse_unsupported_random_covariance(formula: &Formula) -> Result<()> {
@@ -4203,7 +5186,7 @@ fn refuse_unsupported_random_covariance(formula: &Formula) -> Result<()> {
 
 /// Build a ReMat from a random term specification and data.
 fn build_re_mat(rt: &crate::formula::RandomTerm, data: &DataFrame, n: usize) -> Result<ReMat> {
-    use crate::formula::{FixedTerm, GroupingFactor};
+    use crate::formula::GroupingFactor;
 
     // Get grouping factor
     let (group_name, refs, levels) = match &rt.grouping {
@@ -4214,7 +5197,13 @@ fn build_re_mat(rt: &crate::formula::RandomTerm, data: &DataFrame, n: usize) -> 
                     name
                 ))
             })?;
-            (name.clone(), cat.refs.clone(), cat.levels.clone())
+            // lme4 drops unused grouping-factor levels (`factor(g)[,
+            // drop = TRUE]` in mkReTrms): a declared level with no
+            // observations would be an empty random-effect level that only
+            // inflates ngrps/ranef/condVar. Keep observed levels in their
+            // declared order.
+            let (refs, levels) = drop_unused_grouping_levels(&cat.refs, &cat.levels);
+            (name.clone(), refs, levels)
         }
         GroupingFactor::Interaction(names) | GroupingFactor::Cell(names) => {
             // Create interaction levels
@@ -4231,49 +5220,79 @@ fn build_re_mat(rt: &crate::formula::RandomTerm, data: &DataFrame, n: usize) -> 
                 .collect::<Result<Vec<_>>>()?;
 
             let group_name = names.join(" & ");
-            let mut level_map = indexmap::IndexMap::new();
+            // Key each row on its tuple of level references (packed into a
+            // u64 when the level-count product fits) rather than on the
+            // joined label strings: same first-appearance numbering, one
+            // label built per distinct combination instead of per row, and
+            // two distinct combinations whose joined labels happen to
+            // coincide (labels containing the separator) stay distinct.
+            let mut strides = Vec::with_capacity(cats.len());
+            let mut stride = 1u64;
+            let mut packed = true;
+            for c in &cats {
+                strides.push(stride);
+                match stride.checked_mul(c.levels.len().max(1) as u64) {
+                    Some(next) => stride = next,
+                    None => {
+                        packed = false;
+                        break;
+                    }
+                }
+            }
+            let row_key = |obs: usize| -> (u64, Vec<u32>) {
+                if packed {
+                    (
+                        cats.iter()
+                            .zip(&strides)
+                            .map(|(c, s)| c.refs[obs] as u64 * s)
+                            .sum(),
+                        Vec::new(),
+                    )
+                } else {
+                    (0, cats.iter().map(|c| c.refs[obs]).collect())
+                }
+            };
+            let mut level_map: std::collections::HashMap<(u64, Vec<u32>), u32> =
+                std::collections::HashMap::with_capacity(n.min(4096));
+            let mut levels: Vec<String> = Vec::new();
             let mut refs = Vec::with_capacity(n);
 
             for obs in 0..n {
-                let key: String = cats
-                    .iter()
-                    .map(|c| c.levels[c.refs[obs] as usize].clone())
-                    .collect::<Vec<_>>()
-                    .join("_");
-                let idx = level_map.len();
-                let idx = *level_map.entry(key.clone()).or_insert(idx);
-                refs.push(idx as u32);
+                let key = row_key(obs);
+                let next = levels.len() as u32;
+                let idx = *level_map.entry(key).or_insert_with(|| {
+                    levels.push(
+                        cats.iter()
+                            .map(|c| c.levels[c.refs[obs] as usize].as_str())
+                            .collect::<Vec<_>>()
+                            .join("_"),
+                    );
+                    next
+                });
+                refs.push(idx);
             }
 
-            let levels: Vec<String> = level_map.keys().cloned().collect();
             (group_name, refs, levels)
         }
     };
 
-    // Build the Z matrix (transposed: s × n)
-    let mut z_rows: Vec<DVector<f64>> = Vec::new();
-    let mut cnames: Vec<String> = Vec::new();
+    // Build the Z matrix (transposed: s × n) from R's model.matrix coding
+    // of the random-effect basis.
+    let (z_rows, cnames) = random_term_basis(rt, data)?;
+    let _ = n;
 
-    let has_re_intercept =
-        rt.terms.iter().any(|t| matches!(t, FixedTerm::Intercept)) || rt.terms.is_empty();
-
-    if has_re_intercept {
-        z_rows.push(DVector::from_element(n, 1.0));
-        cnames.push("(Intercept)".to_string());
-    }
-
-    let basis_coding = random_effect_basis_coding(rt);
-    for term in &rt.terms {
-        for (col, name) in random_effect_basis_columns(term, data, n, basis_coding)? {
-            z_rows.push(col);
-            cnames.push(name);
-        }
-    }
-
+    // `z` is `vsize × n` column-major, so basis row `i` occupies every
+    // `vsize`-th slot starting at `i`; write it straight from the basis
+    // column instead of transposing each row into a temporary.
     let vsize = z_rows.len();
     let mut z = DMatrix::zeros(vsize, n);
-    for (i, row) in z_rows.iter().enumerate() {
-        z.set_row(i, &row.transpose());
+    {
+        let z_slice = z.as_mut_slice();
+        for (i, row) in z_rows.iter().enumerate() {
+            for (obs, &value) in row.as_slice().iter().enumerate() {
+                z_slice[obs * vsize + i] = value;
+            }
+        }
     }
 
     let mut remat = ReMat::new(group_name, refs, levels, cnames, z);
@@ -4283,6 +5302,26 @@ fn build_re_mat(rt: &crate::formula::RandomTerm, data: &DataFrame, n: usize) -> 
     }
 
     Ok(remat)
+}
+
+/// Compact a grouping factor to its observed levels (declared order kept).
+fn drop_unused_grouping_levels(refs: &[u32], levels: &[String]) -> (Vec<u32>, Vec<String>) {
+    let mut used = vec![false; levels.len()];
+    for &r in refs {
+        used[r as usize] = true;
+    }
+    if used.iter().all(|&u| u) {
+        return (refs.to_vec(), levels.to_vec());
+    }
+    let mut remap = vec![u32::MAX; levels.len()];
+    let mut kept = Vec::new();
+    for (index, level) in levels.iter().enumerate() {
+        if used[index] {
+            remap[index] = kept.len() as u32;
+            kept.push(level.clone());
+        }
+    }
+    (refs.iter().map(|&r| remap[r as usize]).collect(), kept)
 }
 
 /// Build the parameter map: Vec<(block_idx, row, col)> for each θ element.

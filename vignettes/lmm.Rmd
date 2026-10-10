@@ -194,7 +194,7 @@ s_auto <- summary(fit, method = "auto")
 stopifnot(all(s_auto$inference$table$method == "satterthwaite"))
 stopifnot("satterthwaite_finite_difference_approximation" %in%
             s_auto$inference$table$reliability_reason)
-ctab <- s_auto$coefficients
+ctab <- s_auto$coef_table
 p_col <- grep("^Pr\\(|^p\\.value$", names(ctab), value = TRUE)
 stopifnot(length(p_col) == 1L)
 stopifnot(any(is.finite(ctab[[p_col]])))
@@ -238,7 +238,7 @@ interval methods, and when each is available, are covered in
 Design matrices can be rebuilt from the stored formula and model
 frame — including after a save/reload cycle
 (`vignette("mixeff", package = "mixeff")` covers persistence).
-`getME()` provides a small familiar subset for code that expects
+`getME()` rebuilds lme4's low-level components (`theta`, `Lambdat`, `L`, `RX`, `devcomp`, ...) for code that expects
 lme4-style names.
 
 ```{r design-matrices}
@@ -526,10 +526,11 @@ stopifnot(grepl("covariance_assumption", split_text, fixed = TRUE))
 stopifnot(grepl("covariance_assumption", double_text, fixed = TRUE))
 ```
 
-One caveat: when a **factor** appears inside `||`, mixeff's expansion
-differs from lme4's — `vignette("lme4-migration", package =
-"mixeff")` states the exact semantics and the explicit spelling that
-reproduces lme4's model family.
+A **factor** inside `||` expands as in lme4: `(1 + x + f || g)` is
+`(1 | g) + (0 + x | g) + (0 + f | g)`, so the factor keeps its own
+correlated block. To fix every covariance at zero, factor columns included
+(MixedModels.jl's `zerocorr()`), write `diag(1 + x + f | g)`;
+`vignette("lme4-migration", package = "mixeff")` has the details.
 
 ### Nested and crossed grouping
 

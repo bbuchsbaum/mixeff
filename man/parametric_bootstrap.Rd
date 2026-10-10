@@ -4,7 +4,14 @@
 \alias{parametric_bootstrap}
 \title{Parametric bootstrap likelihood-ratio comparison}
 \usage{
-parametric_bootstrap(null, alternative, nsim = 100L, seed = NULL, ...)
+parametric_bootstrap(
+  null,
+  alternative,
+  nsim = 100L,
+  seed = NULL,
+  threads = 1L,
+  ...
+)
 }
 \arguments{
 \item{null, alternative}{Fitted \code{mm_lmm} objects. Order is irrelevant; the
@@ -13,6 +20,11 @@ model with fewer parameters is treated as the reduced model.}
 \item{nsim}{Number of bootstrap replicates.}
 
 \item{seed}{Optional bootstrap seed.}
+
+\item{threads}{Worker threads for the replicate refits (default 1). The
+responses are simulated serially and each replicate refits fresh copies
+of both models, so the result is identical for every value; see
+\code{\link[=bootstrap_control]{bootstrap_control()}} for the threading contract.}
 
 \item{...}{Reserved for future methods.}
 }

@@ -31,14 +31,12 @@ correct, rt, aphantasia, age, vviq_standard, source, and source_folder.
 
 The test file keeps ordinary checks fast. Set `MIXEFF_RUN_APHANTASIA=true` to
 run the core model refits (primary, sensitivity, intact, combined, RT, S7, and
-S9). The intact case defaults to the full-budget joint-Laplace path, which
-reaches near-exact lme4 parity on a release build (~40s per fit); the
-remaining cases use the profiled fast-PIRLS path. Combined stays profiled
-because the engine rejects its joint candidate for that case and falls back
-to fast-PIRLS with a documented_divergence diagnostic; its fixef parity-ledger
-entry remains the contract. Set `MIXEFF_APHANTASIA_JOINT=false` as a
-debug-build escape hatch to route intact back through profiled fast-PIRLS —
-expect strict-tolerance parity failures for intact, since its fixef/logLik
-ledger exemptions were retired when the joint path became the default. Set
+S9). Primary, intact, and combined use glmm()'s default joint-Laplace
+estimator and reach strict lme4 parity with no parity-ledger exemption
+(about 2, 2, and 7.5 minutes per fit); the sensitivity and S7/S9 variants
+use the profiled fast-PIRLS path, which also clears the strict tolerances
+there at ~10-20 seconds per fit. Set `MIXEFF_APHANTASIA_JOINT=false` as a
+debug-build escape hatch to route every case through profiled fast-PIRLS —
+expect strict-tolerance parity failures for intact and combined. Set
 `MIXEFF_RUN_APHANTASIA_STRESS=true` for the S1 random-effects stability
-variants, which are much slower on the current GLMM bridge.
+variants (profiled, ~100 seconds in total).

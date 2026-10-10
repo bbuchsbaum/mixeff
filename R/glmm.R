@@ -2,59 +2,97 @@
 #'
 #' `glmm()` validates the R-side family/link request, compiles the model
 #' formula, and delegates the numerical fit to the upstream Rust
-#' `GeneralizedLinearMixedModel`. The default `method = "pirls_profiled"` is
-#' the labeled fast-PIRLS path. `method = "joint_laplace"` uses the upstream
-#' labeled joint Laplace route (`fast = FALSE`, `nAGQ = 1`) backed by the
-#' native dependency-light optimizer in this vendored build.
+#' `GeneralizedLinearMixedModel`. The default `method = "joint_laplace"` is
+#' the labeled joint Laplace route (`fast = FALSE`, `nAGQ = 1`), the estimator
+#' `lme4::glmer()` uses by default, backed by the native dependency-light
+#' optimizer in this vendored build. `method = "pirls_profiled"` is the
+#' labeled fast-PIRLS profiled path (lme4's `nAGQ = 0`).
 #'
 #' @param formula A two-sided lme4-style formula.
 #' @param data A `data.frame`.
 #' @param family A supported GLMM family object or family constructor. The
-#'   supported 1.0 surface is: [binomial()] with `"logit"`, `"probit"`, or
-#'   `"cloglog"` links; [poisson()] with `"log"` or `"sqrt"` links;
-#'   [Gamma()] with `"log"` link; and negative binomial (NB2, `"log"` link)
-#'   via [mm_negative_binomial()] (theta estimated, like `lme4::glmer.nb()`)
-#'   or `MASS::negative.binomial(theta)` (fixed theta).
+#'   supported surface (every family/link pair the engine fits) is:
+#'   [binomial()] with `"logit"`, `"probit"`, or `"cloglog"` links;
+#'   [poisson()] with `"log"` or `"sqrt"` links; [Gamma()] with `"inverse"`
+#'   (R's default) or `"log"` links; [inverse.gaussian()] with `"inverse"` or
+#'   `"log"` links (R's default `"1/mu^2"` link is not available and is
+#'   refused); [gaussian()] with non-identity `"log"`, `"inverse"`, or
+#'   `"sqrt"` links (a Gaussian identity-link model is an LMM: use [lmm()]);
+#'   and negative binomial (NB2, `"log"` link) via [mm_negative_binomial()]
+#'   (theta estimated, like `lme4::glmer.nb()`) or
+#'   `MASS::negative.binomial(theta)` (fixed theta). Binomial `"cauchit"`,
+#'   `"log"`, and `"identity"` and Poisson `"identity"` links are not
+#'   available in the engine and are refused with a typed
+#'   `mm_inference_unavailable` error naming the supported set.
 #' @param random Reserved for the native random-effect constructor path.
-#' @param weights Optional prior weights. For binomial models these are trial
-#'   counts for proportion responses; weights must be positive and finite.
-#' @param offset Optional fixed linear-predictor offset; values must be finite.
-#' @param subset,na.action,contrasts Reserved for future parity with [lmm()].
-#' @param method GLMM estimation method. `"pirls_profiled"` is the default
-#'   fast-PIRLS profiled path. `"joint_laplace"` requests the labeled joint
-#'   Laplace route and requires `nAGQ <= 1`. The joint route tracks the lme4
-#'   joint-Laplace reference far more closely than the profiled path on
-#'   high-baseline models, at a higher optimizer cost; cap that cost with
-#'   `mm_control(max_feval = )`. The default profiled path is **not** glmer's
-#'   estimator and its coefficients do not match `glmer()` exactly; when
-#'   `method` is left at its default, `glmm()` emits an informational notice
-#'   to that effect (suppress with `mm_control(verbose = -1)`). Use
-#'   `method = "joint_laplace"` for glmer-equivalent estimates.
-#' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` is the
-#'   Laplace setting. Values above `1` are allowed on the profiled path and
-#'   are rejected for `method = "joint_laplace"` in the R wrapper.
+#' @param weights Optional prior weights: a column of `data` (as in lme4,
+#'   `weights = trials`) or a numeric vector. For binomial models these are
+#'   trial counts for proportion responses; weights must be positive and
+#'   finite.
+#' @param offset Optional fixed linear-predictor offset: a column of `data` or
+#'   a numeric vector; values must be finite. `offset()` terms in the formula
+#'   are also supported and are added to it (as in [stats::glm()]).
+#' @param subset,na.action,contrasts As in [lmm()]: `subset` selects rows
+#'   (evaluated in `data`), `na.action` controls missing values (default
+#'   `getOption("na.action")`, i.e. `na.omit`, as in `glmer()`; only model
+#'   variables, `weights` and `offset` count; dropped rows are announced with
+#'   a typed `mm_rows_dropped` message and recorded in `na.action(fit)`;
+#'   `na.exclude` pads `fitted()`/`residuals()`/`predict()` back to the
+#'   original rows; `na.fail` and `na.pass` are refused with a typed
+#'   `mm_data_error`), and
+#'   `contrasts` is honoured only when it names the engine's coding
+#'   (`contr.treatment` for unordered, `contr.poly` for ordered factors).
+#' @param method GLMM estimation method. `"joint_laplace"` (the default)
+#'   is the joint Laplace route, matching `glmer()`'s default estimator, and
+#'   requires `nAGQ = 1`; it certifies Wald standard errors, tests, and
+#'   intervals. Its optimizer cost is higher than the profiled path's; cap it
+#'   with `mm_control(max_feval = )`. `"pirls_profiled"` is the fast profiled
+#'   PIRLS path (equivalent to lme4's `nAGQ = 0` fast estimate); its
+#'   coefficients do not match `glmer(nAGQ = 1)` exactly and Wald inference
+#'   is withheld. When `method` is not supplied and the request needs the
+#'   profiled path -- a negative-binomial family (the joint route is not
+#'   available for it yet), `nAGQ > 1`, or `inference = "working_hessian"` --
+#'   `glmm()` uses `"pirls_profiled"`
+#'   and says so with an `mm_estimator_notice` message (silence with
+#'   `mm_control(verbose = -1)`). An explicit `method = "joint_laplace"` with a
+#'   negative-binomial family or `nAGQ != 1` is refused, never swapped.
+#' @param nAGQ Number of adaptive Gauss-Hermite quadrature points. `1` (the
+#'   default) is the Laplace approximation. `0` requests lme4's PIRLS-only
+#'   fast estimate and selects `method = "pirls_profiled"` (refused together
+#'   with an explicit `method = "joint_laplace"`). Values above `1` run on the
+#'   profiled path only and, as in lme4, require a model with a single scalar
+#'   random-effect term (e.g. `(1 | g)`); other models are refused.
 #' @param inference Requested inference posture. The default `"auto"` keeps
 #'   the certified contract: Wald standard errors, tests, and intervals are
 #'   available only when the engine certifies them (currently
-#'   `method = "joint_laplace"`); the default profiled estimator withholds
-#'   them with a typed refusal. `"working_hessian"` is an explicit opt-in
+#'   `method = "joint_laplace"`, the default); the profiled estimator
+#'   withholds them with a typed refusal. `"working_hessian"` is an explicit opt-in
 #'   that unlocks the UNCERTIFIED profiled working-Hessian approximation on
 #'   every inference route; each resulting row is labelled
 #'   `wald_z_working_hessian` with reliability `moderate`. Its standard
-#'   errors ran about 11% smaller than `glmer()`'s on the package's
-#'   reference dataset (anti-conservative), so treat it as an exploration
-#'   and screening tool, not a reporting route; see `inference_options()`.
+#'   errors came within 1% of `glmer()`'s on the package's reference
+#'   dataset, but nothing certifies that agreement in general, so treat it
+#'   as an exploration and screening tool, not a reporting route; see
+#'   `inference_options()`.
 #'   `"none"`, `"asymptotic"`, and `"bootstrap"` are accepted and recorded
 #'   but currently equivalent to `"auto"`.
-#' @param control A list from [mm_control()].
+#' @param control A list from [mm_control()]. Besides the optimizer
+#'   settings it carries lme4 2.1-0's `glmerControl()` dispersion controls
+#'   (`disp_method`, `disp_dof_correction`, `max_phi_iter` for lme4's
+#'   `maxPhiIter`), which affect Gamma, inverse-Gaussian and Gaussian
+#'   non-identity-link fits. The control is stored on the fit and reused by
+#'   `refit()`, `update()` and the internal refits (bootstrap, profiles,
+#'   predictions).
 #' @param ... Reserved for future use.
 #'
 #'
 #' @details
 #' Optimization runs inside a single native call with no progress output: the
 #' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
-#' before the fitted result returns, and the call cannot be interrupted from
-#' R. Evaluation budgets are bounded (a bounded budget caps optimizer
+#' before the fitted result returns. The fit checks for a user interrupt
+#' (Ctrl-C / Esc) between optimizer evaluations and stops with a typed
+#' `mm_interrupted` error (the check happens at evaluation boundaries, so a
+#' single very expensive evaluation finishes first). Evaluation budgets are bounded (a bounded budget caps optimizer
 #' iterations; it does not prove every native evaluation terminates); runtime on
 #' large problems is governed by `mm_control(max_feval = )`.
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
@@ -67,14 +105,15 @@
 #'   x = rnorm(120),
 #'   g = factor(rep(seq_len(12), each = 10))
 #' )
+#' # Default: glmer-equivalent joint Laplace estimates.
 #' fit <- glmm(y ~ x + (1 | g), df, family = binomial(),
 #'             control = mm_control(verbose = -1))
 #' fixef(fit)
-#' # glmer-equivalent (joint Laplace) estimates:
-#' fit_joint <- glmm(y ~ x + (1 | g), df, family = binomial(),
-#'                   method = "joint_laplace",
-#'                   control = mm_control(verbose = -1))
-#' fixef(fit_joint)
+#' # Fast profiled PIRLS path (lme4's nAGQ = 0):
+#' fit_fast <- glmm(y ~ x + (1 | g), df, family = binomial(),
+#'                  method = "pirls_profiled",
+#'                  control = mm_control(verbose = -1))
+#' fixef(fit_fast)
 #'
 #' @importFrom stats na.omit
 #' @export
@@ -85,21 +124,31 @@ glmm <- function(formula,
                  weights = NULL,
                  offset = NULL,
                  subset = NULL,
-                 na.action = na.omit,
+                 na.action = getOption("na.action"),
                  contrasts = NULL,
-                 method = c("pirls_profiled", "joint_laplace"),
+                 method = c("joint_laplace", "pirls_profiled"),
                  nAGQ = 1L,
                  inference = c("auto", "none", "asymptotic", "bootstrap",
                                "working_hessian"),
                  control = mm_control(),
                  ...) {
   call <- match.call()
+  # lme4 semantics: `weights` and `offset` may name columns of `data`
+  # (`weights = trials`), falling back to the calling environment.
+  weights <- eval(substitute(weights), data, parent.frame())
+  offset <- eval(substitute(offset), data, parent.frame())
   method_explicit <- !missing(method)
   method <- match.arg(method)
   inference <- match.arg(inference)
   control <- mm_validate_control(control)
   family_info <- mm_glmm_family_info(family)
-  nAGQ <- mm_glmm_validate_nagq(nAGQ, method)
+  # Default estimator: joint Laplace (glmer nAGQ = 1). Requests the joint
+  # route cannot serve resolve to the profiled path ANNOUNCED, never silently
+  # (see mm_glmm_resolve_method); explicit requests are honoured or refused.
+  resolved <- mm_glmm_resolve_method(method, method_explicit, family_info,
+                                     nAGQ, inference)
+  method <- resolved$method
+  nAGQ <- mm_glmm_validate_nagq(resolved$nAGQ, method)
 
   if (identical(family_info$family, "negative_binomial") &&
       identical(method, "joint_laplace")) {
@@ -108,9 +157,10 @@ glmm <- function(formula,
     # clear message instead of the engine's internal optimizer-guard error.
     mm_abort(
       message = paste0(
-        "Negative-binomial GLMMs support the default profiled method only; ",
+        "Negative-binomial GLMMs support the profiled method only; ",
         "method = \"joint_laplace\" is not yet available for this family. ",
-        "Drop the method argument to use the profiled fit."
+        "Use method = \"pirls_profiled\" (or drop the method argument, which ",
+        "selects it with a notice)."
       ),
       class = "mm_inference_unavailable",
       reason_code = "nb_joint_laplace_unavailable",
@@ -118,16 +168,29 @@ glmm <- function(formula,
     )
   }
 
-  if (!is.null(random) || !is.null(subset) ||
-      !identical(na.action, na.omit) || !is.null(contrasts)) {
+  if (!is.null(random)) {
     mm_abort(
-      message = "`random`, `subset`, custom `na.action`, and `contrasts` are reserved for the fitted GLMM bridge.",
+      message = "`random` is reserved for the native random-effect constructor path; write random terms in `formula`.",
       class = "mm_fit_error",
       input = call
     )
   }
-  weights <- mm_glmm_validate_weights(weights, data, "weights")
-  offset <- mm_glmm_validate_weights(offset, data, "offset", positive = FALSE)
+  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
+  if (is.data.frame(data)) {
+    weights <- mm_glmm_validate_weights(weights, data, "weights")
+    offset <- mm_glmm_validate_weights(offset, data, "offset", positive = FALSE)
+  }
+
+  # Same lme4-style data preparation as lmm() (R/model-data.R): transforms,
+  # subset, na.action, unused levels, grouping coercion, formula expansion.
+  # Formula offset() terms are added to `offset`.
+  mprep <- mm_prepare_model_data(formula, data, substitute(subset), na.action,
+                                 weights, offset, parent.frame(),
+                                 control$verbose, lmm = FALSE)
+  data <- mprep$data
+  weights <- mprep$weights
+  offset <- mprep$offset
+  engine_formula <- mprep$formula_engine
 
   # Resolve binomial responses: translate a cbind(successes, failures) LHS into
   # a proportion response + trial-count weights, and pick the engine family
@@ -136,29 +199,39 @@ glmm <- function(formula,
   formula <- prep$formula
   data <- prep$data
   weights <- prep$weights
+  engine_formula[[2L]] <- formula[[2L]]
+  if (!is.null(mprep$na_action)) attr(data, "na.action") <- mprep$na_action
+  if (!is.null(attr(mprep$data, "mm_predvars"))) {
+    attr(data, "mm_predvars") <- attr(mprep$data, "mm_predvars")
+  }
   engine_family <- prep$engine_family
   if (identical(family_info$family, "negative_binomial")) {
     # Theta mode rides the family string (see mm_glmm_nb_engine_spec).
     engine_family <- mm_glmm_nb_engine_spec(family_info)
   }
 
-  # lme4 parity: grouping variables must be categorical. Coerce non-factor /
-  # non-character grouping columns to factors (announced, not silent) so an
-  # integer subject/item ID does not hit the native "grouping factor not
-  # categorical" refusal.
-  data <- mm_apply_grouping_coercion(formula, data, control$verbose)
-
-  spec <- compile_model(formula, data)
+  compiled <- mm_compile_model(
+    engine_formula, data,
+    call = quote(compile_model(formula = engine_formula, data = data)),
+    for_fit = TRUE
+  )
+  spec <- compiled$spec
+  spec$expansion <- mprep$expansion
   mm_validate_fit_structure(spec, lmm = FALSE)
   mm_scaling_advisory(spec, control$verbose)
+  mm_disp_control_notice(
+    control,
+    applies = mm_glmm_free_dispersion(list(family = family_info)),
+    what = sprintf("family `%s`", family_info$family)
+  )
   if (control$verbose >= 0L) {
     mm_inform_explanation(spec)
     # No silent surgery on the estimator choice: when the user did not pick a
     # method, surface that the default profiled path is NOT glmer's estimator
     # and point to the certified glmer-equivalent route. Suppressed by
     # mm_control(verbose = -1) (as used in loops/bootstrap).
-    if (!method_explicit && identical(method, "pirls_profiled")) {
-      mm_inform(mm_glmm_profiled_default_notice(), class = "mm_estimator_notice")
+    if (!is.null(resolved$notice)) {
+      mm_inform(resolved$notice, class = "mm_estimator_notice")
     }
     if (identical(method, "joint_laplace")) {
       # The joint route runs to an engine-chosen evaluation budget inside a
@@ -176,10 +249,13 @@ glmm <- function(formula,
     }
   }
 
-  spec_data <- mm_translate_data(spec$model_frame)
-  formula_string <- mm_coerce_formula_string(formula)
+  # The engine fits from the spec compiled above; the data columns cross the
+  # bridge only when it could not compile ahead (no spec handle).
+  spec_data <- if (is.null(compiled$handle)) compiled$spec_data else mm_empty_spec_data()
+  compiled$spec_data <- NULL
+  formula_string <- mm_coerce_formula_string(engine_formula)
   control_json <- jsonlite::toJSON(unclass(control), auto_unbox = TRUE,
-                                   null = "null")
+                                   null = "null", digits = NA)
 
   json <- tryCatch(
     .Call(
@@ -196,7 +272,9 @@ glmm <- function(formula,
       spec_data$categorical_ordered,
       mm_bridge_weights(weights),
       mm_bridge_weights(offset),
-      as.character(control_json)
+      as.character(control_json),
+      compiled$handle,
+      mm_keep_handle()
     ),
     error = function(cnd) cnd
   )
@@ -214,7 +292,12 @@ glmm <- function(formula,
     )
   }
 
-  fit_result <- mm_json_parse_glmm_fit(json)
+  rust_handle <- mm_keyed_handle(
+    json$handle,
+    mm_handle_key_glmm(formula_string, engine_family, family_info$link, method,
+                       nAGQ, control_json)
+  )
+  fit_result <- mm_bridge_fit_result(json, mm_json_parse_glmm_fit)
   fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
   beta <- mm_named_numeric(fit_result$beta, fit_result$beta_names)
@@ -244,17 +327,27 @@ glmm <- function(formula,
     engine_family  = engine_family,
     method         = as.character(fit_result$method %||% method),
     nAGQ           = as.integer(fit_result$n_agq %||% nAGQ),
+    # lme4's nAGQ = 0 maps to the profiled path with nAGQ = 1 on the wire;
+    # keep the caller's request on record.
+    nAGQ_requested = if (isTRUE(resolved$nagq0)) 0L else as.integer(nAGQ),
     inference_request = inference,
     control        = control,
     vars           = spec$vars,
-    model_frame    = spec$model_frame,
+    model_frame    = data,
     weights        = weights,
     offset         = offset,
+    offset_arg     = mprep$offset_arg,
+    engine_formula = if (!identical(engine_formula, formula)) engine_formula,
+    expansion      = mprep$expansion,
+    na.action      = mprep$na_action,
     artifact       = artifact,
-    fit            = fit_result,
+    # Raw payload minus the n-length vectors, which are stored once below.
+    fit            = fit_result[setdiff(names(fit_result),
+                                        c("fitted", "fixed_fitted", "residuals",
+                                          "handle"))],
     fit_summary    = fit_summary,
     schema         = mm_object_schema(artifact),
-    rust_handle    = NULL,
+    rust_handle    = rust_handle,
     lazy_cache     = mm_empty_lazy_cache(),
     beta           = beta,
     theta          = as.numeric(unlist(fit_result$theta, use.names = FALSE)),
@@ -280,7 +373,11 @@ glmm <- function(formula,
     )
   )
   fit <- mm_apply_lme4_coef_naming(fit)
+  fit <- mm_apply_lme4_group_labels(fit)
   class(fit) <- c("mm_glmm", "mm_fit", "mm_compiled")
+  # disp_method = "old/buggy": report theta itself as the random-effect SD,
+  # as lme4 2.1-0 does (the engine reports sigma * theta).
+  fit$varcorr <- mm_varcorr_rescale(fit$varcorr, mm_glmm_re_sd_scale(fit))
   # No silent surgery on the estimator that produced the numbers: when the
   # engine substituted a fallback for the requested method (typed
   # `estimator_substitution` record, engine f82c646+), say so at fit time.
@@ -311,14 +408,62 @@ mm_glmm_substitution_notice <- function(sub) {
   )
 }
 
-mm_glmm_profiled_default_notice <- function() {
-  paste0(
-    "glmm() is using the default method = \"pirls_profiled\": a fast profiled ",
-    "(PIRLS) approximation whose coefficients do NOT exactly match ",
-    "lme4::glmer(). For glmer-equivalent (joint Laplace) estimates, use ",
-    "method = \"joint_laplace\". Silence this message with ",
-    "mm_control(verbose = -1)."
-  )
+# Resolve the estimator. `method` defaults to "joint_laplace" (glmer's
+# nAGQ = 1 Laplace estimate). When `method` was NOT given and the request
+# needs the profiled path, the profiled path is used and announced (typed
+# `mm_estimator_notice`, silenced by verbose = -1):
+#   * negative-binomial families (the joint route is not wired for NB);
+#   * nAGQ > 1 (adaptive quadrature runs on the profiled path only);
+#   * inference = "working_hessian" (an opt-in for the profiled estimator's
+#     uncertified working-Hessian Wald approximation);
+#   * nAGQ = 0 (lme4's PIRLS-only fast estimate == the profiled path).
+# Explicit method requests are never swapped: joint_laplace with NB or with
+# nAGQ != 1 is refused downstream.
+mm_glmm_resolve_method <- function(method, method_explicit, family_info, nAGQ,
+                                   inference = "auto") {
+  nagq0 <- is.numeric(nAGQ) && length(nAGQ) == 1L && !is.na(nAGQ) &&
+    nAGQ == 0
+  if (nagq0) {
+    if (method_explicit && identical(method, "joint_laplace")) {
+      mm_abort(
+        message = paste0(
+          "`nAGQ = 0` requests lme4's PIRLS-only fast estimate, which is ",
+          "method = \"pirls_profiled\"; it cannot be combined with ",
+          "method = \"joint_laplace\"."
+        ),
+        class = "mm_arg_error",
+        input = nAGQ
+      )
+    }
+    # nAGQ = 0 is a request for the fast path itself, so no notice is needed
+    # beyond the documentation: it is what the user asked for.
+    return(list(method = "pirls_profiled", nAGQ = 1L, notice = NULL,
+                nagq0 = TRUE))
+  }
+  out <- list(method = method, nAGQ = nAGQ, notice = NULL, nagq0 = FALSE)
+  if (method_explicit) return(out)
+  is_nb <- identical(family_info$family, "negative_binomial")
+  agq <- is.numeric(nAGQ) && length(nAGQ) == 1L && !is.na(nAGQ) && nAGQ > 1
+  wh <- identical(inference, "working_hessian")
+  if (is_nb || agq || wh) {
+    out$method <- "pirls_profiled"
+    why <- if (is_nb) {
+      "the joint Laplace route is not yet available for negative-binomial families"
+    } else if (agq) {
+      sprintf("adaptive quadrature (nAGQ = %d) runs on the profiled path only",
+              as.integer(nAGQ))
+    } else {
+      paste0("inference = \"working_hessian\" is the profiled estimator's ",
+             "opt-in approximation")
+    }
+    out$notice <- paste0(
+      "glmm() is using method = \"pirls_profiled\" instead of the default ",
+      "\"joint_laplace\": ", why, ". The profiled (PIRLS) estimate does not ",
+      "exactly match lme4::glmer(). Pass method = \"pirls_profiled\" to make ",
+      "this explicit, or silence this message with mm_control(verbose = -1)."
+    )
+  }
+  out
 }
 
 mm_glmm_family_info <- function(family) {
@@ -370,7 +515,7 @@ mm_glmm_family_info <- function(family) {
     mm_abort_glmm_unsupported_family_link(family_name, link_name)
   }
   list(
-    family = if (identical(family_name, "Gamma")) "gamma" else family_name,
+    family = mm_glmm_engine_family_name(family_name),
     link = link_name,
     nb_theta = nb_theta,
     nb_theta_estimated = nb_theta_estimated
@@ -421,11 +566,25 @@ mm_glmm_nb_engine_spec <- function(family_info) {
   }
 }
 
+# R family name -> engine/family_info name.
+mm_glmm_engine_family_name <- function(family_name) {
+  switch(family_name,
+         Gamma = "gamma",
+         inverse.gaussian = "inverse_gaussian",
+         family_name)
+}
+
+# Every family/link pair the engine fits (mixeff-rs
+# validate_supported_glmm_family_link). gaussian/identity is an LMM (lmm());
+# the engine has no cauchit or 1/mu^2 link, and no binomial log/identity or
+# poisson identity GLMM.
 mm_glmm_supported_family_links <- function() {
   list(
     binomial = c("logit", "probit", "cloglog"),
     poisson = c("log", "sqrt"),
-    Gamma = c("log"),
+    Gamma = c("inverse", "log"),
+    inverse.gaussian = c("inverse", "log"),
+    gaussian = c("log", "inverse", "sqrt"),
     negative_binomial = "log"
   )
 }
@@ -448,13 +607,22 @@ mm_abort_glmm_unsupported_family_link <- function(family, link) {
                       paste, character(1), collapse = "/")
   supported_text <- paste(sprintf("%s (%s)", names(by_family), by_family),
                           collapse = ", ")
+  why <- if (identical(family, "gaussian") && identical(link, "identity")) {
+    "A Gaussian identity-link mixed model is a linear mixed model; fit it with lmm(). "
+  } else if (identical(link, "1/mu^2")) {
+    "The engine has no 1/mu^2 link (inverse.gaussian's default); use link = \"inverse\" or \"log\". "
+  } else if (identical(link, "cauchit")) {
+    "The engine has no cauchit link. "
+  } else {
+    ""
+  }
   mm_abort(
     message = sprintf(
       paste0(
-        "The %s family with link `%s` is not supported by glmm(). Supported ",
+        "The %s family with link `%s` is not supported by glmm(). %sSupported ",
         "families: %s. For other families, use lme4::glmer()."
       ),
-      family, link, supported_text
+      family, link, why, supported_text
     ),
     class = "mm_inference_unavailable",
     reason_code = reason_code,
@@ -506,6 +674,24 @@ mm_glmm_binomial_prep <- function(formula, data, family_info, weights) {
     weights <- as.numeric(n)
     formula[[2L]] <- as.name(respname)
   } else {
+    if (!is.name(lhs)) {
+      # A computed response such as I(y > 300) or as.numeric(f == "a"):
+      # evaluate it into a column, as model.frame() would.
+      env <- environment(formula) %||% parent.frame()
+      value <- eval(lhs, data, env)
+      if (length(value) != nrow(data)) {
+        mm_abort(
+          message = sprintf(
+            "The response `%s` must have one value per row of `data` (%d).",
+            deparse1(lhs), nrow(data)
+          ),
+          class = "mm_data_error"
+        )
+      }
+      data[[".mm_binomial_response"]] <- value
+      formula[[2L]] <- as.name(".mm_binomial_response")
+      lhs <- formula[[2L]]
+    }
     response_name <- as.character(lhs)
     col <- data[[response_name]]
     if (is.factor(col)) {
@@ -541,8 +727,11 @@ mm_glmm_binomial_prep <- function(formula, data, family_info, weights) {
 # positive; offsets need only be finite.
 mm_glmm_validate_weights <- function(x, data, label, positive = TRUE) {
   if (is.null(x)) return(NULL)
-  if (!is.numeric(x) || length(x) != nrow(data) || anyNA(x) ||
-      any(!is.finite(x)) || (positive && any(x <= 0))) {
+  # NA values are missing values handled by `na.action` (model.frame()
+  # semantics); the observed values must be finite (and positive).
+  obs <- x[!is.na(x)]
+  if (!is.numeric(x) || length(x) != nrow(data) ||
+      any(!is.finite(obs)) || (positive && any(obs <= 0))) {
     mm_abort(
       message = sprintf(
         "`%s` must be a %s numeric vector with one value per row of `data` (%d).",
@@ -556,9 +745,10 @@ mm_glmm_validate_weights <- function(x, data, label, positive = TRUE) {
 }
 
 mm_glmm_validate_nagq <- function(nAGQ, method) {
-  if (!is.numeric(nAGQ) || length(nAGQ) != 1L || is.na(nAGQ) || nAGQ < 1) {
+  if (!is.numeric(nAGQ) || length(nAGQ) != 1L || is.na(nAGQ) || nAGQ < 1 ||
+      nAGQ != round(nAGQ)) {
     mm_abort(
-      message = "`nAGQ` must be a single positive integer.",
+      message = "`nAGQ` must be 0 or a single positive integer.",
       class = "mm_arg_error",
       input = nAGQ
     )
@@ -566,7 +756,11 @@ mm_glmm_validate_nagq <- function(nAGQ, method) {
   nAGQ <- as.integer(nAGQ)
   if (identical(method, "joint_laplace") && nAGQ > 1L) {
     mm_abort(
-      message = "`method = \"joint_laplace\"` requires `nAGQ <= 1`.",
+      message = paste0(
+        "`method = \"joint_laplace\"` requires `nAGQ = 1`; adaptive ",
+        "quadrature (nAGQ > 1) is available with method = \"pirls_profiled\" ",
+        "for a single scalar random effect."
+      ),
       class = "mm_arg_error",
       input = nAGQ
     )
@@ -605,3 +799,4 @@ mm_json_parse_glmm_fit <- function(json) {
   }
   parsed
 }
+

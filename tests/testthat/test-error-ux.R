@@ -52,10 +52,11 @@ test_that("no-random-effects formula error points to stats::lm()", {
   expect_false(grepl("doTryCatch", conditionMessage(err), fixed = TRUE))
 })
 
-test_that("NA in a model variable is a typed data error by default", {
+test_that("NA in a model variable is a typed data error under na.fail", {
   d <- mk_ux_lmm_data()
   d$x[3] <- NA
-  err <- tryCatch(lmm(y ~ x + (1 | g), d, control = mm_control(verbose = -1)),
+  err <- tryCatch(lmm(y ~ x + (1 | g), d, na.action = na.fail,
+                      control = mm_control(verbose = -1)),
                   condition = function(e) e)
   expect_s3_class(err, "mm_data_error")
   expect_match(conditionMessage(err), "NA", fixed = TRUE)
@@ -82,7 +83,7 @@ test_that("GLMM default-method summary explains withheld inference plainly", {
               control = mm_control(verbose = -1))
   s <- summary(fit)
   txt <- paste(capture.output(print(s)), collapse = "\n")
-  if (any(is.na(s$coefficients[["Std. Error"]]))) {
+  if (any(is.na(s$coefficients[, "Std. Error"]))) {
     # When SE/z/p are withheld the note must name the remedy, not the
     # working-Hessian geometry.
     expect_match(txt, "joint_laplace", fixed = TRUE)
@@ -96,7 +97,7 @@ test_that("GLMM confint refusal advice is actionable on the fit at hand", {
   d <- mk_ux_lmm_data()
   set.seed(97)
   d$yb <- rbinom(nrow(d), 1, 0.4)
-  fit <- glmm(yb ~ x + (1 | g), d, family = binomial(),
+  fit <- glmm(yb ~ x + (1 | g), d, family = binomial(), method = "pirls_profiled",
               control = mm_control(verbose = -1))
   # On the default profiled fit, "use asymptotic" would fail too; the
   # message must point at the joint_laplace refit instead.
@@ -128,4 +129,17 @@ test_that("integer grouping variable is coerced with an announced notice", {
 test_that("mm_negative_binomial rejects bad theta with a typed arg error", {
   expect_error(mm_negative_binomial(theta = -1), class = "mm_arg_error")
   expect_error(mm_negative_binomial(theta = c(1, 2)), class = "mm_arg_error")
+})
+
+test_that("engine error text containing '%' reaches R verbatim (no printf expansion)", {
+  err <- tryCatch(mm_parse_formula("y ~ a %in% b"), error = function(e) e)
+  if (inherits(err, "error")) {
+    expect_match(conditionMessage(err), "'%'", fixed = TRUE)
+    expect_false(grepl("0x0p", conditionMessage(err), fixed = TRUE))
+  }
+  # A data column whose name contains printf directives must not be expanded.
+  d <- data.frame(y = rnorm(12), g = factor(rep(1:3, 4)))
+  names(d)[1] <- "y%s%n"
+  err2 <- tryCatch(compile_model(`y%s%n` ~ zz + (1 | g), d), error = function(e) e)
+  expect_s3_class(err2, "error")
 })

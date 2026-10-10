@@ -7,7 +7,7 @@
 #'
 #' The bridge covers population fixed-effect means only. For GLMMs the whole
 #' emmeans surface is gated by the package's inference-capability contract:
-#' a default profiled fit refuses with a typed error (refit with
+#' a profiled (`pirls_profiled`) fit refuses with a typed error (refit with
 #' `method = "joint_laplace"` for certified Wald inference, or opt in to the
 #' labelled working-Hessian approximation at fit time with
 #' `inference = "working_hessian"`). When the fitted artifact carries a
@@ -37,12 +37,14 @@ recover_data.mm_lmm <- function(object, data = NULL, ...) {
       class = "mm_inference_unavailable"
     )
   }
-  trms <- stats::delete.response(stats::terms(mm_fixed_formula(object)))
+  # User-facing fixed terms (with predvars for poly()/scale()/...), so the
+  # reference grid is over the variables the user wrote.
+  trms <- mm_user_fixed_terms(object)
   frame <- data %||% object$model_frame
   emmeans::recover_data(
     object$call,
     trms,
-    attr(object$model_frame, "na.action"),
+    object$na.action %||% attr(object$model_frame, "na.action"),
     frame = frame,
     ...
   )
@@ -120,12 +122,14 @@ recover_data.mm_glmm <- function(object, data = NULL, ...) {
       input = object
     )
   }
-  trms <- stats::delete.response(stats::terms(mm_fixed_formula(object)))
+  # User-facing fixed terms (with predvars for poly()/scale()/...), so the
+  # reference grid is over the variables the user wrote.
+  trms <- mm_user_fixed_terms(object)
   frame <- data %||% object$model_frame
   emmeans::recover_data(
     object$call,
     trms,
-    attr(object$model_frame, "na.action"),
+    object$na.action %||% attr(object$model_frame, "na.action"),
     frame = frame,
     ...
   )
@@ -153,9 +157,9 @@ emm_basis.mm_glmm <- function(object, trms, xlev, grid, ...) {
       input = object
     )
   }
-  m <- stats::model.frame(trms, grid, na.action = stats::na.pass, xlev = xlev)
-  X_train <- stats::model.matrix(object, type = "fixed")
-  X <- stats::model.matrix(trms, m, contrasts.arg = attr(X_train, "contrasts"))
+  # Same basis builder as emm_basis.mm_lmm(): fit-time coding and levels,
+  # stateful terms evaluated with the training basis, lme4 column names.
+  X <- mm_engine_fixed_matrix(object, grid)
   # fixef() carries lme4/model.matrix-style names, so the reference-grid
   # design aligns by NAME; a positional rename would silently misassign
   # columns whenever the grid's column order differs from the fit's.

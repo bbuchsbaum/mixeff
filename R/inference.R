@@ -113,18 +113,38 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
 #' Fixed-effect bootstrap control
 #'
 #' @param nsim Requested bootstrap replicate count.
-#' @param seed Optional integer seed. `NULL` leaves the Rust RNG seed
-#'   unspecified and records that state in row details.
+#' @param seed Optional integer seed. `NULL` (the default) draws a seed from
+#'   R's random number generator when the bootstrap runs, so `set.seed()`
+#'   makes the bootstrap reproducible; the seed used is recorded in the
+#'   result.
 #' @param failed_refit_policy How failed refits are accounted for. Stable Rust
 #'   wire labels are `"exclude"`, `"count_extreme"`, and `"abort"`.
+#' @param threads Number of worker threads for the replicate refits
+#'   (default `1`, serial). See the "Threads" section.
 #'
-#' @return A list used by `contrast(..., method = "bootstrap")`.
+#' @section Threads:
+#' The engine simulates every replicate's response serially, in the serial
+#' random-number order, and refits the replicates on `threads` worker
+#' threads. The result is identical for every `threads` value; only the
+#' wall-clock time changes. Workers never call into R: the R thread alone
+#' polls for interrupts, so Ctrl-C / Esc still stops the run. The default is
+#' `1` because CRAN policy limits packages to at most two threads unless the
+#' user explicitly asks for more; passing `threads` is that request (for
+#' example `threads = parallel::detectCores()`).
+#'
+#' @return A list used by `contrast(..., method = "bootstrap")`,
+#'   `test_effect()`, and `confint(..., method = "bootstrap")`.
+#'
+#' @examples
+#' bootstrap_control(nsim = 199, seed = 1, threads = 2)
 #'
 #' @export
 bootstrap_control <- function(nsim = 999L,
                               seed = NULL,
-                              failed_refit_policy = c("exclude", "count_extreme", "abort")) {
+                              failed_refit_policy = c("exclude", "count_extreme", "abort"),
+                              threads = 1L) {
   failed_refit_policy <- match.arg(failed_refit_policy)
+  threads <- mm_check_threads(threads)
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) || nsim < 1) {
     mm_abort(
       message = "`nsim` must be a positive integer.",
@@ -143,10 +163,39 @@ bootstrap_control <- function(nsim = 999L,
     list(
       requested_replicates = as.integer(nsim),
       seed = if (is.null(seed)) NULL else as.integer(seed),
-      failed_refit_policy = failed_refit_policy
+      failed_refit_policy = failed_refit_policy,
+      threads = threads
     ),
     class = "mm_bootstrap_control"
   )
+}
+
+# Validate a worker-thread count (bootstrap_control(), confint()/profile()
+# `threads`). Any positive whole number is honoured as asked: the default is
+# 1 and a larger value is the user's explicit opt-in (CRAN policy: <= 2
+# unless the user asks for more).
+mm_check_threads <- function(threads) {
+  if (!is.numeric(threads) || length(threads) != 1L || is.na(threads) ||
+      threads < 1 || threads != round(threads) || !is.finite(threads)) {
+    mm_abort(
+      message = "`threads` must be a single positive whole number.",
+      class = "mm_arg_error",
+      input = threads
+    )
+  }
+  as.integer(threads)
+}
+
+# Wire form of a bootstrap control. A NULL seed is resolved from R's RNG at
+# call time (as the GLMM bootstrap does) so `set.seed()` governs the engine's
+# otherwise entropy-seeded StdRng.
+mm_bootstrap_wire <- function(bootstrap) {
+  out <- unclass(bootstrap)
+  out$threads <- out$threads %||% 1L
+  if (is.null(out$seed)) {
+    out$seed <- sample.int(.Machine$integer.max, 1L)
+  }
+  out
 }
 
 #' @method print mm_contrast
@@ -268,8 +317,11 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
 #'
 #' `test_random_effect()` exposes the boundary-aware likelihood-ratio route for
 #' random-effect variance components. The v1 certified route is a nested ML
-#' comparison that adds exactly one variance/covariance parameter and reports
-#' the Self-Liang 50:50 mixture reference distribution. It is intentionally
+#' comparison that adds exactly one variance parameter and reports the
+#' Self-Liang 50:50 mixture reference distribution; a comparison that adds
+#' only correlation parameters (e.g. `||` versus `|`) is referred to the
+#' ordinary chi-square, since a zero correlation is interior to the
+#' parameter space (`method = "boundary_lrt_ordinary_chisq"`). It is intentionally
 #' separate from [test_effect()], which tests fixed effects.
 #'
 #' @param fit A fitted `mm_lmm`.
@@ -315,8 +367,9 @@ test_random_effect.mm_lmm <- function(fit, term,
   reduced <- NULL
   reduced_payload <- NULL
   if (remaining > 0L) {
-    reduced <- lmm(reduced_formula, full$model_frame, REML = FALSE,
-                   weights = full$weights, control = mm_control(verbose = -1))
+    reduced <- mm_internal_lmm(reduced_formula, full$model_frame, REML = FALSE,
+                               weights = full$weights,
+                               control = mm_internal_control(full, keep_start = FALSE))
     reduced_payload <- mm_boundary_lrt_bridge_payload(reduced)
   }
 
@@ -384,8 +437,9 @@ mm_boundary_lrt_ml_fit <- function(fit, refit_for_comparison) {
       input = list(REML = TRUE)
     )
   }
-  lmm(fit$formula, fit$model_frame, REML = FALSE, weights = fit$weights,
-      control = mm_control(verbose = -1))
+  mm_internal_lmm(fit$formula, fit$model_frame, REML = FALSE,
+                  weights = fit$weights, offset = mm_fit_offset_arg(fit),
+                  control = mm_internal_control(fit))
 }
 
 mm_boundary_lrt_bridge_payload <- function(fit) {
@@ -460,8 +514,8 @@ mm_match_random_effect_term <- function(terms, term) {
 
 mm_drop_random_term_formula <- function(fit, drop_index) {
   response <- mm_response_name(fit)
-  fixed <- setdiff(mm_fixed_effect_terms(fit), "1")
-  fixed_rhs <- if (length(fixed)) paste(fixed, collapse = " + ") else "1"
+  fixed <- mm_fixed_effect_terms(fit)
+  fixed_rhs <- mm_fixed_rhs_text(fixed, mm_fixed_terms_have_intercept(fixed))
   terms <- fit$artifact$semantic_model$random_terms %||% list()
   random <- vapply(terms, function(x) x$source_syntax$text %||% "", character(1))
   random <- random[nzchar(random)]
@@ -506,6 +560,14 @@ mm_boundary_lrt_table <- function(payload, term, reduced_formula, full, reduced,
   status <- as.character(payload$status %||% "not_assessed")
   available <- identical(status, "available")
   reference_distribution <- mm_boundary_lrt_reference_label(payload$mixture)
+  # The engine uses the 50:50 boundary mixture only when exactly one
+  # variance is added; a comparison adding only correlations (`||` vs `|`)
+  # is referred to the ordinary chi-square (a single weight-1 component).
+  mixture <- payload$mixture %||% list()
+  is_mixture <- any(vapply(mixture, function(component) {
+    !is.null(component$point_mass_at) ||
+      !isTRUE(all.equal(as.numeric(component$weight %||% NA_real_), 1))
+  }, logical(1)))
   reason <- payload$reason %||% if (available) NA_character_ else
     "boundary LRT did not certify a p-value"
   reason_code <- payload$reason_code %||% if (available) NA_character_ else
@@ -535,10 +597,16 @@ mm_boundary_lrt_table <- function(payload, term, reduced_formula, full, reduced,
     group = term$group,
     theta_parameters = term$theta_parameters,
     statistic = payload$statistic %||% NA_real_,
-    statistic_name = "chi_bar_square",
+    statistic_name = if (is_mixture || !available) "chi_bar_square" else "chi_square",
     ordinary_chisq_dof = payload$ordinary_chisq_dof %||% NA_integer_,
     p_value = payload$pvalue %||% NA_real_,
-    method = if (available) "boundary_lrt_self_liang_mixture" else "boundary_lrt",
+    method = if (!available) {
+      "boundary_lrt"
+    } else if (is_mixture) {
+      "boundary_lrt_self_liang_mixture"
+    } else {
+      "boundary_lrt_ordinary_chisq"
+    },
     requested_method = "boundary_lrt",
     status = status,
     reason = reason,
@@ -852,6 +920,69 @@ print.mm_df_for_contrast <- function(x, ...) {
   invisible(x)
 }
 
+# lme4's confint.merMod spellings ("Wald", "boot") map onto mixeff's names.
+# Only exact lme4 spellings are translated; the default vector passes
+# through untouched so match.arg() picks the first entry.
+mm_confint_method_spelling <- function(method) {
+  if (length(method) != 1L) return(method)
+  switch(method, Wald = "wald", boot = "bootstrap", method)
+}
+
+#' Confidence intervals for a mixeff LMM
+#'
+#' `method = "asymptotic"` (the default; synonyms `"wald"` and lme4's
+#' `"Wald"`) gives Wald intervals for the fixed effects from the stored
+#' standard errors. `method = "profile"` gives profile-likelihood intervals
+#' with lme4's rows and names: `.sig01`, `.sig02`, ... (random-effect
+#' standard deviations and correlations, numbered as lme4 >= 2.0 does: term
+#' by term, each term's standard deviations before its correlations),
+#' `.sigma`, then the fixed effects. As in lme4, every fit is profiled on the
+#' ML deviance: a REML fit's intervals are those of its ML refit. The
+#' engine's relative-Cholesky `theta1`, ... intervals (on the fit's own
+#' criterion) are kept in `attr(ci, "mm_profile")$table` and can be
+#' requested by name through `parm`. When one parameter's profile is
+#' irregular (non-monotone, not bracketing the estimate, or a failed refit),
+#' its undetermined bounds are `NA` -- lme4 would warn and interpolate
+#' linearly, often reporting `[-1, 1]` for a correlation -- and the reason is
+#' in `attr(ci, "mm_profile")$table` (`status`, `reason_code`, `reason`);
+#' printing the result adds a note. See [profile.mm_lmm()].
+#' `method = "bootstrap"` (lme4's
+#' `"boot"`) gives parametric-bootstrap intervals for the fixed effects,
+#' controlled by [bootstrap_control()].
+#'
+#' lme4's `confint.merMod()` defaults to `method = "profile"`; mixeff keeps
+#' the Wald default because the profile refits the model many times
+#' (about the cost of lme4's profile; several seconds for a modest model)
+#' and can refuse on near-singular fits, while the Wald route is free.
+#' Request `method = "profile"` to reproduce lme4's default output.
+#'
+#' @param object A fitted `mm_lmm`.
+#' @param parm Parameters to report: names (fixed-effect names, and for
+#'   `"profile"` also `".sig01"`, ..., `".sigma"`, `"theta1"`, ...), lme4's
+#'   `"theta_"` / `"beta_"` shortcuts (`"profile"` only), or indices.
+#'   Defaults to all fixed effects (all lme4 rows for `"profile"`).
+#' @param level Confidence level.
+#' @param method `"asymptotic"`, `"wald"`, `"bootstrap"`, or `"profile"`.
+#' @param bootstrap Optional [bootstrap_control()] for `method = "bootstrap"`
+#'   (its `threads` field sets the bootstrap's worker threads).
+#' @param interval Bootstrap interval type, `"percentile"` or `"basic"`.
+#' @param threads Worker threads for `method = "profile"` (default 1). The
+#'   per-parameter profiles run concurrently; the result is identical for
+#'   every value. The default is 1 because CRAN policy limits packages to at
+#'   most two threads unless the user explicitly asks for more; passing
+#'   `threads` is that request.
+#' @param ... Unused.
+#'
+#' @return An `mm_confint` matrix of lower/upper bounds.
+#'
+#' @examples
+#' set.seed(1)
+#' d <- data.frame(g = factor(rep(1:10, each = 6)), x = rnorm(60))
+#' d$y <- 1 + 0.5 * d$x + rnorm(10)[d$g] + rnorm(60)
+#' fit <- lmm(y ~ x + (1 | g), d, control = mm_control(verbose = -1))
+#' confint(fit)
+#' confint(fit, method = "profile")
+#'
 #' @method confint mm_lmm
 #' @importFrom stats confint
 #' @export
@@ -859,8 +990,10 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
                            method = c("asymptotic", "wald", "bootstrap",
                                       "profile"),
                            bootstrap = NULL,
-                           interval = c("percentile", "basic"), ...) {
-  method <- match.arg(method)
+                           interval = c("percentile", "basic"),
+                           threads = 1L, ...) {
+  method <- match.arg(mm_confint_method_spelling(method),
+                      c("asymptotic", "wald", "bootstrap", "profile"))
   # `"asymptotic"` is the package-wide canonical name for the closed-form
   # Wald interval (shared with contrast()/test_effect()/inference_table());
   # `"wald"` stays accepted as a synonym. Internals compute under "wald".
@@ -876,7 +1009,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
   }
   if (identical(method, "profile")) {
     return(mm_profile_confint(object, if (missing(parm)) NULL else parm,
-                              level))
+                              level, threads = threads))
   }
   terms <- names(object$beta)
   if (missing(parm)) {
@@ -914,7 +1047,7 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' Two routes are available. `method = "asymptotic"` builds Wald intervals
 #' (`estimate +/- z * SE`) from the Rust fixed-effect inference table; it
 #' requires a certified fit (`method = "joint_laplace"`) or the explicit
-#' working-Hessian opt-in, and refuses the default profiled estimator with
+#' working-Hessian opt-in, and refuses the profiled (`pirls_profiled`) estimator with
 #' a typed reason. `method = "bootstrap"` runs a parametric bootstrap —
 #' each replicate simulates a response from the fitted model under fresh
 #' random-effect draws and refits the same (effective) estimator — and
@@ -935,10 +1068,18 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 #' @param parm Optional fixed-effect names or indices; defaults to all.
 #' @param level Confidence level.
 #' @param method `"asymptotic"` (the default; the package-wide name for the
-#'   closed-form Wald interval), its synonym `"wald"`, or `"bootstrap"`.
+#'   closed-form Wald interval), its synonyms `"wald"` and lme4's `"Wald"`, or
+#'   `"bootstrap"` (lme4's spelling `"boot"` is accepted). lme4 defaults to
+#'   `"profile"`; mixeff keeps the Wald default because profile intervals are
+#'   refused for GLMMs. The same spellings are accepted by the LMM method
+#'   ([confint.mm_lmm()]), whose `"profile"` intervals use lme4's `.sig01`,
+#'   ..., `.sigma` rows.
 #' @param ... For `method = "bootstrap"`: `nsim` (number of replicates,
-#'   default 999) and `seed` (non-negative integer; when omitted one is
-#'   drawn from R's RNG so `set.seed()` governs reproducibility).
+#'   default 999), `seed` (non-negative integer; when omitted one is
+#'   drawn from R's RNG so `set.seed()` governs reproducibility), and
+#'   `threads` (worker threads for the replicate refits, default 1; the
+#'   result is identical for every value -- see [bootstrap_control()] for
+#'   the threading contract and CRAN's two-thread default policy).
 #'
 #' @return An `mm_confint` matrix of lower/upper bounds (`"asymptotic"`), or
 #'   a plain matrix of percentile bounds with bootstrap-accounting
@@ -949,7 +1090,8 @@ confint.mm_lmm <- function(object, parm, level = 0.95,
 confint.mm_glmm <- function(object, parm, level = 0.95,
                             method = c("asymptotic", "wald", "profile",
                                        "bootstrap"), ...) {
-  method <- match.arg(method)
+  method <- match.arg(mm_confint_method_spelling(method),
+                      c("asymptotic", "wald", "profile", "bootstrap"))
   if (identical(method, "profile")) {
     # Advice must be actionable on THIS fit: asymptotic Wald intervals are
     # certified only for joint_laplace fits.
@@ -1073,6 +1215,7 @@ print.mm_confint <- function(x, ...) {
     status
   }
   cat(sprintf("status: %s\n", status_shown))
+  mm_print_profile_irregular_note(x)
 
   bootstrap <- attr(x, "bootstrap")
   if (length(bootstrap)) {
@@ -1156,7 +1299,7 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
     }
     mm_inform_bootstrap_scale(fit, bootstrap)
     bootstrap_json <- jsonlite::toJSON(
-      unclass(bootstrap),
+      mm_bootstrap_wire(bootstrap),
       auto_unbox = TRUE,
       null = "null"
     )
@@ -1176,7 +1319,8 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         as.integer(ncol(L)),
         as.character(rownames(L)),
         as.numeric(rhs),
-        as.character(bootstrap_json)
+        as.character(bootstrap_json),
+        bridge$handle
       ),
       error = function(cnd) cnd
     )
@@ -1197,7 +1341,8 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         as.integer(ncol(L)),
         as.character(rownames(L)),
         as.numeric(rhs),
-        method
+        method,
+        bridge$handle
       ),
       error = function(cnd) cnd
     )
@@ -1234,7 +1379,8 @@ mm_rust_term_table <- function(fit, method, type = "III") {
       bridge$weights,
       bridge$control_json,
       method,
-      mm_fixed_effect_term_type_label(type)
+      mm_fixed_effect_term_type_label(type),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -1281,20 +1427,49 @@ mm_fixed_effect_term_type_label <- function(type) {
   )
 }
 
-mm_rust_fit_bridge_payload <- function(fit) {
-  spec_data <- mm_translate_data(fit$model_frame)
-  formula_string <- mm_coerce_formula_string(fit$formula)
-  control_json <- jsonlite::toJSON(
-    unclass(fit$control %||% mm_control()),
-    auto_unbox = TRUE,
-    null = "null"
-  )
+# Bridge arguments for an engine-side refit of an LMM `fit` under `reml`.
+# When the fit's live native handle matches that refit (R/handle.R), the
+# payload carries it as `handle` and the model frame is not translated (the
+# engine reuses the live model); `need_data = TRUE` translates it anyway, for
+# verbs that also fit another model to the same data.
+mm_rust_fit_bridge_payload <- function(fit, warm_start = FALSE,
+                                       reml = isTRUE(fit$REML),
+                                       need_data = FALSE) {
+  formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
+  control_json <- mm_refit_control_json(fit, warm_start = warm_start)
+  handle <- mm_lmm_live_handle(fit, reml = reml,
+                               formula_string = formula_string,
+                               control_json = control_json)
   list(
-    spec_data = spec_data,
+    spec_data = mm_bridge_spec_data(fit, handle, need_data = need_data),
     formula_string = formula_string,
     weights = mm_bridge_weights(fit$weights),
-    control_json = as.character(control_json)
+    control_json = control_json,
+    REML = isTRUE(reml),
+    handle = handle
   )
+}
+
+# Control JSON for an engine-side refit of `fit` itself. The user's
+# mm_control() is kept. Refits that recompute quantities of the stored fit
+# (contrasts, predictions, profiles) deliberately do NOT warm start: a cold
+# start with the same control replays the original optimizer path and lands
+# on the identical optimum, whereas a warm start from the fitted theta stops
+# at a point that differs at the optimizer tolerance (~1e-6 relative), so
+# summary()/predict(newdata) would no longer reproduce fixef()/fitted(); it
+# also saved < 10% of the refit time on the benchmarks. `warm_start = TRUE`
+# (start from the fitted theta unless the user set `start`) is for resampling
+# refits of the same model.
+mm_refit_control_json <- function(fit, warm_start = FALSE) {
+  control <- unclass(fit$control %||% mm_control())
+  if (isTRUE(warm_start) && inherits(fit, "mm_lmm") && is.null(control$start)) {
+    theta <- as.numeric(unlist(fit$theta %||% numeric(), use.names = FALSE))
+    if (length(theta) && all(is.finite(theta))) {
+      control$start <- theta
+    }
+  }
+  as.character(jsonlite::toJSON(control, auto_unbox = TRUE, null = "null",
+                                digits = NA))
 }
 
 mm_unavailable_effect_table <- function(term, method) {
@@ -1511,6 +1686,39 @@ mm_bootstrap_confint <- function(fit, parm, level, bootstrap, interval) {
   mm_new_confint(out)
 }
 
+# Rows of a profile interval matrix whose per-parameter profile was
+# irregular (engine status non_monotone / not_bracketing / failed). Their
+# undetermined bounds are NA; the reason is in attr(x, "mm_profile")$table.
+mm_profile_irregular_rows <- function(x) {
+  tab <- attr(x, "mm_profile")$table
+  if (is.null(tab) || !"status" %in% names(tab)) return(NULL)
+  tab <- tab[tab$parameter %in% rownames(x), , drop = FALSE]
+  tab[!is.na(tab$status) & tab$status != "ok", , drop = FALSE]
+}
+
+mm_print_profile_irregular_note <- function(x) {
+  bad <- mm_profile_irregular_rows(x)
+  if (is.null(bad) || !nrow(bad)) return(invisible(NULL))
+  na_rows <- is.na(bad$lower) | is.na(bad$upper)
+  what <- sprintf("%s (%s)", bad$parameter, gsub("_", " ", bad$reason_code,
+                                                 fixed = TRUE))
+  cat(strwrap(
+    paste0(
+      "Note: irregular profile for ", paste(what, collapse = ", "), ". ",
+      if (any(na_rows)) {
+        paste0("Bounds the profile could not determine are reported as NA ",
+               "(lme4 instead falls back to linear interpolation, often ",
+               "giving [-1, 1] for a correlation). ")
+      } else {
+        "The reported bounds come from the regular part of the profile. "
+      },
+      "Reasons: attr(x, \"mm_profile\")$table$reason."
+    ),
+    width = 78, exdent = 2
+  ), sep = "\n")
+  invisible(NULL)
+}
+
 mm_new_confint <- function(x) {
   class(x) <- c("mm_confint", "matrix")
   x
@@ -1544,7 +1752,7 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
   L[1L, parameter] <- 1
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -1565,7 +1773,8 @@ mm_full_model_bootstrap_payload <- function(fit, parameter, level, bootstrap) {
       as.character(rownames(L)),
       0,
       as.character(bootstrap_json),
-      as.numeric(level)
+      as.numeric(level),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -1657,7 +1866,7 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
   mm_inform_bootstrap_scale(fit, bootstrap)
   bridge <- mm_rust_fit_bridge_payload(fit)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -1677,7 +1886,8 @@ mm_rust_term_bootstrap_row <- function(fit, term, bootstrap) {
       as.integer(ncol(L)),
       as.character(term),
       as.numeric(rhs),
-      as.character(bootstrap_json)
+      as.character(bootstrap_json),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -1724,9 +1934,11 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
       reason_code = "bootstrap_lrt_reduced_formula_failed"
     ))
   }
-  bridge <- mm_rust_fit_bridge_payload(fit)
+  # The reduced model is fitted to the same data, so translate it even when
+  # the (ML) alternative is served from its live handle.
+  bridge <- mm_rust_fit_bridge_payload(fit, reml = FALSE, need_data = TRUE)
   bootstrap_json <- jsonlite::toJSON(
-    unclass(bootstrap),
+    mm_bootstrap_wire(bootstrap),
     auto_unbox = TRUE,
     null = "null"
   )
@@ -1741,7 +1953,8 @@ mm_rust_term_bootstrap_lrt_row <- function(fit, term, bootstrap) {
       bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.character(bootstrap_json)
+      as.character(bootstrap_json),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -1874,23 +2087,40 @@ mm_inference_row_unavailable <- function(term, method, reason, reason_code = NA_
 #' Computes profile-likelihood intervals for the model's parameters via the
 #' engine's certified profile payload and returns them as an `mm_profile`
 #' object: `$table` has one row per profiled parameter (`parameter`,
-#' `estimate`, `lower`, `upper`, `regularity`, `reason_code`). Under REML,
-#' fixed-effect coefficients are not profiled (upstream contract); their rows
-#' carry `reason_code = "profile_beta_unavailable_under_reml"` rather than
-#' being silently dropped. Use [confint()] with `method = "profile"` for the
-#' matrix form.
+#' `parameter_kind`, `estimate`, `lower`, `upper`, `regularity`, `status`,
+#' `reason_code`, `reason`, `profiled_criterion`). Rows use lme4's names: `.sig01`,
+#' ... (kind `"sd"` or `"cor"`, numbered in lme4's term order), `.sigma`,
+#' and the fixed effects, all profiled on the ML deviance as lme4 does (a
+#' REML fit is refitted by ML); the engine's relative-Cholesky `theta1`, ...
+#' rows follow, profiled on the fit's own criterion. Use [confint()] with
+#' `method = "profile"` for the matrix form.
+#'
+#' A parameter whose profile is irregular keeps its row: `status` is
+#' `"non_monotone"` (the signed-root deviance is not monotone),
+#' `"not_bracketing"` (the profile does not reach the cutoff on one side),
+#' or `"failed"` (a constrained refit failed); `reason_code` holds the
+#' matching `regularity` code (`"non_monotone_profile"`,
+#' `"profile_not_bracketing"`, `"profile_failed"`) and `reason` the engine's
+#' explanation. Bounds the profile cannot determine are `NA`; a bound inside
+#' the regular part of the profile is still reported. lme4 instead warns
+#' and falls back to linear interpolation (often giving `[-1, 1]` for a
+#' correlation); mixeff reports `NA` plus the reason rather than an
+#' interpolated bound. The other parameters' intervals are unaffected.
 #'
 #' @param fitted A fitted `mm_lmm`.
 #' @param which Optional character vector of parameter names to keep
-#'   (coefficient names, `"sigma"`, `"theta1"`, ...).
+#'   (coefficient names, `".sig01"`, `".sigma"`, `"theta1"`, ...).
 #' @param level Confidence level for the reported interval endpoints.
+#' @param threads Worker threads (default 1); see [confint.mm_lmm()].
 #' @param ... Unused; for generic consistency.
 #' @return An `mm_profile` object with `$table`, `$level`, `$fit_criterion`,
 #'   and `$notes`.
 #' @seealso [confint()] with `method = "profile"` for the matrix form.
 #' @export
-profile.mm_lmm <- function(fitted, which = NULL, level = 0.95, ...) {
-  ci <- mm_profile_confint(fitted, parm = which, level = level)
+profile.mm_lmm <- function(fitted, which = NULL, level = 0.95,
+                           threads = 1L, ...) {
+  ci <- mm_profile_confint(fitted, parm = which, level = level,
+                           threads = threads)
   prof <- attr(ci, "mm_profile")
   out <- list(
     table = prof$table,
@@ -1912,9 +2142,10 @@ print.mm_profile <- function(x, ...) {
   print(format(show, digits = 4), row.names = FALSE)
   unavailable <- tbl[!is.na(tbl$reason_code), , drop = FALSE]
   if (nrow(unavailable)) {
-    cat(sprintf("Not profiled: %s (%s).\n",
-                paste(unavailable$parameter, collapse = ", "),
-                paste(unique(unavailable$reason_code), collapse = "; ")))
+    cat(sprintf("Irregular profile: %s.\n",
+                paste(sprintf("%s (%s)", unavailable$parameter,
+                              unavailable$reason_code),
+                      collapse = ", ")))
   }
   for (note in x$notes) cat("Note:", note, "\n")
   invisible(x)
@@ -1949,60 +2180,87 @@ confint.mm_profile <- function(object, parm, level = NULL, ...) {
 # (no persistent Rust handle), parses the schema-versioned JSON, and
 # returns a list with the rendered confint matrix plus the raw payload.
 
-mm_profile_confint <- function(fit, parm = NULL, level = 0.95) {
-  payload <- mm_profile_confint_payload(fit, level)
+mm_profile_confint <- function(fit, parm = NULL, level = 0.95, threads = 1L) {
+  threads <- mm_check_threads(threads)
+  reml <- isTRUE(fit$REML)
+  # lme4 profiles every fit on the ML deviance (a REML fit's confint()
+  # equals its ML refit's), so the lme4-scale rows (.sigNN, .sigma, beta)
+  # come from the ML profile. The relative-Cholesky theta rows stay on the
+  # fit's own criterion.
+  payload_ml <- mm_profile_confint_payload(fit, level, threads, reml = FALSE)
+  payload <- if (reml) {
+    mm_profile_confint_payload(fit, level, threads, reml = TRUE)
+  } else {
+    payload_ml
+  }
   fit_criterion <- as.character(payload$fit_criterion %||% "")
 
-  intervals <- payload$intervals %||% list()
-  rows <- lapply(intervals, mm_translate_profile_row, fit = fit)
-  rows <- Filter(Negate(is.null), rows)
-  table <- if (length(rows)) {
-    do.call(rbind, rows)
-  } else {
-    mm_empty_profile_table()
+  translate <- function(p) {
+    rows <- lapply(p$intervals %||% list(), mm_translate_profile_row, fit = fit)
+    rows <- Filter(Negate(is.null), rows)
+    if (length(rows)) do.call(rbind, rows) else mm_empty_profile_table()
   }
+  tab_ml <- translate(payload_ml)
+  tab_fit <- if (reml) translate(payload) else tab_ml
+  lme4_kinds <- c("sd", "cor", "sigma", "beta")
+  sig <- tab_ml[tab_ml$parameter_kind %in% c("sd", "cor"), , drop = FALSE]
+  sig <- sig[order(sig$parameter), , drop = FALSE]
+  sigma_row <- tab_ml[tab_ml$parameter_kind == "sigma", , drop = FALSE]
+  beta <- tab_ml[tab_ml$parameter_kind == "beta", , drop = FALSE]
+  beta <- beta[order(match(beta$parameter, names(fit$beta))), , drop = FALSE]
+  other <- tab_fit[!tab_fit$parameter_kind %in% lme4_kinds, , drop = FALSE]
+  table <- rbind(sig, sigma_row, beta, other)
+  table$profiled_criterion <- c(rep("ML", nrow(sig) + nrow(sigma_row) + nrow(beta)),
+                                rep(fit_criterion, nrow(other)))
 
-  # Under REML, beta is not profiled upstream by contract. Append explicit
-  # typed-refusal rows so the caller can see WHICH beta were requested but
-  # not certified, mirroring the bootstrap CI's "available" / refusal
-  # distinction. Any beta name in `parm` (or every beta when parm is the
-  # default) gets one row with reason_code = profile_beta_unavailable_under_reml.
-  if (identical(fit_criterion, "REML")) {
-    beta_names_requested <- mm_profile_beta_subset(fit, parm)
-    if (length(beta_names_requested)) {
-      missing_rows <- lapply(beta_names_requested, function(nm) {
-        data.frame(
-          parameter = nm,
-          parameter_kind = "beta",
-          estimate = unname(fit$beta[nm]),
-          lower = NA_real_,
-          upper = NA_real_,
-          method = "profile_likelihood",
-          regularity = "profile_beta_unavailable_under_reml",
-          boundary_clamped_lower = FALSE,
-          reason_code = "profile_beta_unavailable_under_reml",
-          stringsAsFactors = FALSE
-        )
-      })
-      table <- rbind(table, do.call(rbind, missing_rows))
-    }
-  }
-
+  # parm: names (lme4's ".sig01", ".sigma", coefficient names, or the theta
+  # rows "theta1", ...), lme4's "theta_" (all variance parameters) and
+  # "beta_" (all fixed effects), or indices into the lme4 rows.
+  is_lme4 <- table$parameter_kind %in% lme4_kinds
   if (!is.null(parm)) {
-    parm <- as.character(parm)
-    keep <- table$parameter %in% parm
-    table <- table[keep, , drop = FALSE]
+    if (is.numeric(parm)) {
+      keep <- table$parameter[is_lme4][parm]
+    } else {
+      parm <- as.character(parm)
+      keep <- c(
+        setdiff(parm, c("theta_", "beta_")),
+        if ("theta_" %in% parm) {
+          table$parameter[table$parameter_kind %in% c("sd", "cor", "sigma")]
+        },
+        if ("beta_" %in% parm) table$parameter[table$parameter_kind == "beta"]
+      )
+    }
+    table <- table[table$parameter %in% keep, , drop = FALSE]
   }
 
   rownames(table) <- NULL
-  mat <- as.matrix(table[, c("lower", "upper"), drop = FALSE])
-  rownames(mat) <- table$parameter
+  shown <- if (is.null(parm)) {
+    table[table$parameter_kind %in% lme4_kinds, , drop = FALSE]
+  } else {
+    table
+  }
+  mat <- as.matrix(shown[, c("lower", "upper"), drop = FALSE])
+  rownames(mat) <- shown$parameter
   alpha <- 1 - level
   colnames(mat) <- c(sprintf("%.1f %%", 100 * alpha / 2),
                      sprintf("%.1f %%", 100 * (1 - alpha / 2)))
   attr(mat, "method") <- "profile_likelihood"
   attr(mat, "status") <- "available"
   attr(mat, "fit_criterion") <- fit_criterion
+  notes <- unique(c(
+    as.character(unlist(payload$notes %||% list(), use.names = FALSE)),
+    as.character(unlist(payload_ml$notes %||% list(), use.names = FALSE))
+  ))
+  # The engine's REML-payload note on beta no longer applies: the beta rows
+  # come from the ML profile, as in lme4.
+  notes <- notes[!grepl("omit fixed-effect beta profiles", notes, fixed = TRUE)]
+  if (reml) {
+    notes <- c(notes, paste0(
+      "REML fit: the .sigNN, .sigma and fixed-effect intervals profile the ",
+      "ML deviance (the model refitted by ML), as lme4's confint() does; ",
+      "theta rows profile the REML criterion."
+    ))
+  }
   attr(mat, "mm_profile") <- list(
     schema = list(
       schema_name = as.character(payload$schema_name %||% NA_character_),
@@ -2010,20 +2268,21 @@ mm_profile_confint <- function(fit, parm = NULL, level = 0.95) {
     ),
     fit_criterion = fit_criterion,
     level = as.numeric(payload$level %||% level),
-    notes = as.character(unlist(payload$notes %||% list(),
-                                use.names = FALSE)),
+    threads = threads,
+    notes = notes,
     table = table
   )
   mm_new_confint(mat)
 }
 
-mm_profile_confint_payload <- function(fit, level) {
-  bridge <- mm_rust_fit_bridge_payload(fit)
+mm_profile_confint_payload <- function(fit, level, threads = 1L,
+                                       reml = isTRUE(fit$REML)) {
+  bridge <- mm_rust_fit_bridge_payload(fit, reml = reml)
   json <- tryCatch(
     .Call(
       wrap__mm_lmm_profile_confint_json,
       bridge$formula_string,
-      isTRUE(fit$REML),
+      isTRUE(reml),
       bridge$spec_data$column_order,
       bridge$spec_data$numeric_columns,
       bridge$spec_data$categorical_values,
@@ -2031,7 +2290,9 @@ mm_profile_confint_payload <- function(fit, level) {
       bridge$spec_data$categorical_ordered,
       bridge$weights,
       bridge$control_json,
-      as.numeric(level)
+      as.numeric(level),
+      as.integer(threads),
+      bridge$handle
     ),
     error = function(cnd) cnd
   )
@@ -2072,6 +2333,16 @@ mm_translate_profile_row <- function(row, fit) {
   upstream <- as.character(row$parameter %||% "")
   mapped <- mm_map_profile_parameter(upstream, fit)
   if (is.null(mapped)) return(NULL)
+  # Irregular per-parameter profiles (engine 26f9690+) arrive as rows with
+  # `status` != "ok", a `reason`, and JSON-null (-> NA) bounds that could not
+  # be determined; they are reported, never dropped.
+  status <- as.character(row$status %||% "ok")
+  regularity <- as.character(
+    row$regularity %||%
+      mm_profile_status_regularity[status] %||%
+      "regular_profile_likelihood"
+  )
+  if (is.na(regularity)) regularity <- "regular_profile_likelihood"
   data.frame(
     parameter = mapped$name,
     parameter_kind = mapped$kind,
@@ -2079,16 +2350,78 @@ mm_translate_profile_row <- function(row, fit) {
     lower = as.numeric(row$lower %||% NA_real_),
     upper = as.numeric(row$upper %||% NA_real_),
     method = as.character(row$method %||% "profile_likelihood"),
-    regularity = as.character(row$regularity %||% "regular_profile_likelihood"),
+    regularity = regularity,
     boundary_clamped_lower = isTRUE(row$boundary_clamped_lower),
-    reason_code = NA_character_,
+    status = status,
+    reason_code = if (identical(status, "ok")) NA_character_ else regularity,
+    reason = mm_profile_reason_text(row$reason, upstream, mapped$name),
     stringsAsFactors = FALSE
   )
 }
 
+# The engine prefixes a failed profile's reason with its own parameter name
+# ("profile_.sig02: ..."; engine theta order). Relabel that prefix with the
+# lme4 name the row carries so the reason matches the row.
+mm_profile_reason_text <- function(reason, upstream, mapped) {
+  reason <- mm_optional_text(reason)
+  if (is.na(reason) || identical(upstream, mapped)) return(reason)
+  prefix <- paste0("profile_", upstream, ":")
+  if (startsWith(reason, prefix)) {
+    reason <- paste0("profile_", mapped, ":",
+                     substr(reason, nchar(prefix) + 1L, nchar(reason)))
+  }
+  reason
+}
+
+# Engine (mixeff-rs 26f9690+) per-parameter profile status -> the closed
+# `regularity` code it travels with. A payload from an older engine has no
+# `status`; its rows are all regular.
+mm_profile_status_regularity <- c(
+  non_monotone = "non_monotone_profile",
+  not_bracketing = "profile_not_bracketing",
+  failed = "profile_failed"
+)
+
+# lme4 (>= 2.0) numbers profile parameters term by term: a term's standard
+# deviations first, then its correlations (lower triangle, column-major).
+# `pos` is the lme4 theta index of the slot.
+mm_profile_sig_slot <- function(st, pos) {
+  offset <- 0L
+  for (tm in st$terms) {
+    cells <- which(tm$Tidx > 0L, arr.ind = TRUE)
+    if (!nrow(cells)) next
+    is_diag <- cells[, 1L] == cells[, 2L]
+    ord <- order(!is_diag, cells[, 2L], cells[, 1L])
+    hit <- match(pos, tm$Tidx[cells[ord, , drop = FALSE]])
+    if (!is.na(hit)) {
+      return(list(index = offset + hit, diag = is_diag[ord][[hit]]))
+    }
+    offset <- offset + nrow(cells)
+  }
+  NULL
+}
+
 mm_map_profile_parameter <- function(upstream, fit) {
-  if (upstream %in% c("\u03C3", "<U+03C3>")) {
-    return(list(name = "sigma", kind = "sigma"))
+  if (upstream %in% c("\u03C3", "<U+03C3>", ".sigma")) {
+    return(list(name = ".sigma", kind = "sigma"))
+  }
+  sig_idx <- if (grepl("^\\.sig[0-9]+$", upstream)) {
+    as.integer(sub("^\\.sig", "", upstream))
+  } else {
+    NA_integer_
+  }
+  if (!is.na(sig_idx)) {
+    # Engine `.sigNN` = theta slot NN in ENGINE theta order (SD for a
+    # diagonal slot, correlation otherwise); lme4 numbers the same
+    # quantities in its own term order (mm_re_structure()$perm).
+    st <- tryCatch(mm_re_structure(fit), error = function(cnd) NULL)
+    if (is.null(st)) return(list(name = upstream, kind = "unknown"))
+    pos <- match(sig_idx, st$perm)
+    if (is.na(pos)) return(list(name = upstream, kind = "unknown"))
+    sig <- mm_profile_sig_slot(st, pos)
+    if (is.null(sig)) return(list(name = upstream, kind = "unknown"))
+    return(list(name = sprintf(".sig%02d", sig$index),
+                kind = if (sig$diag) "sd" else "cor"))
   }
   beta_idx <- mm_profile_parameter_index(upstream, c("\u03B2", "<U+03B2>"))
   if (!is.na(beta_idx)) {
@@ -2139,7 +2472,9 @@ mm_empty_profile_table <- function() {
     method = character(),
     regularity = character(),
     boundary_clamped_lower = logical(),
+    status = character(),
     reason_code = character(),
+    reason = character(),
     stringsAsFactors = FALSE
   )
 }
@@ -2179,15 +2514,17 @@ mm_empty_profile_table <- function() {
 #'   `method`, `reliability`, `reason`).
 #'
 #' @examples
-#' \dontrun{
-#' # Difference-in-differences contrast at a focal SOA = 25 ms
-#' # (Loo et al. 2026 aphantasia primary estimand, glmm path)
-#' soa_s_25 <- (log(0.025) - mean(fit$data$soa_log)) / sd(fit$data$soa_log)
-#' mm_lincomb(fit, c(
-#'   "group: aphant:mask: masked"        = 1,
-#'   "group: aphant:mask: masked:soa_s"  = soa_s_25
-#' ))
-#' }
+#' set.seed(1)
+#' d <- data.frame(
+#'   g   = factor(rep(1:12, each = 8)),
+#'   trt = factor(rep(c("ctrl", "drug"), 48)),
+#'   x   = rnorm(96)
+#' )
+#' d$y <- 1 + 0.5 * (d$trt == "drug") + 0.3 * d$x +
+#'   0.4 * (d$trt == "drug") * d$x + rnorm(12)[d$g] + rnorm(96)
+#' fit <- lmm(y ~ trt * x + (1 | g), d, control = mm_control(verbose = -1))
+#' # Treatment effect at x = 1 (weights use lme4 coefficient names):
+#' mm_lincomb(fit, c(trtdrug = 1, "trtdrug:x" = 1))
 #'
 #' @seealso [contrast()] for the long-form, Rust-routed contrast surface
 #'   with full estimability / reliability reporting.

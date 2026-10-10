@@ -27,8 +27,12 @@
 #'   omit to keep the current formula. Random-effect terms (`(x | g)`,
 #'   `(x || g)`) are preserved across `. ~ .` edits.
 #' @param ... Arguments to override on the re-fit. For `mm_lmm`: `data`,
-#'   `REML`, `weights`, `control`. For `mm_glmm`: additionally `family`,
-#'   `offset`, `method`, `nAGQ`, `inference`.
+#'   `REML`, `weights`, `offset`, `na.action`, `control`. For `mm_glmm`:
+#'   additionally `family`, `method`, `nAGQ`, `inference`. The fit's
+#'   missing-value handling carries over: a refit of the stored model frame
+#'   keeps the original `na.action` record (so `na.exclude` padding
+#'   persists), and new `data` is filtered with the original `na.action`
+#'   (`na.omit` or `na.exclude`) unless `na.action` is supplied.
 #' @param evaluate If `TRUE` (default) re-fit and return the new model; if
 #'   `FALSE` return the unevaluated call.
 #'
@@ -53,6 +57,11 @@
 #' @method update mm_lmm
 #' @export
 update.mm_lmm <- function(object, formula., ..., evaluate = TRUE) {
+  # Check names before forcing `...`: an unsupported argument such as
+  # `subset = x > 0` would otherwise be evaluated (and fail) first.
+  mm_check_update_overrides(mm_dots_names(...),
+                            c("data", "REML", "weights", "offset", "na.action",
+                              "control"), "lmm")
   overrides <- list(...)
   new_formula <- if (missing(formula.)) {
     stats::formula(object)
@@ -61,19 +70,28 @@ update.mm_lmm <- function(object, formula., ..., evaluate = TRUE) {
   }
   args <- list(
     formula = new_formula,
-    data    = mm_update_arg(overrides, "data", stats::model.frame(object)),
+    data    = mm_update_arg(overrides, "data",
+                            mm_update_data(object, new_formula, parent.frame())),
     REML    = mm_update_arg(overrides, "REML", isTRUE(object$REML)),
     weights = mm_update_arg(overrides, "weights", object$weights),
+    offset  = mm_update_arg(overrides, "offset", mm_fit_offset_arg(object)),
+    na.action = mm_update_arg(overrides, "na.action", mm_na_action_expr(object)),
     control = mm_update_arg(overrides, "control",
                             object$control %||% mm_control(verbose = -1))
   )
-  mm_refit_call("lmm", args, evaluate, parent.frame())
+  if (is.null(args$na.action)) args$na.action <- NULL
+  mm_update_keep_na(object, mm_refit_call("lmm", args, evaluate, parent.frame()),
+                    overrides)
 }
 
 #' @rdname update.mm
 #' @method update mm_glmm
 #' @export
 update.mm_glmm <- function(object, formula., ..., evaluate = TRUE) {
+  mm_check_update_overrides(mm_dots_names(...),
+                            c("data", "family", "weights", "offset", "method",
+                              "nAGQ", "inference", "na.action", "control"),
+                            "glmm")
   overrides <- list(...)
   new_formula <- if (missing(formula.)) {
     stats::formula(object)
@@ -82,18 +100,55 @@ update.mm_glmm <- function(object, formula., ..., evaluate = TRUE) {
   }
   args <- list(
     formula   = new_formula,
-    data      = mm_update_arg(overrides, "data", stats::model.frame(object)),
+    data      = mm_update_arg(overrides, "data",
+                              mm_update_data(object, new_formula, parent.frame())),
     family    = mm_update_arg(overrides, "family",
                               mm_glmm_family_from_info(object$family)),
     weights   = mm_update_arg(overrides, "weights", object$weights),
-    offset    = mm_update_arg(overrides, "offset", object$offset),
+    offset    = mm_update_arg(overrides, "offset", mm_fit_offset_arg(object)),
+    na.action = mm_update_arg(overrides, "na.action", mm_na_action_expr(object)),
     method    = mm_update_arg(overrides, "method", object$method),
     nAGQ      = mm_update_arg(overrides, "nAGQ", object$nAGQ),
     inference = mm_update_arg(overrides, "inference", object$inference_request),
     control   = mm_update_arg(overrides, "control",
                               object$control %||% mm_control(verbose = -1))
   )
-  mm_refit_call("glmm", args, evaluate, parent.frame())
+  if (is.null(args$na.action)) args$na.action <- NULL
+  mm_update_keep_na(object, mm_refit_call("glmm", args, evaluate, parent.frame()),
+                    overrides)
+}
+
+# The original fit's na.action as a call argument (lme4's update() re-uses
+# the stored call's na.action). Only the standard records are recognised;
+# NULL leaves the refit on its default (getOption("na.action")).
+mm_na_action_expr <- function(object) {
+  na <- object$na.action
+  if (inherits(na, "exclude")) return(quote(stats::na.exclude))
+  if (inherits(na, "omit")) return(quote(stats::na.omit))
+  NULL
+}
+
+# A refit of the stored model frame (no `data` override) sees no missing
+# values, so it would lose the na.action record; re-attach it so nobs()-sized
+# extractors and na.exclude padding match the original fit.
+mm_update_keep_na <- function(object, fit, overrides) {
+  na <- object$na.action
+  if (is.null(na) || "data" %in% names(overrides) ||
+      !inherits(fit, "mm_fit") || !is.null(fit$na.action) ||
+      !identical(nobs(fit), nobs(object))) {
+    return(fit)
+  }
+  if ("na.action" %in% names(overrides)) {
+    fn <- overrides[["na.action"]]
+    if (is.character(fn)) fn <- match.fun(fn)
+    cls <- if (identical(fn, stats::na.exclude)) "exclude" else
+      if (identical(fn, stats::na.omit)) "omit" else NULL
+    if (is.null(cls)) return(fit)
+    class(na) <- cls
+  }
+  fit$na.action <- na
+  attr(fit$model_frame, "na.action") <- na
+  fit
 }
 
 # Pick an override value if the user supplied the name (even as NULL), else the
@@ -101,6 +156,70 @@ update.mm_glmm <- function(object, formula., ..., evaluate = TRUE) {
 # not mentioned" (keep stored weights).
 mm_update_arg <- function(overrides, name, default) {
   if (name %in% names(overrides)) overrides[[name]] else default
+}
+
+# update() must not silently drop an argument it does not carry over (e.g.
+# `subset`, `na.action`, `contrasts`): the refit would differ from what the
+# caller asked for without any sign of it.
+mm_dots_names <- function(...) {
+  nms <- ...names()
+  if (is.null(nms)) return(rep("", ...length()))
+  nms[is.na(nms)] <- ""
+  nms
+}
+
+mm_check_update_overrides <- function(nms, supported, fitter) {
+  if (length(nms) && any(!nzchar(nms))) {
+    mm_abort(
+      message = "Arguments to update() other than the formula must be named.",
+      class = "mm_arg_error"
+    )
+  }
+  unknown <- setdiff(nms, supported)
+  if (length(unknown)) {
+    mm_abort(
+      message = sprintf(
+        paste0("update() cannot carry over %s for a %s() fit; supported ",
+               "arguments are %s. Call %s() directly for other options."),
+        paste(sprintf("`%s`", unknown), collapse = ", "), fitter,
+        paste(sprintf("`%s`", supported), collapse = ", "), fitter
+      ),
+      class = "mm_arg_error",
+      input = unknown
+    )
+  }
+  invisible(TRUE)
+}
+
+# The stored model frame holds only the variables of the original formula.
+# When the updated formula needs other columns, re-evaluate the original
+# `data` argument the way lme4's update() does (via the stored call).
+mm_update_data <- function(object, new_formula, env) {
+  frame <- object$model_frame
+  needed <- all.vars(new_formula)
+  if (all(needed %in% names(frame))) {
+    return(frame)
+  }
+  data_expr <- object$call$data
+  data <- if (!is.null(data_expr)) {
+    tryCatch(eval(data_expr, env), error = function(e) NULL)
+  }
+  if (!is.data.frame(data) || !all(needed %in% names(data)) ||
+      nrow(data) != nrow(frame)) {
+    missing <- setdiff(needed, names(frame))
+    mm_abort(
+      message = sprintf(
+        paste0("The updated formula uses %s, which the fit's stored model ",
+               "frame does not contain, and the original `data` could not be ",
+               "re-evaluated here to the same rows (e.g. the fit used `subset` ",
+               "or dropped NA rows). Pass it explicitly: update(fit, ..., data = d)."),
+        paste(sprintf("`%s`", missing), collapse = ", ")
+      ),
+      class = "mm_arg_error",
+      input = missing
+    )
+  }
+  data
 }
 
 # Reconstruct an R family object from the stored engine family info so a GLMM
@@ -114,6 +233,8 @@ mm_glmm_family_from_info <- function(info) {
     binomial = stats::binomial(link = link),
     poisson  = stats::poisson(link = link),
     gamma    = stats::Gamma(link = link),
+    inverse_gaussian = stats::inverse.gaussian(link = link),
+    gaussian = stats::gaussian(link = link),
     # NB carries its theta mode in family_info (see mm_glmm_family_info /
     # glmm()'s post-fit theta record): `nb_theta_estimated` stays TRUE for
     # estimate-mode fits even though `nb_theta` holds the fitted value, so

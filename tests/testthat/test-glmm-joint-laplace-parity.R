@@ -58,11 +58,18 @@ test_that("joint_laplace matches glmer on a Poisson random-intercept model", {
   mm_expect_glmer_joint_parity(m, gl)
 })
 
-test_that("the default profiled estimator is labelled distinctly from joint_laplace", {
+test_that("the default estimator is joint_laplace; profiled is labelled distinctly", {
   skip_if_not_installed("lme4")
   data(cbpp, package = "lme4")
   m <- glmm(cbind(incidence, size - incidence) ~ period + (1 | herd), cbpp,
             family = binomial(), control = mm_control(verbose = -1))
-  # default is the profiled path, a different estimator than glmer's joint Laplace
-  expect_identical(m$method, "pirls_profiled")
+  # default is glmer's joint Laplace estimator
+  expect_identical(m$method, "joint_laplace")
+  ref <- lme4::glmer(cbind(incidence, size - incidence) ~ period + (1 | herd),
+                     cbpp, family = binomial())
+  expect_equal(unname(fixef(m)), unname(lme4::fixef(ref)), tolerance = 1e-3)
+  p <- glmm(cbind(incidence, size - incidence) ~ period + (1 | herd), cbpp,
+            family = binomial(), method = "pirls_profiled",
+            control = mm_control(verbose = -1))
+  expect_identical(p$method, "pirls_profiled")
 })

@@ -254,8 +254,9 @@ test_that("df_for_contrast / estimability / confint bootstrap print edges", {
   expect_s3_class(pr, "mm_profile")
   out_pr <- capture.output(print(pr))
   expect_true(any(grepl("Profile-likelihood", out_pr, fixed = TRUE)))
-  # REML profile appends typed refusal rows for beta; print may note them.
-  expect_true(is.matrix(confint(pr, parm = "sigma")))
+  # REML fits are profiled on the ML deviance (lme4); rows use lme4 names.
+  expect_true(is.matrix(confint(pr, parm = ".sigma")))
+  expect_equal(nrow(confint(pr, parm = ".sigma")), 1L)
 })
 
 test_that("mm_lincomb LMM/GLMM and bad weights", {
@@ -420,10 +421,14 @@ test_that("getME extra names and fit_handle_alive true path", {
   parts <- getME(fit, c("flist", "cnms", "Lambda", "mu", "y"))
   expect_true(all(c("flist", "cnms", "Lambda", "mu", "y") %in% names(parts)))
 
-  expect_false(fit_handle_alive(fit))
-  live <- fit
-  live$rust_handle <- new("externalptr")
-  expect_true(fit_handle_alive(live))
+  # Fresh fits keep a live engine handle; a NULL external pointer (what
+  # readRDS() restores) is not alive.
+  expect_true(fit_handle_alive(fit))
+  dead <- fit
+  dead$rust_handle <- new("externalptr")
+  expect_false(fit_handle_alive(dead))
+  dead$rust_handle <- NULL
+  expect_false(fit_handle_alive(dead))
 
   sch <- mixeff:::mm_object_schema(fit$artifact)
   expect_true(is.list(sch) && "schema_name" %in% names(sch))
@@ -601,7 +606,7 @@ test_that("aliased coefficient print and design-weak VarCorr", {
   s <- summary(aliased)
   out_s <- capture.output(print(s))
   expect_true(is.character(out_s) && length(out_s) > 0L)
-  expect_true(any(s$coefficients$method == "aliased") ||
+  expect_true(any(s$coef_table$method == "aliased") ||
                 !is.null(attr(s$coefficients, "mm_aliased")))
 
   weak <- mk_cg3_design_weak()
@@ -791,9 +796,16 @@ test_that("glmm weights/offset and cbind validation", {
   )
   expect_error(
     glmm(y ~ x + (1 | g), df, family = binomial(),
-         offset = c(NA_real_, rep(0, 29)),
+         offset = c(Inf, rep(0, 29)),
          control = mm_control(verbose = -1)),
     class = "mm_arg_error"
+  )
+  # An NA offset is a missing value handled by na.action (model.frame()).
+  expect_error(
+    glmm(y ~ x + (1 | g), df, family = binomial(),
+         offset = c(NA_real_, rep(0, 29)), na.action = na.fail,
+         control = mm_control(verbose = -1)),
+    class = "mm_data_error"
   )
 
   succ <- rbinom(30, 5, 0.4)

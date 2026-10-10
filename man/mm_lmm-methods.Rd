@@ -38,8 +38,6 @@
 \alias{ngrps.default}
 \alias{ngrps.mm_lmm}
 \alias{ngrps.mm_glmm}
-\alias{weights.mm_lmm}
-\alias{weights.mm_glmm}
 \alias{extractAIC.mm_lmm}
 \alias{extractAIC.mm_glmm}
 \alias{terms.mm_lmm}
@@ -56,9 +54,9 @@ fixef(object, ...)
 
 \method{fixef}{default}(object, ...)
 
-\method{fixef}{mm_lmm}(object, ...)
+\method{fixef}{mm_lmm}(object, add.dropped = FALSE, ...)
 
-\method{fixef}{mm_glmm}(object, ...)
+\method{fixef}{mm_glmm}(object, add.dropped = FALSE, ...)
 
 ranef(object, ...)
 
@@ -90,7 +88,7 @@ VarCorr(x, ...)
 
 \method{deviance}{mm_lmm}(object, REML = NULL, ...)
 
-\method{deviance}{mm_glmm}(object, REML = NULL, ...)
+\method{deviance}{mm_glmm}(object, ...)
 
 \method{AIC}{mm_lmm}(object, ..., k = 2)
 
@@ -112,9 +110,9 @@ VarCorr(x, ...)
 
 \method{formula}{mm_glmm}(x, ...)
 
-\method{model.frame}{mm_lmm}(formula, ...)
+\method{model.frame}{mm_lmm}(formula, fixed.only = FALSE, ...)
 
-\method{model.frame}{mm_glmm}(formula, ...)
+\method{model.frame}{mm_glmm}(formula, fixed.only = FALSE, ...)
 
 ngrps(object, ...)
 
@@ -123,10 +121,6 @@ ngrps(object, ...)
 \method{ngrps}{mm_lmm}(object, ...)
 
 \method{ngrps}{mm_glmm}(object, ...)
-
-\method{weights}{mm_lmm}(object, ...)
-
-\method{weights}{mm_glmm}(object, ...)
 
 \method{extractAIC}{mm_lmm}(fit, scale, k = 2, ...)
 
@@ -151,19 +145,32 @@ ngrps(object, ...)
 \arguments{
 \item{object, x, formula, fit}{A fitted \code{mm_lmm} or \code{mm_glmm} object.}
 
-\item{...}{Reserved for generic compatibility.}
+\item{...}{Reserved for generic compatibility. For \code{\link[=AIC]{AIC()}} and \code{\link[=BIC]{BIC()}},
+further fitted models: with several models the result is the data frame
+\code{stats::AIC()} returns (\code{df} and \code{AIC}/\code{BIC}, rows named after the
+arguments).}
+
+\item{add.dropped}{For \code{fixef()}: if \code{TRUE}, coefficients dropped for
+rank deficiency are included as \code{NA} (lme4's \code{add.dropped}); by default
+they are omitted, as in lme4.}
 
 \item{condVar}{Logical; when \code{TRUE}, attach a \code{postVar} array of conditional
 variances to each random-effects table. Gaussian \code{\link[=lmm]{lmm()}} fits receive the
-conditional covariances computed by the engine. \code{\link[=glmm]{glmm()}} fits, and any fit
-whose conditional-variance computation refuses, receive an all-\code{NA}
-\code{postVar} plus an \code{mm_unavailable_reason} attribute rather than fabricated
+conditional covariances computed by the engine. \code{\link[=glmm]{glmm()}} fits receive
+lme4's Laplace-approximation conditional covariances
+\verb{sigma^2 * Lambda (Lambda'Z'WZ Lambda + I)^\{-1\} Lambda'} at the fitted
+modes, with \code{W} the final PIRLS working weights. A fit whose
+conditional-variance computation refuses receives an all-\code{NA} \code{postVar}
+plus an \code{mm_unavailable_reason} attribute rather than fabricated
 conditional variances.}
 
 \item{REML}{Ignored; included for S3 compatibility with likelihood and
 deviance generics.}
 
 \item{k}{Penalty per parameter for \code{\link[=AIC]{AIC()}}.}
+
+\item{fixed.only}{For \code{model.frame()}: return only the fixed-effect
+variables, as \code{lme4::model.frame.merMod()}.}
 
 \item{scale}{Ignored; included for S3 compatibility with \code{\link[=extractAIC]{extractAIC()}}.}
 
@@ -199,6 +206,60 @@ Produces the long form returned by \code{as.data.frame(lme4::ranef(.))}: columns
 \code{grpvar}, \code{term}, \code{grp}, \code{condval}, and \code{condsd}. \code{condsd} is the
 conditional standard deviation, taken from the \code{postVar} attribute when the
 modes were extracted with \code{condVar = TRUE}, and \code{NA} otherwise.
+}
+\details{
+These methods follow lme4's shapes. \code{coef()} returns, per grouping factor,
+every fixed-effect column (fixed-only columns repeated) plus the
+conditional modes, in lme4's column order. \code{VarCorr()} returns lme4's
+\code{VarCorr.merMod} structure: a named list of covariance matrices (one per
+random-effect term, so \code{VarCorr(fit)$Subject} is a matrix) with
+\code{"stddev"} and \code{"correlation"} attributes and list attributes \code{"sc"}
+(\code{sigma()}) and \code{"useSc"} (\code{TRUE} for LMMs; \code{FALSE} for every GLMM, as in
+lme4 >= 2.1-0, so GLMM random-effect SDs are absolute and no Residual row
+is printed); it prints like lme4 and
+\code{as.data.frame()} gives lme4's long form. mixeff's full-precision long
+table remains available as \code{VarCorr(fit)$table} (with \verb{$residual_sd}).
+\code{sigma()} of a binomial, Poisson or negative-binomial GLMM is 1, as in
+lme4 (the negative-binomial theta is \code{getME(fit, "glmer.nb.theta")}). For
+GLMMs with a free dispersion parameter (Gamma, inverse Gaussian, and
+Gaussian with a non-identity link) it is \code{sqrt(phi)} with
+\verb{phi = sum(deviance residuals^2) / (n - rank([X, Z]))}, the dispersion
+profiled during the fit, as in lme4 >= 2.1-0 (\code{glmerControl()} defaults
+\code{disp_method = "moment"}, \code{disp_dof_correction = TRUE}; lme4 < 2.1-0 used
+a different, biased estimate). \code{mm_control(disp_dof_correction = FALSE)}
+divides by \code{n} instead, and \code{mm_control(max_phi_iter = )} caps the \code{phi}
+iterations. With \code{mm_control(disp_method = "old/buggy")} the fit
+reproduces lme4 2.1-0's \code{disp_method = "old/buggy"}: PIRLS runs with
+\code{phi = 1}, so \code{weights(fit, "working")} does not carry \code{1/phi}, and
+\code{VarCorr()} reports theta itself as the random-effect SD, as lme4 2.1-0
+does. Under lme4 < 2.1-0 that SD was \code{sigma() * theta}. \code{deviance()} of a GLMM is the sum of squared deviance
+residuals, as \code{lme4::deviance.merMod()}; \code{-2 * logLik()} is the Laplace
+objective reported in \code{anova()}. \code{model.frame()} returns lme4's frame
+(transformed columns such as \code{log(y)}, a \code{terms} attribute, \code{(weights)}
+and \code{(offset)} columns); the raw variables the engine used are in
+\code{fit$model_frame}.
+
+\code{vcov()} of a joint-Laplace GLMM is the inverse of the finite-difference
+Hessian over the fixed effects and covariance parameters, glmer's default
+(\code{use.hessian = TRUE}). When that Hessian is not positive definite (or
+unavailable) the engine falls back to the fixed-effect block RX of the
+Laplace penalized least-squares factorization at the optimum,
+conditional on the covariance parameters -- glmer's
+\code{vcov(fit, use.hessian = FALSE)}, which glmer also falls back to with a
+warning. mixeff does the same: the matrix carries
+\code{attr(, "mm_method") == "laplace_rx_conditional_on_theta"}, reliability
+\code{"low"} and the engine's notes (\code{attr(, "mm_notes")}), and \code{vcov()} warns
+(class \code{mm_vcov_rx_fallback}). Such standard errors ignore the
+uncertainty in the covariance parameters.
+
+Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+(Gamma, inverse Gaussian, Gaussian with a non-identity link) the
+penalized least-squares factor already carries the \code{1 / phi} working
+weights, so mixeff's RX-based \code{vcov()} (\code{nAGQ = 0} fits, and the
+fallback above) is \code{unsc()} with no further \code{sigma^2} factor. lme4 >= 2.1-0
+still multiplies by \code{sigma()^2} there (and in \code{ranef(condVar = TRUE)}), so
+those values differ from lme4 2.1's by the factor \code{phi = sigma()^2};
+Hessian-based \code{vcov()} values agree.
 }
 \examples{
 set.seed(1)

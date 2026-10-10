@@ -4,6 +4,8 @@
 //! distance. Moved verbatim from the former single-file `linear.rs`.
 
 use super::*;
+use crate::compiler::KenwardRogerFScaling;
+use crate::stats::InferenceCovarianceMethod;
 
 impl LinearMixedModel {
     /// Coefficient table for the fixed effects.
@@ -27,6 +29,7 @@ impl LinearMixedModel {
             std_errors,
             self.fixed_effect_p_value_policy(),
         )
+        .with_covariance_method(InferenceCovarianceMethod::ModelBased)
     }
 
     /// Coefficient table using a degrees-of-freedom-based inference method
@@ -81,7 +84,7 @@ impl LinearMixedModel {
             }
         }
 
-        CoefTable::from_df_inference(
+        let mut coefficients = CoefTable::from_df_inference(
             names,
             estimates,
             std_errors,
@@ -91,7 +94,10 @@ impl LinearMixedModel {
             df,
             fixed_effect_statistic_name_label(resolved_stat),
             fixed_effect_inference_method_label(resolved_method),
-        )
+        );
+        coefficients.covariance_methods =
+            table.rows.iter().map(|row| row.covariance_method).collect();
+        coefficients
     }
 
     /// Build one zero-valued single-coefficient hypothesis per fixed effect.
@@ -151,6 +157,7 @@ impl LinearMixedModel {
         let estimability = assess_fixed_contrast_estimability(&hypothesis, &beta, &vcov);
         if estimability.status == EstimabilityStatus::NotEstimable {
             return FixedEffectTest {
+                covariance_method: InferenceCovarianceMethod::ModelBased,
                 hypothesis,
                 estimates,
                 standard_errors,
@@ -169,6 +176,7 @@ impl LinearMixedModel {
                 },
                 estimability,
                 notes: Vec::new(),
+                kenward_roger_f_scaling: None,
             };
         }
 
@@ -179,6 +187,7 @@ impl LinearMixedModel {
                 "multi-df asymptotic Wald contrast tests are not implemented in this scaffold"
                     .to_string();
             return FixedEffectTest {
+                covariance_method: InferenceCovarianceMethod::ModelBased,
                 hypothesis,
                 estimates,
                 standard_errors,
@@ -193,6 +202,7 @@ impl LinearMixedModel {
                 status: InferenceStatus::Unsupported { reason },
                 estimability,
                 notes: Vec::new(),
+                kenward_roger_f_scaling: None,
             };
         }
 
@@ -322,6 +332,7 @@ impl LinearMixedModel {
         let estimability = assess_fixed_contrast_estimability(&hypothesis, &beta, &vcov);
         if estimability.status == EstimabilityStatus::NotEstimable {
             return FixedEffectTest {
+                covariance_method: InferenceCovarianceMethod::ModelBased,
                 hypothesis,
                 estimates,
                 standard_errors,
@@ -337,6 +348,7 @@ impl LinearMixedModel {
                 },
                 estimability,
                 notes: Vec::new(),
+                kenward_roger_f_scaling: None,
             };
         }
 
@@ -466,50 +478,94 @@ impl LinearMixedModel {
         let mut fits = Vec::with_capacity(options.requested_replicates);
         let mut statistics = Vec::with_capacity(options.requested_replicates);
         let mut last_progress = 0usize;
+        crate::parallel::validate_threads(options.threads)?;
 
-        for replicate in 0..options.requested_replicates {
-            if let Some(callback) = &self.progress_callback {
-                callback.report_if_due(
-                    FitProgressPhase::Bootstrap,
-                    replicate + 1,
-                    Some(options.requested_replicates),
-                    &mut last_progress,
-                )?;
-            }
-            let y_sim = self.simulate_fixed_effect_null(&mut rng, target)?;
-            let mut work = self.clone();
-            work.suppress_derivative_diagnostics = true;
-            match work.refit(y_sim.as_slice()) {
-                Ok(()) => {
-                    statistics.push(
-                        fixed_effect_bootstrap_statistic(&work, hypothesis)
-                            .map(|statistic| statistic.value)
-                            .unwrap_or(f64::NAN),
-                    );
-                    fits.push(BootstrapReplicate {
-                        objective: work.objective(),
-                        sigma: work.sigma(),
-                        beta: work.beta(),
-                        se: work.stderror(),
-                        theta: work.theta(),
-                    });
+        if options.threads == 1 {
+            for replicate in 0..options.requested_replicates {
+                if let Some(callback) = &self.progress_callback {
+                    callback.report_if_due(
+                        FitProgressPhase::Bootstrap,
+                        replicate + 1,
+                        Some(options.requested_replicates),
+                        &mut last_progress,
+                    )?;
                 }
-                Err(error @ MixedModelError::Interrupted(_)) => return Err(error),
-                Err(_) => {
-                    let beta = work.beta();
-                    statistics.push(f64::NAN);
-                    fits.push(BootstrapReplicate {
-                        objective: f64::NAN,
-                        sigma: f64::NAN,
-                        se: DVector::from_element(beta.len(), f64::NAN),
-                        beta,
-                        theta: work.theta(),
-                    });
-                    if options.failed_refit_policy == BootstrapFailedRefitPolicy::Abort {
-                        break;
+                let y_sim = self.simulate_fixed_effect_null(&mut rng, target)?;
+                let mut work = self.clone();
+                work.suppress_derivative_diagnostics = true;
+                let (replicate, statistic, outcome) =
+                    null_bootstrap_refit(&mut work, &y_sim, hypothesis);
+                if let Err(error @ MixedModelError::Interrupted(_)) = outcome {
+                    return Err(error);
+                }
+                let failed = outcome.is_err();
+                fits.push(replicate);
+                statistics.push(statistic);
+                if failed && options.failed_refit_policy == BootstrapFailedRefitPolicy::Abort {
+                    break;
+                }
+            }
+        } else {
+            // Parallel refits: responses are simulated serially on this
+            // thread in the serial RNG order; each refit starts from a
+            // fresh clone of the fitted model (as the serial loop does), so
+            // replicates are bit-identical for every thread count. Host
+            // callbacks run only here, in replicate order.
+            let mut template = self.clone();
+            template.progress_callback = None;
+            template.suppress_derivative_diagnostics = true;
+            let total = options.requested_replicates;
+            // The serial loop reports progress for a replicate before
+            // simulating it, and stops (Abort policy) before simulating any
+            // later one. A simulation error is therefore deferred to its
+            // replicate's turn in the in-order consumer below.
+            let simulation_error = std::cell::RefCell::new(None);
+            let rng = &mut rng;
+            crate::parallel::pipeline(
+                options.threads,
+                total,
+                &mut |_| {
+                    if simulation_error.borrow().is_some() {
+                        return Ok(None);
                     }
-                }
-            }
+                    match self.simulate_fixed_effect_null(rng, target) {
+                        Ok(y_sim) => Ok(Some(y_sim)),
+                        Err(error) => {
+                            *simulation_error.borrow_mut() = Some(error);
+                            Ok(None)
+                        }
+                    }
+                },
+                || (),
+                |_, y_sim: Option<DVector<f64>>| {
+                    y_sim.map(|y_sim| {
+                        let mut work = template.clone();
+                        null_bootstrap_refit(&mut work, &y_sim, hypothesis)
+                    })
+                },
+                &mut |index, outcome: Option<(BootstrapReplicate, f64, Result<()>)>| {
+                    if let Some(callback) = &self.progress_callback {
+                        callback.report_if_due(
+                            FitProgressPhase::Bootstrap,
+                            index + 1,
+                            Some(total),
+                            &mut last_progress,
+                        )?;
+                    }
+                    let Some((replicate, statistic, outcome)) = outcome else {
+                        return Err(simulation_error.borrow_mut().take().unwrap_or_else(|| {
+                            MixedModelError::InvalidArgument(
+                                "fixed-effect null bootstrap simulation failed".to_string(),
+                            )
+                        }));
+                    };
+                    let failed = outcome.is_err();
+                    fits.push(replicate);
+                    statistics.push(statistic);
+                    Ok(!(failed
+                        && options.failed_refit_policy == BootstrapFailedRefitPolicy::Abort))
+                },
+            )?;
         }
 
         let bootstrap = MixedModelBootstrap { fits };
@@ -585,6 +641,25 @@ impl LinearMixedModel {
             ));
         }
 
+        // Other random-effect grouping columns nested within the cluster
+        // (e.g. classroom ids within schools) are relabeled per draw along
+        // with the cluster, so a cluster drawn twice contributes two
+        // independent sets of nested units instead of merging them.
+        let nested_within_group = data.categorical_columns_nested_within(group)?;
+        let mut nested_grouping_columns: Vec<String> = Vec::new();
+        for term in &self.formula.random_terms {
+            let names: Vec<&String> = match &term.grouping {
+                crate::formula::GroupingFactor::Single(name) => vec![name],
+                crate::formula::GroupingFactor::Interaction(names)
+                | crate::formula::GroupingFactor::Cell(names) => names.iter().collect(),
+            };
+            for name in names {
+                if nested_within_group.contains(name) && !nested_grouping_columns.contains(name) {
+                    nested_grouping_columns.push(name.clone());
+                }
+            }
+        }
+
         let mut rng = match options.seed {
             Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
             None => rand::rngs::StdRng::from_entropy(),
@@ -604,7 +679,8 @@ impl LinearMixedModel {
                     &mut last_progress,
                 )?;
             }
-            let (resampled, draw) = data.cluster_resample(group, &mut rng)?;
+            let (resampled, draw) =
+                data.cluster_resample_with_nested(group, &nested_grouping_columns, &mut rng)?;
             distinct_counts.push(draw.distinct_sampled_level_count);
             duplicate_counts.push(draw.duplicate_count);
 
@@ -681,6 +757,12 @@ impl LinearMixedModel {
         metadata.notes.push(format!(
             "cluster_resample group={group}, relabeling_policy=replicate_local_unique_levels"
         ));
+        if !nested_grouping_columns.is_empty() {
+            metadata.notes.push(format!(
+                "cluster_resample relabeled nested grouping factor(s) per draw: {}",
+                nested_grouping_columns.join(", ")
+            ));
+        }
         if let (Some(min_distinct), Some(max_duplicates)) =
             (distinct_counts.iter().min(), duplicate_counts.iter().max())
         {
@@ -1034,7 +1116,9 @@ impl LinearMixedModel {
             return ReliabilityGrade::Low;
         }
 
-        let Some(certificate) = &self.compiler_artifact.optimizer_certificate else {
+        // Reads derivative evidence, so go through the inspected artifact
+        // (completes deferred finite-difference evidence on first use).
+        let Some(certificate) = &self.inspection_artifact().optimizer_certificate else {
             return ReliabilityGrade::Low;
         };
 
@@ -1075,6 +1159,36 @@ impl LinearMixedModel {
         }
     }
 
+    /// The hypothesis-independent Satterthwaite ingredients at the fitted
+    /// `varpar = c(θ̂, σ̂)`: the `vcov_beta` Jacobian and the `vcov_varpar`
+    /// Hessian estimate. Computed once per fitted state and shared by every
+    /// row of an inference table (each row used to clone the model and redo
+    /// both, which dominated table cost); the cache is keyed on the bits of
+    /// θ, σ, β, the objective and the REML flag, so any refit or state
+    /// change recomputes.
+    fn satterthwaite_ingredients(&self) -> std::sync::Arc<SatterthwaiteIngredients> {
+        let mut varpar = self.theta();
+        varpar.push(self.sigma());
+        let mut key: Vec<u64> = varpar.iter().map(|v| v.to_bits()).collect();
+        key.extend(self.beta().iter().map(|v| v.to_bits()));
+        key.push(self.optsum.fmin.to_bits());
+        key.push(u64::from(self.optsum.reml));
+        if let Some(hit) = self.satterthwaite_cache.get(&key) {
+            return hit;
+        }
+        let mut evaluator = self.clone();
+        let computed = match evaluator.jac_vcov_beta_varpar(&varpar) {
+            Err(error) => Err(SatterthwaiteIngredientError::Jacobian(error.to_string())),
+            Ok(jacobian) => match evaluator.vcov_varpar(&varpar, self.optsum.reml) {
+                Err(error) => Err(SatterthwaiteIngredientError::VcovVarpar(error.to_string())),
+                Ok(estimate) => Ok((jacobian, estimate)),
+            },
+        };
+        let computed = std::sync::Arc::new(computed);
+        self.satterthwaite_cache.set(key, computed.clone());
+        computed
+    }
+
     fn satterthwaite_fixed_effect_test(
         &self,
         hypothesis: FixedEffectHypothesis,
@@ -1102,12 +1216,10 @@ impl LinearMixedModel {
             );
         }
 
-        let mut varpar = self.theta();
-        varpar.push(self.sigma());
-        let mut evaluator = self.clone();
-        let jacobian = match evaluator.jac_vcov_beta_varpar(&varpar) {
-            Ok(jacobian) => jacobian,
-            Err(error) => {
+        let ingredients = self.satterthwaite_ingredients();
+        let (jacobian, vcov_varpar) = match &*ingredients {
+            Ok((jacobian, vcov_varpar)) => (jacobian, vcov_varpar.clone()),
+            Err(SatterthwaiteIngredientError::Jacobian(error)) => {
                 return fixed_effect_test_not_assessed_with_method(
                     hypothesis,
                     estimates,
@@ -1118,10 +1230,7 @@ impl LinearMixedModel {
                     format!("Satterthwaite fixed-effect inference could not compute vcov_beta derivatives: {error}"),
                 );
             }
-        };
-        let vcov_varpar = match evaluator.vcov_varpar(&varpar, self.optsum.reml) {
-            Ok(estimate) => estimate,
-            Err(error) => {
+            Err(SatterthwaiteIngredientError::VcovVarpar(error)) => {
                 return fixed_effect_test_not_assessed_with_method(
                     hypothesis,
                     estimates,
@@ -1280,7 +1389,7 @@ impl LinearMixedModel {
             };
 
             let mut notes = vec![
-                "Satterthwaite multi-df F row computed from eigen-directions of L V_beta L' and finite-difference vcov_beta Jacobian over varpar"
+                "Satterthwaite multi-df F row computed from eigen-directions of L V_beta L' and analytic vcov_beta Jacobian over varpar"
                     .to_string(),
             ];
             if q < hypothesis.n_contrasts() {
@@ -1292,6 +1401,7 @@ impl LinearMixedModel {
             notes.extend(vcov_varpar.notes);
 
             return FixedEffectTest {
+                covariance_method: InferenceCovarianceMethod::ModelBased,
                 hypothesis,
                 estimates,
                 standard_errors,
@@ -1304,6 +1414,7 @@ impl LinearMixedModel {
                 status: InferenceStatus::Available,
                 estimability,
                 notes,
+                kenward_roger_f_scaling: None,
             };
         }
 
@@ -1396,12 +1507,13 @@ impl LinearMixedModel {
         };
 
         let mut notes = vec![
-            "Satterthwaite denominator df computed from finite-difference vcov_beta Jacobian and deviance Hessian over varpar"
+            "Satterthwaite denominator df computed from analytic vcov_beta Jacobian and finite-difference deviance Hessian over varpar"
                 .to_string(),
         ];
         notes.extend(vcov_varpar.notes);
 
         FixedEffectTest {
+            covariance_method: InferenceCovarianceMethod::ModelBased,
             hypothesis,
             estimates,
             standard_errors,
@@ -1414,6 +1526,7 @@ impl LinearMixedModel {
             status: InferenceStatus::Available,
             estimability,
             notes,
+            kenward_roger_f_scaling: None,
         }
     }
 
@@ -1490,7 +1603,7 @@ impl LinearMixedModel {
                 estimability,
                 "Kenward-Roger fixed-effect inference produced a non-finite adjusted contrast covariance"
                     .to_string(),
-            );
+            ).with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
         }
 
         let mut notes = vec![
@@ -1498,7 +1611,7 @@ impl LinearMixedModel {
                 .to_string(),
         ];
         notes.extend(adjusted.notes);
-        notes.extend(lbddf.notes);
+        notes.extend(lbddf.notes.iter().cloned());
 
         if hypothesis.n_contrasts() == 1 {
             let Some(std_error) = adjusted_standard_errors.first().copied().flatten() else {
@@ -1511,7 +1624,7 @@ impl LinearMixedModel {
                     estimability,
                     "Kenward-Roger fixed-effect inference requires an available adjusted standard error"
                         .to_string(),
-                );
+                ).with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
             };
             let var_con = std_error * std_error;
             if !var_con.is_finite() || var_con <= 0.0 {
@@ -1524,7 +1637,7 @@ impl LinearMixedModel {
                     estimability,
                     "Kenward-Roger fixed-effect inference requires a finite positive adjusted contrast variance"
                         .to_string(),
-                );
+                ).with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
             }
             let statistic = estimates[0] / std_error;
             let p_value = match StudentsT::new(0.0, 1.0, lbddf.denominator_df) {
@@ -1540,10 +1653,11 @@ impl LinearMixedModel {
                         format!(
                             "Kenward-Roger fixed-effect inference could not construct Student-t distribution: {error}"
                         ),
-                    );
+                    ).with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
                 }
             };
             return FixedEffectTest {
+                covariance_method: InferenceCovarianceMethod::KenwardRogerAdjusted,
                 hypothesis,
                 estimates,
                 standard_errors: adjusted_standard_errors,
@@ -1556,6 +1670,7 @@ impl LinearMixedModel {
                 status: InferenceStatus::Available,
                 estimability,
                 notes,
+                kenward_roger_f_scaling: None,
             };
         }
 
@@ -1573,7 +1688,8 @@ impl LinearMixedModel {
                 estimability,
                 "Kenward-Roger fixed-effect inference produced a non-finite F quadratic form"
                     .to_string(),
-            );
+            )
+            .with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
         }
         let f_statistic = quadratic / q as f64;
         if !f_statistic.is_finite() || f_statistic < 0.0 {
@@ -1586,10 +1702,11 @@ impl LinearMixedModel {
                 estimability,
                 "Kenward-Roger fixed-effect inference produced a non-finite F statistic"
                     .to_string(),
-            );
+            )
+            .with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
         }
-        let p_value = match FisherSnedecor::new(q as f64, lbddf.denominator_df) {
-            Ok(f_dist) => Some(1.0 - f_dist.cdf(f_statistic)),
+        let f_dist = match FisherSnedecor::new(q as f64, lbddf.denominator_df) {
+            Ok(f_dist) => f_dist,
             Err(error) => {
                 return fixed_effect_test_not_assessed_with_method(
                     hypothesis,
@@ -1601,19 +1718,40 @@ impl LinearMixedModel {
                     format!(
                         "Kenward-Roger fixed-effect inference could not construct F distribution: {error}"
                     ),
-                );
+                ).with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
             }
         };
-        notes.push(
-            "Kenward-Roger multi-df F row uses F scaling = 1.0 in the current row payload"
-                .to_string(),
-        );
+        // pbkrtest::KRmodcomp's `Ftest` row: the Wald F on the adjusted
+        // covariance (`FtestU`) times the Kenward-Roger scaling factor λ,
+        // referred to F(q, ddf).
+        let f_scaling = lbddf.f_scaling();
+        if !f_scaling.is_finite() || f_scaling <= 0.0 {
+            return fixed_effect_test_not_assessed_with_method(
+                hypothesis,
+                estimates,
+                adjusted_standard_errors,
+                statistics,
+                method,
+                estimability,
+                format!(
+                    "Kenward-Roger fixed-effect inference produced an invalid F scaling factor {f_scaling}"
+                ),
+            )
+            .with_covariance_method(InferenceCovarianceMethod::KenwardRogerAdjusted);
+        }
+        let unscaled_p_value = Some(1.0 - f_dist.cdf(f_statistic));
+        let scaled_statistic = f_scaling * f_statistic;
+        let p_value = Some(1.0 - f_dist.cdf(scaled_statistic));
+        notes.push(format!(
+            "Kenward-Roger multi-df F is scaled by lambda = {f_scaling} (pbkrtest KRmodcomp Ftest); the unscaled F (FtestU) is {f_statistic}"
+        ));
 
         FixedEffectTest {
+            covariance_method: InferenceCovarianceMethod::KenwardRogerAdjusted,
             hypothesis,
             estimates,
             standard_errors: adjusted_standard_errors,
-            statistics: vec![Some(f_statistic)],
+            statistics: vec![Some(scaled_statistic)],
             numerator_df: Some(q as f64),
             denominator_df: Some(lbddf.denominator_df),
             p_values: vec![p_value],
@@ -1622,6 +1760,11 @@ impl LinearMixedModel {
             status: InferenceStatus::Available,
             estimability,
             notes,
+            kenward_roger_f_scaling: Some(KenwardRogerFScaling {
+                f_scaling,
+                unscaled_statistic: f_statistic,
+                unscaled_p_value,
+            }),
         }
     }
 
@@ -1886,6 +2029,7 @@ impl LinearMixedModel {
         notes.extend(payload.metadata.notes.clone());
 
         FixedEffectTest {
+            covariance_method: InferenceCovarianceMethod::ModelBased,
             hypothesis,
             estimates,
             standard_errors,
@@ -1898,6 +2042,7 @@ impl LinearMixedModel {
             status: InferenceStatus::Available,
             estimability,
             notes,
+            kenward_roger_f_scaling: None,
         }
     }
 
@@ -2053,6 +2198,14 @@ impl LinearMixedModel {
                     notes,
                 )
             }
+            FixedEffectCovarianceMethod::LaplaceRxConditionalOnTheta => {
+                FixedEffectCovarianceMatrix::laplace_rx_conditional_on_theta(
+                    coef_names,
+                    matrix_rows(&vcov),
+                    details,
+                    notes,
+                )
+            }
             FixedEffectCovarianceMethod::Unavailable => unreachable!(
                 "available covariance constructor should not be called with unavailable method"
             ),
@@ -2129,6 +2282,7 @@ impl LinearMixedModel {
     }
 }
 
+#[cfg_attr(not(any(test, feature = "unstable-internals")), allow(dead_code))]
 pub(super) fn kenward_roger_covariance_component_count(reterm: &ReMat) -> usize {
     reterm.inds.len()
 }
@@ -2145,6 +2299,7 @@ pub(super) fn kenward_roger_covariance_component_indices(reterm: &ReMat) -> Vec<
         .collect()
 }
 
+#[cfg_attr(not(any(test, feature = "unstable-internals")), allow(dead_code))]
 pub(super) fn kenward_roger_response_component(
     reterm: &ReMat,
     row: usize,
@@ -2743,6 +2898,7 @@ pub(super) fn fixed_effect_test_to_inference_row(
     let reliability_reason = fixed_effect_reliability_reason(&test);
     let details = fixed_effect_details_for_test(kind, &test, statistic_name);
     FixedEffectInferenceRow {
+        covariance_method: test.covariance_method,
         label: test.hypothesis.label.clone(),
         kind,
         estimate: finite_option(test.estimates.first().copied()),
@@ -2774,9 +2930,14 @@ fn fixed_effect_details_for_test(
     let kenward_roger =
         (test.method == InferenceMethod::KenwardRoger).then(|| KenwardRogerInferenceDetails {
             restriction_rank: test.estimability.rank,
-            f_scaling: (statistic_name == Some(FixedEffectStatisticName::F)).then_some(1.0),
-            statistic_scale: (statistic_name == Some(FixedEffectStatisticName::F))
-                .then(|| "unscaled".to_string()),
+            f_scaling: test.kenward_roger_f_scaling.map(|s| s.f_scaling),
+            statistic_scale: test
+                .kenward_roger_f_scaling
+                .map(|_| "kenward_roger_scaled".to_string()),
+            unscaled_statistic: test.kenward_roger_f_scaling.map(|s| s.unscaled_statistic),
+            unscaled_p_value: test
+                .kenward_roger_f_scaling
+                .and_then(|s| s.unscaled_p_value),
         });
     let details = FixedEffectInferenceDetails {
         bootstrap: None,
@@ -2984,10 +3145,11 @@ fn fixed_effect_test_asymptotic_wald_z(
     let normal = Normal::new(0.0, 1.0).unwrap();
     let p_values = statistics
         .iter()
-        .map(|stat| stat.map(|z| 2.0 * (1.0 - normal.cdf(z.abs()))))
+        .map(|stat| stat.map(|z| 2.0 * normal.sf(z.abs())))
         .collect::<Vec<_>>();
     let p_value_available = p_values.iter().all(Option::is_some);
     FixedEffectTest {
+        covariance_method: InferenceCovarianceMethod::ModelBased,
         hypothesis,
         estimates,
         standard_errors,
@@ -3009,6 +3171,7 @@ fn fixed_effect_test_asymptotic_wald_z(
         notes: vec![
             "asymptotic Wald z is a labeled fallback, not a finite-sample correction".to_string(),
         ],
+        kenward_roger_f_scaling: None,
     }
 }
 
@@ -3021,6 +3184,7 @@ fn fixed_effect_test_p_value_unavailable(
     reason: String,
 ) -> FixedEffectTest {
     FixedEffectTest {
+        covariance_method: InferenceCovarianceMethod::ModelBased,
         hypothesis,
         estimates,
         standard_errors,
@@ -3035,6 +3199,7 @@ fn fixed_effect_test_p_value_unavailable(
         status: InferenceStatus::PValueUnavailable { reason },
         estimability,
         notes: Vec::new(),
+        kenward_roger_f_scaling: None,
     }
 }
 
@@ -3049,6 +3214,7 @@ fn fixed_effect_test_not_assessed_with_method(
 ) -> FixedEffectTest {
     let n = hypothesis.n_contrasts();
     FixedEffectTest {
+        covariance_method: InferenceCovarianceMethod::ModelBased,
         hypothesis,
         estimates,
         standard_errors,
@@ -3063,6 +3229,7 @@ fn fixed_effect_test_not_assessed_with_method(
         },
         estimability,
         notes: vec![reason],
+        kenward_roger_f_scaling: None,
     }
 }
 
@@ -3080,6 +3247,7 @@ fn fixed_effect_test_unavailable(
         | InferenceStatus::Unsupported { reason } => reason.clone(),
     };
     FixedEffectTest {
+        covariance_method: InferenceCovarianceMethod::Unavailable,
         hypothesis,
         estimates: vec![f64::NAN; n],
         standard_errors: vec![None; n],
@@ -3092,5 +3260,153 @@ fn fixed_effect_test_unavailable(
         status,
         estimability,
         notes: Vec::new(),
+        kenward_roger_f_scaling: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn asymptotic_wald_helper_preserves_normal_tails_and_unavailability() {
+        // R oracle: 2 * pnorm(abs(z), lower.tail = FALSE). The final case
+        // is true f64 underflow, unlike the two preceding representable tails.
+        let cases = [
+            (0.0, 1.0),
+            (8.0, 1.244_192_114_854_357e-15),
+            (-8.0, 1.244_192_114_854_357e-15),
+            (10.727_955_489_07, 7.524_247_963_015_023e-27),
+            (-10.727_955_489_07, 7.524_247_963_015_023e-27),
+            (16.1155, 1.985_514_938_996_619e-58),
+            (-16.1155, 1.985_514_938_996_619e-58),
+            (40.0, 0.0),
+        ];
+
+        for (z, expected) in cases {
+            let hypothesis = FixedEffectHypothesis::single_coefficient("x", 0, 1).unwrap();
+            let test = fixed_effect_test_asymptotic_wald_z(
+                hypothesis,
+                vec![z],
+                vec![Some(1.0)],
+                vec![Some(z)],
+                FixedContrastEstimability::estimable("x", 1, 1),
+            );
+            let actual = test.p_values[0].unwrap();
+            if expected == 0.0 {
+                assert_eq!(actual, 0.0, "z={z}");
+            } else {
+                assert!(actual > 0.0, "z={z} must not lose a representable tail");
+                assert!(
+                    (actual - expected).abs() / expected < 1e-9,
+                    "z={z}: expected {expected:e}, got {actual:e}"
+                );
+            }
+            assert_eq!(test.status, InferenceStatus::Available);
+        }
+
+        let unavailable = fixed_effect_test_asymptotic_wald_z(
+            FixedEffectHypothesis::single_coefficient("x", 0, 1).unwrap(),
+            vec![0.0],
+            vec![None],
+            vec![None],
+            FixedContrastEstimability::estimable("x", 1, 1),
+        );
+        assert_eq!(unavailable.p_values, vec![None]);
+        assert!(matches!(
+            unavailable.status,
+            InferenceStatus::PValueUnavailable { .. }
+        ));
+    }
+}
+
+/// Hypothesis-independent Satterthwaite inputs (see
+/// `LinearMixedModel::satterthwaite_ingredients`).
+pub(crate) type SatterthwaiteIngredients =
+    std::result::Result<(Vec<DMatrix<f64>>, VcovVarparEstimate), SatterthwaiteIngredientError>;
+
+/// Which Satterthwaite ingredient could not be computed (with the error
+/// text the row's not-assessed reason quotes).
+#[derive(Debug, Clone)]
+pub(crate) enum SatterthwaiteIngredientError {
+    Jacobian(String),
+    VcovVarpar(String),
+}
+
+/// Per-model memo of [`SatterthwaiteIngredients`] keyed on the fitted
+/// state's bits. Cloning a model starts with an empty cache.
+#[derive(Default)]
+pub(crate) struct SatterthwaiteCache(
+    std::sync::Mutex<Option<(Vec<u64>, std::sync::Arc<SatterthwaiteIngredients>)>>,
+);
+
+impl SatterthwaiteCache {
+    fn get(&self, key: &[u64]) -> Option<std::sync::Arc<SatterthwaiteIngredients>> {
+        let guard = self.0.lock().ok()?;
+        guard
+            .as_ref()
+            .filter(|(cached_key, _)| cached_key.as_slice() == key)
+            .map(|(_, value)| value.clone())
+    }
+
+    fn set(&self, key: Vec<u64>, value: std::sync::Arc<SatterthwaiteIngredients>) {
+        if let Ok(mut guard) = self.0.lock() {
+            *guard = Some((key, value));
+        }
+    }
+}
+
+impl Clone for SatterthwaiteCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for SatterthwaiteCache {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("SatterthwaiteCache")
+    }
+}
+
+/// One fixed-effect-null bootstrap refit: the replicate record, its test
+/// statistic (NaN on failure), and the refit outcome (an `Interrupted`
+/// error is only possible when the model carries a host callback, i.e.
+/// never on worker threads).
+fn null_bootstrap_refit(
+    work: &mut LinearMixedModel,
+    y_sim: &DVector<f64>,
+    hypothesis: &FixedEffectHypothesis,
+) -> (BootstrapReplicate, f64, Result<()>) {
+    match work.refit_with_start(y_sim.as_slice(), RefitStart::Fitted) {
+        Ok(()) => {
+            let statistic = fixed_effect_bootstrap_statistic(work, hypothesis)
+                .map(|statistic| statistic.value)
+                .unwrap_or(f64::NAN);
+            (
+                BootstrapReplicate {
+                    objective: work.objective(),
+                    sigma: work.sigma(),
+                    beta: work.beta(),
+                    se: work.stderror(),
+                    theta: work.theta(),
+                },
+                statistic,
+                Ok(()),
+            )
+        }
+        Err(error) => {
+            let beta = work.beta();
+            (
+                BootstrapReplicate {
+                    objective: f64::NAN,
+                    sigma: f64::NAN,
+                    se: DVector::from_element(beta.len(), f64::NAN),
+                    beta,
+                    theta: work.theta(),
+                },
+                f64::NAN,
+                Err(error),
+            )
+        }
     }
 }

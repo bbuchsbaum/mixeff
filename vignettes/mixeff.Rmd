@@ -22,8 +22,11 @@ library(mixeff)
 
 If you fit mixed-effects models in R, you most likely use
 `lme4::lmer()`. `mixeff::lmm()` speaks the same formula language, and
-the extractors — `fixef()`, `ranef()`, `VarCorr()`, `predict()`,
-`simulate()`, `anova()`, `summary()`, `update()` — do what you expect.
+the familiar extractors — `fixef()`, `ranef()`, `VarCorr()`, `predict()`,
+`simulate()`, `anova()`, `summary()`, `update()` — are there. Where their
+output or coverage differs from lme4 (for example the default
+`confint()` method, or `simulate()` being LMM-only), `vignette("lme4-migration")` lists
+it.
 On the package's supported envelope, statistical answers agree with
 `lme4` within documented tolerances on the parity datasets shipped
 with the package; the envelope itself is documented, closed, and
@@ -113,7 +116,8 @@ stopifnot(length(fitted(fit)) == nrow(sleep_like))
 ```
 
 `fixef()`, `ranef()`, `VarCorr()`, `predict()`, `simulate()`, `anova()`, and
-`summary()` all do what you expect.
+`summary()` all work on this fit; `vignette("lme4-migration")` lists where
+their output differs from lme4's.
 
 ## B. When a fit is degenerate, the object says so
 

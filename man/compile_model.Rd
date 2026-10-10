@@ -63,7 +63,7 @@ not match the wrapper's known schema set.
 }
 
 \examples{
-\dontrun{
+set.seed(1)
 df <- data.frame(
   y       = rnorm(20),
   x       = rnorm(20),
@@ -71,7 +71,6 @@ df <- data.frame(
 )
 spec <- compile_model(y ~ x + (1 + x | subject), df)
 audit(spec)
-}
 
 }
 \seealso{

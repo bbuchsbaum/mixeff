@@ -18,6 +18,108 @@ pub(crate) struct OutcomeCounts {
     failures: usize,
 }
 
+/// Per-observation response constants for the retained-constant GLMM
+/// objective, with the response, prior weights and family they were built
+/// from (the cache key; see `GeneralizedLinearMixedModel::response_log_constants`).
+#[derive(Debug, Clone)]
+pub(super) struct ResponseLogConstants {
+    family: Family,
+    y: Vec<f64>,
+    wt: Vec<f64>,
+    values: Vec<f64>,
+}
+
+impl ResponseLogConstants {
+    /// Bitwise match on the key: any change to a response value or weight
+    /// (including a NaN payload or a signed zero) invalidates the cache.
+    fn matches(&self, family: Family, y: &[f64], wt: &[f64]) -> bool {
+        #[cfg(test)]
+        RESPONSE_LOG_CONSTANT_KEY_CHECKS.with(|count| count.set(count.get() + 1));
+        fn same_bits(a: &[f64], b: &[f64]) -> bool {
+            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits())
+        }
+        self.family == family && same_bits(&self.y, y) && same_bits(&self.wt, wt)
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Number of O(n) cache-key comparisons (`ResponseLogConstants::matches`)
+    /// on this thread; tests use it to pin one check per objective evaluation.
+    pub(super) static RESPONSE_LOG_CONSTANT_KEY_CHECKS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
+/// Solve `D x = rhs` in place for a diagonal triangular factor `D`: the
+/// dense forward/back substitutions reduce to this when every off-diagonal
+/// entry is an exact zero.
+/// `L[j,j] x = rhs` (or `L[j,j]' x = rhs` when `transpose`) in place, for
+/// any diagonal-block storage, without densifying it.
+///
+/// The accumulation order per element is that of the dense
+/// `solve_dense_lower_against_rhs` / `solve_dense_upper_from_lower_transpose_against_rhs`
+/// on the densified block (whose off-block entries are exact zeros), so
+/// the solution is unchanged; the old route materialized a `q × q` dense
+/// copy of the block twice per PIRLS iteration.
+fn solve_l_diagonal_block_against_rhs(block: &MatrixBlock, rhs: &mut [f64], transpose: bool) {
+    match block {
+        MatrixBlock::Diagonal(diag) => solve_diagonal_against_rhs(diag.as_slice(), rhs),
+        MatrixBlock::Dense(l) => {
+            if transpose {
+                solve_dense_upper_from_lower_transpose_against_rhs(l, rhs);
+            } else {
+                solve_dense_lower_columnwise(l, rhs);
+            }
+        }
+        MatrixBlock::BlockDiagonal(blocks) => {
+            let mut offset = 0;
+            for l in blocks {
+                let s = l.nrows();
+                let part = &mut rhs[offset..offset + s];
+                if transpose {
+                    solve_dense_upper_from_lower_transpose_against_rhs(l, part);
+                } else {
+                    solve_dense_lower_columnwise(l, part);
+                }
+                offset += s;
+            }
+        }
+        MatrixBlock::Sparse(_) => {
+            let dense = block.as_dense();
+            if transpose {
+                solve_dense_upper_from_lower_transpose_against_rhs(&dense, rhs);
+            } else {
+                solve_dense_lower_columnwise(&dense, rhs);
+            }
+        }
+    }
+}
+
+/// Column-oriented forward substitution `L x = rhs`. Element `i`
+/// accumulates `rhs[i] - l[i,0] x[0] - l[i,1] x[1] - ...` in the same order
+/// as the row-oriented `solve_dense_lower_against_rhs`, so the result is
+/// bit-identical, but `L` is walked down its (contiguous) columns.
+fn solve_dense_lower_columnwise(l: &DMatrix<f64>, rhs: &mut [f64]) {
+    let n = rhs.len();
+    debug_assert_eq!(l.nrows(), n);
+    let data = l.as_slice();
+    for j in 0..n {
+        let col = &data[j * n..(j + 1) * n];
+        let x_j = rhs[j] / col[j];
+        rhs[j] = x_j;
+        for (value, &l_ij) in rhs[j + 1..].iter_mut().zip(&col[j + 1..]) {
+            *value -= l_ij * x_j;
+        }
+    }
+}
+
+fn solve_diagonal_against_rhs(diag: &[f64], rhs: &mut [f64]) {
+    debug_assert_eq!(diag.len(), rhs.len());
+    for (value, &d) in rhs.iter_mut().zip(diag) {
+        *value /= d;
+    }
+}
+
 pub(crate) fn is_binary_response(value: f64) -> bool {
     (value - 0.0).abs() < 1e-12 || (value - 1.0).abs() < 1e-12
 }
@@ -315,8 +417,6 @@ pub(crate) const NEGATIVE_BINOMIAL_THETA_MAX_ITERS: usize = 8;
 
 pub(crate) const NEGATIVE_BINOMIAL_THETA_TOL: f64 = 1.0e-5;
 
-pub(crate) const NEGATIVE_BINOMIAL_THETA_FINAL_REFIT_TOL: f64 = 1.0e-8;
-
 pub(crate) fn clamp_negative_binomial_theta(theta: f64) -> f64 {
     theta.clamp(NEGATIVE_BINOMIAL_THETA_MIN, NEGATIVE_BINOMIAL_THETA_MAX)
 }
@@ -325,7 +425,16 @@ pub(crate) fn negative_binomial_deviance_component(y: f64, mu: f64, theta: f64) 
     let mu = mu.max(f64::MIN_POSITIVE);
     let theta = theta.max(f64::MIN_POSITIVE);
     let first = if y == 0.0 { 0.0 } else { y * (y / mu).ln() };
-    let second = (y + theta) * ((y + theta) / (mu + theta)).ln();
+    // At large shape the ratio rounds close to one, and multiplying its
+    // logarithm by shape amplifies that rounding into conditional-objective
+    // noise. Form the small relative difference before taking log1p.
+    let relative_difference = (y - mu) / (mu + theta);
+    let log_ratio = if relative_difference.abs() < 0.5 {
+        relative_difference.ln_1p()
+    } else {
+        ((y + theta) / (mu + theta)).ln()
+    };
+    let second = (y + theta) * log_ratio;
     2.0 * (first - second)
 }
 
@@ -586,12 +695,13 @@ pub(crate) fn validate_glmm_response_domain(
                 "bernoulli GLMM response must be exactly 0 or 1; index {idx} has {value}"
             )));
         }
-        if family == Family::Binomial
-            && !(0.0..=1.0).contains(&value)
-            && !is_nonnegative_integer_response(value)
-        {
+        // The binomial deviance, likelihood and simulator all work on the
+        // proportion scale (successes / trials, with trials as prior
+        // weights); a count above 1 would make log(1 - y) NaN and the fit
+        // return non-finite estimates instead of an error.
+        if family == Family::Binomial && !(0.0..=1.0).contains(&value) {
             return Err(MixedModelError::InvalidArgument(format!(
-                "binomial GLMM response must be a proportion in [0, 1] or a non-negative integer count; index {idx} has {value}"
+                "binomial GLMM response must be a proportion in [0, 1] (successes / trials, with the trial counts passed as weights); index {idx} has {value}"
             )));
         }
         if family == Family::Poisson && value < 0.0 {
@@ -697,7 +807,15 @@ impl GeneralizedLinearMixedModel {
     /// optimizer probes tolerate it). `Err` is reserved for hard linear-
     /// algebra/state failures.
     pub fn pirls(&mut self, vary_beta: bool, verbose: bool) -> Result<bool> {
-        self.pirls_with_options(vary_beta, verbose, GLMM_PIRLS_MAX_ITER, true)
+        // A caller-driven PIRLS moves the fitted modes; deferred post-fit
+        // evidence must be produced from the fitted state first.
+        self.complete_deferred_inspection();
+        let max_iter = if vary_beta {
+            GLMM_PIRLS_MAX_ITER
+        } else {
+            GLMM_HESSIAN_PIRLS_MAX_ITER
+        };
+        self.pirls_with_options(vary_beta, verbose, max_iter, true)
     }
 
     fn pirls_with_options(
@@ -707,13 +825,34 @@ impl GeneralizedLinearMixedModel {
         max_iter: usize,
         reset_modes: bool,
     ) -> Result<bool> {
-        // Mirrors MixedModels.jl/src/generalizedlinearmixedmodel.jl pirls!
-        // (lines 614-669): step-halving toward the previous accepted iterate
-        // whenever a fresh IRLS step would worsen the Laplace objective. Keeps
-        // the outer optimizer's view of obj(θ) consistent across probes —
-        // without this, BOBYQA on multi-RE GLMM surfaces (e.g. grouseticks
-        // Poisson) sees noisy values and reports `RoundoffLimited`.
-        let tol = 1.0e-5;
+        let result = self.pirls_profiling_dispersion(vary_beta, verbose, max_iter, reset_modes);
+        // Fixed-β iterations update only the RE rows of the LMM's A/L (they
+        // are all the conditional-mode solve and the Laplace log-determinant
+        // read). The `[X|y]` rows are brought back in line with the final
+        // weights before PIRLS returns — on every exit path — so no reader
+        // outside PIRLS (β, vcov, the deferred joint Hessian, refits,
+        // prediction) ever sees them stale. The refresh is bit-identical to
+        // having rebuilt them on the last iteration.
+        // After a failed solve the RE rows of L may be a broken partial
+        // factor; extending it would clear the stale flags on garbage, so the
+        // flags stay set and the next full `update_l` rebuilds everything.
+        let converged = result?;
+        self.lmm.refresh_stale_fe_blocks()?;
+        Ok(converged)
+    }
+
+    pub(super) fn pirls_iterations(
+        &mut self,
+        vary_beta: bool,
+        verbose: bool,
+        max_iter: usize,
+        reset_modes: bool,
+    ) -> Result<bool> {
+        // The profiled fast path retains its Laplace-based halving rule.
+        // With beta fixed, solve the conditional penalized likelihood only:
+        // the Laplace determinant belongs to the outer objective, evaluated
+        // after the conditional modes and their weights have converged.
+        let tol = self.pirls_tolerance_override.unwrap_or(1.0e-5);
         let max_halvings = 10;
 
         let n = self.y.len();
@@ -725,21 +864,50 @@ impl GeneralizedLinearMixedModel {
                 u.fill(0.0);
             }
         }
-        for (i, rt) in self.lmm.reterms.iter().enumerate() {
-            self.b[i] = &rt.lambda * &self.u[i];
-        }
-        self.update_eta();
+        // (`update_eta_given_fixed` recomputes b = Λu in place.)
+        // With β held fixed, `offset + Xβ` is the same vector on every
+        // η update of this solve; form it once.
+        let fixed_eta = (!vary_beta).then(|| self.fixed_linear_predictor());
+        self.update_eta_given_fixed(fixed_eta.as_ref());
 
         // Save the initial accepted state for halving. The 1.0001 slack is
         // only an acceptance bound for the first step-halving loop; convergence
         // is compared with the uninflated accepted objective.
         let mut u_prev: Vec<DMatrix<f64>> = self.u.clone();
+        assert_eq!(
+            self.u.len(),
+            u_prev.len(),
+            "PIRLS current and previous random-effect blocks must stay aligned"
+        );
         let mut beta_prev = self.beta.clone();
-        let mut obj0 = self.laplace_objective();
-        let mut halving_bound = obj0 * 1.0001;
+        let mut obj0 = if vary_beta {
+            self.laplace_objective()
+        } else {
+            self.conditional_objective()
+        };
+        let mut halving_bound = if vary_beta {
+            obj0 * 1.0001
+        } else {
+            obj0 + 64.0 * f64::EPSILON * obj0.abs().max(1.0)
+        };
 
         let mut sqrtwts = vec![0.0f64; n];
         let mut working_y = vec![0.0f64; n];
+        let mut score_buf: Vec<DMatrix<f64>> = Vec::new();
+        // The data part of the score carries 1/φ; keep the stopping rule on
+        // the φ = 1 scale so a small dispersion does not demand a score below
+        // rounding error.
+        let score_tol = 1e-8 * self.pirls_phi().recip().max(1.0);
+        // Near the conditional mode a Newton step lowers the criterion by
+        // about score²/2 — far below the rounding error of the criterion, a
+        // sum over every observation. There the objective comparison is a
+        // coin toss decided by the platform's rounding (FMA contraction,
+        // libm `ln`/`exp`), and rejecting the step leaves the solve stalled
+        // above `score_tol`. A step whose criterion stays within this
+        // rounding band of the accepted one is therefore judged by the
+        // score it is driving to zero instead.
+        let n_criterion_terms = (n + self.u.iter().map(|u| u.len()).sum::<usize>()) as f64;
+        let criterion_rounding = 64.0 * f64::EPSILON * n_criterion_terms.sqrt();
 
         // Whether PIRLS reached its convergence tolerance within `max_iter`.
         // Returned to the caller so a non-converged conditional-mode solve is
@@ -762,33 +930,16 @@ impl GeneralizedLinearMixedModel {
                     &mut last_progress,
                 )?;
             }
-            // --- Compute IRLS weights and working response ---
-            for obs in 0..n {
-                let mu_obs = self.mu[obs];
-                let eta_obs = self.eta[obs];
-                let y_obs = self.y[obs];
-
-                let case_w = if self.wt.is_empty() {
-                    1.0
-                } else {
-                    self.wt[obs]
-                };
-                (sqrtwts[obs], working_y[obs]) =
-                    pirls_working_observation_with_offset_and_family_parameters(
-                        self.family,
-                        self.link,
-                        self.negative_binomial_theta,
-                        y_obs,
-                        eta_obs,
-                        mu_obs,
-                        case_w,
-                        self.offset[obs],
-                    );
+            self.update_pirls_working_state(vary_beta, &mut sqrtwts, &mut working_y)?;
+            let accepted_score = if vary_beta {
+                f64::INFINITY
+            } else {
+                self.conditional_mode_score_max_abs_with(&mut score_buf)
+            };
+            if accepted_score <= score_tol {
+                converged = true;
+                break;
             }
-
-            // --- Update the LMM with new IRLS weights ---
-            self.lmm.update_irls_weights(&sqrtwts, &working_y)?;
-            self.lmm.update_l()?;
 
             // --- Propose new β / u from the LMM solution ---
             let new_u = if vary_beta {
@@ -797,12 +948,15 @@ impl GeneralizedLinearMixedModel {
             } else {
                 self.ranef_u_given_beta(&self.beta)
             };
-            for (i, rt) in self.lmm.reterms.iter().enumerate() {
-                self.u[i].copy_from(&new_u[i]);
-                self.b[i] = &rt.lambda * &self.u[i];
+            for (u, new_u) in self.u.iter_mut().zip(&new_u) {
+                u.copy_from(new_u);
             }
-            self.update_eta();
-            let mut obj = self.laplace_objective();
+            self.update_eta_given_fixed(fixed_eta.as_ref());
+            let mut obj = if vary_beta {
+                self.laplace_objective()
+            } else {
+                self.conditional_objective()
+            };
 
             // --- Step-halving: average toward the previous accepted state
             //     until obj is no worse, up to `max_halvings` averagings. ---
@@ -810,43 +964,184 @@ impl GeneralizedLinearMixedModel {
             // so without the explicit check a NaN/Inf iterate would skip
             // halving and be silently accepted (audit 03·H2 defense-in-depth;
             // the family μ-floors above are the primary fix).
+            // A full fixed-β step the criterion cannot resolve (see
+            // `criterion_rounding`) is accepted when it lowers the score.
+            let accepted_by_score = !vary_beta
+                && obj.is_finite()
+                && obj > halving_bound
+                && obj - obj0 <= criterion_rounding * obj0.abs().max(1.0)
+                && self.conditional_mode_score_max_abs_with(&mut score_buf) < accepted_score;
+            if accepted_by_score {
+                halving_bound = obj;
+            }
             let mut nhalf = 0;
             while (!obj.is_finite() || obj > halving_bound) && nhalf < max_halvings {
                 nhalf += 1;
-                for i in 0..self.u.len() {
-                    self.u[i] = 0.5 * (&self.u[i] + &u_prev[i]);
+                for (u, previous_u) in self.u.iter_mut().zip(&u_prev) {
+                    *u = 0.5 * (&*u + previous_u);
                 }
                 if vary_beta {
                     self.beta = 0.5 * (&self.beta + &beta_prev);
                 }
-                for (i, rt) in self.lmm.reterms.iter().enumerate() {
-                    self.b[i] = &rt.lambda * &self.u[i];
-                }
-                self.update_eta();
-                obj = self.laplace_objective();
+                self.update_eta_given_fixed(fixed_eta.as_ref());
+                obj = if vary_beta {
+                    self.laplace_objective()
+                } else {
+                    self.conditional_objective()
+                };
+            }
+
+            if !vary_beta && (!obj.is_finite() || obj > halving_bound) {
+                // A failed line search is not a small successful step.
+                self.u.clone_from(&u_prev);
+                self.update_eta_given_fixed(fixed_eta.as_ref());
+                break;
             }
 
             if verbose {
                 eprintln!("  PIRLS iter {iter}: obj = {obj:.6} (nhalf = {nhalf})");
             }
 
-            if pirls_converged(obj, obj0, tol) {
+            if vary_beta && pirls_converged(obj, obj0, tol) {
                 converged = true;
                 break;
             }
 
             // Accept iterate as the new previous state.
-            for i in 0..self.u.len() {
-                u_prev[i].copy_from(&self.u[i]);
+            for (previous_u, u) in u_prev.iter_mut().zip(&self.u) {
+                previous_u.copy_from(u);
             }
             beta_prev = self.beta.clone();
             obj0 = obj;
-            halving_bound = obj;
+            halving_bound = if vary_beta {
+                obj
+            } else {
+                obj + 64.0 * f64::EPSILON * obj.abs().max(1.0)
+            };
         }
 
+        if !vary_beta {
+            // The Laplace determinant and AGQ scale must describe the final
+            // modes, including after an exhausted or failed conditional solve.
+            self.update_pirls_working_state(false, &mut sqrtwts, &mut working_y)?;
+            converged = self.conditional_mode_score_max_abs_with(&mut score_buf) <= score_tol;
+        }
         self.refresh_dispersion();
 
         Ok(converged)
+    }
+
+    pub(super) fn update_pirls_working_state(
+        &mut self,
+        vary_beta: bool,
+        sqrtwts: &mut [f64],
+        working_y: &mut [f64],
+    ) -> Result<()> {
+        // lme4 2.1 `sqrtWrkWt()`: μ'(η) sqrt(w / (φ V(μ))).
+        let phi = self.pirls_phi();
+        let inv_sqrt_phi = (phi != 1.0).then(|| 1.0 / phi.sqrt());
+        for obs in 0..self.y.len() {
+            (sqrtwts[obs], working_y[obs]) =
+                pirls_working_observation_with_offset_and_family_parameters(
+                    self.family,
+                    self.link,
+                    self.negative_binomial_theta,
+                    self.y[obs],
+                    self.eta[obs],
+                    self.mu[obs],
+                    self.case_weight(obs),
+                    self.offset[obs],
+                );
+            if let Some(scale) = inv_sqrt_phi {
+                sqrtwts[obs] *= scale;
+            }
+        }
+        if vary_beta {
+            self.lmm.update_irls_weights(sqrtwts, working_y)?;
+            self.lmm.update_l()
+        } else {
+            self.lmm.update_irls_weights_re_only(sqrtwts, working_y);
+            self.lmm.update_l_re_only()
+        }
+    }
+
+    /// Score of half the conditional deviance plus the standard-normal
+    /// random-effect penalty. Evaluate the actual mean/link, not the bounded
+    /// working approximation; invalid derivatives cannot certify convergence.
+    #[cfg(test)]
+    fn conditional_mode_score_max_abs(&self) -> f64 {
+        self.conditional_mode_score_max_abs_with(&mut Vec::new())
+    }
+
+    /// [`conditional_mode_score_max_abs`](Self::conditional_mode_score_max_abs)
+    /// accumulating into a caller-owned buffer, so PIRLS reuses one
+    /// allocation across iterations instead of cloning `u` each time.
+    fn conditional_mode_score_max_abs_with(&self, score: &mut Vec<DMatrix<f64>>) -> f64 {
+        let reusable = score.len() == self.u.len()
+            && score
+                .iter()
+                .zip(&self.u)
+                .all(|(s, u)| s.shape() == u.shape());
+        if reusable {
+            for (s, u) in score.iter_mut().zip(&self.u) {
+                s.copy_from(u);
+            }
+        } else {
+            score.clone_from(&self.u);
+        }
+        let phi = self.pirls_phi();
+        for obs in 0..self.y.len() {
+            let mu = self.mu[obs];
+            if !mu.is_finite() || !self.eta[obs].is_finite() {
+                return f64::INFINITY;
+            }
+            let in_domain = match self.family {
+                Family::Bernoulli | Family::Binomial => (0.0..=1.0).contains(&mu),
+                Family::Normal => true,
+                _ => mu > 0.0,
+            };
+            if !in_domain {
+                return f64::INFINITY;
+            }
+            let residual = match (self.family, self.link) {
+                (Family::Bernoulli | Family::Binomial, LinkFunction::Logit)
+                | (Family::Poisson, LinkFunction::Log)
+                | (Family::Normal, LinkFunction::Identity) => self.y[obs] - mu,
+                _ => {
+                    let variance = self.variance(mu);
+                    let derivative = self.link.mu_eta(self.eta[obs]);
+                    if !variance.is_finite()
+                        || variance <= 0.0
+                        || !derivative.is_finite()
+                        || derivative == 0.0
+                    {
+                        return f64::INFINITY;
+                    }
+                    (self.y[obs] - mu) * derivative / variance
+                }
+            } * self.case_weight(obs)
+                / phi;
+            if !residual.is_finite() {
+                return f64::INFINITY;
+            }
+            for (term, block) in self.lmm.reterms.iter().zip(score.iter_mut()) {
+                let level = term.refs[obs] as usize;
+                for col in 0..term.vsize {
+                    let z_lambda: f64 = (0..term.vsize)
+                        .map(|row| term.z[(row, obs)] * term.lambda[(row, col)])
+                        .sum();
+                    block[(col, level)] -= z_lambda * residual;
+                }
+            }
+        }
+        let mut maximum = 0.0_f64;
+        for value in score.iter().flat_map(|block| block.iter()) {
+            if !value.is_finite() {
+                return f64::INFINITY;
+            }
+            maximum = maximum.max(value.abs());
+        }
+        maximum
     }
 
     /// Conditional modes of the random effects with β held fixed.
@@ -856,6 +1151,10 @@ impl GeneralizedLinearMixedModel {
     /// `nAGQ > 0` surface where the candidate β is part of the outer parameter
     /// vector, so the inner PIRLS step must solve only for `u` conditional on
     /// that β.
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "the conditional random-effect solve mirrors block forward/back substitution and preserves its accumulation order"
+    )]
     fn ranef_u_given_beta(&self, beta: &DVector<f64>) -> Vec<DMatrix<f64>> {
         let k = self.lmm.reterms.len();
         let p = self.lmm.feterm.rank;
@@ -904,23 +1203,21 @@ impl GeneralizedLinearMixedModel {
             let nranef_j = self.lmm.reterms[j].n_ranef();
             let mut rhs = c_vecs[j].clone();
 
+            debug_assert_eq!(rhs.len(), nranef_j);
             for (m, v_m) in v_vecs.iter().enumerate().take(j) {
-                let l_jm = self.lmm.l_blocks[glmm_block_index(j, m)].as_dense();
-                for row in 0..nranef_j {
-                    let mut dot = 0.0;
-                    for col in 0..v_m.len() {
-                        dot += l_jm[(row, col)] * v_m[col];
-                    }
-                    rhs[row] -= dot;
-                }
+                crate::model::linear::subtract_block_matvec(
+                    rhs.as_mut_slice(),
+                    &self.lmm.l_blocks[glmm_block_index(j, m)],
+                    v_m.as_slice(),
+                );
             }
 
-            let mut v_j = rhs.as_slice().to_vec();
-            solve_dense_lower_against_rhs(
-                &self.lmm.l_blocks[glmm_block_index(j, j)].as_dense(),
-                &mut v_j,
+            solve_l_diagonal_block_against_rhs(
+                &self.lmm.l_blocks[glmm_block_index(j, j)],
+                rhs.as_mut_slice(),
+                false,
             );
-            v_vecs.push(DVector::from_vec(v_j));
+            v_vecs.push(rhs);
         }
 
         let mut u_vecs: Vec<DVector<f64>> = vec![DVector::zeros(0); k];
@@ -928,24 +1225,21 @@ impl GeneralizedLinearMixedModel {
             let nranef_j = self.lmm.reterms[j].n_ranef();
             let mut rhs = v_vecs[j].clone();
 
+            debug_assert_eq!(rhs.len(), nranef_j);
             for m in (j + 1)..k {
-                let l_mj = self.lmm.l_blocks[glmm_block_index(m, j)].as_dense();
-                let u_m = &u_vecs[m];
-                for row in 0..nranef_j {
-                    let mut dot = 0.0;
-                    for col in 0..u_m.len() {
-                        dot += l_mj[(col, row)] * u_m[col];
-                    }
-                    rhs[row] -= dot;
-                }
+                crate::model::linear::subtract_block_transpose_matvec(
+                    rhs.as_mut_slice(),
+                    &self.lmm.l_blocks[glmm_block_index(m, j)],
+                    u_vecs[m].as_slice(),
+                );
             }
 
-            let mut u_j = rhs.as_slice().to_vec();
-            solve_dense_upper_from_lower_transpose_against_rhs(
-                &self.lmm.l_blocks[glmm_block_index(j, j)].as_dense(),
-                &mut u_j,
+            solve_l_diagonal_block_against_rhs(
+                &self.lmm.l_blocks[glmm_block_index(j, j)],
+                rhs.as_mut_slice(),
+                true,
             );
-            u_vecs[j] = DVector::from_vec(u_j);
+            u_vecs[j] = rhs;
         }
 
         self.lmm
@@ -958,18 +1252,25 @@ impl GeneralizedLinearMixedModel {
 
     /// Laplace approximation objective: deviance residuals + u penalty + log|L|.
     pub fn laplace_objective(&self) -> f64 {
+        self.conditional_objective() + self.lmm_logdet()
+    }
+
+    /// The PIRLS criterion `dev/φ + ‖u‖²` (φ = 1 except for profiled
+    /// estimated-dispersion families).
+    fn conditional_objective(&self) -> f64 {
         // For binomial-with-trials data the response is a per-trial proportion
         // and `wt[i]` is the trial count; weighting the per-observation
         // deviance contribution by `wt[i]` recovers the binomial deviance.
         let dev: f64 = (0..self.y.len())
             .map(|i| self.case_weight(i) * self.dev_resid_component(self.y[i], self.mu[i]))
-            .sum();
+            .sum::<f64>()
+            / self.pirls_phi();
         let u_penalty: f64 = self
             .u
             .iter()
             .map(|u| u.iter().map(|x| x * x).sum::<f64>())
             .sum();
-        dev + u_penalty + self.lmm_logdet()
+        dev + u_penalty
     }
 
     fn u_penalty(&self) -> f64 {
@@ -979,20 +1280,118 @@ impl GeneralizedLinearMixedModel {
             .sum()
     }
 
-    fn minus_two_loglik_observation(&self, index: usize) -> f64 {
+    /// The part of observation `index`'s log-likelihood that depends only on
+    /// the response and its prior weight (`ln C(n, k)` for binomial,
+    /// `ln Γ(y + 1)` for Poisson and negative binomial), or `None` for
+    /// families without such a term.
+    pub(super) fn response_log_constant_observation(&self, index: usize) -> Option<f64> {
+        let y = self.y[index];
+        match self.family {
+            Family::Bernoulli | Family::Binomial => {
+                let trials = self.case_weight(index).max(0.0);
+                let successes = (trials * y).clamp(0.0, trials);
+                let failures = trials - successes;
+                Some(if trials == 0.0 {
+                    0.0
+                } else {
+                    ln_gamma(trials + 1.0) - ln_gamma(successes + 1.0) - ln_gamma(failures + 1.0)
+                })
+            }
+            Family::Poisson | Family::NegativeBinomial => Some(ln_gamma(y + 1.0)),
+            Family::Gamma | Family::Normal | Family::InverseGaussian => None,
+        }
+    }
+
+    /// The cached per-observation response constants, when they were built
+    /// for the current family, response and prior weights.
+    pub(super) fn current_response_log_constants(&self) -> Option<&[f64]> {
+        self.response_log_constants
+            .as_ref()
+            .filter(|cache| cache.matches(self.family, self.y.as_slice(), &self.wt))
+            .map(|cache| cache.values.as_slice())
+    }
+
+    /// Build (or rebuild, after `y`/`wt`/family changed) the per-observation
+    /// response-constant cache used by the retained-constant objective.
+    pub(super) fn ensure_response_log_constants(&mut self) {
+        if self.current_response_log_constants().is_some() {
+            return;
+        }
+        let values: Option<Vec<f64>> = (0..self.y.len())
+            .map(|index| self.response_log_constant_observation(index))
+            .collect();
+        self.response_log_constants = values.map(|values| ResponseLogConstants {
+            family: self.family,
+            y: self.y.as_slice().to_vec(),
+            wt: self.wt.clone(),
+            values,
+        });
+    }
+
+    /// `Σ_i -2 log p(y_i | μ_i)` with response constants retained. The
+    /// cache key (an O(n) comparison) is checked once per sum, never per
+    /// observation; a stale or absent cache falls back to computing each
+    /// constant inline.
+    fn minus_two_loglik_sum(&self) -> f64 {
+        let cached = self.current_response_log_constants();
+        let density_phi = self.conditional_density_dispersion();
+        (0..self.y.len())
+            .map(|i| {
+                let constant = match cached {
+                    Some(values) => Some(values[i]),
+                    None => self.response_log_constant_observation(i),
+                };
+                self.minus_two_loglik_observation_given_constant(i, constant, density_phi)
+            })
+            .sum::<f64>()
+    }
+
+    /// Dispersion φ plugged into the conditional response density of the
+    /// log-likelihood.
+    ///
+    /// Every estimated-dispersion family uses lme4's convention (the family
+    /// `aic()` that `glmer`'s Laplace criterion calls, unchanged in lme4
+    /// 2.1): φ = Σ wᵢ dᵢ / Σ wᵢ, the mean unit deviance at the current μ
+    /// (Gaussian: over the observation count, as `gaussian()$aic`).
+    pub(super) fn conditional_density_dispersion(&self) -> f64 {
+        match self.family {
+            Family::Normal => {
+                let n = self.y.len().max(1) as f64;
+                (self.weighted_deviance() / n).max(f64::MIN_POSITIVE)
+            }
+            Family::Gamma | Family::InverseGaussian => {
+                let (mut dev, mut total_weight) = (0.0, 0.0);
+                for i in 0..self.y.len() {
+                    let weight = self.case_weight(i);
+                    dev += weight * self.dev_resid_component(self.y[i], self.mu[i]);
+                    total_weight += weight;
+                }
+                (dev / total_weight.max(f64::MIN_POSITIVE)).max(f64::MIN_POSITIVE)
+            }
+            _ => self.dispersion(true).max(f64::MIN_POSITIVE),
+        }
+    }
+
+    /// `-2 log p(y_i | μ_i)` with the response-only constant supplied by the
+    /// caller (see [`response_log_constant_observation`](Self::response_log_constant_observation));
+    /// the arithmetic is exactly the uncached expression's.
+    fn minus_two_loglik_observation_given_constant(
+        &self,
+        index: usize,
+        response_constant: Option<f64>,
+        density_phi: f64,
+    ) -> f64 {
         let y = self.y[index];
         let mu = self.mu[index].max(f64::MIN_POSITIVE);
+        let response_constant =
+            || response_constant.expect("families with a response-only constant always supply it");
         match self.family {
             Family::Bernoulli | Family::Binomial => {
                 let trials = self.case_weight(index).max(0.0);
                 let successes = (trials * y).clamp(0.0, trials);
                 let failures = trials - successes;
                 let p = mu.clamp(1.0e-15, 1.0 - 1.0e-15);
-                let log_choose = if trials == 0.0 {
-                    0.0
-                } else {
-                    ln_gamma(trials + 1.0) - ln_gamma(successes + 1.0) - ln_gamma(failures + 1.0)
-                };
+                let log_choose = response_constant();
                 let success_term = if successes == 0.0 {
                     0.0
                 } else {
@@ -1007,13 +1406,13 @@ impl GeneralizedLinearMixedModel {
             }
             Family::Poisson => {
                 let count_term = if y == 0.0 { 0.0 } else { y * mu.ln() };
-                -2.0 * (count_term - mu - ln_gamma(y + 1.0))
+                -2.0 * (count_term - mu - response_constant())
             }
             Family::NegativeBinomial => {
                 let theta = self
                     .negative_binomial_theta
                     .expect("negative-binomial GLMM stores fixed theta");
-                let loglik = ln_gamma(y + theta) - ln_gamma(theta) - ln_gamma(y + 1.0)
+                let loglik = ln_gamma(y + theta) - ln_gamma(theta) - response_constant()
                     + theta * (theta / (theta + mu)).ln()
                     + if y == 0.0 {
                         0.0
@@ -1022,21 +1421,28 @@ impl GeneralizedLinearMixedModel {
                     };
                 -2.0 * loglik
             }
+            // Prior weights enter as the base R family `aic()`s use them.
             Family::Gamma => {
-                let phi = self.dispersion(true).max(f64::MIN_POSITIVE);
+                let phi = density_phi;
                 let shape = 1.0 / phi;
                 let scale = mu * phi;
-                -2.0 * ((shape - 1.0) * y.ln() - y / scale - shape * scale.ln() - ln_gamma(shape))
+                -2.0 * self.case_weight(index)
+                    * ((shape - 1.0) * y.ln() - y / scale - shape * scale.ln() - ln_gamma(shape))
             }
             Family::Normal => {
-                let variance = self.dispersion(true).max(f64::MIN_POSITIVE);
+                let weight = self.case_weight(index);
+                if weight <= 0.0 {
+                    return 0.0;
+                }
+                let variance = density_phi / weight;
                 let residual = y - mu;
                 (2.0 * std::f64::consts::PI * variance).ln() + residual * residual / variance
             }
             Family::InverseGaussian => {
-                let phi = self.dispersion(true).max(f64::MIN_POSITIVE);
-                (2.0 * std::f64::consts::PI * phi * y.powi(3)).ln()
-                    + (y - mu).powi(2) / (phi * y * mu * mu)
+                let phi = density_phi;
+                let weight = self.case_weight(index);
+                weight * (2.0 * std::f64::consts::PI * phi * y.powi(3)).ln()
+                    + weight * (y - mu).powi(2) / (phi * y * mu * mu)
             }
         }
     }
@@ -1051,12 +1457,8 @@ impl GeneralizedLinearMixedModel {
     /// convention, so callers should treat those values as explicit metadata
     /// rather than as a cross-engine parity claim.
     pub fn response_constants_offset(&self) -> f64 {
-        let dropped: f64 = (0..self.y.len())
-            .map(|i| self.case_weight(i) * self.dev_resid_component(self.y[i], self.mu[i]))
-            .sum();
-        let included: f64 = (0..self.y.len())
-            .map(|i| self.minus_two_loglik_observation(i))
-            .sum();
+        let dropped = self.weighted_deviance() / self.pirls_phi();
+        let included = self.minus_two_loglik_sum();
         included - dropped
     }
 
@@ -1068,11 +1470,7 @@ impl GeneralizedLinearMixedModel {
     /// fitting and comparison artifacts keep their existing dropped-constant
     /// semantics while certified joint GLMM parity is promoted row by row.
     pub fn laplace_objective_with_response_constants(&self) -> f64 {
-        (0..self.y.len())
-            .map(|i| self.minus_two_loglik_observation(i))
-            .sum::<f64>()
-            + self.u_penalty()
-            + self.lmm_logdet()
+        self.minus_two_loglik_sum() + self.u_penalty() + self.lmm_logdet()
     }
 
     /// Deviance of the GLMM.
@@ -1125,9 +1523,11 @@ impl GeneralizedLinearMixedModel {
         for (g, &uv) in u0_flat.iter().enumerate() {
             devc0[g] = uv * uv;
         }
+        // lme4 2.1 `devcCol()`: deviance residuals reweighted by 1/φ.
+        let inv_phi = 1.0 / self.pirls_phi();
         for i in 0..n_obs {
             devc0[refs[i] as usize] +=
-                self.case_weight(i) * self.dev_resid_component(self.y[i], self.mu[i]);
+                self.case_weight(i) * self.dev_resid_component(self.y[i], self.mu[i]) * inv_phi;
         }
 
         // Sweep over GH nodes.
@@ -1137,9 +1537,13 @@ impl GeneralizedLinearMixedModel {
 
         // From here on `u[0]`/`eta`/`mu` are perturbed at each node. The guard
         // restores them when this scope ends — including if the sweep panics.
+        // β is not perturbed by the sweep, so `offset + Xβ` is formed once
+        // instead of at every node.
+        let fixed = self.fixed_linear_predictor();
         let mut work = AgqRestoreGuard {
             glmm: self,
             u0_flat: u0_flat.clone(),
+            fixed: None,
         };
 
         for (&z, &w) in rule.z.iter().zip(rule.w.iter()) {
@@ -1148,8 +1552,8 @@ impl GeneralizedLinearMixedModel {
             }
             if z == 0.0 {
                 // devc == devc0, exp(0) * w simplifies to w
-                for g in 0..n_levels {
-                    mult[g] += w;
+                for multiplier in &mut mult {
+                    *multiplier += w;
                 }
                 continue;
             }
@@ -1157,15 +1561,15 @@ impl GeneralizedLinearMixedModel {
             for g in 0..n_levels {
                 work.u[0][(0, g)] = u0_flat[g] + z * sd[g];
             }
-            work.update_eta();
+            work.update_eta_given_fixed(Some(&fixed));
             // devc[g] = u[g]² + Σ devresid_i (per group)
-            for g in 0..n_levels {
+            for (g, devc_g) in devc.iter_mut().enumerate() {
                 let uv = work.u[0][(0, g)];
-                devc[g] = uv * uv;
+                *devc_g = uv * uv;
             }
             for i in 0..n_obs {
                 devc[refs[i] as usize] +=
-                    work.case_weight(i) * work.dev_resid_component(work.y[i], work.mu[i]);
+                    work.case_weight(i) * work.dev_resid_component(work.y[i], work.mu[i]) * inv_phi;
             }
             // mult[g] += exp((z² + devc0[g] - devc[g]) / 2) * w
             let z2 = z * z;
@@ -1175,6 +1579,7 @@ impl GeneralizedLinearMixedModel {
         }
 
         // `work` drops here, restoring u and η/μ (also on a panic above).
+        work.fixed = Some(fixed);
         drop(work);
 
         let sum_devc0: f64 = devc0.iter().sum();
@@ -1189,6 +1594,10 @@ impl GeneralizedLinearMixedModel {
     /// scale. For AGQ, the quadrature objective is shifted by the same
     /// response-constant offset used by the Laplace path.
     pub fn deviance_with_response_constants(&mut self, n_agq: usize) -> f64 {
+        // The `ln Γ` response constants depend only on y and the prior
+        // weights; computing them per observation on every joint-objective
+        // evaluation dominated its non-PIRLS cost.
+        self.ensure_response_log_constants();
         if n_agq <= 1 {
             return self.laplace_objective_with_response_constants();
         }
@@ -1196,7 +1605,7 @@ impl GeneralizedLinearMixedModel {
         self.deviance(n_agq) + offset
     }
 
-    fn case_weight(&self, obs: usize) -> f64 {
+    pub(super) fn case_weight(&self, obs: usize) -> f64 {
         if self.wt.is_empty() {
             1.0
         } else {
@@ -1251,7 +1660,12 @@ impl GeneralizedLinearMixedModel {
 
     /// Returns whether the inner PIRLS converged (see [`Self::pirls`]).
     pub(super) fn update_pirls_at_theta(&mut self, theta: &[f64], vary_beta: bool) -> Result<bool> {
-        self.update_pirls_at_theta_with_options(theta, vary_beta, GLMM_PIRLS_MAX_ITER, true)
+        let max_iter = if vary_beta {
+            GLMM_PIRLS_MAX_ITER
+        } else {
+            GLMM_HESSIAN_PIRLS_MAX_ITER
+        };
+        self.update_pirls_at_theta_with_options(theta, vary_beta, max_iter, true)
     }
 
     pub(super) fn update_pirls_at_theta_with_options(
@@ -1286,7 +1700,7 @@ impl GeneralizedLinearMixedModel {
         }
         match self.update_pirls_at_theta(theta, true) {
             Ok(_) => {
-                let deviance = self.deviance(n_agq);
+                let deviance = self.profiled_outer_objective(n_agq);
                 if deviance.is_finite() {
                     deviance
                 } else {
@@ -1298,6 +1712,23 @@ impl GeneralizedLinearMixedModel {
                 f64::INFINITY
             }
             Err(_) => f64::INFINITY,
+        }
+    }
+
+    /// Objective the profiled (fast-PIRLS) outer θ search minimizes.
+    ///
+    /// For Gamma and inverse-Gaussian the response-constant offset depends
+    /// on θ through the dispersion φ = mean unit deviance, so the outer
+    /// criterion is the full Laplace `-2 logLik` (lme4's `nAGQ = 0`
+    /// criterion); minimizing the unit-φ deviance alone drives θ to the
+    /// boundary. Other families keep the dropped-constant deviance, which
+    /// differs from `-2 logLik` by a θ-free constant.
+    pub(super) fn profiled_outer_objective(&mut self, n_agq: usize) -> f64 {
+        let deviance = self.deviance(n_agq);
+        if self.family.has_dispersion() {
+            deviance + self.response_constants_offset()
+        } else {
+            deviance
         }
     }
 
@@ -1313,7 +1744,21 @@ impl GeneralizedLinearMixedModel {
             return 1.0;
         }
 
+        if self.profiles_dispersion() {
+            // lme4 2.1 `sigma()`: sqrt of the profiled (damped) φ.
+            return self.pirls_phi.max(f64::MIN_POSITIVE).sqrt();
+        }
         let pearson = self.pearson_dispersion_numerator();
+        if matches!(self.family, Family::Gamma | Family::InverseGaussian) {
+            // lme4's `sigma()` for a glmer fit: sqrt(pwrss / n) with
+            // pwrss = Pearson weighted RSS + ||u||². The same scale rescales
+            // the fixed-effect covariance and the random-effect SDs, so the
+            // residual SD, VarCorr and vcov agree with each other and with
+            // lme4.
+            let n = self.y.len().max(1) as f64;
+            let variance = ((pearson + self.u_penalty()) / n).max(f64::MIN_POSITIVE);
+            return variance.sqrt();
+        }
         let denom = self.y.len().saturating_sub(self.lmm.feterm.rank).max(1) as f64;
         let variance = (pearson / denom).max(f64::MIN_POSITIVE);
         variance.sqrt()
@@ -1346,5 +1791,150 @@ impl GeneralizedLinearMixedModel {
             total += self.case_weight(obs) * residual * residual / variance;
         }
         total
+    }
+}
+
+#[cfg(test)]
+mod nested_sparse_regression {
+    use crate::formula::parse_formula;
+    use crate::model::generalized::GeneralizedLinearMixedModel;
+    use crate::model::traits::{Family, LinkFunction, MixedModelFit};
+    use crate::types::MatrixBlock;
+
+    #[test]
+    fn large_shape_negative_binomial_deviance_preserves_small_differences() {
+        // Independent 65-digit decimal logarithms of the NB unit deviance.
+        for (y, mu, expected) in [
+            (0.0, 3.2, 6.399999591624694),
+            (3.0, 3.001, 3.3325923789244125e-7),
+            (6.0, 2.1, 4.797864887403264),
+        ] {
+            let actual = super::negative_binomial_deviance_component(y, mu, 25074971.408206597);
+            assert!(
+                (actual - expected).abs() < 1e-13,
+                "y={y} mu={mu}: {actual} != {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_beta_pirls_refuses_invalid_gamma_mean_at_zero_theta() {
+        let mut data = crate::model::data::DataFrame::new();
+        data.add_numeric("y", vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        data.add_categorical("g", vec!["a".into(), "a".into(), "b".into(), "b".into()])
+            .unwrap();
+        let mut model = GeneralizedLinearMixedModel::new(
+            parse_formula("y ~ 1 + (1 | g)").unwrap(),
+            &data,
+            Family::Gamma,
+            Some(LinkFunction::Inverse),
+        )
+        .unwrap();
+        model.beta.fill(-1.0);
+        assert!(!model
+            .update_pirls_at_theta_with_options(&[0.0], false, 2, true)
+            .unwrap());
+        assert!(model.mu.iter().all(|mu| *mu < 0.0));
+        assert!(model.conditional_mode_score_max_abs().is_infinite());
+        let initial = model.joint_glmm_deviance_at_params(&[-1.0, 0.0], 1, 1);
+        assert!(initial.is_infinite());
+        let error = model
+            .fit_joint_glmm_from_start(vec![-1.0], vec![0.0], initial, 1, 100, None)
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("starting conditional-mode solve did not converge"));
+    }
+
+    /// grouseticks Poisson GLMM (INDEX ⊂ BROOD ⊂ LOCATION): pins the fit
+    /// the sparse-aware blocked Cholesky produces and checks that the RE
+    /// off-diagonal L blocks keep their sparse storage through the fit
+    /// (mote bd-01M1TGFK22VQ8VCASPS83BRSB5).
+    #[test]
+    fn grouseticks_poisson_fit_keeps_sparse_l_blocks() {
+        let (data, _) = crate::datasets::load("grouseticks").unwrap();
+        let formula = parse_formula(
+            "TICKS ~ 1 + YEAR + cHEIGHT + (1 | BROOD) + (1 | INDEX) + (1 | LOCATION)",
+        )
+        .unwrap();
+        let mut model = GeneralizedLinearMixedModel::new(
+            formula,
+            &data,
+            Family::Poisson,
+            Some(LinkFunction::Log),
+        )
+        .unwrap();
+        model.fit_with_options(true, 1, false).unwrap();
+
+        // The exact objective and feval pins belong to the NLopt BOBYQA path;
+        // the no-NLopt fallback optimizer stops ~7e-5 higher on this surface.
+        let objective = model.objective();
+        let expected = 851.404_637_081_444;
+        let tolerance = if cfg!(feature = "nlopt") { 1e-8 } else { 1e-6 };
+        assert!(
+            ((objective - expected) / expected).abs() <= tolerance,
+            "objective {objective:.12} drifted from {expected}"
+        );
+        #[cfg(feature = "nlopt")]
+        assert_eq!(model.opt_summary().feval, 48, "feval changed");
+
+        let k = model.lmm.reterms.len();
+        assert_eq!(k, 3);
+        for i in 1..k {
+            for j in 0..i {
+                let idx = i * (i + 1) / 2 + j;
+                assert!(
+                    matches!(model.lmm.l_blocks[idx], MatrixBlock::Sparse(_)),
+                    "L[{i},{j}] was densified by the fit"
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod diagonal_block_solve_tests {
+    use super::*;
+    use crate::types::MatrixBlock;
+    use rand::{rngs::StdRng, Rng, SeedableRng};
+
+    fn random_lower(n: usize, rng: &mut StdRng) -> DMatrix<f64> {
+        DMatrix::from_fn(n, n, |i, j| {
+            if i == j {
+                1.0 + rng.gen::<f64>()
+            } else if i > j {
+                rng.gen::<f64>() - 0.5
+            } else {
+                0.0
+            }
+        })
+    }
+
+    #[test]
+    fn block_solves_are_bit_identical_to_densified_row_solves() {
+        let mut rng = StdRng::seed_from_u64(7);
+        let blocks: Vec<DMatrix<f64>> = (0..9).map(|_| random_lower(3, &mut rng)).collect();
+        let dense_l = random_lower(27, &mut rng);
+        for block in [
+            MatrixBlock::BlockDiagonal(blocks),
+            MatrixBlock::Dense(dense_l),
+            MatrixBlock::Diagonal(DVector::from_fn(27, |i, _| 1.0 + i as f64)),
+        ] {
+            let rhs: Vec<f64> = (0..27).map(|_| rng.gen::<f64>() - 0.5).collect();
+            let dense = block.as_dense();
+            for transpose in [false, true] {
+                let mut expected = rhs.clone();
+                if transpose {
+                    solve_dense_upper_from_lower_transpose_against_rhs(&dense, &mut expected);
+                } else {
+                    solve_dense_lower_against_rhs(&dense, &mut expected);
+                }
+                let mut got = rhs.clone();
+                solve_l_diagonal_block_against_rhs(&block, &mut got, transpose);
+                for (g, e) in got.iter().zip(&expected) {
+                    assert_eq!(g.to_bits(), e.to_bits(), "transpose={transpose}");
+                }
+            }
+        }
     }
 }

@@ -21,6 +21,10 @@ A revived \code{mm_fit} object.
 \code{revive()} restores the process-local parts of a \code{mixeff} object after
 \code{saveRDS()} / \code{readRDS()} or a worker restart. The fitted artifact and flat
 extractor values are the durable source of truth; the Rust handle is only a
-cache and may be absent. In the current bridge, revival recreates the lazy
-R-side cache and explicitly leaves \code{rust_handle = NULL}.
+cache and may be absent. Revival recreates the lazy R-side cache, keeps a
+live native handle, and clears a dead one (an external pointer restored by
+\code{readRDS()}); it does not refit the model. Without a live handle,
+computations that need the engine model (contrasts, \code{summary()} tests,
+predictions with intervals, profiles, bootstraps) refit it from the stored
+model frame, with identical results.
 }

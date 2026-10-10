@@ -13,6 +13,8 @@
   se.fit = FALSE,
   interval = c("none", "confidence", "prediction"),
   level = 0.95,
+  na.action = stats::na.pass,
+  offset = NULL,
   ...
 )
 }
@@ -20,15 +22,20 @@
 \item{object}{A fitted \code{mm_glmm} object.}
 
 \item{newdata}{Optional new data. Must be a \code{data.frame} containing every
-variable referenced by the model's formula. Categorical levels must
-either match the training factor levels or trigger the \code{allow.new.levels}
-policy.}
+variable the requested prediction needs (the fixed-effect variables, plus
+the grouping and slope variables of the random terms used); other
+columns are ignored. Grouping columns may be factor, character, or
+integer (coerced the way they were at fit time); fixed-effect factor and
+character columns are matched to the training levels, and a level not
+seen when fitting is refused. Stateful terms (\code{poly()}, \code{scale()},
+\code{ns()}, ...) are evaluated with the training basis, as in \code{\link[stats:lm]{stats::lm()}}.}
 
-\item{re.form}{Random-effects conditioning, following lme4's basic
-convention. \code{NULL} returns conditional predictions; \code{NA} (or \code{~0})
-returns population-level (fixed-effect) predictions. Conditioning on a
-subset of grouping factors via a one-sided formula is not supported by
-the current Rust contract and raises \code{mm_inference_unavailable}.}
+\item{re.form}{Random-effects conditioning, following lme4. \code{NULL}
+returns conditional predictions; \code{NA} (or \code{~0}) returns population-level
+(fixed-effect) predictions; a one-sided formula naming some of the
+model's random terms (e.g. \code{~ (1 | subject)}) conditions on those terms'
+conditional modes only. Standard errors and intervals are not available
+for such partial conditioning.}
 
 \item{allow.new.levels}{When \code{FALSE} (default), unseen grouping levels in
 \code{newdata} raise \code{mm_inference_unavailable} through the Rust
@@ -37,7 +44,11 @@ the population mean (zero random effect), matching
 \code{lme4::predict(allow.new.levels = TRUE)}.}
 
 \item{type}{Prediction scale. Gaussian LMMs use the same values for
-\code{"response"} and \code{"link"}.}
+\code{"response"} and \code{"link"}. For \code{residuals()}, the residual type, as in
+lme4: LMMs default to \code{"response"} (\code{y - mu}, also \code{"working"}), with
+\code{"pearson"}/\code{"deviance"} the weighted residuals \code{sqrt(w) * (y - mu)};
+GLMMs default to \code{"deviance"} and also offer \code{"pearson"}
+(\code{(y - mu) * sqrt(w / V(mu))}), \code{"working"} and \code{"response"}.}
 
 \item{se.fit}{Logical; when \code{TRUE}, returns a list with \code{fit} and \code{se.fit}.
 For population predictions (\code{re.form = NA}) the standard error is the
@@ -57,6 +68,20 @@ prediction-variance payload. Returns a matrix with \code{fit}/\code{lwr}/\code{u
 
 \item{level}{Confidence level for \code{interval} / \code{se.fit} intervals.}
 
+\item{na.action}{Missing-value handling for \code{newdata}, as in
+\code{lme4::predict.merMod()}: the default \link[stats:na.fail]{stats::na.pass} returns \code{NA} for
+rows with a missing value in a variable the prediction needs;
+\link[stats:na.fail]{stats::na.omit} drops them and \link[stats:na.fail]{stats::na.exclude} pads them back as
+\code{NA}. In-sample predictions of a fit made with \code{na.action = na.exclude}
+are padded to the original rows, like \code{\link[=fitted]{fitted()}} and \code{\link[=residuals]{residuals()}}.}
+
+\item{offset}{Offset for \code{newdata} rows when the model was fitted with the
+\verb{offset =} argument: a numeric vector (one value per \code{newdata} row) or an
+expression evaluated in \code{newdata}. Offsets written in the formula
+(\code{offset(log(t))}) are evaluated from \code{newdata} automatically. (lme4
+silently drops an \verb{offset =} argument offset for new data; mixeff refuses
+instead of guessing.)}
+
 \item{...}{Reserved for generic compatibility.}
 }
 \value{
@@ -66,9 +91,12 @@ A numeric vector, or a list with \code{fit} and \code{se.fit} when
 \description{
 GLMM predictions are computed on the R side from the stored fixed effects
 (population, \code{re.form = NA}) or fixed effects plus conditional modes
-(\code{re.form = NULL}), then mapped through the family link. This mirrors
+(\code{re.form = NULL}, or a subset of the random terms via a one-sided
+\code{re.form} formula), then mapped through the family link. This mirrors
 \code{lme4::predict.merMod} for generalized models: \code{type = "link"} returns the
-linear predictor and \code{type = "response"} the mean.
+linear predictor and \code{type = "response"} the mean. Offsets written in the
+formula (\code{offset(log(t))}) are evaluated from \code{newdata}; an \verb{offset =}
+argument offset must be supplied again through \code{predict(offset = )}.
 }
 \details{
 In-sample response predictions reuse the engine's certified fitted values.
@@ -77,12 +105,22 @@ Standard errors and confidence intervals: population (\code{re.form = NA})
 SEs are the fixed-effect Wald SE mapped through the link by the delta
 method; conditional (\code{re.form = NULL}) SEs and confidence bounds come from
 the engine prediction-variance payload. The engine certifies these rows
-for \code{method = "joint_laplace"} fits and for default \code{pirls_profiled} fits
+for \code{method = "joint_laplace"} fits and for \code{pirls_profiled} fits
 whose post-fit profiled-optimum certificate is issued (per-row status
 \code{"available"}). Uncertified fits (e.g. singular fits, or fits whose
 certificate fails) keep status \code{"degraded"}, and their conditional SEs and
 bounds are withheld as \code{NA} with the engine's reason in the \code{mm_reason}
 attribute — consistent with the package's "no fake certainty" contract.
+For a fit with an offset, conditional SEs/intervals on \code{newdata} are
+available on the link scale only.
+
+Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
+(Gamma, inverse Gaussian, Gaussian with a non-identity link) lme4 >= 2.1-0
+builds \code{predict(se.fit = TRUE)} from \code{sigma()^2} times its unscaled
+penalized least-squares covariance, although its PIRLS weights already
+carry \code{1 / phi}. mixeff's SEs use the engine's covariance (\code{vcov()},
+without the extra \code{sigma^2}), so they differ from lme4 2.1's by roughly a
+factor of \code{sigma()}.
 
 Prediction (future-observation) intervals (\code{interval = "prediction"}) are
 available for conditional, response-scale predictions: the engine returns

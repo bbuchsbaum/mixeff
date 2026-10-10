@@ -55,6 +55,31 @@ pub(crate) struct TrustBqOptions {
     /// Default `false` keeps the evaluation count byte-identical to the
     /// previous behavior for callers that do not opt in.
     pub(crate) reuse_samples: bool,
+    /// Maximum number of consecutive trust-region steps that may reuse the
+    /// current quadratic model after a *rejected* trial step instead of
+    /// rebuilding it from a fresh finite-difference stencil. After a
+    /// rejection the model centre is unchanged and only the radius shrinks,
+    /// so the existing model is still centred at the right point; restricting
+    /// it to a smaller ball is at least as locally valid as before. Each
+    /// rebuild costs `2d + d(d-1)/2` evaluations for the full-cross-term
+    /// model, so skipping one rebuild per rejection is the dominant saving.
+    /// `0` (the default) rebuilds after every step, byte-identical to the
+    /// historical behaviour.
+    pub(crate) rejected_step_model_reuse: usize,
+    /// Maximum number of consecutive steps that may reuse the quadratic
+    /// model after a *highly successful* accepted step (`ratio >= eta_expand`)
+    /// by translating it to the new centre: `g ← g + H p`, `H ← H`. The
+    /// translation is exact for the surrogate; the guard is that it is only
+    /// taken when the model predicted the last step well. `0` (the default)
+    /// disables translation. A model that has been reused (by either rule)
+    /// `max(rejected_step_model_reuse, accepted_step_model_reuse)` times is
+    /// always rebuilt, so reuse never chains into unbounded model drift.
+    pub(crate) accepted_step_model_reuse: usize,
+    /// Gradient-oracle loop only (`minimize_with_gradient_and_progress`):
+    /// stop when the bound-projected gradient `‖x − P(x − ∇f)‖_∞` at the
+    /// current centre is at most `gradient_tolerance_rel · max(1, |f|)`.
+    /// `0` (the default) disables the first-order stop.
+    pub(crate) gradient_tolerance_rel: f64,
 }
 
 impl Default for TrustBqOptions {
@@ -76,6 +101,9 @@ impl Default for TrustBqOptions {
             stall_ftol_abs: -1.0,
             stall_requires_stable_x: true,
             reuse_samples: false,
+            rejected_step_model_reuse: 0,
+            accepted_step_model_reuse: 0,
+            gradient_tolerance_rel: 0.0,
         }
     }
 }
@@ -92,6 +120,9 @@ pub(crate) enum TrustBqStopReason {
     ObjectiveStagnation,
     /// A caller-owned convergence certificate accepted the current best point.
     CertifiedConvergence,
+    /// The exact (oracle) projected gradient at the best point is within the
+    /// caller's first-order band (`TrustBqOptions::gradient_tolerance_rel`).
+    GradientBelowTolerance,
 }
 
 impl TrustBqStopReason {
@@ -99,7 +130,8 @@ impl TrustBqStopReason {
         match self {
             TrustBqStopReason::RadiusBelowTolerance
             | TrustBqStopReason::ObjectiveTolerance
-            | TrustBqStopReason::StepBelowTolerance => {
+            | TrustBqStopReason::StepBelowTolerance
+            | TrustBqStopReason::GradientBelowTolerance => {
                 TrustBqTraceClassification::SmoothConvergence
             }
             TrustBqStopReason::ObjectiveStagnation => TrustBqTraceClassification::StatisticalStall,
@@ -186,6 +218,25 @@ impl QuadraticInterpolationModel {
         let quadratic = 0.5 * s.dot(&(&self.hessian * &s));
         -(linear + quadratic)
     }
+
+    /// Re-centre the surrogate at `x + displacement`. For
+    /// `q_x(s) = f + gᵀs + ½ sᵀHs` the same quadratic written around the new
+    /// centre is `q_{x+p}(u) = q_x(p) + (g + Hp)ᵀu + ½ uᵀHu`, so only the
+    /// gradient changes. The constant term is never stored (predicted
+    /// reductions are relative to the centre value), so this is exact for the
+    /// surrogate.
+    fn translate(&mut self, displacement: &[f64]) {
+        let p = DVector::from_column_slice(displacement);
+        self.gradient += &self.hessian * p;
+    }
+}
+
+/// A quadratic model carried across loop iterations instead of being rebuilt.
+struct RetainedModel {
+    model: QuadraticInterpolationModel,
+    /// How many trust-region steps this model has already been reused for
+    /// since it was last built from a fresh stencil.
+    reuses: usize,
 }
 
 #[cfg(test)]
@@ -261,6 +312,10 @@ where
     // contracted materially from its startup scale. See the accepted-step
     // check below for the production failure this guards.
     let ftol_radius = (options.initial_radius / 16.0).max(options.final_radius);
+    // Persistent quadratic model (see `rejected_step_model_reuse` /
+    // `accepted_step_model_reuse`). `None` means the next iteration rebuilds
+    // from a fresh finite-difference stencil.
+    let mut retained_model: Option<RetainedModel> = None;
     loop {
         if fevals >= options.max_evaluations {
             return Ok(TrustBqResult {
@@ -327,7 +382,13 @@ where
             stalled = 0;
             stall_best_f = best_f;
             stall_best_x.clone_from(&best_x);
-        } else {
+        } else if retained_model.is_none() {
+            // The stall window is counted in *fresh-model* iterations so that
+            // persistent-model reuse (which makes an iteration cost one
+            // evaluation instead of a whole stencil) does not tighten the
+            // caller's stagnation band in evaluation terms: with reuse off
+            // every iteration is a fresh-model iteration and this is the
+            // historical counter.
             stalled += 1;
         }
         // Only treat a stall as convergence once the search has actually
@@ -359,20 +420,28 @@ where
         }
 
         iterations += 1;
-        let model = build_quadratic_model(
-            &x,
-            f,
-            lower_bounds,
-            upper_bounds,
-            radius,
-            options.max_evaluations,
-            options.max_cross_terms,
-            &mut fevals,
-            &mut objective,
-            &mut cache,
-            reuse,
-        )?;
-        last_model_sample_count = model.sample_count;
+        // `model_reuses` counts how many steps the model in hand has already
+        // been reused for; a freshly built model starts at zero.
+        let (model, model_reuses) = match retained_model.take() {
+            Some(retained) => (retained.model, retained.reuses + 1),
+            None => {
+                let model = build_quadratic_model(
+                    &x,
+                    f,
+                    lower_bounds,
+                    upper_bounds,
+                    radius,
+                    options.max_evaluations,
+                    options.max_cross_terms,
+                    &mut fevals,
+                    &mut objective,
+                    &mut cache,
+                    reuse,
+                )?;
+                last_model_sample_count = model.sample_count;
+                (model, 0)
+            }
+        };
         if fevals >= options.max_evaluations {
             return Ok(TrustBqResult {
                 x: best_x,
@@ -385,7 +454,7 @@ where
             });
         }
 
-        let step = trust_region_step(&model, &x, lower_bounds, upper_bounds, radius);
+        let step = trust_region_step(&model, &x, lower_bounds, upper_bounds, radius, false);
         let step_norm = norm(&step);
         if step_norm <= options.final_radius {
             radius *= options.shrink_factor;
@@ -430,11 +499,28 @@ where
         let ratio = actual_reduction / predicted_reduction;
         if ratio >= options.eta_accept && actual_reduction > 0.0 {
             let old_f = f;
+            // Actual displacement (post-projection), which is what the
+            // surrogate must be translated by if it is carried over.
+            let displacement = trial
+                .iter()
+                .zip(x.iter())
+                .map(|(t, xi)| t - xi)
+                .collect::<Vec<_>>();
             x = trial;
             f = trial_f;
 
             if ratio >= options.eta_expand && step_norm > 0.8 * radius {
                 radius *= options.expand_factor;
+            }
+            // Translated reuse: only after a step the model predicted very
+            // well, and only within the per-model reuse cap.
+            if ratio >= options.eta_expand && model_reuses < options.accepted_step_model_reuse {
+                let mut translated = model;
+                translated.translate(&displacement);
+                retained_model = Some(RetainedModel {
+                    model: translated,
+                    reuses: model_reuses,
+                });
             }
 
             let objective_tol = options.ftol_abs + options.ftol_rel * old_f.abs().max(1.0);
@@ -447,7 +533,13 @@ where
             // |gradient|=17.7. Continue contracting until the model has
             // localized by at least four halvings; the existing stagnation
             // and caller-certificate stops remain available in the meantime.
-            if actual_reduction.abs() <= objective_tol
+            // A reused model is never allowed to certify FTOL convergence: a
+            // stale surrogate can propose a poorly aimed short step whose
+            // tiny accepted reduction says nothing about the local optimum.
+            // The next iteration rebuilds a fresh stencil, and only a fresh
+            // model's tiny accepted step counts as objective convergence.
+            if model_reuses == 0
+                && actual_reduction.abs() <= objective_tol
                 && (!options.ftol_requires_local_radius || radius <= ftol_radius)
             {
                 return Ok(TrustBqResult {
@@ -462,6 +554,15 @@ where
             }
         } else {
             radius *= options.shrink_factor;
+            // Rejected-step reuse: the centre is unchanged and only the
+            // radius shrank, so the model is still centred correctly. Keep it
+            // for the next (smaller) trust-region step within the reuse cap.
+            if model_reuses < options.rejected_step_model_reuse {
+                retained_model = Some(RetainedModel {
+                    model,
+                    reuses: model_reuses,
+                });
+            }
         }
     }
 }
@@ -676,6 +777,7 @@ fn trust_region_step(
     lower_bounds: &[f64],
     upper_bounds: &[f64],
     radius: f64,
+    refine_shifted_ray: bool,
 ) -> Vec<f64> {
     let n = x.len();
     if norm(model.gradient.as_slice()) <= MIN_STEP {
@@ -696,6 +798,27 @@ fn trust_region_step(
             let mut step = step_vec.iter().copied().collect::<Vec<_>>();
             bound_and_scale_step(&mut step, x, lower_bounds, upper_bounds, radius);
             if norm(&step) > MIN_STEP && model.predicted_reduction(&step) > 0.0 {
+                if refine_shifted_ray && shift > 0.0 {
+                    // Damping supplies a direction, but an arbitrary shift
+                    // must not force tiny steps while a secant Hessian stays
+                    // indefinite. Minimize the original quadratic along the
+                    // feasible ray, retaining its curvature-informed direction.
+                    let direction = DVector::from_column_slice(&step) / norm(&step);
+                    let curvature = direction.dot(&(&model.hessian * &direction));
+                    let limit =
+                        max_bound_step(x, direction.as_slice(), lower_bounds, upper_bounds, radius);
+                    let alpha = if curvature > 0.0 {
+                        (-model.gradient.dot(&direction) / curvature)
+                            .min(limit)
+                            .max(0.0)
+                    } else {
+                        limit
+                    };
+                    let ray: Vec<f64> = direction.iter().map(|v| alpha * v).collect();
+                    if model.predicted_reduction(&ray) > model.predicted_reduction(&step) {
+                        return ray;
+                    }
+                }
                 return step;
             }
         }
@@ -894,9 +1017,489 @@ fn distance(left: &[f64], right: &[f64]) -> f64 {
         .sqrt()
 }
 
+// === Gradient-oracle variant ===
+//
+// The loop below keeps TrustBQ's trust-region acceptance, bound handling and
+// stop logic, but takes the model gradient from an oracle that returns the
+// exact gradient with every objective value, and builds the model Hessian by
+// symmetric-rank-one (SR1) secant updates from every evaluated point, seeded
+// by forward differences of the oracle gradient along each axis. A fresh
+// model therefore costs one oracle call per iteration instead of a
+// `2d + d(d-1)/2` interpolation stencil.
+
+/// Relative forward-difference step (of `max(1, |x_i|)`) used to seed the
+/// SR1 Hessian from the oracle gradient.
+const HESSIAN_SEED_STEP_REL: f64 = 1e-4;
+/// SR1 skip guard: the update is applied only when
+/// `|rᵀs| ≥ SR1_SKIP_TOLERANCE · ‖r‖ ‖s‖` for `r = y − Hs`.
+const SR1_SKIP_TOLERANCE: f64 = 1e-8;
+/// Consecutive rejected trial steps after which the secant Hessian is
+/// discarded and re-seeded by finite differences of the gradient.
+const RESEED_AFTER_REJECTIONS: usize = 4;
+/// Consecutive accepted steps whose ratio of actual to predicted reduction
+/// stayed below `POOR_RATIO` after which the secant Hessian is re-seeded:
+/// the model keeps under-predicting (a flat, rank-deficient covariance
+/// valley is the typical case), so the trust region never re-expands and
+/// the search crawls.
+const RESEED_AFTER_POOR_ACCEPTS: usize = 6;
+const POOR_RATIO: f64 = 0.25;
+/// Trust-radius contraction (relative to the radius at the last seed) at
+/// which a poorly predicted step triggers a re-seed: the secant model was
+/// built from steps on a much coarser scale and no longer describes the
+/// local curvature.
+const RESEED_RADIUS_CONTRACTION: f64 = 16.0;
+/// Objective-based stops (accepted-step FTOL, stagnation) in the gradient
+/// loop are only trusted when the exact projected gradient is within this
+/// multiple of the first-order band: a tiny accepted reduction from a poor
+/// secant model says nothing about the optimum when the gradient is still
+/// large.
+const OBJECTIVE_STOP_GRADIENT_LOOSENING: f64 = 1e3;
+
+pub(crate) fn minimize_with_gradient_and_progress<F, P>(
+    initial: &[f64],
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
+    options: TrustBqOptions,
+    mut oracle: F,
+    mut progress: P,
+) -> Result<TrustBqResult>
+where
+    F: FnMut(&[f64]) -> Result<(f64, Vec<f64>)>,
+    P: FnMut(&TrustBqProgress<'_>) -> Result<bool>,
+{
+    validate_problem(initial, lower_bounds, upper_bounds, &options)?;
+
+    let n = initial.len();
+    let mut fevals = 0usize;
+    let mut x = project_point(initial, lower_bounds, upper_bounds);
+    let (mut f, mut g) = evaluate_oracle(&mut oracle, &x, &mut fevals)?;
+    let initial_objective = f;
+    let mut best_x = x.clone();
+    let mut best_f = f;
+    let mut radius = options.initial_radius.max(options.final_radius);
+    let mut iterations = 0usize;
+    let mut stalled = 0usize;
+    let mut stall_best_f = best_f;
+    let mut stall_best_x = best_x.clone();
+    let stall_ftol_rel = if options.stall_ftol_rel >= 0.0 {
+        options.stall_ftol_rel
+    } else {
+        options.ftol_rel
+    };
+    let stall_ftol_abs = if options.stall_ftol_abs >= 0.0 {
+        options.stall_ftol_abs
+    } else {
+        options.ftol_abs
+    };
+    let ftol_radius = (options.initial_radius / 16.0).max(options.final_radius);
+
+    let mut hessian = seed_hessian_from_gradient(
+        &x,
+        &g,
+        lower_bounds,
+        upper_bounds,
+        options.max_evaluations,
+        &mut oracle,
+        &mut fevals,
+        &mut best_x,
+        &mut best_f,
+    )?;
+    let mut consecutive_rejections = 0usize;
+    let mut consecutive_poor_accepts = 0usize;
+    let mut radius_at_seed = radius;
+    // The last seed count is reported through `last_model_sample_count`.
+    let last_model_sample_count = n;
+
+    loop {
+        if fevals >= options.max_evaluations {
+            return Ok(TrustBqResult {
+                x: best_x,
+                fmin: best_f,
+                fevals,
+                iterations,
+                final_radius: radius,
+                stop_reason: TrustBqStopReason::MaxEvaluations,
+                last_model_sample_count,
+            });
+        }
+        if radius <= options.final_radius {
+            return Ok(TrustBqResult {
+                x: best_x,
+                fmin: best_f,
+                fevals,
+                iterations,
+                final_radius: radius,
+                stop_reason: TrustBqStopReason::RadiusBelowTolerance,
+                last_model_sample_count,
+            });
+        }
+        if iterations > 0
+            && progress(&TrustBqProgress {
+                x: &best_x,
+                fmin: best_f,
+                fevals,
+                radius,
+            })?
+        {
+            return Ok(TrustBqResult {
+                x: best_x,
+                fmin: best_f,
+                fevals,
+                iterations,
+                final_radius: radius,
+                stop_reason: TrustBqStopReason::CertifiedConvergence,
+                last_model_sample_count,
+            });
+        }
+
+        // Exact first-order stop: the projected gradient at the current
+        // centre is below the caller's band. Unlike a finite-difference
+        // surrogate this needs no trust-region contraction to be trusted.
+        let projected = projected_gradient_norm(&x, &g, lower_bounds, upper_bounds);
+        let gradient_band = options.gradient_tolerance_rel * f.abs().max(1.0);
+        // Objective-based stops below are gated on a loosened version of
+        // the same band (no gate when the first-order stop is disabled).
+        let gradient_allows_objective_stop = options.gradient_tolerance_rel <= 0.0
+            || projected <= OBJECTIVE_STOP_GRADIENT_LOOSENING * gradient_band;
+        if options.gradient_tolerance_rel > 0.0 && x == best_x && projected <= gradient_band {
+            return Ok(TrustBqResult {
+                x: best_x,
+                fmin: best_f,
+                fevals,
+                iterations,
+                final_radius: radius,
+                stop_reason: TrustBqStopReason::GradientBelowTolerance,
+                last_model_sample_count,
+            });
+        }
+
+        // Stagnation early stop, as in the interpolation loop; every
+        // iteration here is a fresh-model iteration.
+        let stall_obj_tol = stall_ftol_abs + stall_ftol_rel * stall_best_f.abs().max(1.0);
+        let improved_f = (stall_best_f - best_f) > stall_obj_tol;
+        let moved_x = options.stall_requires_stable_x
+            && best_x
+                .iter()
+                .zip(stall_best_x.iter())
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f64, f64::max)
+                > options.final_radius;
+        if improved_f || moved_x {
+            stalled = 0;
+            stall_best_f = best_f;
+            stall_best_x.clone_from(&best_x);
+        } else {
+            stalled += 1;
+        }
+        let has_descended = best_f < initial_objective;
+        let stall_radius_is_local = if options.ftol_requires_local_radius {
+            radius <= ftol_radius
+        } else {
+            radius < options.initial_radius
+        };
+        if has_descended
+            && stalled >= options.stall_iterations
+            && stall_radius_is_local
+            && gradient_allows_objective_stop
+        {
+            return Ok(TrustBqResult {
+                x: best_x,
+                fmin: best_f,
+                fevals,
+                iterations,
+                final_radius: radius,
+                stop_reason: TrustBqStopReason::ObjectiveStagnation,
+                last_model_sample_count,
+            });
+        }
+
+        iterations += 1;
+        let model = QuadraticInterpolationModel {
+            gradient: DVector::from_column_slice(&g),
+            hessian: hessian.clone(),
+            sample_count: 0,
+        };
+        let step = trust_region_step(&model, &x, lower_bounds, upper_bounds, radius, true);
+        let step_norm = norm(&step);
+        if step_norm <= options.final_radius {
+            radius *= options.shrink_factor;
+            if radius <= options.final_radius {
+                return Ok(TrustBqResult {
+                    x: best_x,
+                    fmin: best_f,
+                    fevals,
+                    iterations,
+                    final_radius: radius,
+                    stop_reason: TrustBqStopReason::StepBelowTolerance,
+                    last_model_sample_count,
+                });
+            }
+            continue;
+        }
+        let predicted_reduction = model.predicted_reduction(&step);
+        if !predicted_reduction.is_finite() || predicted_reduction <= 0.0 {
+            radius *= options.shrink_factor;
+            continue;
+        }
+        let mut trial = x
+            .iter()
+            .zip(step.iter())
+            .map(|(xi, si)| xi + si)
+            .collect::<Vec<_>>();
+        project_in_place(&mut trial, lower_bounds, upper_bounds);
+        if distance(&x, &trial) <= options.final_radius {
+            radius *= options.shrink_factor;
+            continue;
+        }
+
+        let (trial_f, trial_g) = evaluate_oracle(&mut oracle, &trial, &mut fevals)?;
+        if trial_f < best_f {
+            best_f = trial_f;
+            best_x = trial.clone();
+        }
+        // Secant information from every evaluated point, accepted or not.
+        if trial_g.iter().all(|value| value.is_finite()) {
+            let s: Vec<f64> = trial.iter().zip(x.iter()).map(|(t, xi)| t - xi).collect();
+            let y: Vec<f64> = trial_g.iter().zip(g.iter()).map(|(t, gi)| t - gi).collect();
+            secant_update(&mut hessian, &s, &y);
+        }
+
+        let actual_reduction = f - trial_f;
+        let ratio = actual_reduction / predicted_reduction;
+        if ratio >= options.eta_accept && actual_reduction > 0.0 {
+            let old_f = f;
+            x = trial;
+            f = trial_f;
+            g = trial_g;
+            consecutive_rejections = 0;
+            if ratio >= options.eta_expand && step_norm > 0.8 * radius {
+                radius *= options.expand_factor;
+            }
+            if ratio < POOR_RATIO {
+                consecutive_poor_accepts += 1;
+                let contracted = radius * RESEED_RADIUS_CONTRACTION <= radius_at_seed;
+                if (consecutive_poor_accepts >= RESEED_AFTER_POOR_ACCEPTS || contracted)
+                    && fevals + n < options.max_evaluations
+                {
+                    hessian = seed_hessian_from_gradient(
+                        &x,
+                        &g,
+                        lower_bounds,
+                        upper_bounds,
+                        options.max_evaluations,
+                        &mut oracle,
+                        &mut fevals,
+                        &mut best_x,
+                        &mut best_f,
+                    )?;
+                    consecutive_poor_accepts = 0;
+                    radius_at_seed = radius;
+                }
+            } else {
+                consecutive_poor_accepts = 0;
+            }
+            let objective_tol = options.ftol_abs + options.ftol_rel * old_f.abs().max(1.0);
+            let new_projected = projected_gradient_norm(&x, &g, lower_bounds, upper_bounds);
+            let new_gradient_allows_stop = options.gradient_tolerance_rel <= 0.0
+                || new_projected
+                    <= OBJECTIVE_STOP_GRADIENT_LOOSENING
+                        * options.gradient_tolerance_rel
+                        * f.abs().max(1.0);
+            if actual_reduction.abs() <= objective_tol
+                && (!options.ftol_requires_local_radius || radius <= ftol_radius)
+                && new_gradient_allows_stop
+            {
+                return Ok(TrustBqResult {
+                    x: best_x,
+                    fmin: best_f,
+                    fevals,
+                    iterations,
+                    final_radius: radius,
+                    stop_reason: TrustBqStopReason::ObjectiveTolerance,
+                    last_model_sample_count,
+                });
+            }
+        } else {
+            radius *= options.shrink_factor;
+            consecutive_rejections += 1;
+            consecutive_poor_accepts = 0;
+            let contracted = radius * RESEED_RADIUS_CONTRACTION <= radius_at_seed;
+            if (consecutive_rejections >= RESEED_AFTER_REJECTIONS || contracted)
+                && fevals + n < options.max_evaluations
+            {
+                // The secant model has stopped predicting the objective;
+                // start over from finite differences of the gradient.
+                hessian = seed_hessian_from_gradient(
+                    &x,
+                    &g,
+                    lower_bounds,
+                    upper_bounds,
+                    options.max_evaluations,
+                    &mut oracle,
+                    &mut fevals,
+                    &mut best_x,
+                    &mut best_f,
+                )?;
+                consecutive_rejections = 0;
+                radius_at_seed = radius;
+            }
+        }
+    }
+}
+
+fn evaluate_oracle<F>(oracle: &mut F, x: &[f64], fevals: &mut usize) -> Result<(f64, Vec<f64>)>
+where
+    F: FnMut(&[f64]) -> Result<(f64, Vec<f64>)>,
+{
+    let (value, gradient) = oracle(x)?;
+    *fevals += 1;
+    if !value.is_finite() {
+        return Err(MixedModelError::Optimization(
+            "TrustBQ objective returned a non-finite value".to_string(),
+        ));
+    }
+    if gradient.len() != x.len() {
+        return Err(MixedModelError::Optimization(format!(
+            "TrustBQ gradient oracle returned {} components for {} parameters",
+            gradient.len(),
+            x.len()
+        )));
+    }
+    Ok((value, gradient))
+}
+
+/// Symmetrized forward-difference Hessian of the oracle gradient at `x`
+/// (one oracle call per axis; axes pinned by their bounds or the budget
+/// keep a zero row, which the shifted step solver tolerates).
+#[allow(clippy::too_many_arguments)]
+fn seed_hessian_from_gradient<F>(
+    x: &[f64],
+    g: &[f64],
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
+    max_evaluations: usize,
+    oracle: &mut F,
+    fevals: &mut usize,
+    best_x: &mut Vec<f64>,
+    best_f: &mut f64,
+) -> Result<DMatrix<f64>>
+where
+    F: FnMut(&[f64]) -> Result<(f64, Vec<f64>)>,
+{
+    let n = x.len();
+    let mut hessian = DMatrix::zeros(n, n);
+    for i in 0..n {
+        if *fevals >= max_evaluations {
+            break;
+        }
+        let scale = HESSIAN_SEED_STEP_REL * x[i].abs().max(1.0);
+        let mut delta = feasible_axis_delta(x[i], lower_bounds[i], upper_bounds[i], scale, 1.0);
+        if delta.abs() <= MIN_STEP {
+            delta = feasible_axis_delta(x[i], lower_bounds[i], upper_bounds[i], scale, -1.0);
+        }
+        if delta.abs() <= MIN_STEP {
+            continue;
+        }
+        let mut probe = x.to_vec();
+        probe[i] += delta;
+        let (probe_f, probe_g) = evaluate_oracle(oracle, &probe, fevals)?;
+        if probe_f < *best_f {
+            *best_f = probe_f;
+            best_x.clone_from(&probe);
+        }
+        if probe_g.iter().all(|value| value.is_finite()) {
+            for j in 0..n {
+                hessian[(j, i)] = (probe_g[j] - g[j]) / delta;
+            }
+        }
+    }
+    let transposed = hessian.transpose();
+    hessian += transposed;
+    hessian *= 0.5;
+    Ok(hessian)
+}
+
+/// Secant update of the model Hessian: BFGS when the pair has positive
+/// curvature (`yᵀs > 0`), which preserves positive definiteness when the
+/// current model is positive definite, and SR1
+/// otherwise, which lets the model record negative curvature instead of
+/// discarding the pair.
+fn secant_update(hessian: &mut DMatrix<f64>, s: &[f64], y: &[f64]) {
+    let sv = DVector::from_column_slice(s);
+    let yv = DVector::from_column_slice(y);
+    let ys = yv.dot(&sv);
+    if ys > SR1_SKIP_TOLERANCE * yv.norm() * sv.norm() && ys > 0.0 {
+        let hs = &*hessian * &sv;
+        let shs = sv.dot(&hs);
+        if shs > 0.0 {
+            *hessian -= (&hs * hs.transpose()) / shs;
+        }
+        *hessian += (&yv * yv.transpose()) / ys;
+    } else {
+        sr1_update(hessian, s, y);
+    }
+}
+
+/// SR1 secant update `H ← H + r rᵀ / (rᵀ s)`, `r = y − H s`, skipped when
+/// the denominator is too small relative to `‖r‖ ‖s‖`.
+fn sr1_update(hessian: &mut DMatrix<f64>, s: &[f64], y: &[f64]) {
+    let s = DVector::from_column_slice(s);
+    let y = DVector::from_column_slice(y);
+    let r = &y - &*hessian * &s;
+    let denominator = r.dot(&s);
+    if denominator.abs() < SR1_SKIP_TOLERANCE * r.norm() * s.norm() || denominator == 0.0 {
+        return;
+    }
+    let update = (&r * r.transpose()) / denominator;
+    *hessian += update;
+}
+
+/// `‖x − P(x − g)‖_∞`: the bound-projected gradient measure.
+fn projected_gradient_norm(
+    x: &[f64],
+    g: &[f64],
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
+) -> f64 {
+    let mut stepped: Vec<f64> = x.iter().zip(g.iter()).map(|(xi, gi)| xi - gi).collect();
+    project_in_place(&mut stepped, lower_bounds, upper_bounds);
+    x.iter()
+        .zip(stepped.iter())
+        .map(|(xi, si)| (xi - si).abs())
+        .fold(0.0_f64, f64::max)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn indefinite_oracle_step_minimizes_its_feasible_ray() {
+        let model = QuadraticInterpolationModel {
+            gradient: DVector::from_vec(vec![-1.0, 0.0]),
+            hessian: DMatrix::from_diagonal(&DVector::from_vec(vec![-1.0, 2.0])),
+            sample_count: 0,
+        };
+        let (lower, upper) = unbounded(2);
+        for (radius, bound, expected_step) in
+            [(1.0, f64::INFINITY, 1.0), (1.0, 0.4, 0.4), (0.2, 0.4, 0.2)]
+        {
+            let mut upper = upper.clone();
+            upper[0] = bound;
+            let step = trust_region_step(&model, &[0.0, 0.0], &lower, &upper, radius, true);
+            assert!((step[0] - expected_step).abs() < 1e-12);
+            assert_eq!(step[1], 0.0);
+            // q(t) = -t - t^2/2 decreases along the entire feasible ray;
+            // the shifted Newton step alone would stop at t = 1/9.
+            assert!(
+                (model.predicted_reduction(&step)
+                    - expected_step
+                    - 0.5 * expected_step * expected_step)
+                    .abs()
+                    < 1e-12
+            );
+        }
+    }
 
     fn unbounded(n: usize) -> (Vec<f64>, Vec<f64>) {
         (vec![f64::NEG_INFINITY; n], vec![f64::INFINITY; n])
@@ -1131,6 +1734,212 @@ mod tests {
     }
 
     #[test]
+    fn quadratic_model_translation_is_exact_for_the_surrogate() {
+        // q_x(s) = gᵀs + ½ sᵀHs (constant dropped). After re-centring at
+        // x + p, the translated model's predicted reduction over u must equal
+        // q_x(p) - q_x(p + u), i.e. the original model's reduction over p + u
+        // minus its reduction over p.
+        let gradient = DVector::from_column_slice(&[0.7, -1.3, 2.1]);
+        let hessian =
+            DMatrix::from_row_slice(3, 3, &[4.0, 0.5, -0.25, 0.5, 3.0, 0.75, -0.25, 0.75, 2.5]);
+        let original = QuadraticInterpolationModel {
+            gradient: gradient.clone(),
+            hessian: hessian.clone(),
+            sample_count: 9,
+        };
+        let mut translated = original.clone();
+        let p = [0.3, -0.2, 0.15];
+        translated.translate(&p);
+        assert_eq!(translated.sample_count, 9);
+        assert_eq!(translated.hessian, hessian);
+
+        for u in [[0.1, 0.2, -0.3], [-0.05, 0.0, 0.4], [0.25, -0.25, 0.25]] {
+            let p_plus_u = [p[0] + u[0], p[1] + u[1], p[2] + u[2]];
+            let expected =
+                original.predicted_reduction(&p_plus_u) - original.predicted_reduction(&p);
+            let actual = translated.predicted_reduction(&u);
+            assert!(
+                (actual - expected).abs() < 1e-12,
+                "u={u:?}: translated {actual} vs expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn trust_bq_rejected_step_model_reuse_is_cheaper_and_reaches_same_optimum() {
+        // A quartic bowl: far from the optimum the finite-difference quadratic
+        // built at a coarse radius over-predicts, so trial steps get rejected
+        // and the fresh-rebuild solver pays a whole stencil again at the same
+        // centre. Keeping the model for one shrunken step skips that.
+        fn quartic(x: &[f64]) -> Result<f64> {
+            Ok((x[0] - 1.0).powi(4) + 3.0 * (x[1] + 2.0).powi(4) + (x[0] - 1.0).powi(2))
+        }
+        let opts = |rejected_reuse: usize| TrustBqOptions {
+            initial_radius: 2.0,
+            final_radius: 1e-6,
+            max_evaluations: 20_000,
+            ftol_abs: 1e-12,
+            ftol_rel: 1e-12,
+            rejected_step_model_reuse: rejected_reuse,
+            ..TrustBqOptions::default()
+        };
+        let fresh = minimize(&[3.0, 1.0], &[-6.0, -6.0], &[6.0, 6.0], opts(0), quartic)
+            .expect("fresh-rebuild solve");
+        let reused = minimize(&[3.0, 1.0], &[-6.0, -6.0], &[6.0, 6.0], opts(1), quartic)
+            .expect("rejected-reuse solve");
+
+        assert!(fresh.stop_reason.is_acceptable_convergence(), "{fresh:?}");
+        assert!(reused.stop_reason.is_acceptable_convergence(), "{reused:?}");
+        assert!(reused.fmin < 1e-12, "{reused:?}");
+        assert!((reused.x[0] - 1.0).abs() < 1e-4, "{reused:?}");
+        assert!((reused.x[1] + 2.0).abs() < 1e-3, "{reused:?}");
+        assert!(
+            reused.fevals < fresh.fevals,
+            "rejected-step reuse evals {} not fewer than fresh {}",
+            reused.fevals,
+            fresh.fevals
+        );
+        // Reuse makes iterations cheaper on average (a reused step costs one
+        // evaluation instead of a stencil plus one).
+        assert!(
+            (reused.fevals as f64 / reused.iterations as f64)
+                < (fresh.fevals as f64 / fresh.iterations as f64),
+            "{fresh:?} {reused:?}"
+        );
+    }
+
+    #[test]
+    fn trust_bq_rejected_step_model_reuse_is_not_a_free_lunch_on_a_curved_valley() {
+        // Documented limitation: on Rosenbrock's curved valley a model built
+        // at radius r is a poor fit at r/2 too, so reusing it after a
+        // rejection usually buys another rejection. The rule must still
+        // converge to the same optimum, and the overhead stays small (a few
+        // percent), but it is *not* an evaluation saving there — which is why
+        // the profiled-LMM policy pairs it with the translated accepted-step
+        // rule for the small family and keeps the caps at one.
+        fn rosenbrock(x: &[f64]) -> Result<f64> {
+            Ok(100.0 * (x[1] - x[0] * x[0]).powi(2) + (1.0 - x[0]).powi(2))
+        }
+        let opts = |rejected_reuse: usize| TrustBqOptions {
+            initial_radius: 0.5,
+            final_radius: 1e-6,
+            max_evaluations: 20_000,
+            ftol_abs: 1e-12,
+            ftol_rel: 1e-12,
+            rejected_step_model_reuse: rejected_reuse,
+            ..TrustBqOptions::default()
+        };
+        let fresh = minimize(
+            &[-1.2, 1.0],
+            &[-2.0, -1.0],
+            &[2.0, 3.0],
+            opts(0),
+            rosenbrock,
+        )
+        .expect("fresh-rebuild solve");
+        let reused = minimize(
+            &[-1.2, 1.0],
+            &[-2.0, -1.0],
+            &[2.0, 3.0],
+            opts(1),
+            rosenbrock,
+        )
+        .expect("rejected-reuse solve");
+
+        assert!(reused.stop_reason.is_acceptable_convergence(), "{reused:?}");
+        assert!(reused.fmin < 1e-5, "{reused:?}");
+        assert!((reused.x[0] - 1.0).abs() < 5e-3, "{reused:?}");
+        assert!((reused.x[1] - 1.0).abs() < 1e-2, "{reused:?}");
+        assert!(
+            reused.fevals <= fresh.fevals + fresh.fevals / 10,
+            "rejected-step reuse overhead exceeded 10%: {} vs {}",
+            reused.fevals,
+            fresh.fevals
+        );
+    }
+
+    #[test]
+    fn trust_bq_accepted_step_model_reuse_is_cheaper_and_reaches_same_optimum() {
+        // On an exact quadratic the translated surrogate is the true
+        // objective, so carrying it across a well-predicted accepted step
+        // must lose nothing and skip whole stencils.
+        fn quad(x: &[f64]) -> Result<f64> {
+            Ok((x[0] - 1.25).powi(2)
+                + 2.0 * (x[1] + 2.0).powi(2)
+                + 0.5 * (x[0] - 1.25) * (x[1] + 2.0))
+        }
+        let (lower, upper) = unbounded(2);
+        let opts = |accepted_reuse: usize| TrustBqOptions {
+            initial_radius: 1.0,
+            final_radius: 1e-7,
+            max_evaluations: 400,
+            accepted_step_model_reuse: accepted_reuse,
+            ..TrustBqOptions::default()
+        };
+        let fresh = minimize(&[4.0, -5.0], &lower, &upper, opts(0), quad).expect("fresh solve");
+        let reused = minimize(&[4.0, -5.0], &lower, &upper, opts(1), quad).expect("reuse solve");
+
+        assert!(fresh.stop_reason.is_acceptable_convergence(), "{fresh:?}");
+        assert!(reused.stop_reason.is_acceptable_convergence(), "{reused:?}");
+        assert!((reused.x[0] - 1.25).abs() < 1e-4, "{reused:?}");
+        assert!((reused.x[1] + 2.0).abs() < 1e-4, "{reused:?}");
+        assert!(reused.fmin < 1e-8, "{reused:?}");
+        assert!(
+            reused.fevals < fresh.fevals,
+            "accepted-step reuse evals {} not fewer than fresh {}",
+            reused.fevals,
+            fresh.fevals
+        );
+    }
+
+    #[test]
+    fn trust_bq_translated_model_reuse_cuts_rosenbrock_valley_cost() {
+        // Along the valley floor successive steps are well predicted, so the
+        // translated model keeps being reused instead of re-probing the
+        // stencil; with tight tolerances the fresh-rebuild solver needs an
+        // order of magnitude more evaluations to polish to the same point.
+        fn rosenbrock(x: &[f64]) -> Result<f64> {
+            Ok(100.0 * (x[1] - x[0] * x[0]).powi(2) + (1.0 - x[0]).powi(2))
+        }
+        let opts = |accepted_reuse: usize| TrustBqOptions {
+            initial_radius: 0.5,
+            final_radius: 1e-6,
+            max_evaluations: 20_000,
+            ftol_abs: 1e-12,
+            ftol_rel: 1e-12,
+            accepted_step_model_reuse: accepted_reuse,
+            ..TrustBqOptions::default()
+        };
+        let fresh = minimize(
+            &[-1.2, 1.0],
+            &[-2.0, -1.0],
+            &[2.0, 3.0],
+            opts(0),
+            rosenbrock,
+        )
+        .expect("fresh-rebuild solve");
+        let reused = minimize(
+            &[-1.2, 1.0],
+            &[-2.0, -1.0],
+            &[2.0, 3.0],
+            opts(1),
+            rosenbrock,
+        )
+        .expect("translated-reuse solve");
+
+        assert!(reused.stop_reason.is_acceptable_convergence(), "{reused:?}");
+        assert!(reused.fmin < 1e-8, "{reused:?}");
+        assert!((reused.x[0] - 1.0).abs() < 1e-4, "{reused:?}");
+        assert!((reused.x[1] - 1.0).abs() < 1e-4, "{reused:?}");
+        assert!(
+            reused.fevals * 4 < fresh.fevals,
+            "translated reuse should cut the valley cost by >4x: {} vs {}",
+            reused.fevals,
+            fresh.fevals
+        );
+    }
+
+    #[test]
     fn trust_bq_sample_reuse_is_exact_and_cheaper() {
         // A boundary-clamped quadratic: the unconstrained x0 optimum is -2 but
         // x0 is clamped to its lower bound 0, so axis-0 probing is one-sided
@@ -1179,5 +1988,173 @@ mod tests {
             reused.fevals,
             fresh.fevals
         );
+    }
+
+    fn quadratic_oracle(x: &[f64]) -> Result<(f64, Vec<f64>)> {
+        let f = (x[0] - 1.25).powi(2) + 2.0 * (x[1] + 2.0).powi(2);
+        Ok((f, vec![2.0 * (x[0] - 1.25), 4.0 * (x[1] + 2.0)]))
+    }
+
+    fn rosenbrock_oracle(x: &[f64]) -> Result<(f64, Vec<f64>)> {
+        let f = 100.0 * (x[1] - x[0] * x[0]).powi(2) + (1.0 - x[0]).powi(2);
+        let g0 = -400.0 * x[0] * (x[1] - x[0] * x[0]) - 2.0 * (1.0 - x[0]);
+        let g1 = 200.0 * (x[1] - x[0] * x[0]);
+        Ok((f, vec![g0, g1]))
+    }
+
+    #[test]
+    fn trust_bq_gradient_solves_shifted_quadratic_in_a_handful_of_oracle_calls() {
+        let (lower, upper) = unbounded(2);
+        let result = minimize_with_gradient_and_progress(
+            &[4.0, -5.0],
+            &lower,
+            &upper,
+            TrustBqOptions {
+                initial_radius: 1.0,
+                final_radius: 1e-7,
+                max_evaluations: 400,
+                gradient_tolerance_rel: 1e-10,
+                ..TrustBqOptions::default()
+            },
+            quadratic_oracle,
+            |_| Ok(false),
+        )
+        .unwrap();
+        assert!(result.stop_reason.is_acceptable_convergence(), "{result:?}");
+        assert!((result.x[0] - 1.25).abs() < 1e-6, "{result:?}");
+        assert!((result.x[1] + 2.0).abs() < 1e-6, "{result:?}");
+        // One start, two seed probes, then a few trust-region steps: the
+        // exact Hessian seed makes the surrogate exact for a quadratic.
+        assert!(result.fevals <= 12, "{result:?}");
+        let interpolation = minimize(
+            &[4.0, -5.0],
+            &lower,
+            &upper,
+            TrustBqOptions {
+                initial_radius: 1.0,
+                final_radius: 1e-7,
+                max_evaluations: 400,
+                ..TrustBqOptions::default()
+            },
+            |x| quadratic_oracle(x).map(|(f, _)| f),
+        )
+        .unwrap();
+        assert!(
+            result.fevals < interpolation.fevals,
+            "{result:?} vs {interpolation:?}"
+        );
+    }
+
+    #[test]
+    fn trust_bq_gradient_handles_rosenbrock_like_valley() {
+        let (lower, upper) = (vec![-2.0, -1.0], vec![2.0, 3.0]);
+        let result = minimize_with_gradient_and_progress(
+            &[-1.2, 1.0],
+            &lower,
+            &upper,
+            TrustBqOptions {
+                initial_radius: 0.5,
+                final_radius: 1e-8,
+                max_evaluations: 2_000,
+                ftol_abs: 1e-14,
+                ftol_rel: 1e-14,
+                gradient_tolerance_rel: 1e-9,
+                ..TrustBqOptions::default()
+            },
+            rosenbrock_oracle,
+            |_| Ok(false),
+        )
+        .unwrap();
+        assert_ne!(
+            result.stop_reason,
+            TrustBqStopReason::MaxEvaluations,
+            "{result:?}"
+        );
+        assert!(result.fmin < 1e-8, "{result:?}");
+        assert!((result.x[0] - 1.0).abs() < 1e-4, "{result:?}");
+        assert!((result.x[1] - 1.0).abs() < 1e-4, "{result:?}");
+        let interpolation = minimize(
+            &[-1.2, 1.0],
+            &lower,
+            &upper,
+            TrustBqOptions {
+                initial_radius: 0.5,
+                final_radius: 1e-6,
+                max_evaluations: 20_000,
+                ftol_abs: 1e-12,
+                ftol_rel: 1e-12,
+                ..TrustBqOptions::default()
+            },
+            |x| rosenbrock_oracle(x).map(|(f, _)| f),
+        )
+        .unwrap();
+        assert!(
+            result.fevals * 2 < interpolation.fevals,
+            "gradient {} vs interpolation {} evaluations",
+            result.fevals,
+            interpolation.fevals
+        );
+    }
+
+    #[test]
+    fn trust_bq_gradient_respects_bounded_boundary_optimum() {
+        // Unconstrained optimum at (1.25, -2); the bounds pin x[1] >= 0.
+        let lower = vec![f64::NEG_INFINITY, 0.0];
+        let upper = vec![f64::INFINITY, f64::INFINITY];
+        let result = minimize_with_gradient_and_progress(
+            &[3.0, 2.0],
+            &lower,
+            &upper,
+            TrustBqOptions {
+                initial_radius: 1.0,
+                final_radius: 1e-8,
+                max_evaluations: 400,
+                gradient_tolerance_rel: 1e-10,
+                ..TrustBqOptions::default()
+            },
+            quadratic_oracle,
+            |_| Ok(false),
+        )
+        .unwrap();
+        assert!(result.stop_reason.is_acceptable_convergence(), "{result:?}");
+        assert!((result.x[0] - 1.25).abs() < 1e-6, "{result:?}");
+        assert_eq!(result.x[1], 0.0, "{result:?}");
+    }
+
+    #[test]
+    fn trust_bq_gradient_rejects_non_finite_objective_and_bad_gradient_length() {
+        let (lower, upper) = unbounded(1);
+        let options = TrustBqOptions::default();
+        let err = minimize_with_gradient_and_progress(
+            &[1.0],
+            &lower,
+            &upper,
+            options.clone(),
+            |_| Ok((f64::NAN, vec![0.0])),
+            |_| Ok(false),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("non-finite"), "{err}");
+        let err = minimize_with_gradient_and_progress(
+            &[1.0],
+            &lower,
+            &upper,
+            options,
+            |x| Ok((x[0] * x[0], vec![])),
+            |_| Ok(false),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("components"), "{err}");
+    }
+
+    #[test]
+    fn sr1_update_recovers_a_constant_hessian_from_secant_pairs() {
+        let exact = DMatrix::from_row_slice(2, 2, &[2.0, 0.5, 0.5, 4.0]);
+        let mut hessian = DMatrix::identity(2, 2);
+        for s in [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]] {
+            let y = &exact * DVector::from_column_slice(&s);
+            sr1_update(&mut hessian, &s, y.as_slice());
+        }
+        assert!((&hessian - &exact).norm() < 1e-12, "{hessian}");
     }
 }

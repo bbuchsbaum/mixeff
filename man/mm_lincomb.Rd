@@ -62,15 +62,17 @@ not named in \code{weights} contribute zero. Pass the long-form
 rhs.
 }
 \examples{
-\dontrun{
-# Difference-in-differences contrast at a focal SOA = 25 ms
-# (Loo et al. 2026 aphantasia primary estimand, glmm path)
-soa_s_25 <- (log(0.025) - mean(fit$data$soa_log)) / sd(fit$data$soa_log)
-mm_lincomb(fit, c(
-  "group: aphant:mask: masked"        = 1,
-  "group: aphant:mask: masked:soa_s"  = soa_s_25
-))
-}
+set.seed(1)
+d <- data.frame(
+  g   = factor(rep(1:12, each = 8)),
+  trt = factor(rep(c("ctrl", "drug"), 48)),
+  x   = rnorm(96)
+)
+d$y <- 1 + 0.5 * (d$trt == "drug") + 0.3 * d$x +
+  0.4 * (d$trt == "drug") * d$x + rnorm(12)[d$g] + rnorm(96)
+fit <- lmm(y ~ trt * x + (1 | g), d, control = mm_control(verbose = -1))
+# Treatment effect at x = 1 (weights use lme4 coefficient names):
+mm_lincomb(fit, c(trtdrug = 1, "trtdrug:x" = 1))
 
 }
 \seealso{

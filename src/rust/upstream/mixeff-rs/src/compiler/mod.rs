@@ -50,7 +50,9 @@ pub use audit::{
     DesignAudit, EmptyCellAudit, EstimatorSubstitution, EvidenceMethod, EvidenceQuality, FitAudit,
     FixedEffectAudit, FixedEffectColumnAudit, FixedEffectColumnKind, FixedEffectTermAudit,
     FixedEffectTermStatus, GradientEvidence, GroupingAudit, HessianEvidence,
-    InformationBudgetStatus, MissingDependencePathAudit, OptimizerCertificate,
+    IncompleteCheckEvidence, IncompleteCheckStatus, InformationBudgetStatus,
+    MissingDependencePathAudit, NewtonDecrementEstimate, NewtonDecrementEvidence,
+    NewtonDecrementExclusion, NewtonDecrementVariant, NewtonDecrementVerdict, OptimizerCertificate,
     OptimizerDerivativeEvidence, OptimizerStopEvidence, ParameterSpaceEvidence,
     RandomEffectEffectiveNReport, RandomEffectInformationBudget, RandomTermAudit, RankAssessment,
     RankStatus, SampleSizeContext,
@@ -60,8 +62,8 @@ pub use estimability::{
     ContrastMatrix, ContrastRhs, EstimabilityAssessment, EstimabilityStatus,
     FixedContrastEstimability, FixedEffectHypothesis, FixedEffectTermTestType, FixedEffectTest,
     FixedEffectTestMethod, FixedTermEstimability, InferenceMethod, InferenceStatus,
-    KernelPathEstimability, RandomCovarianceEstimability, RandomVarianceEstimability,
-    ReliabilityGrade,
+    KenwardRogerFScaling, KernelPathEstimability, RandomCovarianceEstimability,
+    RandomVarianceEstimability, ReliabilityGrade,
 };
 pub use explain::{explain_model, ModelExplanation};
 pub use ir::{

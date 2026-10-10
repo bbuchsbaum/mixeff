@@ -65,11 +65,12 @@ test_that("registry-declared refusals carry their declared classes and codes", {
 
   fit <- glmm(y ~ x + (1 | g), d, family = binomial(),
               control = mm_control(verbose = -1))
-  # Feature refusals: classes declared in the registry.
-  expect_error(simulate(fit), class = "mm_inference_unavailable")
-  expect_error(refit(fit, fitted(fit)), class = "mm_inference_unavailable")
+  # simulate()/refit() are supported for GLMMs; a Bernoulli refit refuses a
+  # response that is not 0/1.
+  expect_s3_class(simulate(fit), "data.frame")
+  expect_error(refit(fit, fitted(fit)), class = "mm_arg_error")
   expect_error(
-    glmm(y ~ x + (1 | g), d, family = binomial(), subset = 1:50,
+    glmm(y ~ x + (1 | g), d, family = binomial(), random = ~ (1 | g),
          control = mm_control(verbose = -1)),
     class = "mm_fit_error"
   )

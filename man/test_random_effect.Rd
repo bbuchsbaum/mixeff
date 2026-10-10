@@ -41,7 +41,10 @@ An \code{mm_random_effect_test} object with a one-row \code{table}.
 \description{
 \code{test_random_effect()} exposes the boundary-aware likelihood-ratio route for
 random-effect variance components. The v1 certified route is a nested ML
-comparison that adds exactly one variance/covariance parameter and reports
-the Self-Liang 50:50 mixture reference distribution. It is intentionally
+comparison that adds exactly one variance parameter and reports the
+Self-Liang 50:50 mixture reference distribution; a comparison that adds
+only correlation parameters (e.g. \code{||} versus \code{|}) is referred to the
+ordinary chi-square, since a zero correlation is interior to the
+parameter space (\code{method = "boundary_lrt_ordinary_chisq"}). It is intentionally
 separate from \code{\link[=test_effect]{test_effect()}}, which tests fixed effects.
 }

@@ -33,19 +33,46 @@ mixed model, so use
 | `Bernoulli` | `Logit`, `Probit`, `Cloglog` | `Logit` |
 | `Binomial` | `Logit`, `Probit`, `Cloglog` | `Logit` |
 | `Poisson` | `Log`, `Sqrt` | `Log` |
+| `NegativeBinomial` (NB2) | `Log` | `Log` |
 | `Gamma` | `Log`, `Inverse` | `Inverse` |
 | `InverseGaussian` | `Log`, `Inverse` | `Inverse` |
 | `Normal` (as GLMM) | `Log`, `Inverse`, `Sqrt` | — (use LMM for Identity) |
 
-The variant lists are intentionally enumerable from the public types, so this
-table cannot drift silently:
+**Estimated-dispersion GLMMs (Gamma, inverse Gaussian, Gaussian with a
+non-identity link) follow lme4 2.1.** By default
+([`GlmmDispersionMethod::Moment`](crate::model::GlmmDispersionMethod::Moment), lme4 2.1's
+`glmerControl(disp_method = "moment", disp_dof_correction = TRUE)`) the
+dispersion φ is profiled inside PIRLS: the working weights are
+`w μ'(η)² / (φ V(μ))`, the conditional modes minimize `dev/φ + ‖u‖²`, and φ
+follows lme4's damped fixed-point iteration `φ ← φ^0.9 (dev / (Σw − rank([X,
+Z])))^0.1` from φ = 1 (at most `maxPhiIter = 100` steps per objective
+evaluation). Consequently θ is the absolute random-effect SD on the link
+scale (`varcorr()` reports θ, not θσ), `dispersion(false)` is lme4's
+`sigma()` = sqrt(φ), and the fixed-effect covariance is the φ-weighted RX
+(or the joint Laplace Hessian) with no further σ² rescaling. The Laplace/AGQ
+criterion keeps the family `aic()` density with φ = mean unit deviance, and
+`loglikelihood()` equals lme4 2.1's `logLik` (lme4 < 2.1 added the `aic()`'s
+`+2`, printing a value 1.0 lower). θ, β, σ, logLik, deviance and AIC match
+lme4 2.1 (`tests/parity_dispersion_glmm_lme4.rs`). lme4 2.1's own `vcov()`
+for `nAGQ = 0` fits and its `predict(se.fit = TRUE)` multiply the
+already-φ-weighted factorization by `sigma()²` once more; the engine does
+not, so those lme4 numbers are σ (resp. σ²) times the engine's.
+`set_dispersion_method(GlmmDispersionMethod::Legacy)` reproduces lme4 < 2.1
+(`disp_method = "old/buggy"`: unit-φ working weights, θ relative to σ,
+σ = sqrt((Pearson RSS + ‖u‖²)/n)); `set_dispersion_dof_correction(false)`
+and `set_max_phi_iter(n)` mirror the other two controls.
+
+The variants below compile against the public types. Both enums are
+`#[non_exhaustive]`, so a newly added variant does not break this example;
+update the table when one is added:
 
 ```rust
 use mixeff_rs::model::{Family, LinkFunction};
 # fn main() {
 let _families = [
     Family::Normal, Family::Bernoulli, Family::Binomial,
-    Family::Poisson, Family::Gamma, Family::InverseGaussian,
+    Family::Poisson, Family::NegativeBinomial, Family::Gamma,
+    Family::InverseGaussian,
 ];
 let _links = [
     LinkFunction::Identity, LinkFunction::Log, LinkFunction::Logit,
@@ -68,7 +95,7 @@ subset:
 | `y ~ x1 / x2` | Nesting (`x1 + x1:x2`) | Stable |
 | `0 + …`, `-1 + …`, `1 + …` | Explicit intercept handling | Stable |
 | `(re | g)` | Correlated random effects in group `g` | Stable |
-| `(re || g)` | Zero-correlation random effects | Stable |
+| `(re || g)` | Zero-correlation random effects (lme4 expansion; see below for factors) | Stable |
 | `(re | g1 & g2)` | Interaction grouping factor | Stable |
 | `(re | g1:g2)` | Cell-level grouping factor | Stable |
 | `(re | g1/g2)` | Nested grouping expansion | Stable |
@@ -78,6 +105,33 @@ subset:
 | `cs(re | g)`, `ar1(re | g)` | Structured random-effect covariance syntax | Parsed and refused for fitting in v1.0 |
 | `I(expr)` and other in-formula transforms | Stateless arithmetic subset | Stable (minimal subset) |
 | Full `I()` / model.matrix transformations | — | Out of scope |
+
+### Random-effect basis coding and `||` with factors
+
+The random-effect basis inside `( … | g)` is coded exactly like R's
+`model.matrix()` for the same terms (as lme4's `mkReTrms` does): with an
+intercept every factor uses contrasts (treatment by default, or the factor's
+explicit contrast); without an intercept the *first* factor gets full
+indicator columns and later factors use contrasts, so `(0 + f + h | g)` has
+`nlevels(f) + nlevels(h) - 1` full-rank columns; interactions follow R's
+marginality rules.
+
+`||` follows lme4's `expandDoubleVerts`. For intercept and numeric terms it
+means independent variances (`(1 + x || g)` is `(1 | g) + (0 + x | g)`; the
+engine fits it as one diagonal block, which is the same model). A **factor**
+inside `||` is not split into independent contrast variances: like lme4,
+`(1 + x + f || g)` becomes `(1 + x || g) + (0 + f | g)`, i.e. the factor is
+its own block with full indicator coding and an unstructured covariance among
+its levels. The fitted model's formula shows this expansion, and the compiler
+records it as a `syntax_expansion` diagnostic with
+`expansion_kind = "zero_correlation_factor_split"`. (Through 1.0.0-rc.5 a
+factor inside `||` was treatment-coded with one independent variance per
+contrast, a different model from lme4.)
+
+Unused levels of a grouping factor are dropped when the random-effect terms
+are built (as in lme4), so they do not appear in `ranef`, the number of
+groups, or conditional variances; at prediction time such a level is a new
+level.
 
 Random-effect covariance artifacts serialize stable support labels:
 `supported` for scalar, diagonal, and full/unstructured fitted families;
@@ -126,7 +180,7 @@ GLMM `fast=true` default is **not** the same statistical approximation as
 | Wald CIs ([`CoefTable::wald_confint`](crate::stats::CoefTable::wald_confint)) | ✓ | ✓ | Stable |
 | Satterthwaite / Kenward-Roger df rows in [`CoefTable`](crate::stats::CoefTable) | ✓ | — | Stable for Gaussian REML LMMs with iid Gaussian residuals; crossed/nested certification is fixture-driven and expanding |
 | Profile-likelihood CIs ([`crate::stats::profile`](mod@crate::stats::profile)) — `σ`, `θ`, ML `β` | ✓ | — | Stable for LMM; GLMM out of scope |
-| Parametric bootstrap ([`parametricbootstrap`](crate::model::parametricbootstrap), [`parametricbootstrap_glmm`](crate::stats::bootstrap::parametricbootstrap_glmm)) | ✓ | ✓ | Stable for LMM; stable for Bernoulli, Binomial, Poisson, and Gamma GLMMs. InverseGaussian and Normal-as-GLMM bootstrap are refused |
+| Parametric bootstrap ([`parametricbootstrap`](crate::model::parametricbootstrap), [`parametricbootstrap_glmm`](crate::stats::bootstrap::parametricbootstrap_glmm)) | ✓ | ✓ | Stable for LMM; stable for Bernoulli, Binomial, Poisson, NegativeBinomial, and Gamma GLMMs. InverseGaussian and Normal-as-GLMM bootstrap are refused |
 | Likelihood-ratio tests ([`LikelihoodRatioTest`](crate::stats::LikelihoodRatioTest), [`BoundaryLikelihoodRatioTest`](crate::stats::BoundaryLikelihoodRatioTest), [`ModelComparisonTable`](crate::stats::ModelComparisonTable)) | ✓ | ✓ | Stable, with a typed taxonomy and stable reason codes |
 
 ## Refusals

@@ -117,10 +117,18 @@ mm_json_parse_fixed_effect_inference_table <- function(table) {
     )
   }
 
-  mm_json_negotiate(list(
-    schema_name    = as.character(table$schema_name),
-    schema_version = as.character(table$schema_version)
-  ))
+  # 1.2.0 (mixeff-rs rc.4) only added per-row `covariance_method`
+  # provenance (kept in `$raw`), so tables stored by fits made with the 1.1.0
+  # engine still parse.
+  legacy <- identical(as.character(table$schema_name),
+                      "mixedmodels.fixed_effect_inference_table") &&
+    identical(as.character(table$schema_version), "1.1.0")
+  if (!legacy) {
+    mm_json_negotiate(list(
+      schema_name    = as.character(table$schema_name),
+      schema_version = as.character(table$schema_version)
+    ))
+  }
 
   rows <- table$rows %||% list()
   parsed_rows <- lapply(rows, mm_fixed_effect_inference_row)

@@ -153,31 +153,40 @@ aphantasia_s1_case_ids <- function(ref) {
   grep("^S1_", names(ref$models), value = TRUE)
 }
 
-# Intact defaults to full-budget joint Laplace: at pin b7086ef a release
-# build reaches near-exact lme4 parity (max|dfixef| 0.0067 vs strict tol
-# 2.5e-2, ~40s/fit) while still beating lme4's own fit time (~157s). See
-# bd-01KT241N8FS5WV8ZK7QDBPMGCQ for the measured sweep.
-# Combined stays on profiled: its residual gap to lme4 is structural, not an
-# optimizer defect. The native `||` semantics drop the within-factor
-# correlation for the factor term (4 theta), while lme4's `||` expansion
-# keeps a full 2x2 covariance block for `mask` (6 theta) whose fitted
-# off-diagonal the native family cannot represent. At pin 6731062 the joint
-# route descends from the profiled start without falling back but plateaus
-# at the native-family optimum ~1.9 logLik above the lme4 reference
-# (upstream root-cause: bd-01KTQJFZNF; semantics pinned in
-# docs/random_effects_formulas.md R3, product decision bd-01KTRQRZKB).
-# Combined's fixef ledger entry remains the contract. (Intact reaches strict
-# parity because lme4's fitted mask block degenerates to diagonal there.)
-# MIXEFF_APHANTASIA_JOINT=false is the debug-build escape hatch (the intact
-# joint fit takes ~20+ min under devtools::load_all); profiled intact drifts
-# far past the strict tolerances (max|dfixef| ~0.47), so expect intact
-# parity failures when the hatch is engaged.
+# Estimator routing for the core GLMM cases. The headline cases (primary,
+# intact, combined) run glmm()'s default estimator, joint Laplace (glmer
+# nAGQ = 1); the remaining sensitivity/subset variants (sensitivity, S7,
+# S9 x2) run the profiled fast path, which also clears the strict case
+# tolerances there and keeps real-data coverage of pirls_profiled at ~10x
+# lower cost. Native `||` expands like lme4 (the factor term `mask` keeps
+# its own correlated block: 6 theta, df identical to glmer), so both routes
+# fit lme4's exact model family. Measured 2026-10-09 (engine b0037a4,
+# release .so, single core) vs inst/extdata/aphantasia/reference.json:
+#   case         route    max|dfixef|  logLik gap  AIC gap  df  time
+#   primary      joint    5e-5         +0.0008     -0.002   15  ~119s
+#   intact       joint    3.9e-3       -0.0022     +0.004   15  ~104s
+#   combined     joint    1.27e-2      +0.137      -0.274   23  ~449s
+#   sensitivity  profiled 1.27e-2      -0.145      +0.291   15  ~13s
+#   S7           profiled 1.28e-2      -0.172      +0.344   16  ~10s
+#   S9           profiled 1.32e-2      -0.185      +0.370   15  ~22s
+#   S9 + age     profiled 1.57e-2      -0.194      +0.388   16  ~7s
+#   rt (lmm)     --       <1e-5        <1e-10      <1e-10   12  <1s
+# (Joint on the four variants: max|dfixef| <= 1.1e-4, logLik within 2e-3,
+# but 82-203s per fit.) Profiled misses strict parity on intact
+# (max|dfixef| 0.47) and combined (0.24), so those two need the joint route;
+# combined's joint optimum sits 0.14 logLik ABOVE the glmer reference.
+# MIXEFF_APHANTASIA_JOINT=false is the debug-build escape hatch (joint fits
+# are many times slower under an unoptimized build): it routes every case
+# through pirls_profiled, so expect strict-tolerance failures for intact
+# and combined when it is engaged.
 aphantasia_use_joint_glmm <- function() {
   !identical(tolower(Sys.getenv("MIXEFF_APHANTASIA_JOINT")), "false")
 }
 
+aphantasia_default_route_cases <- c("primary", "intact", "combined")
+
 aphantasia_use_joint_for_case <- function(id) {
-  identical(id, "intact") && aphantasia_use_joint_glmm()
+  id %in% aphantasia_default_route_cases && aphantasia_use_joint_glmm()
 }
 
 aphantasia_glmm_method <- function(id) {
@@ -232,6 +241,12 @@ aphantasia_expect_fit_matches_reference <- function(fit, ref, id) {
 
   loglik_ref <- ref$logLik
   aic_ref <- ref$AIC
+  # Parameter count parity: lme4's df recovered from the frozen AIC/logLik.
+  expect_identical(
+    as.integer(attr(stats::logLik(fit), "df")),
+    as.integer(round((aic_ref + 2 * loglik_ref) / 2)),
+    info = sprintf("aphantasia `%s` df (parameter count) differs from lme4", id)
+  )
   mm_assert_parity(
     as.numeric(stats::logLik(fit)),
     loglik_ref,
@@ -323,23 +338,59 @@ test_that("aphantasia core fit-side reproduction matches cached lme4 references 
                    control = aphantasia_glmm_control(id))
     }
     aphantasia_expect_fit_matches_reference(fit, model_ref, id)
+    if (identical(id, "primary") && aphantasia_use_joint_for_case(id)) {
+      # The manuscript's DiD point estimates on the default (joint Laplace)
+      # path: a fixed linear combination of fixef, so it inherits the 5e-5
+      # fixef parity (measured |dEst| < 1e-4). Wald SEs are exercised in the
+      # working-Hessian block below.
+      s25 <- (log(0.025) - mean(cases$primary$data$soa_log)) /
+        stats::sd(cases$primary$data$soa_log)
+      b <- mixeff::fixef(fit)
+      did <- c(b[["groupaphant:maskmasked"]],
+               b[["groupaphant:maskmasked"]] +
+                 s25 * b[["groupaphant:maskmasked:soa_s"]])
+      expected_dd <- aphantasia_reference_rows(ref$inference$primary_dd)
+      mm_assert_parity(
+        did, unlist(expected_dd$estimate),
+        case_id = "aphantasia_primary",
+        field = "inference.primary_dd.estimate_default_route",
+        tolerance = 0.02,
+        label = "aphantasia primary DiD estimate (default route)",
+        mode = "absolute"
+      )
+      # Engine afc7c36: the active Hessian is not positive definite here
+      # (participant mask block, corr ~0.98), so the Wald rows fall back to
+      # RX conditional on theta -- glmer's vcov(use.hessian = FALSE) -- and
+      # are labelled as such (reliability low, notes naming the Hessian).
+      rows <- mixeff:::mm_glmm_coefficient_inference_rows(fit)
+      expect_true(all(rows$status == "available"))
+      expect_true(all(rows$reliability == "low"))
+      expect_true(all(rows$reliability_reason ==
+                        "glmm_laplace_rx_conditional_on_theta_wald"))
+      expect_warning(stats::vcov(fit), class = "mm_vcov_rx_fallback")
+      out <- paste(capture.output(print(suppressWarnings(summary(fit)))),
+                   collapse = "\n")
+      expect_match(out, "fixed-effect block RX", fixed = TRUE)
+      # The joint stop is FTOL with an eager objective gap of ~4e-4 deviance
+      # units (> the 1e-6 certification policy; logLik 0.001 above glmer):
+      # presented as "convergence not certified", a warning, not a failure.
+      if (identical(fit$fit_status, "not_optimized")) {
+        conv <- mixeff:::mm_glmm_convergence_assessment(fit)
+        expect_true(conv$not_certified_small_gap)
+        expect_match(out, "convergence not certified", fixed = TRUE)
+      }
+    }
   }
 })
 
-test_that("combined reaches the lme4 optimum via the explicit || expansion formula", {
-  # The combined case's ledgered fixef gap is a model-FAMILY divergence: the
-  # native `||` drops within-factor level covariances that lme4's expansion
-  # keeps (see the routing comment above). This test locks in the documented
-  # escape hatch end-to-end through the R wrapper: writing lme4's expansion
-  # explicitly -- the factor gets its own correlated block -- fits the
-  # lme4-exact family, and joint Laplace then reaches/beats the glmer
-  # reference from a default start (upstream bd-01KTQJFZNF final probe).
-  # Measured at pin 6731062 (release build, ~9 min): max|dfixef| 0.0217,
-  # logLik -11283.929 vs ref -11284.046 (we end 0.117 BETTER), AIC rel gap
-  # ~1e-5, df = 23 = lme4's parameter count. The optimizer stops at MAXEVAL
-  # on lme4's over-parameterized theta ridge (4 covariance parameters for 3
-  # identifiable dof), so bounds below carry modest headroom over the
-  # measured values rather than the strict ledger tolerances.
+test_that("native || fits the same model as lme4's explicit expansion on aphantasia data", {
+  # lme4 expands (1 + mask + soa_s || participant) into
+  # (1 | participant) + (0 + mask | participant) + (0 + soa_s | participant):
+  # the factor term keeps its own correlated 2x2 block. The native `||` now
+  # follows the same rule, so writing the expansion out by hand must fit the
+  # identical model (same 6 theta, same df, same optimum). Profiled fits keep
+  # this cheap (~10s each, measured 2026-10-09); the estimator does not
+  # matter for an equivalence check of the random-effects structure.
   testthat::skip_on_cran()
   mm_skip_if_no_lme4()
   testthat::skip_if_not(
@@ -349,32 +400,31 @@ test_that("combined reaches the lme4 optimum via the explicit || expansion formu
 
   ref <- aphantasia_reference()
   data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
-  cases <- aphantasia_fit_cases(ref, data_sets)
-  model_ref <- ref$models$combined
-  expanded <- correct ~ group * mask * soa_s * stimtype + block +
+  model_ref <- ref$models$primary
+  native <- stats::as.formula(model_ref$formula)
+  expanded <- correct ~ group * mask * soa_s + block +
     (1 | participant) + (0 + mask | participant) +
     (0 + soa_s | participant) + (1 | item)
 
-  fit <- mixeff::glmm(expanded, cases$combined$data,
-                      family = cases$combined$family,
-                      method = "joint_laplace", nAGQ = 1L,
-                      control = mixeff::mm_control(verbose = -1))
+  fit_native <- mixeff::glmm(native, data_sets$primary,
+                             family = stats::binomial(),
+                             method = "pirls_profiled",
+                             control = mixeff::mm_control(verbose = -1))
+  fit_expanded <- mixeff::glmm(expanded, data_sets$primary,
+                               family = stats::binomial(),
+                               method = "pirls_profiled",
+                               control = mixeff::mm_control(verbose = -1))
 
-  # joint candidate retained, not a fast-PIRLS fallback
-  expect_match(fit$fit$optimizer$return_value, "^JOINT_LAPLACE")
-  # the expanded family has lme4's parameter count (17 fixef + 6 theta)
-  expect_identical(as.integer(attr(stats::logLik(fit), "df")), 23L)
-
-  observed <- mixeff::fixef(fit)
-  expected <- unlist(model_ref$fixef, use.names = TRUE)
-  common <- intersect(names(expected), names(observed))
-  expect_equal(length(common), length(expected))
-  expect_lt(max(abs(observed[common] - expected[common])), 3e-2)
-
-  # logLik at (or beyond) the glmer optimum; AIC inherits it at equal df
-  expect_lt(abs(as.numeric(stats::logLik(fit)) - model_ref$logLik), 0.5)
-  expect_gte(as.numeric(stats::logLik(fit)), model_ref$logLik - 0.5)
-  expect_lt(abs(stats::AIC(fit) - model_ref$AIC) / abs(model_ref$AIC), 1e-3)
+  # lme4's parameter count: 9 fixef + 6 theta
+  expect_identical(as.integer(attr(stats::logLik(fit_native), "df")), 15L)
+  expect_identical(as.integer(attr(stats::logLik(fit_expanded), "df")), 15L)
+  expect_equal(length(fit_native$theta), length(unlist(model_ref$theta)))
+  expect_equal(as.numeric(stats::logLik(fit_native)),
+               as.numeric(stats::logLik(fit_expanded)), tolerance = 1e-8)
+  # Same model, slightly different optimizer path (term order differs):
+  # measured fixef agreement ~3e-5 relative, logLik to 1e-8.
+  expect_equal(mixeff::fixef(fit_native), mixeff::fixef(fit_expanded),
+               tolerance = 1e-4)
 })
 
 test_that("aphantasia intact budgeted joint Laplace proof improves the profiled gap when enabled", {
@@ -435,12 +485,21 @@ test_that("aphantasia S1 random-effects stability fits run in the stress tier", 
   data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
   cases <- aphantasia_fit_cases(ref, data_sets)
 
+  # Profiled fits clear the strict tolerances for every S1 variant and keep
+  # this tier at ~100s total. Measured 2026-10-09 (max|dfixef|, logLik gap,
+  # df = lme4's, time): intercept_only 1.2e-2 / -0.16 / 11 / 2s;
+  # current_uncorrelated 1.3e-2 / -0.15 / 15 / 10s; correlated 1.3e-2 /
+  # -0.13 / 16 / 18s; item_mask 1.6e-2 / -0.20 / 17 / 21s; maximal
+  # 1.2e-2 / -0.14 / 22 / 48s. (The default joint route reaches
+  # max|dfixef| <= 8e-5 and logLik within 1.3e-3 on all five, at 39-303s
+  # per fit, ~10 min in total.)
   for (id in aphantasia_s1_case_ids(ref)) {
     model_ref <- ref$models[[id]]
     fit <- mixeff::glmm(
       stats::as.formula(model_ref$formula),
       cases[[id]]$data,
       family = cases[[id]]$family,
+      method = "pirls_profiled",
       control = mixeff::mm_control(verbose = -1)
     )
     aphantasia_expect_fit_matches_reference(fit, model_ref, id)
@@ -459,14 +518,20 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
   data_sets <- aphantasia_data_sets(ref, aphantasia_trials())
   primary_ref <- ref$models$primary
   # inference = "working_hessian": this block DELIBERATELY exercises the
-  # labelled working-Hessian approximation -- its point is to pin how far
-  # the profiled DiD SEs sit from glmer on real data (the evidence behind
-  # the opt-in's documented anti-conservatism caveat). Under the strict
-  # contract (WI-2.2) the default fit refuses mm_lincomb() outright.
+  # labelled working-Hessian approximation on the profiled estimator -- its
+  # point is to pin how far the profiled DiD estimates and SEs sit from
+  # glmer on real data (the evidence behind the opt-in's documented caveat).
+  # Without the opt-in mm_lincomb() refuses SEs here: the profiled
+  # covariance is uncertified. (On this dataset the default joint fit's
+  # Hessian is not positive definite on the active parameter space -- the
+  # fitted mask block sits near a boundary, corr ~0.98 -- so since engine
+  # afc7c36 its Wald rows come from RX conditional on theta, graded low.)
+  # ~10s per fit (measured 2026-10-09).
   fit <- mixeff::glmm(
     stats::as.formula(primary_ref$formula),
     data_sets$primary,
     family = stats::binomial(),
+    method = "pirls_profiled",
     inference = "working_hessian",
     control = mixeff::mm_control(verbose = -1)
   )
@@ -495,24 +560,12 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
   )
   expected <- aphantasia_reference_rows(ref$inference$primary_dd)
 
-  # The DiD estimate and Wald SE drift vs glmer on this default-path
-  # (pirls_profiled, native `||`) fit. The W3.3 hold-the-point experiment
-  # (bd-01KS61JMB85G8DC3BXVSQW48MA; probe scripts glmm_holdpoint/referee/forward)
-  # attributes the drift, so these are classified expected_mismatch rows in
-  # inst/extdata/expected-mismatches.json, not unclassified regressions:
-  #   * Referee = glmer's nAGQ=1 devfun evaluated at mixeff's exact
-  #     (theta, beta) (sanity: reproduces vcov(glmer) to 1.3e-8), run both
-  #     directions (mm_control(start=) forward; devfun reverse).
-  #   * SE gap ~= 73% random-effects FAMILY divergence (native `||` collapses
-  #     the mask factor RE to one scalar: 4 theta vs lme4's 6) + ~26%
-  #     covariance-FORMULA drift (profiled working-Hessian vcov ~2.8%
-  #     anti-conservative vs the true Laplace vcov at an IDENTICAL point,
-  #     uniform across coefficients; upstream bd-01KT3Z64YE5QN7626PQRJSJJVA)
-  #     + ~1% point/optimizer drift.
-  #   * Estimate gap ~= 47% family + ~53% estimator (profiled vs joint
-  #     Laplace; joint_laplace on lme4's expansion matches glmer fixef to 8e-5).
-  # Routing through mm_assert_parity records a parity-scoreboard row per field
-  # and enforces the ledger bounds.
+  # With lme4-style `||` the profiled fit is in glmer's model family, and the
+  # DiD rows sit inside the strict case tolerances (no ledger entry):
+  # measured 2026-10-09 |dEst| = 0.0039 / 0.0083 (centered / 25 ms) against
+  # tol 0.02, |dSE| = 8e-5 / 1.4e-4 (SE within 0.1% of glmer) against tol
+  # 0.002 (~2.5% of the SE). Routing through mm_assert_parity records a
+  # parity-scoreboard row per field.
   mm_assert_parity(
     observed$estimate, unlist(expected$estimate),
     case_id = "aphantasia_primary",
@@ -525,7 +578,7 @@ test_that("aphantasia GLMM inference checks are gated on full vcov support", {
     observed$SE, unlist(expected$SE),
     case_id = "aphantasia_primary",
     field = "inference.primary_dd.SE",
-    tolerance = 0.01,
+    tolerance = 0.002,
     label = "aphantasia primary DiD SE",
     mode = "absolute"
   )

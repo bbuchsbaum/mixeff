@@ -48,14 +48,13 @@
 #' parsed artifact with the expected schema header.
 #'
 #' @examples
-#' \dontrun{
+#' set.seed(1)
 #' df <- data.frame(
 #'   y       = rnorm(20),
 #'   x       = rnorm(20),
 #'   subject = factor(rep(letters[1:5], each = 4))
 #' )
 #' audit(compile_model(y ~ x + (1 + x | subject), df))
-#' }
 #'
 #' @seealso [compile_model()].
 #'
@@ -121,8 +120,8 @@ mm_audit_impl <- function(spec) {
   summary_text <- mm_append_r_design_diagnostic_text(summary_text, supplemental)
 
   out <- list(
-    text                   = text,
-    summary_text           = summary_text,
+    text                   = mm_expansion_display_text(text, spec$expansion),
+    summary_text           = mm_expansion_display_text(summary_text, spec$expansion),
     design_audit           = artifact$design_audit,
     report                 = report,
     random_term_cards      = report$random_term_cards %||% list(),

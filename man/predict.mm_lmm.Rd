@@ -17,6 +17,8 @@
   se.fit = FALSE,
   interval = c("none", "confidence", "prediction"),
   level = 0.95,
+  na.action = stats::na.pass,
+  offset = NULL,
   ...
 )
 
@@ -31,21 +33,31 @@
 
 \method{fitted}{mm_glmm}(object, ...)
 
-\method{residuals}{mm_glmm}(object, type = c("response"), ...)
+\method{residuals}{mm_glmm}(
+  object,
+  type = c("deviance", "pearson", "working", "response"),
+  scaled = FALSE,
+  ...
+)
 }
 \arguments{
 \item{object}{A fitted \code{mm_lmm} object.}
 
 \item{newdata}{Optional new data. Must be a \code{data.frame} containing every
-variable referenced by the model's formula. Categorical levels must
-either match the training factor levels or trigger the \code{allow.new.levels}
-policy.}
+variable the requested prediction needs (the fixed-effect variables, plus
+the grouping and slope variables of the random terms used); other
+columns are ignored. Grouping columns may be factor, character, or
+integer (coerced the way they were at fit time); fixed-effect factor and
+character columns are matched to the training levels, and a level not
+seen when fitting is refused. Stateful terms (\code{poly()}, \code{scale()},
+\code{ns()}, ...) are evaluated with the training basis, as in \code{\link[stats:lm]{stats::lm()}}.}
 
-\item{re.form}{Random-effects conditioning, following lme4's basic
-convention. \code{NULL} returns conditional predictions; \code{NA} (or \code{~0})
-returns population-level (fixed-effect) predictions. Conditioning on a
-subset of grouping factors via a one-sided formula is not supported by
-the current Rust contract and raises \code{mm_inference_unavailable}.}
+\item{re.form}{Random-effects conditioning, following lme4. \code{NULL}
+returns conditional predictions; \code{NA} (or \code{~0}) returns population-level
+(fixed-effect) predictions; a one-sided formula naming some of the
+model's random terms (e.g. \code{~ (1 | subject)}) conditions on those terms'
+conditional modes only. Standard errors and intervals are not available
+for such partial conditioning.}
 
 \item{allow.new.levels}{When \code{FALSE} (default), unseen grouping levels in
 \code{newdata} raise \code{mm_inference_unavailable} through the Rust
@@ -54,7 +66,11 @@ the population mean (zero random effect), matching
 \code{lme4::predict(allow.new.levels = TRUE)}.}
 
 \item{type}{Prediction scale. Gaussian LMMs use the same values for
-\code{"response"} and \code{"link"}.}
+\code{"response"} and \code{"link"}. For \code{residuals()}, the residual type, as in
+lme4: LMMs default to \code{"response"} (\code{y - mu}, also \code{"working"}), with
+\code{"pearson"}/\code{"deviance"} the weighted residuals \code{sqrt(w) * (y - mu)};
+GLMMs default to \code{"deviance"} and also offer \code{"pearson"}
+(\code{(y - mu) * sqrt(w / V(mu))}), \code{"working"} and \code{"response"}.}
 
 \item{se.fit}{Logical; when \code{TRUE}, returns a list with \code{fit} and \code{se.fit}.
 For population predictions (\code{re.form = NA}) the standard error is the
@@ -74,10 +90,24 @@ prediction-variance payload. Returns a matrix with \code{fit}/\code{lwr}/\code{u
 
 \item{level}{Confidence level for \code{interval} / \code{se.fit} intervals.}
 
+\item{na.action}{Missing-value handling for \code{newdata}, as in
+\code{lme4::predict.merMod()}: the default \link[stats:na.fail]{stats::na.pass} returns \code{NA} for
+rows with a missing value in a variable the prediction needs;
+\link[stats:na.fail]{stats::na.omit} drops them and \link[stats:na.fail]{stats::na.exclude} pads them back as
+\code{NA}. In-sample predictions of a fit made with \code{na.action = na.exclude}
+are padded to the original rows, like \code{\link[=fitted]{fitted()}} and \code{\link[=residuals]{residuals()}}.}
+
+\item{offset}{Offset for \code{newdata} rows when the model was fitted with the
+\verb{offset =} argument: a numeric vector (one value per \code{newdata} row) or an
+expression evaluated in \code{newdata}. Offsets written in the formula
+(\code{offset(log(t))}) are evaluated from \code{newdata} automatically. (lme4
+silently drops an \verb{offset =} argument offset for new data; mixeff refuses
+instead of guessing.)}
+
 \item{...}{Reserved for generic compatibility.}
 
-\item{scaled}{Logical; when \code{TRUE}, residuals are divided by the residual
-scale.}
+\item{scaled}{Logical; when \code{TRUE}, residuals are divided by \code{sigma(object)}
+(once), as in lme4.}
 }
 \value{
 A numeric vector, or a list with \code{fit} and \code{se.fit} when

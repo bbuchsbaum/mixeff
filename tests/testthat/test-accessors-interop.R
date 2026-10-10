@@ -44,9 +44,9 @@ test_that("terms() returns the fixed-effect terms", {
   expect_true("Days" %in% all.vars(tt))
 })
 
-test_that("weights() returns prior weights or NULL", {
+test_that("weights() returns prior weights (ones when unweighted, as lme4)", {
   m <- mk_acc_fit()
-  expect_null(weights(m))
+  expect_equal(weights(m), rep(1, nobs(m)))
   w <- runif(nrow(lme4::sleepstudy), 0.5, 2)
   mw <- suppressMessages(
     lmm(Reaction ~ Days + (Days | Subject), lme4::sleepstudy,

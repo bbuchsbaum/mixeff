@@ -314,10 +314,10 @@ test_that("summary() renders Rust coefficient inference rows", {
   expect_s3_class(sm, "summary.mm_lmm")
   expect_s3_class(sm$inference, "mm_inference_table")
   expect_identical(sm$requested_method, "auto")
-  expect_true(any(sm$coefficients$method %in% c("satterthwaite", "asymptotic_wald_z")))
-  p_cols <- grep("^Pr\\(|^p\\.value$", names(sm$coefficients), value = TRUE)
+  expect_true(any(sm$coef_table$method %in% c("satterthwaite", "asymptotic_wald_z")))
+  p_cols <- grep("^Pr\\(|^p\\.value$", names(sm$coef_table), value = TRUE)
   expect_length(p_cols, 1L)
-  expect_true(any(is.finite(sm$coefficients[[p_cols]])))
+  expect_true(any(is.finite(sm$coef_table[[p_cols]])))
 })
 
 test_that("summary(method = 'auto') resolves to satterthwaite on a feasible fit", {
@@ -334,8 +334,8 @@ test_that("summary(method = 'auto') resolves to satterthwaite on a feasible fit"
                     "satterthwaite_finite_difference_approximation"))
 
   # df is finite, so the coefficient table keeps its df column.
-  expect_true("df" %in% names(sm$coefficients))
-  expect_true(all(is.finite(sm$coefficients$df)))
+  expect_true("df" %in% names(sm$coef_table))
+  expect_true(all(is.finite(sm$coef_table$df)))
 
   # The engine's prose warrant is printed beneath the inference block.
   printed <- paste(capture.output(print(sm)), collapse = "\n")
@@ -369,7 +369,7 @@ test_that("summary auto keeps the labeled asymptotic table when satterthwaite is
   expect_true(all(inf$reliability_reason == "asymptotic_wald_z_fallback"))
 
   # df is undefined for z rows; the all-NA column is dropped, not printed.
-  expect_false("df" %in% names(sm$coefficients))
+  expect_false("df" %in% names(sm$coef_table))
   printed <- paste(capture.output(print(sm)), collapse = "\n")
   expect_match(printed, "labeled fallback", fixed = TRUE)
 })
@@ -461,7 +461,8 @@ test_that("profile.mm_lmm returns a usable mm_profile object", {
   expect_s3_class(prof, "mm_profile")
   expect_true(all(c("parameter", "estimate", "lower", "upper") %in%
                     names(prof$table)))
-  expect_true(all(c("(Intercept)", "Days", "sigma") %in% prof$table$parameter))
+  expect_true(all(c("(Intercept)", "Days", ".sigma", ".sig01") %in%
+                    prof$table$parameter))
   # confint on the profile reproduces confint(fit, method = "profile")
   direct <- confint(fit, method = "profile")
   via_prof <- confint(prof)

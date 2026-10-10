@@ -11,10 +11,11 @@ compare(object, ...)
   object,
   ...,
   target = c("fixed_effects", "random_effects", "prediction"),
-  method = c("auto", "lrt", "bootstrap", "aic"),
+  method = c("auto", "lrt", "bootstrap", "aic", "kenward_roger", "satterthwaite"),
   refit_for_comparison = c("auto", "error", "ml"),
   nsim = 0L,
-  seed = NULL
+  seed = NULL,
+  threads = 1L
 )
 }
 \arguments{
@@ -25,14 +26,33 @@ compare(object, ...)
 \item{target}{Comparison target label.}
 
 \item{method}{\code{"auto"} / \code{"lrt"} for asymptotic likelihood-ratio rows,
-\code{"aic"} for information criteria only, or \code{"bootstrap"} for a small
-parametric-bootstrap LRT when \code{nsim > 0}.}
+\code{"aic"} for information criteria only, \code{"bootstrap"} for a small
+parametric-bootstrap LRT when \code{nsim > 0}, or \code{"kenward_roger"} /
+\code{"satterthwaite"} for pbkrtest's \code{KRmodcomp()} / \code{SATmodcomp()}: an F
+test of the larger model's fixed effects restricted to the smaller
+model's (two models with identical random effects, nested in their fixed
+effects). The restriction matrix is built from the two design matrices
+as pbkrtest does; the test runs on the REML fit of the larger model
+(refitted by REML if it was fitted by ML, as pbkrtest does). The
+Kenward-Roger F is pbkrtest's scaled statistic (the main \code{Ftest} row of
+\code{KRmodcomp()}, which lmerTest's \code{anova(ddf = "Kenward-Roger")} also
+reports): \eqn{F = \lambda F_U}{F = lambda * F_U} referred to
+\eqn{F(q, \nu)}{F(q, ddf)} with the KR denominator df, where
+\eqn{\lambda}{lambda} is the KR scaling factor (\code{f_scaling}; 1 for a
+single restriction). The unscaled statistic and its p-value (pbkrtest's
+\code{FtestU} row) are kept as \code{unscaled_statistic} / \code{unscaled_p_value}.
+The F row
+replaces the LRT row (\code{statistic_name = "F"}, \code{df} = numerator df,
+\code{den_df} = denominator df); the full result is in \verb{$fixed_f}.}
 
 \item{refit_for_comparison}{How to handle REML fits.}
 
 \item{nsim}{Number of bootstrap simulations for \code{method = "bootstrap"}.}
 
 \item{seed}{Optional bootstrap seed.}
+
+\item{threads}{Worker threads for the bootstrap refits (default 1; see
+\code{\link[=bootstrap_control]{bootstrap_control()}}). The result is identical for every value.}
 }
 \value{
 An \code{mm_model_comparison} object with a data-frame \code{table}.

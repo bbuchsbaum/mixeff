@@ -1,7 +1,7 @@
 use super::*;
 use approx::assert_relative_eq;
 use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -320,14 +320,14 @@ fn simulate_large_theta_crossed(seed: u64) -> DataFrame {
     let mut item_labels = Vec::with_capacity(total_n);
     let mut site_labels = Vec::with_capacity(total_n);
 
-    for s in 0..n_subjects {
-        for i in 0..n_items {
+    for (s, subject_effect) in subj_effects.iter().enumerate() {
+        for (i, item_effect) in item_effects.iter().enumerate() {
             for r in 0..n_rep {
                 let site = (s * 5 + i * 3 + r) % n_sites;
                 let x = r as f64 + (i % 4) as f64 * 0.35;
                 let mut mu = beta[0] + beta[1] * x;
-                mu += subj_effects[s][0] + subj_effects[s][1] * x;
-                mu += item_effects[i][0] + item_effects[i][1] * x;
+                mu += subject_effect[0] + subject_effect[1] * x;
+                mu += item_effect[0] + item_effect[1] * x;
                 mu += site_effects[site][0] + site_effects[site][1] * x;
                 let y = mu + sigma * normal.sample(&mut rng);
 
@@ -950,7 +950,7 @@ fn test_random_effect_no_intercept_factor_uses_cell_means_with_explicit_contrast
 }
 
 #[test]
-fn test_random_effect_categorical_cell_means_preserves_zero_correlation_map() {
+fn test_random_effect_factor_in_double_bar_gets_full_covariance_like_lme4() {
     let mut data = DataFrame::new();
     data.add_numeric("y", vec![1.0, 2.0, 3.0, 1.5, 2.5, 3.5])
         .unwrap();
@@ -971,6 +971,8 @@ fn test_random_effect_categorical_cell_means_preserves_zero_correlation_map() {
     )
     .unwrap();
 
+    // lme4 expands `(0 + cond || subj)` to `(0 + cond | subj)`: a factor
+    // inside `||` keeps an unstructured covariance among its indicators.
     let formula = parse_formula("y ~ cond + (0 + cond || subj)").unwrap();
     let model = LinearMixedModel::new(formula, &data, None).unwrap();
 
@@ -978,12 +980,12 @@ fn test_random_effect_categorical_cell_means_preserves_zero_correlation_map() {
         model.reterms[0].cnames,
         vec!["cond: A", "cond: B", "cond: C"]
     );
-    assert_eq!(model.theta().len(), 3);
-    assert!(matches!(
+    assert_eq!(model.theta().len(), 6);
+    assert!(!matches!(
         model.compiler_artifact().theta_maps[0],
         ThetaMap::Diagonal(_)
     ));
-    assert_eq!(model.compiler_artifact().theta_maps[0].n_free(), 3);
+    assert_eq!(model.compiler_artifact().theta_maps[0].n_free(), 6);
 }
 
 #[test]
@@ -1045,10 +1047,25 @@ fn test_zerocorr_factor_split_terms_record_no_error_diagnostics() {
     data.add_categorical("g", (0..n).map(|i| format!("g{}", i / 6)).collect())
         .unwrap();
 
+    // lme4: (1 + f + x || g) -> (1 | g) + (0 + f | g) + (0 + x | g). The
+    // engine keeps the intercept and x as one diagonal block.
     let formula = parse_formula("y ~ x + f + (1 + f + x || g)").unwrap();
     let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
 
-    assert_eq!(model.reterms[0].cnames, vec!["(Intercept)", "f: b", "x"]);
+    let mut bases = model
+        .reterms
+        .iter()
+        .map(|term| term.cnames.clone())
+        .collect::<Vec<_>>();
+    bases.sort();
+    assert_eq!(
+        bases,
+        vec![
+            vec!["(Intercept)".to_string(), "x".to_string()],
+            vec!["f: a".to_string(), "f: b".to_string()],
+        ]
+    );
+    assert_eq!(model.theta().len(), 2 + 3);
     let artifact = model.compiler_artifact();
     let errors = artifact
         .diagnostics
@@ -1060,10 +1077,18 @@ fn test_zerocorr_factor_split_terms_record_no_error_diagnostics() {
         errors.is_empty(),
         "||-with-factor construction should not record error diagnostics: {errors:?}"
     );
+    // Two scalar maps for the diagonal (Intercept, x) block plus one
+    // unstructured map for the factor block.
     assert_eq!(artifact.theta_maps.len(), 3);
-    let factor_map = &artifact.theta_maps[1];
+    let factor_map = &artifact.theta_maps[2];
+    assert!(matches!(factor_map, ThetaMap::FullCholesky(_)));
     assert_eq!(factor_map.block().user_basis, vec!["f".to_string()]);
-    assert_eq!(factor_map.block().theta_slots[0].lambda_row, 1);
+    assert_eq!(
+        factor_map.block().optimizer_basis,
+        vec!["f: a".to_string(), "f: b".to_string()]
+    );
+    assert_eq!(factor_map.n_free(), 3);
+    assert_eq!(factor_map.block().theta_slots[0].lambda_row, 0);
     let total_free: usize = artifact.theta_maps.iter().map(|map| map.n_free()).sum();
     assert_eq!(total_free, model.theta().len());
 
@@ -1220,6 +1245,107 @@ fn test_trust_bq_certificate_stop_accepts_scalar_interior() {
     assert!(model
         .trust_bq_covariance_kkt_certifies_theta(&theta, objective, 64, false)
         .unwrap());
+}
+
+#[test]
+fn deferred_certificate_evidence_matches_eager_completion() {
+    let data = sleepstudy_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (1 + days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+
+    // The stored certificate defers its finite-difference evidence...
+    assert!(model.derivative_evidence_pending);
+    let stored = model
+        .compiler_artifact
+        .optimizer_certificate
+        .as_ref()
+        .unwrap();
+    assert!(LinearMixedModel::certificate_derivatives_deferred(stored));
+    assert!(stored.free_gradient_norm.is_none());
+
+    // ...but every inspection reports the completed evidence.
+    let inspected = model.optimizer_certificate().unwrap().clone();
+    assert!(!LinearMixedModel::certificate_derivatives_deferred(
+        &inspected
+    ));
+    assert!(inspected.free_gradient_norm.is_some());
+    assert!(inspected.hessian_eigen_min.is_some());
+    assert_eq!(inspected.status, stored.status);
+
+    // Completing in place yields exactly the same certificate and report.
+    let mut eager = model.clone();
+    eager.ensure_derivative_evidence();
+    assert!(!eager.derivative_evidence_pending);
+    assert_eq!(
+        eager
+            .compiler_artifact
+            .optimizer_certificate
+            .as_ref()
+            .unwrap(),
+        &inspected
+    );
+    assert_eq!(
+        eager.audit_report().to_text(),
+        model.audit_report().to_text()
+    );
+    assert_eq!(eager.compiler_artifact(), model.compiler_artifact());
+}
+
+#[test]
+fn refit_resets_the_inspected_certificate() {
+    let data = sleepstudy_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (1 + days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+    let before = model.optimizer_certificate().unwrap().objective_value;
+
+    let scaled: Vec<f64> = model.y().iter().map(|value| value * 1.25).collect();
+    model.refit(&scaled).unwrap();
+    assert!(model.derivative_evidence_pending);
+    let after = model.optimizer_certificate().unwrap();
+    assert_eq!(after.objective_value, Some(model.optsum().fmin));
+    assert_ne!(after.objective_value, before);
+    assert!(!LinearMixedModel::certificate_derivatives_deferred(after));
+}
+
+#[test]
+fn shared_parity_fixture_reaches_its_rank_deficient_reml_optimum() {
+    let data = shared_julia_parity_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (1 + days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model
+        .fit_with_options(FitOptions::reml().with_optimizer(Optimizer::TrustBq))
+        .unwrap();
+    // Independent dense-V REML minimization from three starts agrees here;
+    // this fixture is not an interior fit suitable for deferred-Hessian tests.
+    assert!((model.objective() - 223.735093518798).abs() < 1e-7);
+    assert_eq!(model.theta()[2], 0.0);
+    assert!(!model.derivative_evidence_pending);
+    assert_eq!(
+        model.optimizer_certificate().unwrap().status,
+        FitStatus::ConvergedReducedRank
+    );
+}
+
+#[test]
+fn verify_convergence_completes_deferred_evidence_first() {
+    let data = shared_julia_parity_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (1 | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+    assert!(model.derivative_evidence_pending);
+
+    model.verify_convergence().unwrap();
+    assert!(!model.derivative_evidence_pending);
+    let stored = model
+        .compiler_artifact
+        .optimizer_certificate
+        .as_ref()
+        .unwrap();
+    assert!(!LinearMixedModel::certificate_derivatives_deferred(stored));
+    assert!(stored.free_gradient_norm.is_some());
+    assert!(stored.verification.is_some());
 }
 
 #[test]
@@ -1452,6 +1578,10 @@ fn test_trust_bq_sample_reuse_override_changes_optimizer_trace() {
                 FitOptions::reml().with_optimizer_control(
                     OptimizerControl::auto()
                         .with_optimizer(Optimizer::TrustBq)
+                        // Sample reuse is a property of the finite-difference
+                        // interpolation loop; the analytic-gradient oracle
+                        // (the family default) never re-samples a point.
+                        .with_trust_bq_gradient_oracle(TrustBqGradientOracle::Disabled)
                         .with_trust_bq_sample_reuse(reuse),
                 ),
             )
@@ -1619,9 +1749,12 @@ fn test_active_face_refit_noop_on_full_rank_fit() {
 }
 
 // The maximal over-specified singular row (36 theta for a ~rank-4 block) is
-// where the primary optimizer exhausts its budget far from the lme4
-// optimum; the assertions pin the recovery contract on the default (NLopt)
-// release path.
+// where the primary optimizer exhausts its budget. With NEWUOA the plain fit
+// stopped far from the optimum and the active-face refit recovered more than
+// ten deviance units; the gradient-driven TrustBQ path (Phase 5 S5.3) reaches
+// the refit's certified face on its own within the same budget, so the
+// contract is now: the refit stays audit-visible, never lands above the
+// plain fit, and both sit well below NEWUOA's budget-bound objective.
 #[cfg(feature = "nlopt")]
 #[test]
 fn test_active_face_refit_improves_maximal_singular_fit() {
@@ -1657,16 +1790,26 @@ fn test_active_face_refit_improves_maximal_singular_fit() {
         faced.optsum.return_value
     );
     assert!(
-        faced.objective() < baseline.objective() - 10.0,
-        "active-face refit must materially improve the budget-bound objective: {} vs {}",
+        faced.objective() <= baseline.objective() + 1e-6,
+        "active-face refit must not land above the plain fit: {} vs {}",
         faced.objective(),
         baseline.objective()
     );
-    // lme4 converges this row to 766.554 (comparison/lme4_results.json); the
-    // face refit must land in that neighborhood, not merely improve.
+    // NEWUOA's budget-bound plain fit on this row sat above 790 (and the
+    // finite-difference TrustBQ model stopped at 798); the gradient path
+    // passes 770 in under a hundred evaluations.
     assert!(
-        (faced.objective() - 766.554).abs() < 5.0,
-        "active-face objective {} is far from the lme4 reference 766.554",
+        baseline.objective() < 770.0,
+        "plain gradient-driven fit should pass the old budget-bound level: {}",
+        baseline.objective()
+    );
+    // lme4 reports 766.554 for this row (comparison/lme4_results.json); the
+    // face refit must not land materially above it. The gradient-driven
+    // path keeps descending along the rank-deficient valley past that value
+    // (760.0 within the 475-evaluation budget), so the band is one-sided.
+    assert!(
+        faced.objective() < 766.554 + 5.0,
+        "active-face objective {} is materially above the lme4 reference 766.554",
         faced.objective()
     );
     // The refit's evaluations are accounted for.
@@ -3200,9 +3343,11 @@ fn test_vector_fit_uses_bobyqa_with_bounded_evaluations() {
     );
 }
 
+/// Large-θ automatic dispatch (Phase 5 S5.3): the native TrustBQ path
+/// driven by the analytic gradient, not NEWUOA.
 #[cfg(feature = "nlopt")]
 #[test]
-fn test_large_theta_fit_uses_nlopt_newuoa() {
+fn test_large_theta_fit_uses_trust_bq_gradient_oracle() {
     let data = simulate_large_theta_crossed(123);
     let formula = parse_formula(
         "reaction ~ 1 + days + (1 + days | subj) + (1 + days | item) + (1 + days | site)",
@@ -3214,14 +3359,19 @@ fn test_large_theta_fit_uses_nlopt_newuoa() {
     model.fit(true).unwrap();
 
     assert_eq!(model.n_theta(), 9);
-    assert_eq!(model.optsum.optimizer, Optimizer::NloptNewuoa);
+    assert_eq!(model.optsum.optimizer, Optimizer::TrustBq);
+    assert!(
+        model.optsum.return_value.starts_with("GRADIENT_ORACLE:"),
+        "{}",
+        model.optsum.return_value
+    );
     assert!(model.objective_value().is_finite());
     assert!(model.sigma().is_finite());
 }
 
 #[cfg(feature = "nlopt")]
 #[test]
-fn test_large_theta_nlopt_matches_or_beats_cobyla_baseline() {
+fn test_large_theta_auto_fit_matches_or_beats_cobyla_baseline() {
     let data = simulate_large_theta_crossed(123);
     let formula = parse_formula(
         "reaction ~ 1 + days + (1 + days | subj) + (1 + days | item) + (1 + days | site)",
@@ -3597,8 +3747,11 @@ fn test_large_theta_fit_records_maxeval_status() {
 
     model.fit(true).unwrap();
 
-    assert_eq!(model.optsum.optimizer, Optimizer::NloptNewuoa);
-    assert_eq!(model.optsum.return_value, "MAXEVAL_REACHED");
+    assert_eq!(model.optsum.optimizer, Optimizer::TrustBq);
+    assert_eq!(
+        model.optsum.return_value,
+        "GRADIENT_ORACLE: MAXEVAL_REACHED"
+    );
     assert_eq!(model.optsum.feval, 1);
     assert!(model.objective_value().is_finite());
 }
@@ -3606,6 +3759,7 @@ fn test_large_theta_fit_records_maxeval_status() {
 #[cfg(feature = "nlopt")]
 #[test]
 fn test_large_theta_fit_records_maxtime_status() {
+    // A wall-clock budget keeps the NLopt NEWUOA path, which honors it.
     let data = simulate_large_theta_crossed(123);
     let formula = parse_formula(
         "reaction ~ 1 + days + (1 + days | subj) + (1 + days | item) + (1 + days | site)",
@@ -3719,7 +3873,8 @@ fn test_crossed_fit_matches_julia_on_shared_fixture() {
 
     model.fit(true).unwrap();
 
-    assert_eq!(model.optsum.optimizer, Optimizer::NloptNewuoa);
+    // Large-theta automatic dispatch: TrustBQ on the analytic gradient.
+    assert_eq!(model.optsum.optimizer, Optimizer::TrustBq);
     // A fitted optimizer path is allowed codegen-level drift within the
     // documented VERSIONING.md numerical parity band.
     assert_relative_eq!(
@@ -4414,6 +4569,86 @@ fn test_jac_vcov_beta_varpar_returns_symmetric_matrices_and_sigma_derivative() {
 }
 
 #[test]
+fn test_analytic_jac_vcov_beta_varpar_matches_central_differences() {
+    let mut rng = StdRng::seed_from_u64(91);
+    let n = 240;
+    let mut synthetic = DataFrame::new();
+    let g: Vec<String> = (0..n).map(|i| format!("g{}", i % 12)).collect();
+    let h: Vec<String> = (0..n)
+        .map(|_| format!("h{}", rng.gen_range(0..9)))
+        .collect();
+    let x: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+    let z: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| {
+            1.0 + 0.5 * x[i] - 0.3 * z[i]
+                + 0.4 * ((i % 12) as f64 - 6.0) / 6.0 * (1.0 + x[i])
+                + rng.gen_range(-1.0..1.0)
+        })
+        .collect();
+    let weights: Vec<f64> = (0..n).map(|_| rng.gen_range(0.5..2.0)).collect();
+    synthetic.add_categorical("g", g).unwrap();
+    synthetic.add_categorical("h", h).unwrap();
+    synthetic.add_numeric("x", x).unwrap();
+    synthetic.add_numeric("z", z).unwrap();
+    synthetic.add_numeric("y", y).unwrap();
+
+    let cases: Vec<(DataFrame, &str, Option<Vec<f64>>)> = vec![
+        (
+            sleepstudy_fixture(),
+            "reaction ~ 1 + days + (1 + days | subj)",
+            None,
+        ),
+        (
+            sleepstudy_fixture(),
+            "reaction ~ 1 + days + (1 | subj)",
+            None,
+        ),
+        (
+            pastes_fixture(),
+            "strength ~ 1 + (1 | batch) + (1 | batch_cask)",
+            None,
+        ),
+        (
+            synthetic.clone(),
+            "y ~ 1 + x + z + (1 + x | g) + (1 | h)",
+            None,
+        ),
+        (
+            synthetic,
+            "y ~ 1 + x + z + (1 + x | g) + (1 | h)",
+            Some(weights),
+        ),
+    ];
+    for (data, formula, weights) in cases {
+        let mut model =
+            LinearMixedModel::new(parse_formula(formula).unwrap(), &data, weights.as_deref())
+                .unwrap();
+        model.fit(true).unwrap();
+        let fitted = fitted_varpar(&model);
+        // At the optimum and at a nearby interior point.
+        let perturbed: Vec<f64> = fitted.iter().map(|v| v * 1.07 + 0.01).collect();
+        for varpar in [fitted, perturbed] {
+            let theta_before = model.theta();
+            let analytic = model.jac_vcov_beta_varpar(&varpar).unwrap();
+            let numeric = model
+                .jac_vcov_beta_varpar_finite_difference(&varpar)
+                .unwrap();
+            assert_eq!(model.theta(), theta_before);
+            assert_eq!(analytic.len(), numeric.len());
+            for (index, (a, b)) in analytic.iter().zip(&numeric).enumerate() {
+                let scale = b.amax().max(1e-12);
+                let diff = (a - b).amax() / scale;
+                assert!(
+                    diff < 1e-6,
+                    "{formula} varpar[{index}]: relative diff {diff:e}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn test_vcov_varpar_estimate_returns_hessian_diagnostics_and_restores_state() {
     let data = sleepstudy_fixture();
     let formula = parse_formula("reaction ~ 1 + days + (1 + days | subj)").unwrap();
@@ -4553,6 +4788,97 @@ fn test_kenward_roger_sigma_g_vector_random_effect_components() {
     );
 }
 
+/// The Woodbury (no `n x n`) Kenward-Roger ingredients and adjusted
+/// covariance must match the original dense formulation.
+#[test]
+fn test_kenward_roger_low_rank_matches_dense_reference() {
+    let mut rng = StdRng::seed_from_u64(1234);
+    let n = 150;
+    let mut synthetic = DataFrame::new();
+    let g: Vec<String> = (0..n).map(|i| format!("g{}", i % 10)).collect();
+    let h: Vec<String> = (0..n)
+        .map(|_| format!("h{}", rng.gen_range(0..7)))
+        .collect();
+    let x: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| {
+            2.0 + 0.7 * x[i]
+                + ((i % 10) as f64 - 4.5) * 0.4 * (1.0 + 0.5 * x[i])
+                + rng.gen_range(-1.0..1.0)
+        })
+        .collect();
+    synthetic.add_categorical("g", g).unwrap();
+    synthetic.add_categorical("h", h).unwrap();
+    synthetic.add_numeric("x", x).unwrap();
+    synthetic.add_numeric("y", y).unwrap();
+
+    let cases: Vec<(DataFrame, &str)> = vec![
+        (
+            sleepstudy_fixture(),
+            "reaction ~ 1 + days + (1 + days | subj)",
+        ),
+        (sleepstudy_fixture(), "reaction ~ 1 + days + (1 | subj)"),
+        (
+            pastes_fixture(),
+            "strength ~ 1 + (1 | batch) + (1 | batch_cask)",
+        ),
+        (
+            penicillin_fixture(),
+            "diameter ~ 1 + (1 | plate) + (1 | sample)",
+        ),
+        (synthetic.clone(), "y ~ 1 + x + (1 + x | g) + (1 | h)"),
+        (synthetic, "y ~ 1 + x + (1 | g) + (0 + x | g) + (1 | h)"),
+    ];
+    let rel = |a: &DMatrix<f64>, b: &DMatrix<f64>| (a - b).amax() / b.amax().max(1e-300);
+    for (data, formula) in cases {
+        let mut model =
+            LinearMixedModel::new(parse_formula(formula).unwrap(), &data, None).unwrap();
+        model.fit(true).unwrap();
+        let x = model.feterm.full_rank_x().into_owned();
+        let low = model.kenward_roger_ingredients(&x).unwrap();
+        let dense = model.kenward_roger_ingredients_dense(&x).unwrap();
+        assert_eq!(low.component_labels, dense.component_labels, "{formula}");
+        assert!(rel(&low.ktrace, &dense.ktrace) < 1e-9, "{formula}: ktrace");
+        for (a, b) in low.p_matrices.iter().zip(&dense.p_matrices) {
+            assert!(rel(a, b) < 1e-9, "{formula}: P {:e}", rel(a, b));
+        }
+        assert_eq!(low.q_matrices.len(), dense.q_matrices.len());
+        for (a, b) in low.q_matrices.iter().zip(&dense.q_matrices) {
+            assert!(rel(a, b) < 1e-9, "{formula}: Q {:e}", rel(a, b));
+        }
+
+        let adjusted = model.kenward_roger_adjusted_vcov().unwrap();
+        let phi = adjusted.unadjusted_vcov_active.clone();
+        let reference = model
+            .kenward_roger_adjusted_from_ingredients(phi, dense)
+            .unwrap();
+        assert!(
+            rel(
+                &adjusted.adjusted_vcov_active,
+                &reference.adjusted_vcov_active
+            ) < 1e-9,
+            "{formula}: adjusted vcov"
+        );
+        assert!(rel(&adjusted.w, &reference.w) < 1e-8, "{formula}: W");
+        for row in 0..model.coef_names().len() {
+            let mut l = DMatrix::zeros(1, model.coef_names().len());
+            l[(0, row)] = 1.0;
+            let a = model
+                .kenward_roger_lbddf_with_adjusted(&l, &adjusted)
+                .unwrap();
+            let b = model
+                .kenward_roger_lbddf_with_adjusted(&l, &reference)
+                .unwrap();
+            assert!(
+                (a.denominator_df - b.denominator_df).abs() <= 1e-8 * b.denominator_df.abs(),
+                "{formula}: ddf {} vs {}",
+                a.denominator_df,
+                b.denominator_df
+            );
+        }
+    }
+}
+
 #[test]
 fn test_kenward_roger_adjusted_vcov_returns_pbkrtest_style_artifacts() {
     let data = sleepstudy_fixture();
@@ -4632,10 +4958,18 @@ fn test_lmm_explicit_kenward_roger_multi_df_request_returns_f_test() {
     assert_eq!(test.p_values.len(), 1);
     assert!(test.p_values[0].unwrap().is_finite());
     assert!((0.0..=1.0).contains(&test.p_values[0].unwrap()));
+    let scaling = test
+        .kenward_roger_f_scaling
+        .expect("multi-df KR F test records its F scaling");
+    assert!(scaling.f_scaling.is_finite() && scaling.f_scaling > 0.0);
+    assert!(
+        (test.statistics[0].unwrap() - scaling.f_scaling * scaling.unscaled_statistic).abs()
+            <= 1e-12 * test.statistics[0].unwrap().abs()
+    );
     assert!(test
         .notes
         .iter()
-        .any(|note| note.contains("F scaling = 1.0")));
+        .any(|note| note.contains("scaled by lambda")));
 
     let row = fixed_effect_test_to_inference_row(FixedEffectInferenceRowKind::Term, test);
     let details = row.details.expect("multi-df row should carry details");
@@ -4648,8 +4982,10 @@ fn test_lmm_explicit_kenward_roger_multi_df_request_returns_f_test() {
     let kr = details
         .kenward_roger
         .expect("KR row should carry KR details");
-    assert_eq!(kr.f_scaling, Some(1.0));
-    assert_eq!(kr.statistic_scale.as_deref(), Some("unscaled"));
+    assert_eq!(kr.f_scaling, Some(scaling.f_scaling));
+    assert_eq!(kr.statistic_scale.as_deref(), Some("kenward_roger_scaled"));
+    assert_eq!(kr.unscaled_statistic, Some(scaling.unscaled_statistic));
+    assert_eq!(kr.unscaled_p_value, scaling.unscaled_p_value);
 }
 
 #[test]
@@ -4738,7 +5074,11 @@ fn test_native_default_kenward_roger_rows_are_finite_with_realistic_tolerances()
             // `test_lmm_kenward_roger_scalar_rows_match_pbkrtest_fixture`.
             test.statistics[0].unwrap().powi(2)
         } else {
-            test.statistics[0].unwrap()
+            // Multi-row rows report pbkrtest's scaled `Ftest`; the
+            // unscaled `FtestU` lives in the KR scaling record.
+            test.kenward_roger_f_scaling
+                .expect("multi-df KR F test records its scaling")
+                .unscaled_statistic
         };
         assert!(
             (unscaled_statistic - case.unscaled_statistic).abs()
@@ -4822,7 +5162,7 @@ fn test_lmm_kenward_roger_scalar_rows_match_pbkrtest_fixture() {
 // native no-default-features path drifts in the unscaled F statistic.
 #[cfg(feature = "nlopt")]
 #[test]
-fn test_lmm_kenward_roger_multi_df_rows_match_pbkrtest_unscaled_fixture() {
+fn test_lmm_kenward_roger_multi_df_rows_match_pbkrtest_fixture() {
     let fixture = kenward_roger_pbkrtest_parity_fixture();
 
     for case in fixture.multi_df_cases {
@@ -4866,29 +5206,178 @@ fn test_lmm_kenward_roger_multi_df_rows_match_pbkrtest_unscaled_fixture() {
             epsilon = 1e-3,
             max_relative = 5e-4,
         );
-        assert!(
-            (test.statistics[0].unwrap() - case.unscaled_statistic).abs()
-                <= 1e-3 + 5e-4 * case.unscaled_statistic.abs(),
-            "{}: unscaled F drift exceeds tolerance: rust={} ref={}",
-            case.name,
-            test.statistics[0].unwrap(),
-            case.unscaled_statistic
+        // The row reports pbkrtest's scaled `Ftest`; the unscaled `FtestU`
+        // is kept in the KR scaling record.
+        assert_kenward_roger_scaled_f_matches(
+            &test,
+            &case.name,
+            KenwardRogerScaledReference {
+                statistic: case.statistic,
+                p_value: case.p_value,
+                f_scaling: case.f_scaling,
+                unscaled_statistic: case.unscaled_statistic,
+                unscaled_p_value: case.unscaled_p_value,
+            },
         );
-        assert_relative_eq!(
-            test.p_values[0].unwrap(),
-            case.unscaled_p_value,
-            epsilon = 1e-12,
-            max_relative = 1e-3,
-        );
+    }
+}
 
-        if (case.f_scaling - 1.0).abs() > 1e-12 {
-            assert_ne!(case.statistic, case.unscaled_statistic);
-            assert_ne!(case.p_value, case.unscaled_p_value);
-            assert!(test
-                .notes
-                .iter()
-                .any(|note| note.contains("F scaling = 1.0")));
-        }
+struct KenwardRogerScaledReference {
+    statistic: f64,
+    p_value: f64,
+    f_scaling: f64,
+    unscaled_statistic: f64,
+    unscaled_p_value: f64,
+}
+
+fn assert_kenward_roger_scaled_f_matches(
+    test: &FixedEffectTest,
+    name: &str,
+    reference: KenwardRogerScaledReference,
+) {
+    // Multi-df F drift vs pbkrtest is dominated by numerical noise in the
+    // adjusted-vcov off-diagonals; match a realistic numerical tolerance
+    // rather than bit-exactness.
+    let close = |got: f64, want: f64| (got - want).abs() <= 1e-3 + 5e-4 * want.abs();
+    let statistic = test.statistics[0].unwrap();
+    assert!(
+        close(statistic, reference.statistic),
+        "{name}: scaled F rust={statistic} pbkrtest Ftest={}",
+        reference.statistic
+    );
+    // Tail p-values (~1e-7) amplify the ~1e-4 relative F drift between the
+    // native and NLopt optimizers: compare them on the log scale.
+    // (Below ~1e-12 the `1 - cdf` p-value is cancellation noise; accept an
+    // absolute 1e-12 match there.)
+    let p_close =
+        |got: f64, want: f64| (got - want).abs() <= 1e-12 || (got.ln() - want.ln()).abs() <= 5e-3;
+    let p_value = test.p_values[0].unwrap();
+    assert!(
+        p_close(p_value, reference.p_value),
+        "{name}: p rust={p_value} pbkrtest={}",
+        reference.p_value
+    );
+    let scaling = test
+        .kenward_roger_f_scaling
+        .unwrap_or_else(|| panic!("{name}: KR F test must record its scaling"));
+    assert!(
+        (scaling.f_scaling - reference.f_scaling).abs() <= 1e-4,
+        "{name}: lambda rust={} pbkrtest={}",
+        scaling.f_scaling,
+        reference.f_scaling
+    );
+    assert!(
+        close(scaling.unscaled_statistic, reference.unscaled_statistic),
+        "{name}: unscaled F rust={} pbkrtest FtestU={}",
+        scaling.unscaled_statistic,
+        reference.unscaled_statistic
+    );
+    let unscaled_p = scaling.unscaled_p_value.unwrap();
+    assert!(
+        p_close(unscaled_p, reference.unscaled_p_value),
+        "{name}: unscaled p rust={unscaled_p} pbkrtest={}",
+        reference.unscaled_p_value
+    );
+}
+
+#[derive(Debug, Deserialize)]
+struct KenwardRogerScaledFixture {
+    generated_with: serde_json::Value,
+    cases: Vec<KenwardRogerScaledCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct KenwardRogerScaledCase {
+    name: String,
+    formula: String,
+    label: String,
+    l: Vec<Vec<f64>>,
+    rhs: Vec<f64>,
+    numerator_df: f64,
+    denominator_df: f64,
+    statistic: f64,
+    p_value: f64,
+    f_scaling: f64,
+    unscaled_statistic: f64,
+    unscaled_p_value: f64,
+    coefficient_names: Vec<String>,
+}
+
+/// sleepstudy plus the derived factors used by the scaled-F fixture:
+/// `phase` = a (days 0-1), b (2-4), c (5-7), d (8-9); `half` = early
+/// (days < 5) / late.
+fn sleepstudy_with_phase_fixture() -> DataFrame {
+    let mut df = sleepstudy_fixture();
+    let days = df.numeric("days").unwrap().to_vec();
+    let phase = days
+        .iter()
+        .map(|&d| match d as i32 {
+            0..=1 => "a",
+            2..=4 => "b",
+            5..=7 => "c",
+            _ => "d",
+        })
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let half = days
+        .iter()
+        .map(|&d| if d < 5.0 { "early" } else { "late" }.to_string())
+        .collect::<Vec<_>>();
+    df.add_categorical("phase", phase).unwrap();
+    df.add_categorical("half", half).unwrap();
+    df
+}
+
+/// pbkrtest::KRmodcomp `Ftest` parity (scaled F, ndf, ddf, p) for 2- and
+/// 3-df L-matrix tests; see the fixture's provenance for the R script.
+#[test]
+fn test_lmm_kenward_roger_scaled_f_matches_pbkrtest_krmodcomp() {
+    let fixture: KenwardRogerScaledFixture = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/compiler_contract/kenward_roger_pbkrtest_scaled_f_v1.json"
+    ))
+    .expect("scaled KR fixture should deserialize");
+    assert!(fixture.generated_with["r_packages"]["pbkrtest"].is_string());
+    assert!(fixture.cases.len() >= 2);
+    let data = sleepstudy_with_phase_fixture();
+    for case in fixture.cases {
+        let formula = case
+            .formula
+            .replace("Reaction", "reaction")
+            .replace("Days", "days");
+        let mut model =
+            LinearMixedModel::new(parse_formula(&formula).unwrap(), &data, None).unwrap();
+        model.fit(true).unwrap();
+        assert_eq!(model.coef_names().len(), case.coefficient_names.len());
+        let hypothesis = fixed_effect_hypothesis_from_fixture(&case.label, &case.l, &case.rhs);
+        let test = model.test_contrast_with_method(hypothesis, FixedEffectTestMethod::KenwardRoger);
+        assert_eq!(test.status, InferenceStatus::Available, "{}", case.name);
+        assert_eq!(test.numerator_df, Some(case.numerator_df), "{}", case.name);
+        assert_relative_eq!(
+            test.denominator_df.unwrap(),
+            case.denominator_df,
+            epsilon = 1e-3,
+            max_relative = 5e-4,
+        );
+        assert!(
+            (case.f_scaling - 1.0).abs() > 1e-3,
+            "{}: informative λ",
+            case.name
+        );
+        assert_kenward_roger_scaled_f_matches(
+            &test,
+            &case.name,
+            KenwardRogerScaledReference {
+                statistic: case.statistic,
+                p_value: case.p_value,
+                f_scaling: case.f_scaling,
+                unscaled_statistic: case.unscaled_statistic,
+                unscaled_p_value: case.unscaled_p_value,
+            },
+        );
+        let row = fixed_effect_test_to_inference_row(FixedEffectInferenceRowKind::Term, test);
+        let kr = row.details.unwrap().kenward_roger.unwrap();
+        assert_eq!(kr.statistic_scale.as_deref(), Some("kenward_roger_scaled"));
+        assert!(kr.unscaled_statistic.is_some() && kr.unscaled_p_value.is_some());
     }
 }
 
@@ -5333,19 +5822,19 @@ fn manual_one_term_ranef_u_via_block_solver(model: &LinearMixedModel) -> DMatrix
     let wtxy = &model.xy_mat.wtxy;
 
     let mut wr = vec![0.0f64; n];
-    for obs in 0..n {
+    for (obs, wr_obs) in wr.iter_mut().enumerate() {
         let mut val = wtxy[(obs, p)];
         for q in 0..p {
             val -= wtxy[(obs, q)] * beta[q];
         }
-        wr[obs] = val;
+        *wr_obs = val;
     }
 
     let mut c = vec![0.0f64; nranef];
-    for obs in 0..n {
+    for (obs, &wr_obs) in wr.iter().enumerate() {
         let r = re.refs[obs] as usize;
         for s in 0..vs {
-            c[r * vs + s] += re.wtz[(s, obs)] * wr[obs];
+            c[r * vs + s] += re.wtz[(s, obs)] * wr_obs;
         }
     }
 
@@ -7032,4 +7521,291 @@ fn type_i_sequences_terms_by_interaction_order() {
             }
         }
     }
+}
+
+#[test]
+fn inference_covariance_provenance_survives_tables_and_legacy_json() {
+    use crate::stats::InferenceCovarianceMethod as Cov;
+    let data = sleepstudy_fixture();
+    let formula = parse_formula("reaction ~ 1 + days + (days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(true).unwrap();
+    let hypothesis = FixedEffectHypothesis::single_coefficient("days", 1, 2).unwrap();
+    let ordinary = model.fixed_effect_contrast_inference_table(
+        vec![hypothesis.clone()],
+        FixedEffectTestMethod::Satterthwaite,
+    );
+    assert_eq!(ordinary.rows[0].covariance_method, Cov::ModelBased);
+    let kr = model.fixed_effect_contrast_inference_table(
+        vec![hypothesis.clone()],
+        FixedEffectTestMethod::KenwardRoger,
+    );
+    assert_eq!(
+        kr.rows[0].status,
+        crate::compiler::FixedEffectInferenceStatus::Available
+    );
+    assert_eq!(kr.rows[0].covariance_method, Cov::KenwardRogerAdjusted);
+    let adjusted = model.kenward_roger_adjusted_vcov().unwrap();
+    assert_relative_eq!(
+        kr.rows[0].std_error.unwrap().powi(2),
+        adjusted.adjusted_vcov[(1, 1)],
+        epsilon = 1e-9
+    );
+    let terms = model.fixed_effect_term_inference_table(FixedEffectTestMethod::KenwardRoger);
+    assert!(terms
+        .rows
+        .iter()
+        .all(|row| row.covariance_method == Cov::KenwardRogerAdjusted));
+    let coefficients = model.coeftable_with_method(FixedEffectTestMethod::KenwardRoger);
+    assert!(coefficients
+        .covariance_methods
+        .iter()
+        .all(|method| *method == Cov::KenwardRogerAdjusted));
+    assert!(coefficients.to_string().contains("kenward_roger_adjusted"));
+    assert!(crate::stats::coeftable_to_markdown(&coefficients).contains("kenward_roger_adjusted"));
+    let mut legacy = serde_json::to_value(&ordinary).unwrap();
+    legacy["schema_version"] = serde_json::json!("1.1.0");
+    legacy["rows"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("covariance_method");
+    let decoded: crate::compiler::FixedEffectInferenceTable =
+        serde_json::from_value(legacy).unwrap();
+    assert_eq!(decoded.rows[0].covariance_method, Cov::NotRecorded);
+    let summary = crate::stats::FitSummaryPayload::from_linear_model(&model);
+    assert_eq!(summary.coefficients.covariance_method(0), Cov::ModelBased);
+    assert_eq!(summary.summary.rows[0].covariance_method, Cov::ModelBased);
+    assert!(summary
+        .summary
+        .to_markdown()
+        .contains("Covariance: model_based"));
+
+    // A rejected KR request retains ordinary SEs: do not label them adjusted.
+    let formula = parse_formula("reaction ~ 1 + days + (days | subj)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &data, None).unwrap();
+    model.fit(false).unwrap();
+    let refused = model.fixed_effect_contrast_inference_table(
+        vec![hypothesis],
+        FixedEffectTestMethod::KenwardRoger,
+    );
+    assert_eq!(
+        refused.rows[0].status,
+        crate::compiler::FixedEffectInferenceStatus::NotAssessed
+    );
+    assert_eq!(refused.rows[0].covariance_method, Cov::ModelBased);
+    assert!(refused.rows[0].std_error.is_some());
+}
+
+fn categorical_prediction_fixture() -> DataFrame {
+    let n = 120;
+    let (mut y, mut f, mut h, mut g) = (vec![], vec![], vec![], vec![]);
+    for i in 0..n {
+        let level = i % 3;
+        let half = (i / 3) % 2;
+        let group = i % 6;
+        f.push(format!("L{level}"));
+        h.push(format!("H{half}"));
+        g.push(format!("G{group}"));
+        y.push(
+            5.0 + level as f64
+                + 0.7 * (half * level) as f64
+                + 0.3 * group as f64
+                + (((i * 37) % 11) as f64 - 5.0) * 0.2,
+        );
+    }
+    let mut df = DataFrame::new();
+    df.add_numeric("y", y).unwrap();
+    df.add_categorical("f", f).unwrap();
+    df.add_categorical("h", h).unwrap();
+    df.add_categorical("g", g).unwrap();
+    df
+}
+
+/// `y ~ 0 + f` is a reparameterization of `y ~ f` (one mean per level), so
+/// the ML fits must agree; treatment-coding `f` without an intercept used to
+/// drop the reference level and fit a different, worse model.
+#[test]
+fn no_intercept_factor_model_is_a_reparameterization() {
+    let df = categorical_prediction_fixture();
+    let fit = |formula: &str| {
+        let mut model = LinearMixedModel::new(parse_formula(formula).unwrap(), &df, None).unwrap();
+        model.fit(false).unwrap();
+        model
+    };
+    let with_intercept = fit("y ~ f + (1|g)");
+    let cell_means = fit("y ~ 0 + f + (1|g)");
+    assert_eq!(cell_means.coef_names(), vec!["f: L0", "f: L1", "f: L2"]);
+    assert_relative_eq!(
+        cell_means.loglikelihood(),
+        with_intercept.loglikelihood(),
+        epsilon = 1e-6
+    );
+    let b = with_intercept.coef();
+    let m = cell_means.coef();
+    assert_relative_eq!(m[0], b[0], epsilon = 1e-5);
+    assert_relative_eq!(m[1], b[0] + b[1], epsilon = 1e-5);
+    assert_relative_eq!(m[2], b[0] + b[2], epsilon = 1e-5);
+}
+
+/// Prediction looks coefficients up by design-column name, so the newdata
+/// design must use the fit's codings (marginality, no-intercept rule).
+/// Predicting on the training data must reproduce the fitted values.
+#[test]
+fn predict_new_on_training_data_matches_fitted_for_categorical_codings() {
+    let df = categorical_prediction_fixture();
+    for formula in [
+        "y ~ f + (1|g)",
+        "y ~ 0 + f + h + (1|g)",
+        "y ~ f + f:h + (1|g)",
+        "y ~ 0 + f:h + (1|g)",
+    ] {
+        let mut model = LinearMixedModel::new(parse_formula(formula).unwrap(), &df, None).unwrap();
+        model.fit(false).unwrap();
+        let fitted = model.fitted();
+        let predicted = model.predict_new(&df, NewReLevels::Error).unwrap();
+        for (p, f) in predicted.iter().zip(fitted.iter()) {
+            assert_relative_eq!(p.unwrap(), *f, epsilon = 1e-8);
+        }
+    }
+}
+
+#[test]
+fn lmm_prior_weights_are_validated_before_use() {
+    let df = categorical_prediction_fixture();
+    let formula = || parse_formula("y ~ f + (1|g)").unwrap();
+    let n = df.nrow();
+    for (weights, needle) in [
+        (vec![1.0; n - 1], "length"),
+        (
+            {
+                let mut w = vec![1.0; n];
+                w[3] = 0.0;
+                w
+            },
+            "index 3",
+        ),
+        (
+            {
+                let mut w = vec![1.0; n];
+                w[5] = -1.0;
+                w
+            },
+            "index 5",
+        ),
+        (
+            {
+                let mut w = vec![1.0; n];
+                w[7] = f64::NAN;
+                w
+            },
+            "index 7",
+        ),
+    ] {
+        let err = LinearMixedModel::new(formula(), &df, Some(&weights)).unwrap_err();
+        assert!(
+            matches!(&err, MixedModelError::InvalidArgument(msg) if msg.contains(needle)),
+            "unexpected error for {needle}: {err:?}"
+        );
+    }
+}
+
+/// With prior weights the residual variance is sigma^2 / w_i, so simulated
+/// residual spread must shrink where the weight is large.
+#[test]
+fn weighted_lmm_simulation_scales_residual_noise_by_weights() {
+    let df = categorical_prediction_fixture();
+    let n = df.nrow();
+    let weights: Vec<f64> = (0..n)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 100.0 })
+        .collect();
+    let mut model =
+        LinearMixedModel::new(parse_formula("y ~ f + (1|g)").unwrap(), &df, Some(&weights))
+            .unwrap();
+    model.fit(false).unwrap();
+    let mut rng = StdRng::seed_from_u64(11);
+    let beta = model.beta();
+    let (mut light, mut heavy) = (0.0, 0.0);
+    let reps = 200;
+    for _ in 0..reps {
+        let a = model.simulate_with_active_beta(&mut rng, &beta).unwrap();
+        let b = model.simulate_with_active_beta(&mut rng, &beta).unwrap();
+        // Same fixed part; difference of two draws isolates the noise
+        // (random effects differ too, but equally for both weight classes).
+        for i in 0..n {
+            let d = (a[i] - b[i]).powi(2);
+            if i % 2 == 0 {
+                light += d
+            } else {
+                heavy += d
+            }
+        }
+    }
+    assert!(light > 2.0 * heavy, "light={light} heavy={heavy}");
+}
+
+#[test]
+fn reml_logdet_treats_non_positive_lxx_pivot_as_infeasible() {
+    let df = dyestuff_fixture();
+    let formula = parse_formula("yield ~ 1 + (1 | batch)").unwrap();
+    let mut model = LinearMixedModel::new(formula, &df, None).unwrap();
+    model.fit(true).unwrap();
+    let (logdet, _) = model.determinant_term_and_pwrss_for_reml(true);
+    assert!(logdet.is_finite());
+
+    let k = model.reterms.len();
+    let mut last = model.l_blocks[block_index(k, k)].as_dense();
+    last[(0, 0)] = 0.0;
+    model.l_blocks[block_index(k, k)] = MatrixBlock::Dense(last);
+    let (logdet, _) = model.determinant_term_and_pwrss_for_reml(true);
+    assert_eq!(logdet, f64::INFINITY);
+    // ML ignores L_XX and is unaffected.
+    let (ml_logdet, _) = model.determinant_term_and_pwrss_for_reml(false);
+    assert!(ml_logdet.is_finite());
+}
+
+#[test]
+fn unused_grouping_levels_are_dropped_like_lme4() {
+    let base = dyestuff_fixture();
+    let batch = base.categorical("batch").unwrap();
+    let mut declared = batch.levels.clone();
+    declared.insert(1, "unused_a".to_string());
+    declared.push("unused_b".to_string());
+    let mut df = DataFrame::new();
+    df.add_numeric("yield", base.numeric("yield").unwrap().to_vec())
+        .unwrap();
+    df.add_categorical_with_levels("batch", batch.values.clone(), declared)
+        .unwrap();
+
+    let formula = parse_formula("yield ~ 1 + (1 | batch)").unwrap();
+    let mut with_unused = LinearMixedModel::new(formula.clone(), &df, None).unwrap();
+    with_unused.fit(true).unwrap();
+    let mut reference = LinearMixedModel::new(formula, &base, None).unwrap();
+    reference.fit(true).unwrap();
+
+    assert_eq!(with_unused.reterms[0].n_levels(), batch.levels.len());
+    assert_eq!(with_unused.reterms[0].levels, batch.levels);
+    assert_relative_eq!(
+        with_unused.objective(),
+        reference.objective(),
+        epsilon = 1e-8
+    );
+    assert_eq!(with_unused.ranef_b()[0].ncols(), batch.levels.len());
+
+    // A level that was declared but never observed is a new level at
+    // prediction time.
+    let mut newdata = DataFrame::new();
+    newdata.add_numeric("yield", vec![0.0, 0.0]).unwrap();
+    newdata
+        .add_categorical(
+            "batch",
+            vec![batch.levels[0].clone(), "unused_a".to_string()],
+        )
+        .unwrap();
+    assert!(with_unused
+        .predict_new(&newdata, NewReLevels::Error)
+        .is_err());
+    let pred = with_unused
+        .predict_new(&newdata, NewReLevels::Population)
+        .unwrap();
+    assert_eq!(pred.len(), 2);
 }

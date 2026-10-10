@@ -4,6 +4,8 @@
 //! (bd-01KWHYQSTWK60P6HA4S4B2K99P). No logic changes.
 
 use super::*;
+use crate::compiler::{IncompleteCheckEvidence, IncompleteCheckStatus};
+use crate::model::linear::WARM_REFIT_INITIAL_STEP;
 
 impl GeneralizedLinearMixedModel {
     /// Fixed-effect covariance from the final PIRLS working Hessian, rescaled
@@ -57,8 +59,7 @@ impl GeneralizedLinearMixedModel {
 
     pub(super) fn recorded_fixed_effect_covariance(&self) -> Option<DMatrix<f64>> {
         let payload = self
-            .lmm
-            .compiler_artifact
+            .inference_artifact()
             .fixed_effect_covariance_matrix
             .as_ref()?;
         // Noninferential payloads stay usable as covariance geometry for
@@ -84,6 +85,8 @@ impl GeneralizedLinearMixedModel {
     }
 
     pub(super) fn record_invalid_agq_diagnostic(&mut self, n_agq: usize, reason: &str) {
+        // A cached `&self` view predates this diagnostic.
+        self.inspection = std::sync::OnceLock::new();
         self.lmm
             .compiler_artifact
             .diagnostics
@@ -139,6 +142,8 @@ impl GeneralizedLinearMixedModel {
     }
 
     pub(super) fn record_pirls_failure_diagnostic(&mut self, theta: &[f64], reason: &str) {
+        // A cached `&self` view predates this diagnostic.
+        self.inspection = std::sync::OnceLock::new();
         self.lmm
             .compiler_artifact
             .diagnostics
@@ -190,6 +195,8 @@ impl GeneralizedLinearMixedModel {
     /// modes. Distinct from [`Self::record_pirls_failure_diagnostic`], which
     /// flags a hard PIRLS/linear-algebra failure that aborts the fit.
     pub(super) fn record_pirls_nonconvergence_diagnostic(&mut self, theta: &[f64]) {
+        // A cached `&self` view predates this diagnostic.
+        self.inspection = std::sync::OnceLock::new();
         self.lmm
             .compiler_artifact
             .diagnostics
@@ -229,6 +236,17 @@ impl GeneralizedLinearMixedModel {
     }
 
     pub(super) fn reset_for_refit(&mut self, new_y: Option<&[f64]>) -> Result<()> {
+        self.reset_for_refit_with_start(new_y, None)
+    }
+
+    /// Reset for a refit; `start_theta` (a warm start) keeps the current
+    /// conditional modes and fixed effects as the first PIRLS start and
+    /// contracts the optimizer's first step.
+    pub(super) fn reset_for_refit_with_start(
+        &mut self,
+        new_y: Option<&[f64]>,
+        start_theta: Option<Vec<f64>>,
+    ) -> Result<()> {
         if let Some(new_y) = new_y {
             if new_y.len() != self.y.len() {
                 return Err(MixedModelError::InvalidArgument(format!(
@@ -247,40 +265,56 @@ impl GeneralizedLinearMixedModel {
                 ));
             }
 
+            // The fitted state is overwritten from here on, and the fallible
+            // recomputation below must not leave a stale deferral behind.
+            self.clear_deferred_inspection();
             let p = self.lmm.feterm.rank;
-            for obs in 0..self.y.len() {
+            for (obs, &new_response) in new_y.iter().enumerate() {
                 let sw = if self.lmm.sqrtwts.is_empty() {
                     1.0
                 } else {
                     self.lmm.sqrtwts[obs]
                 };
-                self.y[obs] = new_y[obs];
-                self.lmm.y[obs] = new_y[obs];
-                self.lmm.xy_mat.xy[(obs, p)] = new_y[obs];
-                self.lmm.xy_mat.wtxy[(obs, p)] = sw * new_y[obs];
+                self.y[obs] = new_response;
+                self.lmm.y[obs] = new_response;
+                self.lmm.xy_mat.xy[(obs, p)] = new_response;
+                self.lmm.xy_mat.wtxy[(obs, p)] = sw * new_response;
             }
             self.lmm.recompute_a_blocks()?;
         }
 
-        let initial_theta = self.lmm.optsum.initial.clone();
+        self.clear_deferred_inspection();
+        let warm = start_theta.is_some();
+        let initial_theta = match start_theta {
+            Some(theta) => theta,
+            None => self.lmm.optsum.initial.clone(),
+        };
         self.lmm.set_theta(&initial_theta)?;
         self.lmm.update_l()?;
         self.theta = initial_theta.clone();
 
-        self.beta = DVector::zeros(self.lmm.feterm.rank);
-        self.beta0 = self.beta.clone();
-        for u in &mut self.u {
-            u.fill(0.0);
+        if warm {
+            // Keep the fitted conditional modes and fixed effects as the
+            // first PIRLS start; only the optimizer's start and step change.
+            self.lmm.optsum.initial = initial_theta.clone();
+            self.warm_refit_step = Some(vec![WARM_REFIT_INITIAL_STEP; initial_theta.len()]);
+        } else {
+            self.warm_refit_step = None;
+            self.beta = DVector::zeros(self.lmm.feterm.rank);
+            self.beta0 = self.beta.clone();
+            for u in &mut self.u {
+                u.fill(0.0);
+            }
+            for u0 in &mut self.u0 {
+                u0.fill(0.0);
+            }
+            for b in &mut self.b {
+                b.fill(0.0);
+            }
+            self.eta.fill(0.0);
+            self.mu.fill(0.0);
+            self.dispersion = 1.0;
         }
-        for u0 in &mut self.u0 {
-            u0.fill(0.0);
-        }
-        for b in &mut self.b {
-            b.fill(0.0);
-        }
-        self.eta.fill(0.0);
-        self.mu.fill(0.0);
-        self.dispersion = 1.0;
         self.update_eta();
 
         self.lmm.optsum.finitial = f64::INFINITY;
@@ -295,6 +329,14 @@ impl GeneralizedLinearMixedModel {
         self.lmm.compiler_artifact.effective_covariance.clear();
         self.pirls_profiled_optimum_certificate = None;
         Ok(())
+    }
+
+    /// Drop every deferral and cached view without completing them: for
+    /// paths that discard the fitted state.
+    fn clear_deferred_inspection(&mut self) {
+        self.pirls_certificate_pending = false;
+        self.joint_inference_pending = false;
+        self.inspection = std::sync::OnceLock::new();
     }
 
     pub(super) fn record_glmm_fit_metadata(&mut self) {
@@ -321,9 +363,51 @@ impl GeneralizedLinearMixedModel {
         }
         self.record_fast_pirls_parity_scope_diagnostic(&metadata);
         self.record_pirls_profiled_optimum_certificate(&metadata);
-        let inference_artifacts = self.glmm_fixed_effect_inference_artifacts(&metadata);
+        // Every recording is a new final fit (or a relabelling of one): any
+        // deferral left by an earlier stage of the same driver is void.
+        self.joint_inference_pending = false;
+        self.inspection = std::sync::OnceLock::new();
+        if self.defers_joint_laplace_inference(&metadata) {
+            // Defer the finite-difference joint Hessian until the inference
+            // payloads are inspected or a mutating path needs them. The
+            // stored payloads are cleared so no reader can see an earlier
+            // stage's (profiled) values; readers go through
+            // `inference_artifact`/`compiler_artifact`, which produce exactly
+            // the eager payloads.
+            self.lmm
+                .compiler_artifact
+                .model_boundary
+                .inference_availability = InferenceAvailability::NotAssessed {
+                reason: LinearMixedModel::DEFERRED_DERIVATIVE_EVIDENCE_REASON.to_string(),
+            };
+            self.lmm.compiler_artifact.glmm_fit_metadata = Some(metadata);
+            self.lmm.compiler_artifact.fixed_effect_covariance_matrix = None;
+            self.lmm.compiler_artifact.fixed_effect_inference_table = None;
+            self.joint_inference_pending = true;
+            return;
+        }
+        self.record_glmm_inference_artifacts(&metadata);
+        self.lmm.compiler_artifact.glmm_fit_metadata = Some(metadata);
+    }
+
+    /// Joint-Laplace fits defer their fixed-effect inference artifacts: the
+    /// only estimator whose artifacts cost a finite-difference Hessian.
+    fn defers_joint_laplace_inference(&self, metadata: &GlmmFitMetadata) -> bool {
+        #[cfg(test)]
+        if super::tests::EAGER_JOINT_LAPLACE_INFERENCE.with(std::cell::Cell::get) {
+            return false;
+        }
+        metadata.estimation_method == "joint_laplace" && self.lmm.optsum.n_agq <= 1
+    }
+
+    /// Compute and store the fixed-effect inference table, the covariance
+    /// payload and the inference-availability boundary for `metadata`'s
+    /// estimator. For joint-Laplace fits this runs the finite-difference
+    /// joint Hessian, whose PIRLS probes move the conditional modes.
+    fn record_glmm_inference_artifacts(&mut self, metadata: &GlmmFitMetadata) {
+        let inference_artifacts = self.glmm_fixed_effect_inference_artifacts(metadata);
         let inference_availability =
-            glmm_inference_availability_for_table(&metadata, &inference_artifacts.table);
+            glmm_inference_availability_for_table(metadata, &inference_artifacts.table);
         let covariance = inference_artifacts
             .covariance
             .unwrap_or_else(|| self.profiled_glmm_fixed_effect_covariance_matrix());
@@ -331,9 +415,76 @@ impl GeneralizedLinearMixedModel {
             .compiler_artifact
             .model_boundary
             .inference_availability = inference_availability;
-        self.lmm.compiler_artifact.glmm_fit_metadata = Some(metadata);
         self.lmm.compiler_artifact.fixed_effect_covariance_matrix = Some(covariance);
         self.lmm.compiler_artifact.fixed_effect_inference_table = Some(inference_artifacts.table);
+    }
+
+    /// Run the deferred joint-Laplace inference on this model itself. Only
+    /// for disposable clones: the Hessian probes perturb the fitted modes.
+    pub(super) fn issue_deferred_joint_laplace_inference(&mut self) {
+        if !self.joint_inference_pending {
+            return;
+        }
+        self.joint_inference_pending = false;
+        let metadata = self
+            .lmm
+            .compiler_artifact
+            .glmm_fit_metadata
+            .clone()
+            .expect("a deferred joint inference always has recorded fit metadata");
+        self.record_glmm_inference_artifacts(&metadata);
+    }
+
+    /// Produce the deferred joint-Laplace inference artifacts in place, as
+    /// the eager path would have recorded them. The Hessian runs on a clone
+    /// (or is taken from an existing `&self` inspection), so the fitted
+    /// conditional modes, linear predictor and deviance are left exactly as
+    /// they are. No-op when nothing is pending.
+    pub(crate) fn complete_joint_laplace_inference(&mut self) {
+        if !self.joint_inference_pending {
+            return;
+        }
+        let completed = match self.inspection.take() {
+            Some(inspection) => inspection.artifact,
+            None => {
+                let mut probe = self.clone();
+                probe.issue_deferred_joint_laplace_inference();
+                probe.lmm.compiler_artifact
+            }
+        };
+        self.joint_inference_pending = false;
+        // The Hessian also completes the certificate's full Newton
+        // decrement; copy that evidence back with the inference fields.
+        let full_decrement = completed
+            .optimizer_certificate
+            .as_ref()
+            .and_then(|certificate| certificate.stationarity_decrement.as_ref())
+            .and_then(|evidence| evidence.full.clone());
+        if let Some(evidence) = self
+            .lmm
+            .compiler_artifact
+            .optimizer_certificate
+            .as_mut()
+            .and_then(|certificate| certificate.stationarity_decrement.as_mut())
+        {
+            evidence.full = full_decrement;
+        }
+        self.lmm
+            .compiler_artifact
+            .model_boundary
+            .inference_availability = completed.model_boundary.inference_availability;
+        self.lmm.compiler_artifact.fixed_effect_covariance_matrix =
+            completed.fixed_effect_covariance_matrix;
+        self.lmm.compiler_artifact.fixed_effect_inference_table =
+            completed.fixed_effect_inference_table;
+    }
+
+    /// Complete every deferred post-fit computation in place. Mutating
+    /// paths that record on, or move away from, the fitted state call this
+    /// first.
+    pub(crate) fn complete_deferred_inspection(&mut self) {
+        self.complete_joint_laplace_inference();
+        self.complete_pirls_certificate();
     }
 
     /// Run the post-fit profiled-optimum certificate for profiled fast-PIRLS
@@ -344,15 +495,65 @@ impl GeneralizedLinearMixedModel {
             metadata.estimation_method.as_str(),
             "fast_pirls_profiled" | "fallback_fast_pirls"
         ) {
+            // A joint (or otherwise non-profiled) final fit owns its own
+            // certificate evidence: nothing is deferred, and a deferral left
+            // by an earlier profiled stage of the same driver is void.
             self.pirls_profiled_optimum_certificate = None;
+            self.pirls_certificate_pending = false;
+            self.inspection = std::sync::OnceLock::new();
             return;
         }
         // Fit drivers can record metadata more than once for the same final
         // fit (e.g. a joint fallback re-labelling a profiled fit); the
         // certificate and its diagnostic are per-fit, not per-recording.
-        if self.pirls_profiled_optimum_certificate.is_some() {
+        if self.pirls_profiled_optimum_certificate.is_some() || self.pirls_certificate_pending {
             return;
         }
+        // Defer the finite-difference PIRLS probes (25-40% of a fit's wall
+        // time) until the certificate is inspected or a mutating path needs
+        // it; the optimizer certificate carries the same deferred marker
+        // the LMM path uses, and `complete_pirls_certificate` produces
+        // exactly the eager outcome, diagnostic and evidence.
+        if let Some(optimizer_certificate) = &mut self.lmm.compiler_artifact.optimizer_certificate {
+            optimizer_certificate.mark_derivative_checks_incomplete(IncompleteCheckEvidence::new(
+                "derivative_inspection",
+                IncompleteCheckStatus::Deferred,
+                LinearMixedModel::DEFERRED_DERIVATIVE_EVIDENCE_REASON,
+            ));
+        }
+        self.pirls_certificate_diagnostic_slot = self.lmm.compiler_artifact.diagnostics.len();
+        self.pirls_certificate_pending = true;
+        self.inspection = std::sync::OnceLock::new();
+    }
+
+    /// Produce the deferred profiled-optimum certificate in place: the
+    /// probes, the optimizer certificate's derivative evidence, the
+    /// provenance diagnostic (at the slot the eager path used) and the
+    /// stored outcome. No-op when nothing is pending.
+    pub(crate) fn complete_pirls_certificate(&mut self) {
+        if !self.pirls_certificate_pending {
+            return;
+        }
+        self.pirls_certificate_pending = false;
+        self.inspection = std::sync::OnceLock::new();
+        let estimation_method = self
+            .lmm
+            .compiler_artifact
+            .glmm_fit_metadata
+            .as_ref()
+            .map(|metadata| metadata.estimation_method.clone())
+            .unwrap_or_default();
+        let slot = self
+            .pirls_certificate_diagnostic_slot
+            .min(self.lmm.compiler_artifact.diagnostics.len());
+        self.issue_pirls_profiled_optimum_certificate(&estimation_method, slot);
+    }
+
+    fn issue_pirls_profiled_optimum_certificate(
+        &mut self,
+        estimation_method: &str,
+        diagnostic_slot: usize,
+    ) {
         let outcome = self.certify_pirls_profiled_optimum();
 
         // Reflect the certificate outcome into the optimizer certificate's
@@ -388,10 +589,36 @@ impl GeneralizedLinearMixedModel {
                         );
                     }
                 }
-                Err(reason) => {
-                    optimizer_certificate.mark_derivative_checks_not_assessed(format!(
-                        "profiled-optimum certificate not issued: {reason}"
-                    ));
+                Err(error) => {
+                    let reason = format!("profiled-optimum certificate not issued: {error}");
+                    let status = match error {
+                        ProfiledCertificateError::Skipped(_) => IncompleteCheckStatus::Skipped,
+                        _ => IncompleteCheckStatus::Unavailable,
+                    };
+                    optimizer_certificate.mark_derivative_checks_incomplete(
+                        IncompleteCheckEvidence::new(
+                            "derivative_inspection",
+                            status,
+                            reason.clone(),
+                        ),
+                    );
+                    if matches!(error, ProfiledCertificateError::Failed(_)) {
+                        // A computed check rejected its predicate. Preserve the
+                        // optimizer stop; do not turn this into a skipped check.
+                        optimizer_certificate.checks.retain(|check| {
+                            !matches!(check,
+                            crate::compiler::CertificateCheck::Incomplete { evidence }
+                                if evidence.check_name == "derivative_inspection")
+                        });
+                        optimizer_certificate.checks.push(
+                            crate::compiler::CertificateCheck::Failed {
+                                code: "profiled_optimum".to_string(),
+                                message: reason.clone(),
+                            },
+                        );
+                        optimizer_certificate.evidence.certification_quality =
+                            crate::compiler::EvidenceQuality::Failed { reason };
+                    }
                 }
             }
         }
@@ -415,7 +642,7 @@ impl GeneralizedLinearMixedModel {
         );
         diagnostic.payload.insert(
             "estimation_method".to_string(),
-            serde_json::json!(metadata.estimation_method.as_str()),
+            serde_json::json!(estimation_method),
         );
         match &outcome {
             Ok(certificate) => {
@@ -447,11 +674,14 @@ impl GeneralizedLinearMixedModel {
             Err(reason) => {
                 diagnostic
                     .payload
-                    .insert("reason".to_string(), serde_json::json!(reason));
+                    .insert("reason".to_string(), serde_json::json!(reason.to_string()));
             }
         }
-        self.lmm.compiler_artifact.diagnostics.push(diagnostic);
-        self.pirls_profiled_optimum_certificate = Some(outcome);
+        self.lmm
+            .compiler_artifact
+            .diagnostics
+            .insert(diagnostic_slot, diagnostic);
+        self.pirls_profiled_optimum_certificate = Some(outcome.map_err(|error| error.to_string()));
     }
 
     pub(super) fn record_negative_binomial_theta_estimation_metadata(
@@ -461,6 +691,7 @@ impl GeneralizedLinearMixedModel {
         update_iterations: usize,
         converged: bool,
     ) {
+        self.inspection = std::sync::OnceLock::new();
         if let Some(metadata) = &mut self.lmm.compiler_artifact.glmm_fit_metadata {
             metadata
                 .family_parameters
@@ -612,6 +843,7 @@ impl GeneralizedLinearMixedModel {
             return;
         }
 
+        self.inspection = std::sync::OnceLock::new();
         self.lmm
             .compiler_artifact
             .diagnostics
@@ -622,6 +854,7 @@ impl GeneralizedLinearMixedModel {
     }
 
     pub(super) fn refresh_binomial_separation_diagnostics(&mut self) {
+        self.inspection = std::sync::OnceLock::new();
         self.lmm
             .compiler_artifact
             .diagnostics

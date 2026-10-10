@@ -35,3 +35,55 @@ test_that("interrupt demo handles negative input by clamping to zero", {
   out <- mixeff:::mm_interrupt_demo(-5L)
   expect_true(out >= 0L)
 })
+
+test_that("a running fit stops cleanly with mm_interrupted on SIGINT", {
+  skip_on_cran()
+  skip_if_not_installed("processx")
+  skip_if_not_installed("pkgload")
+  skip_on_os("windows")
+  # Load mixeff in the child the way this session did: an installed copy
+  # (R CMD check, covr) from the same library, else the source tree.
+  ns_path <- getNamespaceInfo("mixeff", "path")
+  load_line <- if (dir.exists(file.path(ns_path, "Meta"))) {
+    sprintf(".libPaths(c(%s, .libPaths())); suppressMessages(library(mixeff))",
+            deparse(dirname(ns_path)))
+  } else {
+    skip_if_not(file.exists(file.path(ns_path, "DESCRIPTION")),
+                "package source tree is not available")
+    sprintf("suppressMessages(pkgload::load_all(%s, compile = FALSE, quiet = TRUE))",
+            deparse(ns_path))
+  }
+  script <- tempfile(fileext = ".R")
+  writeLines(c(
+    load_line,
+    "set.seed(1)",
+    "n <- 40000; d <- data.frame(s = factor(sample(800, n, TRUE)),",
+    "  it = factor(sample(400, n, TRUE)), x = rnorm(n))",
+    "d$y <- rbinom(n, 1, plogis(-0.5 + 0.3 * d$x + rnorm(800)[d$s] + rnorm(400)[d$it]))",
+    "cat('READY\\n')",
+    "r <- tryCatch({",
+    "  glmm(y ~ x + (1 | s) + (1 | it), d, binomial, control = mm_control(verbose = -1))",
+    "  'COMPLETED'",
+    "}, mm_interrupted = function(e) 'MM_INTERRUPTED', error = function(e) paste('ERROR', conditionMessage(e)))",
+    "cat(r, '\\n')",
+    "cat('ALIVE', mixeff:::mm_interrupt_demo(3L), '\\n')"
+  ), script)
+  p <- processx::process$new(file.path(R.home("bin"), "Rscript"), script,
+                             stdout = "|", stderr = "|")
+  on.exit(p$kill(), add = TRUE)
+  out <- ""
+  deadline <- Sys.time() + 120
+  while (!grepl("READY", out) && p$is_alive() && Sys.time() < deadline) {
+    p$poll_io(500)
+    out <- paste0(out, p$read_output())
+  }
+  skip_if_not(grepl("READY", out), "child process did not start")
+  Sys.sleep(2)
+  p$interrupt()
+  p$wait(60000)
+  out <- paste0(out, p$read_all_output())
+  skip_if(grepl("COMPLETED", out), "fit finished before the interrupt arrived")
+  expect_match(out, "MM_INTERRUPTED", fixed = TRUE)
+  # The R session survives and the native library is still usable.
+  expect_match(out, "ALIVE 3", fixed = TRUE)
+})

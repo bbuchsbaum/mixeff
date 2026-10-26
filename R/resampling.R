@@ -58,8 +58,8 @@ mm_bootmer <- function(fit, FUN, nsim = 1L, seed = NULL,
   if (inherits(fit, "mm_glmm")) {
     mm_abort(
       message = paste0(
-        "`mm_bootmer()` refits through `refit()`, which is not implemented ",
-        "for GLMM fits. Use confint(fit, method = \"bootstrap\") for the ",
+        "`mm_bootmer()` currently supports LMM fits only. ",
+        "Use confint(fit, method = \"bootstrap\") for the ",
         "engine-run GLMM parametric bootstrap."
       ),
       class = "mm_inference_unavailable",

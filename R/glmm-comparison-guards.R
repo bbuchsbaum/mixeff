@@ -44,6 +44,13 @@ mm_assert_glmm_lrt_pair <- function(null, alternative) {
       refuse("the same negative-binomial theta mode and fixed theta", "glmm_lrt_nb_theta_differs")
     }
   }
+  if (mm_glmm_free_dispersion(null)) {
+    p0 <- null$dispersion_policy
+    p1 <- alternative$dispersion_policy
+    if (is.null(p0) || is.null(p1) || !identical(p0, p1)) {
+      refuse("the same known fit-time dispersion policy", "glmm_lrt_dispersion_differs")
+    }
+  }
   meta <- function(fit) {
     m <- fit$artifact$glmm_fit_metadata
     list(method = m$effective_method %||% m$estimation_method,

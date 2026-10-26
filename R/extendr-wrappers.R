@@ -162,7 +162,7 @@ mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_colum
 #' REML). Returns a serialised `BootstrapLikelihoodRatioTest`.
 #'
 #' @noRd
-mm_bootstrap_lrt_json <- function(reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle = NULL) .Call(wrap__mm_bootstrap_lrt_json, reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle)
+mm_bootstrap_lrt_json <- function(reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle = NULL, reduced_handle = NULL) .Call(wrap__mm_bootstrap_lrt_json, reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle, reduced_handle)
 
 #' Build an upstream model-comparison table for fitted LMM payloads.
 #'

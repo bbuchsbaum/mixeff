@@ -218,8 +218,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL,
   }
   mm_assert_bootstrap_lrt_pair(null, alternative)
   bootstrap <- bootstrap_control(nsim = nsim, seed = seed, threads = threads)
-  # The null model is refitted to the alternative's data, so translate it even
-  # when the (ML) alternative is served from its live handle.
+  # Supply data for a cold ML refit if either fitted handle is unavailable.
   bridge <- mm_rust_fit_bridge_payload(alternative, reml = FALSE,
                                        need_data = TRUE)
   bootstrap_json <- jsonlite::toJSON(
@@ -239,7 +238,8 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL,
       bridge$weights,
       bridge$control_json,
       as.character(bootstrap_json),
-      bridge$handle
+      bridge$handle,
+      mm_lmm_live_handle(null, reml = FALSE)
     ),
     error = function(cnd) cnd
   )

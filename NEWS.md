@@ -18,17 +18,22 @@
   `confint(method = "profile")`, bootstrap contrasts and intervals,
   `parametric_bootstrap()`, `predict()` on new data and with intervals or
   `se.fit` (LMMs and GLMMs), `ranef(condVar = TRUE)`, GLMM bootstrap
-  intervals, and `verify_convergence()`. Results are identical to the cold
-  refit. Profiles and convergence checks work on a copy, so the cached model
-  never changes. These calls stay interruptible. On a 200,000-row crossed
+  intervals, and `verify_convergence()`. Queries preserve the recorded fitted
+  solution. Profiles and convergence checks work on a copy, so the cached
+  model never changes. Live handles retain the R interrupt callback. The
+  following timings are historical bridge-performance measurements, not
+  benchmarks rerun for the merged candidate. On a 200,000-row crossed
   LMM, `contrast()` drops from 0.39 s to 0.002 s, `predict(newdata,
   interval = "prediction")` from 0.70 s to 0.04 s and `summary()` by the
   0.45 s refit. On a 3,000-row binomial GLMM, `predict(newdata, se.fit = TRUE)`
   drops from 0.44 s to 0.006 s.
 * The handle is a process-local cache. It does not survive `saveRDS()` /
-  `readRDS()` or a new R process. Those fits, and fits where the handle does
-  not match the requested refit (for example a profile under ML of a REML
-  fit), fall back to the cold refit automatically, with identical results.
+  `readRDS()` or a new R process. Those fits restore a saved native snapshot
+  without optimization, or refuse the query if restoration is unavailable.
+  An explicitly changed estimand (for example a profile under ML of a REML
+  fit) still requires a refit. The pinned engine cannot reattach the R
+  interrupt callback after restoration; long restored native jobs have a
+  known cancellation limitation.
   `revive()` keeps a live handle and clears a dead one. Copies of a fit share
   the handle.
 * Memory: the handle keeps the engine model, including a copy of the model

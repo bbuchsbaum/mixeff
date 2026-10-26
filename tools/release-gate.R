@@ -162,6 +162,7 @@ run("R CMD build (release tarball)", {
       c("CMD", "build", shQuote(pkg_root)),
       stdout = TRUE, stderr = TRUE, env = check_env
     )
+    writeLines(build_out, file.path(check_root, "build.log"))
     build_status <- attr(build_out, "status")
     if (!is.null(build_status) && build_status != 0L) {
       stop(paste(tail(build_out, 20L), collapse = "\n"))
@@ -257,6 +258,7 @@ if (fast) {
         c("CMD", "check", "--as-cran", "--no-manual", shQuote(tarball)),
         stdout = TRUE, stderr = TRUE, env = check_env
       )
+      writeLines(check_out, file.path(check_root, "check-console.log"))
       check_status <- attr(check_out, "status")
       if (is.null(check_status)) check_status <- 0L
       log_path <- file.path(check_root, paste0(pkg, ".Rcheck"), "00check.log")
@@ -345,6 +347,7 @@ if (!build_ok) {
                              shQuote(paste0("--library=", gate_lib)),
                              shQuote(tarball)),
                            stdout = TRUE, stderr = TRUE)
+    writeLines(install_out, file.path(check_root, "install.log"))
     st <- attr(install_out, "status")
     install_ok <<- is.null(st) || st == 0L
     record("install built tarball", install_ok,

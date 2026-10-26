@@ -333,6 +333,12 @@ glmm <- function(formula,
     nAGQ_requested = if (isTRUE(resolved$nagq0)) 0L else as.integer(nAGQ),
     inference_request = inference,
     control        = control,
+    # Record normalized fit-time dispersion semantics separately from controls.
+    dispersion_policy = list(
+      method = control$disp_method %||% "moment",
+      dof_correction = if (identical(control$disp_method, "old/buggy")) NULL else
+        control$disp_dof_correction %||% TRUE
+    ),
     vars           = spec$vars,
     model_frame    = data,
     weights        = weights,

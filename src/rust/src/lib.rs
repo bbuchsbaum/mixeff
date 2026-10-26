@@ -1604,19 +1604,22 @@ fn mm_bootstrap_lrt_json(
     control_json: &str,
     bootstrap_options_json: &str,
     #[extendr(default = "NULL")] alternative_handle: Robj,
+    #[extendr(default = "NULL")] reduced_handle: Robj,
 ) -> std::result::Result<String, MmBridgeError> {
     (|| -> std::result::Result<String, String> {
-        let reduced = fit_lmm_from_bridge_data(
-            reduced_formula,
-            false,
-            &column_order,
-            &numeric_columns,
-            &categorical_values,
-            &categorical_levels,
-            &categorical_ordered,
-            &weights,
-            control_json,
-        )?;
+        let reduced = lmm_or_refit(&reduced_handle, || {
+            fit_lmm_from_bridge_data(
+                reduced_formula,
+                false,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
         // The alternative is the caller's ML fit: reuse its live model when
         // the handle is alive (the R side only passes it for an ML fit).
         let alternative = lmm_or_refit(&alternative_handle, || {
@@ -1660,7 +1663,7 @@ fn mm_bootstrap_lrt_json(
             y_sims.push(reduced.simulate(&mut rng));
         }
         let one_replicate = |y_sim: &DVector<f64>| -> (f64, BootstrapReplicate) {
-            let mut work_red = reduced.clone();
+            let mut work_red = LinearMixedModel::clone(&reduced);
             let mut work_alt = LinearMixedModel::clone(&alternative);
             let refit_red = work_red.refit(y_sim.as_slice());
             let refit_alt = work_alt.refit(y_sim.as_slice());

@@ -181,9 +181,12 @@ None.
   a session a fit also holds an external pointer to the live engine model
   (`fit$rust_handle`) so follow-on computations (contrasts, prediction
   intervals, bootstraps) skip a refit. The pointer does not survive
-  serialization; after reloading, those computations refit from the
-  stored data and give identical results. `options(mixeff.keep_handle =
-  FALSE)` disables the handle.
+  serialization; after reloading, queries restore the recorded native
+  fitted-state snapshot without optimization. An explicitly different
+  estimand (for example ML instead of REML) still requires a refit.
+  `options(mixeff.keep_handle = FALSE)` disables the live cache.
+  The pinned engine currently cannot reattach R interrupt callbacks to
+  restored models; long restored native jobs remain a release limitation.
 - **Threads**: single-threaded by default. The parametric bootstrap
   uses more threads only when asked (`bootstrap_control(threads =)`);
   results are bit-identical for every thread count

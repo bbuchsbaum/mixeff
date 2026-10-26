@@ -52,7 +52,9 @@ if (!any(grepl('replace-with = "vendored-sources"', config_lines, fixed = TRUE))
   fail("src/rust/vendor-config.toml does not point Cargo at the vendored sources")
 }
 
-entries <- utils::untar(vendor_tar, list = TRUE)
+# Use R's bundled tar reader so this validation is independent of an external
+# `tar`/`xz` program (not available on every R-hub image).
+entries <- utils::untar(vendor_tar, list = TRUE, tar = "internal")
 if (!any(entries %in% c("vendor", "vendor/"))) fail("vendor.tar.xz lacks vendor/ root")
 if (!any(grepl("^vendor/.+/Cargo\\.toml$", entries))) {
   fail("vendor.tar.xz contains no vendored Cargo.toml files")

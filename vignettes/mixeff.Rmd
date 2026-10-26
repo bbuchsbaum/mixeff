@@ -1,6 +1,6 @@
 ---
 title: Introduction and the Supported Model Contract
-output: albersdown::albers_vignette
+output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Introduction and the Supported Model Contract}
   %\VignetteEngine{knitr::rmarkdown}

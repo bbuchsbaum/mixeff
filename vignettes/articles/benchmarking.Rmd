@@ -404,7 +404,10 @@ ggplot(simulation_long, aes(value, method)) +
              linewidth = 0.3, colour = "grey40") +
   geom_pointrange(aes(xmin = lower, xmax = upper), linewidth = 0.4,
                   fatten = 1.5, orientation = "y") +
-  facet_grid(fixture ~ metric, scales = "free", space = "free_y") +
+  facet_grid(fixture ~ metric, scales = "free", space = "free_y",
+             labeller = labeller(fixture = c(interior = "Interior",
+               boundary = "Boundary", reduced_rank = "Reduced rank",
+               small_group = "Small group", glmm_binomial = "GLMM"))) +
   scale_x_continuous(labels = function(x) paste0(format(100 * x, trim = TRUE), "%")) +
   scale_y_discrete(labels = c(
     asymptotic_wald_z = "Wald z", satterthwaite = "Satterthwaite",

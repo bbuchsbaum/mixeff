@@ -1,6 +1,6 @@
 ---
 title: Inference
-output: albersdown::albers_vignette
+output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Inference}
   %\VignetteEngine{knitr::rmarkdown}

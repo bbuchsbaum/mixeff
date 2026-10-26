@@ -1,6 +1,6 @@
 ---
 title: Generalized Linear Mixed Models
-output: albersdown::albers_vignette
+output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Generalized Linear Mixed Models}
   %\VignetteEngine{knitr::rmarkdown}

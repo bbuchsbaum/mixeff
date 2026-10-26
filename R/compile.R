@@ -112,6 +112,7 @@ mm_compile_model <- function(formula, data, call, for_fit = FALSE) {
   mm_check_no_na(data, vars)
 
   narrowed <- mm_factor_character_columns(data[, vars, drop = FALSE])
+  mm_assert_unordered_contrast_policy(formula, narrowed)
   spec_data <- mm_translate_data(narrowed)
   formula_string <- mm_coerce_formula_string(formula)
 

@@ -25,6 +25,7 @@ cache and may be absent. Revival recreates the lazy R-side cache, keeps a
 live native handle, and clears a dead one (an external pointer restored by
 \code{readRDS()}); it does not refit the model. Without a live handle,
 computations that need the engine model (contrasts, \code{summary()} tests,
-predictions with intervals, profiles, bootstraps) refit it from the stored
-model frame, with identical results.
+predictions with intervals, profiles, bootstraps) restore the recorded
+fitted snapshot without optimization. If the snapshot is missing or
+incompatible, native queries refuse while stored extractors remain readable.
 }

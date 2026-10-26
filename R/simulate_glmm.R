@@ -374,7 +374,9 @@ refit.mm_glmm <- function(object, newresp, ...) {
     bernoulli <- is.null(weights)
     if (bernoulli && any(!newresp %in% c(0, 1))) {
       mm_abort(
-        message = "This binomial fit has a 0/1 response; `newresp` must contain only 0 and 1 (or be a two-level factor, or a (successes, failures) matrix).",
+        message = paste0("This binomial fit has a 0/1 response; `newresp` must ",
+                         "contain only 0 and 1 (or be a two-level factor, ",
+                         "or a (successes, failures) matrix)."),
         class = "mm_arg_error",
         input = newresp
       )

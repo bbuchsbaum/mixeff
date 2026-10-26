@@ -302,7 +302,7 @@ mm_rmvnorm <- function(n, Sigma) {
   } else {
     eig <- eigen(Sigma, symmetric = TRUE)
     vals <- pmax(eig$values, 0)
-    out <- z %*% (eig$vectors %*% diag(sqrt(vals), nrow = p))
+    out <- z %*% (diag(sqrt(vals), nrow = p) %*% t(eig$vectors))
   }
   colnames(out) <- colnames(Sigma)
   out

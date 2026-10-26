@@ -84,8 +84,6 @@ mm_translate_data <- function(data) {
       if (is.ordered(col)) {
         mm_assert_ordered_contrast_policy(nm, col)
         categorical_ordered <- c(categorical_ordered, nm)
-      } else {
-        mm_assert_unordered_contrast_policy(nm, col)
       }
     } else if (is.character(col)) {
       vals <- as.character(col)
@@ -113,6 +111,51 @@ mm_translate_data <- function(data) {
     categorical_levels  = categorical_levels,
     categorical_ordered = categorical_ordered
   )
+}
+
+# Check contrast intent at the formula boundary, before passing columns to
+# Rust. Grouping-only factors and the response are labels, not design contrasts.
+# Do not repeat this global-option check on post-fit translation: prediction
+# and inference must retain the training basis when session options change.
+mm_assert_unordered_contrast_policy <- function(formula, data) {
+  predictor_vars <- function(expr) {
+    if (!is.call(expr)) return(all.vars(expr))
+    if (as.character(expr[[1L]]) %in% c("|", "||")) {
+      return(predictor_vars(expr[[2L]]))
+    }
+    unique(unlist(lapply(as.list(expr)[-1L], predictor_vars), use.names = FALSE))
+  }
+  vars <- intersect(predictor_vars(formula[[3L]]), names(data))
+  for (nm in vars) {
+    col <- data[[nm]]
+    if (!is.factor(col) || is.ordered(col)) next
+    requested <- attr(col, "contrasts")
+    source <- "contrasts attribute"
+    if (is.null(requested)) {
+      opt <- getOption("contrasts")
+      requested <- if (length(opt)) unname(opt[[1L]]) else NA_character_
+      source <- "unordered-factor options(contrasts=) setting"
+    }
+    # Accept the exact canonical treatment basis as well as its name.
+    # Different column labels are part of the caller's coefficient contract.
+    supported <- identical(requested, "contr.treatment") ||
+      (nlevels(col) > 1L &&
+         identical(requested, stats::contr.treatment(levels(col))))
+    if (!supported) {
+      mm_abort(
+        message = sprintf(paste0(
+          "Factor `%s` has an unsupported %s. mixeff uses treatment ",
+          "contrasts with the first level as reference. Supply that coding ",
+          "explicitly, reset the contrast setting, or construct numeric ",
+          "predictors for a different coding."), nm, source),
+        class = "mm_arg_error",
+        reason_code = "unsupported_factor_contrasts",
+        column = nm,
+        input = requested
+      )
+    }
+  }
+  invisible(TRUE)
 }
 
 #' Refuse ordered factors whose contrast policy mixeff cannot honour
@@ -188,71 +231,6 @@ mm_assert_ordered_contrast_policy <- function(nm, col, .call = rlang::caller_env
   invisible(TRUE)
 }
 
-#' Refuse unordered factors whose contrast coding mixeff cannot honour
-#'
-#' The engine codes unordered factors with treatment contrasts (first level
-#' as reference), which is lme4's result only under R's default
-#' `contr.treatment`. A different global unordered-contrast option, or a
-#' contrast attached to the factor (`contrasts(f) <- contr.sum(3)`), would
-#' make lme4 fit a different parameterisation, so mixeff refuses instead of
-#' silently fitting treatment coding.
-#'
-#' @keywords internal
-#' @noRd
-mm_assert_unordered_contrast_policy <- function(nm, col, .call = rlang::caller_env()) {
-  opt <- getOption("contrasts")
-  global_unordered <- if (!is.null(names(opt)) && "unordered" %in% names(opt)) {
-    opt[["unordered"]]
-  } else if (length(opt) >= 1L) {
-    as.character(opt)[[1L]]
-  } else {
-    NA_character_
-  }
-  if (!identical(as.character(global_unordered), "contr.treatment")) {
-    shown <- if (length(global_unordered) != 1L || is.na(global_unordered)) {
-      "not contr.treatment"
-    } else {
-      as.character(global_unordered)
-    }
-    mm_abort(
-      message = sprintf(
-        paste0(
-          "Factor `%s` would be coded with treatment contrasts, but the global ",
-          "unordered-factor contrast option resolves to `%s`, so lme4 would fit ",
-          "a different parameterisation. mixeff supports treatment coding for ",
-          "unordered factors only; reset it with ",
-          "options(contrasts = c(\"contr.treatment\", \"contr.poly\")), or build ",
-          "the coded columns yourself as numeric predictors."
-        ),
-        nm, shown
-      ),
-      class = "mm_arg_error",
-      column = nm,
-      call = .call
-    )
-  }
-  col_contrasts <- attr(col, "contrasts")
-  if (!is.null(col_contrasts) && !identical(col_contrasts, "contr.treatment")) {
-    mm_abort(
-      message = sprintf(
-        paste0(
-          "Factor `%s` carries a `contrasts` attribute other than the string ",
-          "\"contr.treatment\". mixeff codes unordered factors with treatment ",
-          "contrasts (first level as reference) and will not silently replace ",
-          "the requested coding. Drop it with `attr(%s, \"contrasts\") <- NULL` ",
-          "(use relevel() to choose the reference level), or build the coded ",
-          "columns yourself as numeric predictors."
-        ),
-        nm, nm
-      ),
-      class = "mm_arg_error",
-      column = nm,
-      call = .call
-    )
-  }
-  invisible(TRUE)
-}
-
 #' Refuse compilation when a design variable contains NA
 #'
 #' `compile_model()` audits the data exactly as given and never drops rows.
@@ -279,7 +257,10 @@ mm_check_no_na <- function(data, vars, .call = rlang::caller_env()) {
   )
   mm_abort(
     message = sprintf(
-      "Missing values in design variable(s): %s. compile_model() audits complete cases only; lmm()/glmm() drop incomplete rows under `na.action` (default getOption(\"na.action\"), i.e. na.omit), or pass na.omit(data).",
+      paste0("Missing values in design variable(s): %s. ",
+             "compile_model() audits complete cases only; lmm()/glmm() drop ",
+             "incomplete rows under `na.action` (default getOption(\"na.action\"), ",
+             "i.e. na.omit), or pass na.omit(data)."),
       details
     ),
     class = "mm_data_error",

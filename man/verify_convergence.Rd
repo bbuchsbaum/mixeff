@@ -88,20 +88,15 @@ the verdict (\code{status}), the per-run deltas, and the wording are all owned
 by the Rust contract — R only formats them.
 }
 \details{
-The verifier refits the model from the stored specification before it
-starts, so a call costs roughly \code{2 + jitter_starts} fits (plus consensus
-runs when enabled). GLMM verification uses wider default tolerances than
-the LMM route (objective \code{1e-4}, beta \code{1e-3}): each objective evaluation
-carries inner-PIRLS noise, and the joint path's derivative-free beta
-search bounds beta reproducibility at its \code{ftol} stop. A GLMM whose
-requested \code{joint_laplace} estimator was substituted by the labelled
-fast-PIRLS fallback (see \code{optimizer_certificate()}) re-requests the joint
-route; when the verification refit falls back the same way — the expected
-case — every run verifies the profiled objective the fitted numbers came
-from, with ordinary objective deltas. Runs are only reported as
-substitution runs (no objective delta) in the asymmetric case where the
-reference refit certifies the joint route but an individual verification
-run falls back.
+The verifier queries the recorded fitted solution as its baseline, reusing
+a live handle or restoring its snapshot without optimization. Only the
+requested restart, jitter, and consensus runs perform new fits. A missing
+or incompatible snapshot without a usable handle is refused. GLMM
+verification uses wider default tolerances than the LMM route (objective
+\code{1e-4}, beta \code{1e-3}) because its objective carries inner-PIRLS noise.
+A substituted fit is verified against its recorded effective estimator;
+a verification run that changes estimator is labelled as a substitution,
+rather than compared using an objective from a different estimator.
 }
 \examples{
 set.seed(1)

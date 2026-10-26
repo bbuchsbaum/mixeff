@@ -42,6 +42,7 @@ Imports:
     stats,
     utils
 Suggests:
+    albersdown (>= 2.1.0),
     boot,
     broom,
     broom.mixed,

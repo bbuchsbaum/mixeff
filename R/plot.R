@@ -306,7 +306,8 @@ qqmath.mm_ranef <- function(x, data, main = TRUE, level = 0.95, ...) {
                               x[ok] + rng * se[ok], y[ok], col = "black")
       lattice::panel.xyplot(x, y, pch = pch, ...)
     }
-    lattice::xyplot(q ~ unlist(df)[ord] | ind[ord], se = se[ord],
+    plot_data <- data.frame(quantile = q, value = unlist(df)[ord], group = ind[ord])
+    lattice::xyplot(quantile ~ value | group, data = plot_data, se = se[ord],
                     panel = panel_ci,
                     scales = list(x = list(relation = "free")),
                     ylab = "Standard normal quantiles", xlab = NULL,

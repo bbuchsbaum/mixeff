@@ -25,7 +25,7 @@ the engine model (contrasts, \code{summary()} tests, predictions with intervals,
 \code{\link[=verify_convergence]{verify_convergence()}}) reuse it instead of refitting. A \code{FALSE} result
 does not mean the fit is unusable: the handle does not survive
 \code{saveRDS()} / \code{readRDS()} or a new R process, and those computations then
-refit the model from the stored model frame, with identical results;
+restore the fitted snapshot without optimization (or refuse if unavailable);
 extractors read from the durable artifact and flat R-side payload, and
 \code{\link[=revive]{revive()}} recreates the lazy cache after serialization. Set
 \code{options(mixeff.keep_handle = FALSE)} before fitting to not keep handles

@@ -82,6 +82,11 @@ mm_compile_model_spec <- function(formula, column_order, numeric_columns, catego
 #' @noRd
 mm_handle_alive <- function(ptr) .Call(wrap__mm_handle_alive, ptr)
 
+#' Restore a fitted model snapshot into a live bridge handle.
+#'
+#' @noRd
+mm_restore_fit_handle <- function(fitted_state, kind) .Call(wrap__mm_restore_fit_handle, fitted_state, kind)
+
 #' Number of follow-on bridge computations served from a live fitted-model
 #' handle since the package was loaded (diagnostic; used by the tests).
 #'

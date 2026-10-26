@@ -7,8 +7,9 @@
 #' live native handle, and clears a dead one (an external pointer restored by
 #' `readRDS()`); it does not refit the model. Without a live handle,
 #' computations that need the engine model (contrasts, `summary()` tests,
-#' predictions with intervals, profiles, bootstraps) refit it from the stored
-#' model frame, with identical results.
+#' predictions with intervals, profiles, bootstraps) restore the recorded
+#' fitted snapshot without optimization. If the snapshot is missing or
+#' incompatible, native queries refuse while stored extractors remain readable.
 #'
 #' @param fit A fitted `mm_fit` object.
 #' @param ... Reserved for future methods.
@@ -75,7 +76,7 @@ revive.default <- function(fit, ...) {
 #' [verify_convergence()]) reuse it instead of refitting. A `FALSE` result
 #' does not mean the fit is unusable: the handle does not survive
 #' `saveRDS()` / `readRDS()` or a new R process, and those computations then
-#' refit the model from the stored model frame, with identical results;
+#' restore the fitted snapshot without optimization (or refuse if unavailable);
 #' extractors read from the durable artifact and flat R-side payload, and
 #' [revive()] recreates the lazy cache after serialization. Set
 #' `options(mixeff.keep_handle = FALSE)` before fitting to not keep handles

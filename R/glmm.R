@@ -298,6 +298,7 @@ glmm <- function(formula,
                        nAGQ, control_json)
   )
   fit_result <- mm_bridge_fit_result(json, mm_json_parse_glmm_fit)
+  if (!is.null(rust_handle)) attr(rust_handle, "mm_fitted_state") <- fit_result$fitted_state
   fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
   beta <- mm_named_numeric(fit_result$beta, fit_result$beta_names)
@@ -799,4 +800,3 @@ mm_json_parse_glmm_fit <- function(json) {
   }
   parsed
 }
-

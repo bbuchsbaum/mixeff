@@ -319,6 +319,31 @@ fn mm_handle_alive(ptr: Robj) -> bool {
     live_lmm(&ptr).is_some() || live_glmm(&ptr).is_some()
 }
 
+/// Restore a fitted model snapshot into a live bridge handle.
+///
+/// @noRd
+#[extendr]
+fn mm_restore_fit_handle(
+    fitted_state: &str,
+    kind: &str,
+) -> std::result::Result<Robj, MmBridgeError> {
+    (|| -> std::result::Result<Robj, String> {
+        match kind {
+            "lmm" => LinearMixedModel::restore_json(fitted_state)
+                .map(|model| ExternalPtr::new(FittedLmmHandle(model)).into()),
+            "glmm" => GeneralizedLinearMixedModel::restore_json(fitted_state)
+                .map(|model| ExternalPtr::new(FittedGlmmHandle(model)).into()),
+            _ => {
+                return Err(format!(
+                    "mm_inference_unavailable: unknown fitted-state kind `{kind}`"
+                ))
+            }
+        }
+        .map_err(|e| format!("mm_inference_unavailable: fitted-state restoration unavailable: {e}"))
+    })()
+    .map_err(MmBridgeError)
+}
+
 /// Number of follow-on bridge computations served from a live fitted-model
 /// handle since the package was loaded (diagnostic; used by the tests).
 ///
@@ -838,12 +863,18 @@ fn mm_fit_lmm_json(
                     e
                 )
             })?;
+        let (fitted_state, restoration_error) = match model.snapshot_json() {
+            Ok(snapshot) => (Some(snapshot), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
         let payload = json!({
             "schema": {
                 "schema_name": "mixeff.lmm_fit_result",
                 "schema_version": 1
             },
             "artifact_json": artifact_json,
+            "fitted_state": fitted_state,
+            "restoration_error": restoration_error,
             "formula": model.formula().to_string(),
             "reml": reml,
             "beta": beta.iter().copied().collect::<Vec<_>>(),
@@ -1020,12 +1051,18 @@ fn mm_fit_glmm_json(
             )
         })?;
 
+        let (fitted_state, restoration_error) = match model.snapshot_json() {
+            Ok(snapshot) => (Some(snapshot), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
         let payload = json!({
             "schema": {
                 "schema_name": "mixeff.glmm_fit_result",
                 "schema_version": 1
             },
             "artifact_json": artifact_json,
+            "fitted_state": fitted_state,
+            "restoration_error": restoration_error,
             "formula": model.formula_label().unwrap_or_else(|| formula.to_string()),
             "family": glmm_family_label(family),
             "link": glmm_link_label(link),
@@ -2049,6 +2086,9 @@ fn mm_glmm_parametric_bootstrap_json(
             "seed": seed,
             "threads": threads,
             "bootstrap": boot_json,
+            "template": model.compiler_artifact().glmm_fit_metadata,
+            "template_objective": model.objective(),
+            "replicate_estimator_policy": "preserve_effective_or_fail",
         }))
         .map_err(|e| {
             format!(
@@ -3404,6 +3444,7 @@ extendr_module! {
     fn mm_compile_model_json;
     fn mm_compile_model_spec;
     fn mm_handle_alive;
+    fn mm_restore_fit_handle;
     fn mm_handle_hits;
     fn mm_fit_lmm_json;
     fn mm_fit_glmm_json;

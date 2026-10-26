@@ -14,7 +14,7 @@ the declared Rust toolchain requirements only.
 The package changed substantially after the runs listed under "Test
 environments" below: the engine was re-pinned to mixeff-rs `10f1768`
 and the lme4-parity audit (`assessment/2026-10-pre-cran-audit.md`) was
-completed. On the resulting tree:
+completed. The pre-merge audit records the following historical results:
 
 - GitHub Actions on the release-candidate commit: Ubuntu R-release and
   R-devel, macOS R-release, Windows R-release (two jobs), test coverage,
@@ -30,14 +30,21 @@ and R-release) and the R-hub court on the final tarball, and replace the
 "Test environments" and "R-hub court results" sections below with those
 results.
 
-## Test environments
+## Current local candidate
 
-Checked as the built source tarball throughout (never the source
-directory); the acceptance run is `tools/release-gate.R
---release-candidate`, which builds one tarball, records its SHA-256,
-checks that artifact with `--as-cran`, installs that same artifact, and
-runs the full test suite plus the slow parity and real-data
-reproduction tiers against it.
+The merged candidate retains engine pin `10f176877309ab8f6360eaaef3ce39ca55165eb6`
+and combines the current main-branch interface with fitted-state restoration,
+estimator-preserving GLMM bootstrap, and the October vignette remediation.
+Local release qualification is recorded in `release-gate-report.txt` and the
+CRAN-readiness assessment. The historical counts below do not qualify this
+merged candidate; hosted checks and builder submissions must be refreshed.
+
+The canonical acceptance command is `Rscript tools/release-gate.R
+--release-candidate`. It builds and hashes one source tarball, checks that
+artifact with `--as-cran`, installs it, and runs the suite with slow parity
+and core aphantasia enabled. Manual/PDF validation is separate.
+
+### Historical platform results
 
 - macOS arm64, R 4.5.1 — `--as-cran` on the built tarball with
   vignettes rebuilt: 0 errors, 0 warnings, 1 NOTE (below).
@@ -62,6 +69,10 @@ reproduction tiers against it.
 1. **CRAN incoming feasibility** (all platforms) — "New submission", plus
    the tarball size on some machines. The Rust sources are vendored so
    the package builds fully offline, which accounts for the size.
+
+   Size of tarball: 6478929 bytes
+
+   The release gate refreshes this line from the artifact it builds.
 
 2. **`checking compiled code`, win-builder only** — this check does not
    run there:

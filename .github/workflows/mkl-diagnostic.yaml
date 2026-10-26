@@ -1,0 +1,50 @@
+name: MKL variance-component diagnostic
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      containers: ${{ steps.setup.outputs.containers }}
+    steps:
+      - uses: r-hub/actions/setup@v1
+        id: setup
+        with:
+          config: mkl
+  diagnostic:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        config: ${{ fromJson(needs.setup.outputs.containers) }}
+    container:
+      image: ${{ matrix.config.container }}
+    steps:
+      - uses: r-hub/actions/checkout@v1
+      - uses: r-hub/actions/platform-info@v1
+        with:
+          token: ${{ secrets.RHUB_TOKEN }}
+          job-config: ${{ matrix.config.job-config }}
+      - uses: r-hub/actions/setup-deps@v1
+        with:
+          token: ${{ secrets.RHUB_TOKEN }}
+          job-config: ${{ matrix.config.job-config }}
+      - name: Install unchanged runtime with portable extraction
+        run: R CMD INSTALL .
+        env:
+          CARGO_NET_OFFLINE: "true"
+          NOT_CRAN: ""
+      - name: Diagnose Brown covariance and fitted objectives
+        run: Rscript assessment/mkl-diagnostic.R . mkl-diagnostic-output > mkl-diagnostic.log 2>&1
+      - name: Show diagnostic result
+        if: always()
+        run: test ! -f mkl-diagnostic.log || cat mkl-diagnostic.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mkl-parity-diagnostic
+          path: |
+            mkl-diagnostic.log
+            mkl-diagnostic-output/

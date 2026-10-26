@@ -399,3 +399,74 @@ test_that("a follow-on on the live handle stays interruptible", {
   expect_match(out, "USED_HANDLE TRUE", fixed = TRUE)
   expect_match(out, "UNCHANGED TRUE", fixed = TRUE)
 })
+
+
+test_that("restored LMM and GLMM bootstrap handles retain R interruption", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_not_installed("processx")
+  ns_path <- getNamespaceInfo("mixeff", "path")
+  load_line <- if (dir.exists(file.path(ns_path, "Meta"))) {
+    sprintf(".libPaths(c(%s, .libPaths())); suppressMessages(library(mixeff))",
+            deparse(dirname(ns_path)))
+  } else {
+    skip_if_not_installed("pkgload")
+    sprintf("suppressMessages(pkgload::load_all(%s, compile = FALSE, quiet = TRUE))",
+            deparse(ns_path))
+  }
+  for (kind in c("lmm", "glmm")) for (threads in c(1L, 2L)) {
+    script <- tempfile(fileext = ".R")
+    errfile <- tempfile(fileext = ".txt")
+    writeLines(c(
+      load_line,
+      "set.seed(42)",
+      "d <- data.frame(g = factor(rep(1:12, each = 10)), x = rnorm(120))",
+      "eta <- 0.3 + 0.4 * d$x + rnorm(12, sd = 0.4)[d$g]",
+      if (kind == "lmm") c(
+        "d$y <- eta + rnorm(120)",
+        "fit <- lmm(y ~ x + (1 | g), d, control = mm_control(verbose = -1))"
+      ) else c(
+        "d$y <- rpois(120, exp(eta))",
+        "fit <- glmm(y ~ x + (1 | g), d, family = poisson(),",
+        "  method = 'pirls_profiled', control = mm_control(verbose = -1))"
+      ),
+      "path <- tempfile(); saveRDS(fit, path); fit <- readRDS(path); unlink(path)",
+      "stopifnot(!fit_handle_alive(fit))",
+      "before <- list(fixef(fit), logLik(fit), fit$fit$fitted_state)",
+      "cat('READY\\n'); flush.console()",
+      "r <- tryCatch({",
+      if (kind == "lmm") sprintf(
+        " confint(fit, method = 'bootstrap', bootstrap = bootstrap_control(nsim = 1000000, seed = 1, threads = %d))",
+        threads
+      ) else sprintf(
+        " confint(fit, method = 'bootstrap', nsim = 1000000, seed = 1, threads = %d)", threads
+      ),
+      " 'COMPLETED'",
+      "}, mm_interrupted = function(e) 'MM_INTERRUPTED', error = function(e) paste('ERROR', conditionMessage(e)))",
+      "cat(r, '\\n')",
+      "cat('UNCHANGED', identical(before, list(fixef(fit), logLik(fit), fit$fit$fitted_state)), '\\n')",
+      "cat('ALIVE', mixeff:::mm_interrupt_demo(3L), '\\n')"
+    ), script)
+    p <- processx::process$new(file.path(R.home("bin"), "Rscript"), script,
+                               stdout = "|", stderr = errfile)
+    on.exit(p$kill(), add = TRUE)
+    out <- ""
+    deadline <- Sys.time() + 60
+    while (!grepl("READY", out, fixed = TRUE) && p$is_alive() && Sys.time() < deadline) {
+      p$poll_io(250)
+      out <- paste0(out, p$read_output())
+    }
+    expect_match(out, "READY", fixed = TRUE, info = paste(kind, threads, readLines(errfile)))
+    if (!grepl("READY", out, fixed = TRUE)) { p$kill(); next }
+    Sys.sleep(0.5)
+    p$interrupt()
+    p$wait(20000)
+    expect_false(p$is_alive(), info = paste(kind, threads, "did not stop after SIGINT"))
+    if (p$is_alive()) { p$kill(); next }
+    out <- paste0(out, p$read_all_output())
+    expect_identical(p$get_exit_status(), 0L, info = paste(readLines(errfile), collapse = "\n"))
+    expect_match(out, "MM_INTERRUPTED", fixed = TRUE)
+    expect_match(out, "UNCHANGED TRUE", fixed = TRUE)
+    expect_match(out, "ALIVE 3", fixed = TRUE)
+  }
+})

@@ -437,6 +437,8 @@ if (install_ok) run("suite + error-UX + schema/manifest", {
   record(suite_gate, fails == 0,
          sprintf("%d pass / %d fail / %d skip in %ds",
                  sum(df$passed), fails, sum(df$skipped), suite_elapsed))
+  record("suite has no unhandled warnings", sum(df$warning) == 0L,
+         sprintf("%d warning(s)", sum(df$warning)))
   # Error-UX and schema/manifest are part of that run; assert they were present.
   ux_present <- any(grepl("error-ux", df$file))
   schema_present <- any(grepl("schema|manifest", df$file))

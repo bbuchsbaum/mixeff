@@ -330,9 +330,15 @@ fn mm_restore_fit_handle(
     (|| -> std::result::Result<Robj, String> {
         match kind {
             "lmm" => LinearMixedModel::restore_json(fitted_state)
-                .map(|model| ExternalPtr::new(FittedLmmHandle(model)).into()),
+                .map(|mut model| {
+                    model.set_progress_callback(Some(r_interrupt_callback()));
+                    ExternalPtr::new(FittedLmmHandle(model)).into()
+                }),
             "glmm" => GeneralizedLinearMixedModel::restore_json(fitted_state)
-                .map(|model| ExternalPtr::new(FittedGlmmHandle(model)).into()),
+                .map(|mut model| {
+                    model.set_progress_callback(Some(r_interrupt_callback()));
+                    ExternalPtr::new(FittedGlmmHandle(model)).into()
+                }),
             _ => {
                 return Err(format!(
                     "mm_inference_unavailable: unknown fitted-state kind `{kind}`"

@@ -1,5 +1,16 @@
 # mixeff 0.2.0
 
+## Restored-model cancellation and release checks
+
+* Restoring a fitted snapshot now reattaches the R interrupt callback without
+  refitting. Serial and threaded bootstrap jobs on models reloaded from RDS
+  stop with `mm_interrupted` and preserve the fitted baseline.
+* Nonnumeric and complex contrast specifications are refused at the R boundary
+  with `mm_arg_error`, before coercion can warn or discard imaginary parts.
+* Release checks now fail on unhandled test warnings. Documentation claim
+  checks retain case-insensitive literal matching, and computational article
+  checks use complete portable HTML output under the C locale.
+
 ## Bridge performance: compile once, keep the fitted model (mixeff-rs bridge-perf)
 
 * `lmm()` and `glmm()` now compile the formula and audit the design once per
@@ -31,9 +42,8 @@
   `readRDS()` or a new R process. Those fits restore a saved native snapshot
   without optimization, or refuse the query if restoration is unavailable.
   An explicitly changed estimand (for example a profile under ML of a REML
-  fit) still requires a refit. The pinned engine cannot reattach the R
-  interrupt callback after restoration; long restored native jobs have a
-  known cancellation limitation.
+  fit) still requires a refit. Restored handles receive a new R interrupt
+  callback on the calling thread.
   `revive()` keeps a live handle and clears a dead one. Copies of a fit share
   the handle.
 * Memory: the handle keeps the engine model, including a copy of the model
@@ -332,8 +342,8 @@
 * Fits, refits, bootstraps and profiles can be interrupted (Ctrl-C/Esc):
   the engine checks for a pending interrupt between optimizer evaluations
   without longjmp-ing through Rust frames, and stops with a typed
-  `mm_interrupted` error. This requires the host callback: models restored
-  from snapshots currently lack it, as noted above.
+  `mm_interrupted` error. The bridge attaches the host callback to both
+  newly fitted and restored models.
 * New `mm_bootmer()` (`lme4::bootMer()` counterpart; a `boot`-compatible
   result for `boot::boot.ci()`), `rePCA()`, `mm_lmlist()` (`lmList()`),
   `mm_allfit()` (`allFit()`), and `mm_control(optCtrl = )` (lme4-style

@@ -1231,7 +1231,7 @@ print.mm_confint <- function(x, ...) {
 }
 
 mm_contrast_matrix <- function(L, fit) {
-  if (is.null(L)) {
+  if (!is.numeric(L) || is.complex(L)) {
     mm_abort(
       message = "`L` must be a numeric contrast vector or matrix.",
       class = "mm_arg_error",

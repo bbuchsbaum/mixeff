@@ -30,7 +30,13 @@ mm_doc_hits <- function(files, pattern, fixed = TRUE, unless = NULL) {
   hits <- character()
   for (f in files) {
     lines <- readLines(f, warn = FALSE)
-    idx <- grep(pattern, lines, fixed = fixed, ignore.case = TRUE)
+    # grep() ignores ignore.case when fixed = TRUE. Fold both literal inputs
+    # ourselves so these claim guards remain case-insensitive literal checks.
+    idx <- if (isTRUE(fixed)) {
+      grep(tolower(pattern), tolower(lines), fixed = TRUE)
+    } else {
+      grep(pattern, lines, ignore.case = TRUE)
+    }
     if (!is.null(unless) && length(idx)) {
       idx <- idx[!grepl(unless, lines[idx], ignore.case = TRUE)]
     }
@@ -78,8 +84,8 @@ test_that("'average treatment effect' appears only in the inference estimand dis
   inf <- files[basename(files) == "inference.Rmd"]
   if (length(inf)) {
     n <- sum(vapply(inf, function(f) {
-      length(grep("average treatment effect", readLines(f, warn = FALSE),
-                  fixed = TRUE, ignore.case = TRUE))
+      length(grep("average treatment effect", tolower(readLines(f, warn = FALSE)),
+                  fixed = TRUE))
     }, integer(1)))
     expect_identical(n, 1L)
   }
@@ -89,7 +95,7 @@ test_that("'drop-in' appears only in explicit negations", {
   files <- mm_doc_files()
   for (f in files) {
     lines <- readLines(f, warn = FALSE)
-    idx <- grep("drop-in", lines, fixed = TRUE, ignore.case = TRUE)
+    idx <- grep("drop-in", tolower(lines), fixed = TRUE)
     for (i in idx) {
       expect_match(lines[[i]], "not", ignore.case = TRUE,
                    info = sprintf("positive drop-in claim at %s:%d: %s",

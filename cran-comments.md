@@ -32,7 +32,7 @@ results.
 
 ## Current local candidate
 
-The merged candidate retains engine pin `10f176877309ab8f6360eaaef3ce39ca55165eb6`
+The current candidate uses engine pin `004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b`
 and combines the current main-branch interface with fitted-state restoration,
 estimator-preserving GLMM bootstrap, and the October vignette remediation.
 Local release qualification is recorded in `release-gate-report.txt` and the
@@ -45,7 +45,9 @@ passed `R CMD check --as-cran --no-manual` on macOS arm64 / R 4.5.1:
 The six vignettes and help examples passed; the separate 76-page PDF manual
 built successfully. Exact tarball identity and raw receipts are recorded under
 `release-evidence/cran-2026-10-26/`. This local result does not supersede the
-remaining upstream cancellation defect or the need for refreshed builder checks.
+need for refreshed builder checks. The cancellation defect was subsequently
+repaired and verified with actual R SIGINT tests; the updated candidate is
+undergoing full release qualification.
 
 The canonical acceptance command is `Rscript tools/release-gate.R
 --release-candidate`. It builds and hashes one source tarball, checks that
@@ -193,8 +195,8 @@ None.
   fitted-state snapshot without optimization. An explicitly different
   estimand (for example ML instead of REML) still requires a refit.
   `options(mixeff.keep_handle = FALSE)` disables the live cache.
-  The pinned engine currently cannot reattach R interrupt callbacks to
-  restored models; long restored native jobs remain a release limitation.
+  The bridge reattaches the R interrupt callback after restoration. Serial
+  and threaded LMM/GLMM bootstrap cancellation is covered by R SIGINT tests.
 - **Threads**: single-threaded by default. The parametric bootstrap
   uses more threads only when asked (`bootstrap_control(threads =)`);
   results are bit-identical for every thread count

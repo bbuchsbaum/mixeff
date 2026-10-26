@@ -12,9 +12,17 @@ test_that("benchmarking article stays light and points at benchmark scripts", {
   expect_true(any(grepl("inst/benchmarks/bootstrap-inference.R", text, fixed = TRUE)))
   expect_true(any(grepl("eval = FALSE", text, fixed = TRUE)))
 
-  out <- rmarkdown::render(path, output_file = tempfile(fileext = ".html"),
-                           quiet = TRUE)
+  # Render the article's code and plot-data path portably. The website's
+  # albersdown format is checked separately below because its locale-sensitive
+  # renderer can truncate output under C locales.
+  out <- rmarkdown::render(path, output_format = "html_document",
+                           output_file = tempfile(fileext = ".html"), quiet = TRUE)
   expect_true(file.exists(out))
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_match(html, "</html>", fixed = TRUE)
+  expect_match(html, "Benchmarking", fixed = TRUE)
+  expect_match(paste(readLines(path, warn = FALSE), collapse = "\n"),
+               "albersdown::albers_vignette", fixed = TRUE)
 })
 
 test_that("the shipped calibration artifact is release-grade with honest accounting", {

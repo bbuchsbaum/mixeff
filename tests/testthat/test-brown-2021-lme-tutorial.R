@@ -130,13 +130,37 @@ brown_fit_pair <- function(case) {
   if (!is.null(case$control)) {
     ref_args$control <- case$control
   }
-  list(
+  reference_warnings <- character()
+  pair <- list(
     mixeff = mixeff::lmm(case$formula, dat, REML = case$REML,
                          control = mixeff::mm_control(verbose = -1)),
     lme4 = suppressMessages(suppressWarnings(
-      do.call(lme4::lmer, ref_args)
+      withCallingHandlers(do.call(lme4::lmer, ref_args), warning = function(w) {
+        reference_warnings <<- c(reference_warnings, conditionMessage(w))
+      })
     ))
   )
+  diagnostic_out <- Sys.getenv("MIXEFF_DIAG_OUT")
+  if (nzchar(diagnostic_out)) {
+    dir.create(diagnostic_out, recursive = TRUE, showWarnings = FALSE)
+    env <- Sys.getenv()
+    env <- env[grepl("^(_R_CHECK|R_TESTS$|NOT_CRAN$|TESTTHAT|OMP_|MKL_|OPENBLAS_|RAYON_)", names(env))]
+    opts <- options()
+    opts <- opts[grepl("lme4|contrasts|testthat|na.action|digits|warn|mc.cores|Matrix", names(opts), ignore.case = TRUE)]
+    record <- list(pair = pair, formula = case$formula, REML = case$REML,
+                   control = case$control, warnings = reference_warnings,
+                   fixture_md5 = tools::md5sum(brown_fixture_path("brown_rt_dummy_data.csv.gz")),
+                   session = sessionInfo(), software = extSoftVersion(),
+                   locale = Sys.getlocale(), environment = env,
+                   options = capture.output(str(opts)), library_paths = .libPaths(),
+                   package_paths = vapply(c("mixeff", "lme4", "Matrix"), find.package, character(1)),
+                   reference_optinfo = pair$lme4@optinfo,
+                   covariance = list(mixeff = as.data.frame(mixeff::VarCorr(pair$mixeff)),
+                                     lme4 = as.data.frame(lme4::VarCorr(pair$lme4))),
+                   logLik = vapply(pair, function(x) as.numeric(logLik(x)), numeric(1)))
+    saveRDS(record, tempfile("brown-pair-", diagnostic_out, fileext = ".rds"))
+  }
+  pair
 }
 
 brown_fixef_key <- function(x) {

@@ -31,13 +31,15 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
-      - name: Install unchanged runtime with portable extraction
-        run: R CMD INSTALL .
+      - uses: r-hub/actions/run-check@v1
+        with:
+          token: ${{ secrets.RHUB_TOKEN }}
+          job-config: ${{ matrix.config.job-config }}
         env:
-          CARGO_NET_OFFLINE: "true"
-          NOT_CRAN: ""
-      - name: Diagnose Brown covariance and fitted objectives
-        run: Rscript assessment/mkl-diagnostic.R . mkl-diagnostic-output > mkl-diagnostic.log 2>&1
+          MIXEFF_DIAG_OUT: /tmp/mkl-pairs
+      - name: Evaluate original check covariances
+        if: always()
+        run: Rscript assessment/mkl-captured-objectives.R . mkl-diagnostic-output > mkl-diagnostic.log 2>&1
       - name: Show diagnostic result
         if: always()
         run: test ! -f mkl-diagnostic.log || cat mkl-diagnostic.log
@@ -48,3 +50,7 @@ jobs:
           path: |
             mkl-diagnostic.log
             mkl-diagnostic-output/
+            /tmp/mkl-pairs/
+            check/**/00check.log
+            check/**/00install.out
+            check/**/testthat.Rout*

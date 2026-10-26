@@ -2,9 +2,17 @@
 # Run after installing mixeff: Rscript assessment/mkl-multistart.R . OUTPUT
 # The SD8.2 start is a constructed stress case, not the lost MKL fit.
 .libPaths(c(Sys.getenv("MIXEFF_DIAGNOSTIC_LIBRARY", "check/mixeff.Rcheck"), .libPaths()))
-source("assessment/mkl-diagnostic.R")
+diagnostic <- "assessment/mkl-diagnostic.R"
+if (!file.exists(diagnostic)) {
+  diagnostic <- "release-evidence/cancellation-2026-10-26/mkl-diagnostic.R"
+}
+source(diagnostic)
 tight <- lme4::lmerControl(optimizer = "bobyqa", calc.derivs = TRUE,
   optCtrl = list(rhobeg = 0.01, rhoend = 1e-9, maxfun = 20000))
+# lme4 2.1 also gates checkConv itself by sample/parameter count.
+for (field in c("check.conv.nobsmax", "check.conv.nparmax")) {
+  if (!is.null(tight$checkConv[[field]])) tight$checkConv[[field]] <- Inf
+}
 # Independent lme4 initial structure: unit diagonal and zero correlations.
 # Nominate8.2 using the residual scale of an ordinary fixed-effects model,
 # independent of either mixed-model fit. Sigma is profiled during fitting.

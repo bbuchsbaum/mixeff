@@ -31,15 +31,14 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
+      - name: Committed vendor snapshot matches the pin
+        run: Rscript tools/check-vendor-drift.R
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
         env:
           MIXEFF_DIAG_OUT: /tmp/mkl-pairs
-      - name: Evaluate original check covariances
-        if: always()
-        run: Rscript assessment/mkl-captured-objectives.R . mkl-diagnostic-output > mkl-diagnostic.log 2>&1
       - name: Bounded multistart with default MKL threads
         if: always()
         run: Rscript assessment/mkl-multistart.R . mkl-multistart-default > mkl-multistart-default.log 2>&1
@@ -49,9 +48,6 @@ jobs:
           MKL_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: Rscript assessment/mkl-multistart.R . mkl-multistart-one > mkl-multistart-one.log 2>&1
-      - name: Show diagnostic result
-        if: always()
-        run: test ! -f mkl-diagnostic.log || cat mkl-diagnostic.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

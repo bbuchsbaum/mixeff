@@ -283,7 +283,7 @@ rbind(
                                   has_numbers = any(is.finite(coef_tab[, "Std. Error"]))),
   confint           = glmm_status(confint(glmm_fast)),
   simulate          = glmm_status(stats::simulate(glmm_fit, nsim = 1L, seed = 1L)),
-  refit             = glmm_status(refit(glmm_fit,
+  refit             = glmm_status(lme4::refit(glmm_fit,
                                         stats::simulate(glmm_fit, seed = 1L)))
 )
 ```
@@ -326,6 +326,6 @@ stopifnot(max(abs(fixef(glmm_fit) - lme4::fixef(glmer_fit))) < 5e-3)
 stopifnot(inherits(tryCatch(confint(glmm_fast), error = identity),
                    "mm_inference_unavailable"))
 # simulate()/refit() are available for GLMMs.
-stopifnot(inherits(refit(glmm_fit, stats::simulate(glmm_fit, seed = 1L)),
+stopifnot(inherits(lme4::refit(glmm_fit, stats::simulate(glmm_fit, seed = 1L)),
                    "mm_glmm"))
 ```

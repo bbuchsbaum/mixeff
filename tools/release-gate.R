@@ -421,6 +421,7 @@ if (install_ok) run("suite + error-UX + schema/manifest", {
   if (release_candidate) {
     Sys.unsetenv(c("MIXEFF_RUN_SLOW_PARITY", "MIXEFF_RUN_APHANTASIA"))
   }
+  saveRDS(res, file.path(check_root, "suite-results.rds"))
   df <- as.data.frame(res)
   fails <- sum(df$failed) + sum(df$error)
   suite_elapsed <- round(proc.time()["elapsed"] - suite_t)

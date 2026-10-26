@@ -332,7 +332,8 @@
 * Fits, refits, bootstraps and profiles can be interrupted (Ctrl-C/Esc):
   the engine checks for a pending interrupt between optimizer evaluations
   without longjmp-ing through Rust frames, and stops with a typed
-  `mm_interrupted` error.
+  `mm_interrupted` error. This requires the host callback: models restored
+  from snapshots currently lack it, as noted above.
 * New `mm_bootmer()` (`lme4::bootMer()` counterpart; a `boot`-compatible
   result for `boot::boot.ci()`), `rePCA()`, `mm_lmlist()` (`lmList()`),
   `mm_allfit()` (`allFit()`), and `mm_control(optCtrl = )` (lme4-style

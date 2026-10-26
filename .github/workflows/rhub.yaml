@@ -40,6 +40,15 @@ jobs:
       - name: Evaluate original check covariances
         if: always()
         run: Rscript assessment/mkl-captured-objectives.R . mkl-diagnostic-output > mkl-diagnostic.log 2>&1
+      - name: Bounded multistart with default MKL threads
+        if: always()
+        run: Rscript assessment/mkl-multistart.R . mkl-multistart-default > mkl-multistart-default.log 2>&1
+      - name: Bounded multistart with one MKL thread
+        if: always()
+        env:
+          MKL_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: Rscript assessment/mkl-multistart.R . mkl-multistart-one > mkl-multistart-one.log 2>&1
       - name: Show diagnostic result
         if: always()
         run: test ! -f mkl-diagnostic.log || cat mkl-diagnostic.log
@@ -48,6 +57,8 @@ jobs:
         with:
           name: mkl-parity-diagnostic
           path: |
+            mkl-multistart-*/
+            mkl-multistart-*.log
             mkl-diagnostic.log
             mkl-diagnostic-output/
             /tmp/mkl-pairs/

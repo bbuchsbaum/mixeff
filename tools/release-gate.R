@@ -367,6 +367,7 @@ if (install_ok) {
 ## 5. lint ---------------------------------------------------------------------
 if (install_ok) run("lint_package == 0", {
   lints <- lintr::lint_package(pkg_root)
+  if (length(lints)) print(lints)
   record("lint_package == 0", length(lints) == 0,
          sprintf("%d lint(s)", length(lints)))
 })
@@ -481,7 +482,8 @@ if (release_candidate) {
       # Restore the env var before re-raising: this block is a top-level
       # promise, so on.exit would not fire (same caveat as the suite step).
       rendered <- tryCatch(
-        rmarkdown::render(vig, output_dir = out_dir,
+        rmarkdown::render(vig, output_format = rmarkdown::html_vignette(),
+                          output_dir = out_dir,
                           envir = new.env(parent = globalenv()), quiet = TRUE),
         error = function(e) e
       )

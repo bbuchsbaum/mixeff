@@ -34,6 +34,7 @@
 #' ystar <- simulate(fit, nsim = 1, seed = 2)
 #' fixef(refit(fit, ystar))
 #'
+#' @export
 refit <- function(object, newresp, ...) {
   UseMethod("refit")
 }

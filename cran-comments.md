@@ -70,7 +70,7 @@ and core aphantasia enabled. Manual/PDF validation is separate.
    the tarball size on some machines. The Rust sources are vendored so
    the package builds fully offline, which accounts for the size.
 
-   Size of tarball: 6478929 bytes
+   Size of tarball: 6804877 bytes
 
    The release gate refreshes this line from the artifact it builds.
 

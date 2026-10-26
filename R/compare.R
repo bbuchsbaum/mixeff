@@ -596,7 +596,7 @@ mm_anova_frame <- function(object, table, type, method, refit_for_comparison) {
     NumDF = num,
     DenDF = as.numeric(table$den_df),
     `F value` = f_stat,
-    `Pr(>f_stat)` = as.numeric(table$p_value),
+    `Pr(>F)` = as.numeric(table$p_value),
     check.names = FALSE
   )
   row.names(out) <- table$term

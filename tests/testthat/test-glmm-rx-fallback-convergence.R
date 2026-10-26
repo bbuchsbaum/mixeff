@@ -117,13 +117,15 @@ test_that("RX-fallback Wald rows are labelled in summary(), vcov() and inference
                    "glmm_laplace_rx_conditional_on_theta_wald")
   expect_match(wald$display_reason, "RX", fixed = TRUE)
   expect_match(wald$notes, "not positive definite", fixed = TRUE)
-  # The joint route's bootstrap refusal is reported, not "runs now".
+  # Joint bootstrap preserves the fitted effective estimator per replicate.
   boot <- io$table[io$table$method == "glmm_parametric_bootstrap", ]
-  expect_identical(boot$expected_status, "not_assessed")
+  expect_identical(boot$expected_status, "available")
   expect_identical(boot$expected_reliability_reason,
-                   "glmm_bootstrap_joint_laplace_unavailable")
-  expect_error(confint(fit, method = "bootstrap", nsim = 10),
-               class = "mm_inference_unavailable")
+                   "bootstrap_monte_carlo_replicates")
+  ci <- confint(fit, method = "bootstrap", nsim = 10, seed = 42)
+  expect_identical(attr(ci, "mm_estimator"), "joint_laplace")
+  expect_identical(attr(ci, "mm_bootstrap")$replicate_estimator_policy,
+                   "preserve_effective_or_fail")
 })
 
 test_that("a not_optimized joint fit with a small objective gap reads as 'convergence not certified'", {

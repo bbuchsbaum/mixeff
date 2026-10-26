@@ -198,9 +198,11 @@ test_that("malformed verification options JSON is contained", {
 
 test_that("a negative n_agq smuggled into the GLMM verify payload is contained", {
   fit <- mm_ffi_glmm_fit()
-  # Cold (handle-less) payload: these tests drive the data path's checks.
-  fit$rust_handle <- NULL
+  # Explicitly remove the restored handle and supply the complete data: a live
+  # fitted baseline correctly ignores refit-only nAGQ fields.
   payload <- mixeff:::mm_rust_glmm_refit_payload(fit, "joint_laplace")
+  payload$spec_data <- mixeff:::mm_bridge_spec_data(fit, NULL, need_data = TRUE)
+  payload$handle <- NULL
   payload$n_agq <- -1
   expect_error(
     mixeff:::mm_verify_convergence_glmm_json(payload, "{}"),
@@ -221,8 +223,7 @@ test_that("nsim = 0 in the GLMM parametric-bootstrap options is contained", {
 
 test_that("malformed bootstrap options JSON in the contrast bootstrap is contained", {
   fit <- mm_ffi_lmm_fit()
-  fit$rust_handle <- NULL
-  b <- mixeff:::mm_rust_fit_bridge_payload(fit)
+  b <- mixeff:::mm_rust_fit_bridge_payload(fit, need_data = TRUE)
   expect_error(
     mixeff:::mm_fixed_effect_bootstrap_contrast_json(
       b$formula_string, FALSE, b$spec_data$column_order,
@@ -239,8 +240,7 @@ test_that("malformed bootstrap options JSON in the contrast bootstrap is contain
 
 test_that("an inconsistent contrast-matrix payload is contained", {
   fit <- mm_ffi_lmm_fit()
-  fit$rust_handle <- NULL
-  b <- mixeff:::mm_rust_fit_bridge_payload(fit)
+  b <- mixeff:::mm_rust_fit_bridge_payload(fit, need_data = TRUE)
   # 3 values declared as a 2x2 matrix.
   expect_error(
     mixeff:::mm_fixed_effect_contrast_json(

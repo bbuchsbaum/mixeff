@@ -16,9 +16,8 @@ factor_contrast_design <- function(seed = 8L) {
   dat
 }
 
-# mixeff refuses an attached unordered contrast rather than silently
-# replacing it with treatment coding; the mixeff fits below use the same data
-# with the attribute dropped (the random-effect basis is cell-means either way).
+# Drop attached contrasts for tests that exercise default coding (the
+# random-effect basis is cell-means either way).
 without_attached_contrasts <- function(dat) {
   for (nm in names(dat)) {
     if (is.factor(dat[[nm]])) attr(dat[[nm]], "contrasts") <- NULL
@@ -26,20 +25,23 @@ without_attached_contrasts <- function(dat) {
   dat
 }
 
-test_that("attached unordered contrasts are refused, not silently replaced", {
-  dat <- factor_contrast_design()
-  expect_error(
-    lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
-    class = "mm_arg_error"
-  )
+test_that("explicit treatment coding overrides an unsupported global option", {
+  dat <- without_attached_contrasts(factor_contrast_design())
+  baseline <- lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1))
+  contrasts(dat$f) <- stats::contr.treatment(levels(dat$f))
   old <- options(contrasts = c("contr.sum", "contr.poly"))
   on.exit(options(old), add = TRUE)
+  tagged <- lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1))
+  expect_equal(fixef(tagged), fixef(baseline))
   expect_error(
     lmm(y ~ f + (1 | g), without_attached_contrasts(dat),
         control = mm_control(verbose = -1)),
-    regexp = "contr.sum",
+    regexp = "unsupported unordered-factor options",
     class = "mm_arg_error"
   )
+  contrasts(dat$f) <- stats::contr.sum(levels(dat$f))
+  expect_error(lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
+               class = "mm_arg_error")
 })
 
 test_that("no-intercept factor random slopes use cell-means coding", {
@@ -163,7 +165,7 @@ test_that("an unset contrasts option is refused for unordered factors too", {
   on.exit(options(old), add = TRUE)
   expect_error(
     lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
-    regexp = "not contr.treatment",
+    regexp = "unsupported unordered-factor options",
     class = "mm_arg_error"
   )
 })

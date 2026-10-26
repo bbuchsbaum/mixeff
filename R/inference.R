@@ -1095,7 +1095,7 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
   if (identical(method, "profile")) {
     # Advice must be actionable on THIS fit: asymptotic Wald intervals are
     # certified only for joint_laplace fits.
-    advice <- "Use method = \"bootstrap\", or use method = \"asymptotic\" on a certified joint-Laplace fit."
+    advice <- "Use method = \"bootstrap\", or use method = \"asymptotic\" on a certified joint_laplace fit."
 
     mm_abort(
       message = sprintf(

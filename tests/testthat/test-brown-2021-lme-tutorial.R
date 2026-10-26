@@ -509,6 +509,7 @@ test_that("Brown reference harness accepts a converged singular boundary fit", {
 })
 
 test_that("Brown parity failures save both fits and diagnostics", {
+  mm_skip_if_no_lme4()
   old <- Sys.getenv("MIXEFF_DIAG_OUT", unset = NA_character_)
   out <- tempfile("brown-diag-")
   Sys.setenv(MIXEFF_DIAG_OUT = out)

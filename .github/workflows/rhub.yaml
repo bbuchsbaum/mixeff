@@ -71,6 +71,22 @@ jobs:
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
+      - name: Validate MKL reference dependencies
+        if: matrix.config.name == 'mkl'
+        shell: Rscript {0}
+        run: |
+          # R-hub's Fedora cache can contain an nloptr binary linked to
+          # FlexiBLAS, which is absent in the MKL image. Rebuild that optional
+          # reference dependency against this image; never skip MKL parity.
+          if (!requireNamespace("nloptr", quietly = TRUE)) {
+            install.packages("nloptr", repos = "https://cloud.r-project.org",
+                             type = "source", lib = Sys.getenv("R_LIBS_USER"))
+          }
+          stopifnot(requireNamespace("nloptr", quietly = TRUE),
+                    requireNamespace("lme4", quietly = TRUE))
+          print(packageVersion("nloptr"))
+          print(packageVersion("lme4"))
+          print(extSoftVersion()[c("BLAS", "LAPACK")])
       - uses: r-hub/actions/run-check@v1
         with:
           token: ${{ secrets.RHUB_TOKEN }}

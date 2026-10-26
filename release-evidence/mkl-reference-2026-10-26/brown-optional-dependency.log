@@ -1,0 +1,36 @@
+Witness: only a private copy of lme4 has its shared library renamed. User libraries unchanged.
+
+Attaching package: ‘mixeff’
+
+The following object is masked from ‘package:stats’:
+
+    step
+
+
+Attaching package: ‘testthat’
+
+The following object is masked from ‘package:mixeff’:
+
+    compare
+
+brown-2021-lme-tutorial: ............SSSSSSS
+
+══ Skipped ═════════════════════════════════════════════════════════════════════
+1. Brown 2021 LMM tutorial examples match core lme4 outputs ('test-brown-2021-lme-tutorial.R:363:3') - Reason: {lme4} cannot be loaded
+
+2. Brown 2021 large RT tutorial examples match lme4 ('test-brown-2021-lme-tutorial.R:376:3') - Reason: {lme4} cannot be loaded
+
+3. Brown 2021 RT likelihood-ratio example agrees with lme4 ('test-brown-2021-lme-tutorial.R:389:3') - Reason: {lme4} cannot be loaded
+
+4. Brown captured lme4 endpoint is improved by a tight validated refit ('test-brown-2021-lme-tutorial.R:419:3') - Reason: {lme4} cannot be loaded
+
+5. Brown reference harness records a real optimizer nonconvergence ('test-brown-2021-lme-tutorial.R:469:3') - Reason: {lme4} cannot be loaded
+
+6. Brown reference harness accepts a converged singular boundary fit ('test-brown-2021-lme-tutorial.R:495:3') - Reason: {lme4} cannot be loaded
+
+7. Brown parity failures save both fits and diagnostics ('test-brown-2021-lme-tutorial.R:512:3') - Reason: {lme4} cannot be loaded
+
+══ DONE ════════════════════════════════════════════════════════════════════════
+Warning message:
+package ‘testthat’ was built under R version 4.5.2 
+UNLOADABLE LME4: 12 passed 0 failed 0 warnings 7 skipped

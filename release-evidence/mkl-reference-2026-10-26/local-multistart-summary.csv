@@ -1,0 +1,4 @@
+"start","stim_slope_sd","common_objective","optimizer_code","convergence_messages","warnings","objective_excess"
+"multistart_default_endpoint",14.7197170143478,302385.669214517,"0","","",1.74622982740402e-09
+"multistart_stress_sd8_2",14.7192432315663,302385.669214515,"0","","",0
+"multistart_engine",14.7185993419584,302385.669214518,"0","","",3.31783667206764e-09

@@ -1,0 +1,7 @@
+{
+  "run": 40410870077,
+  "commit": "e7697417017e738eb371098a8332ad475740c9d8",
+  "artifact_id": 12693788016,
+  "sha256": "2aa193189cb340fe027cb36bce78627a0264eca79c6dc46a855c56bf51dfe3b2",
+  "cause": "nloptr cached binary depends on unavailable libflexiblas.so.3; lme4 unavailable; one new receipt test lacked optional-dependency guard (fixed). No MKL numerical qualification in this run."
+}

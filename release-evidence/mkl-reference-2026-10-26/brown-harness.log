@@ -1,0 +1,19 @@
+
+Attaching package: 'mixeff'
+
+The following object is masked from 'package:stats':
+
+    step
+
+
+Attaching package: 'testthat'
+
+The following object is masked from 'package:mixeff':
+
+    compare
+
+brown-2021-lme-tutorial: .........................................................................................................
+
+== DONE ========================================================================
+Warning message:
+package 'testthat' was built under R version 4.5.2 

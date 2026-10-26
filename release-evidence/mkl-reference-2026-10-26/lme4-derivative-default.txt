@@ -1,0 +1,22 @@
+lme4 2.1.0 
+List of 2
+ $ calc.derivs: NULL
+ $ checkConv  :List of 5
+  ..$ check.conv.nobsmax : num 10000
+  ..$ check.conv.nparmax : num 10
+  ..$ check.conv.grad    :List of 3
+  .. ..$ action: chr "warning"
+  .. ..$ tol   : num 0.002
+  .. ..$ relTol: NULL
+  ..$ check.conv.singular:List of 2
+  .. ..$ action: chr "message"
+  .. ..$ tol   : num 1e-04
+  ..$ check.conv.hess    :List of 2
+  .. ..$ action: chr "warning"
+  .. ..$ tol   : num 1e-06
+    calc.derivs <- control$calc.derivs %||% (nobs < control$checkConv$check.conv.nobsmax && 
+        npar < control$checkConv$check.conv.nparmax)
+    if (identical(control$optimizer, "none")) 
+
+Brown observations:21679
+Default derivative check: FALSE 

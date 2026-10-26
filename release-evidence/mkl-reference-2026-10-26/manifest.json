@@ -1,0 +1,115 @@
+{
+  "candidate_commit": "d5fdc546637848e9fe23314b50532478ba5916fb",
+  "engine_pin": "004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b",
+  "production_estimation_changes": false,
+  "parity_tolerance_changes": false,
+  "reference_optimizer_stopping_control_changes": {
+    "case": "rt_modality_full",
+    "rhobeg": 0.01,
+    "rhoend": 1e-09,
+    "maxfun": 20000
+  },
+  "validation_controls_changed": [
+    "calc.derivs=TRUE",
+    "check.conv.nobsmax=Inf when supported",
+    "check.conv.nparmax=Inf when supported"
+  ],
+  "focused_suite": {
+    "passed": 128,
+    "failed": 0,
+    "test_warnings": 0,
+    "environment_startup_warning": "testthat built under R4.5.2"
+  },
+  "local_multistart": {
+    "reference_sd": [
+      14.71971701434776,
+      14.7192432315663,
+      14.71859934195844
+    ],
+    "objective_spread": 3.317836672067642e-09,
+    "engine_objective_excess": 5.814363248646259e-07,
+    "full_derivative_check": "all passed with countguardsInf"
+  },
+  "diagnostic_run": 40413879004,
+  "diagnostic_result": "success",
+  "original_8_2_endpoint": "reproduced and diagnosed as inferior reference optimizer endpoint",
+  "test_file_sha256": "73975c40995f24b9bdf11cf8393a76e8aa3ec5beccbbf6a3aa8ab9b340cc5002",
+  "diagnostic_script_sha256": "94379d6aedc88d4465e9d13d69429cf6964ae252fa1e43a9038f2bc2180d1d08",
+  "reproduced_failure": {
+    "run": 40407299066,
+    "reference_sd": 8.17512312268143,
+    "reference_common_objective": 302385.8003502963,
+    "tight_refit_sd": 14.719220293418505,
+    "tight_refit_objective": 302385.6692145155,
+    "objective_improvement": 0.13113578082993627,
+    "finding": "inferior default reference endpoint; tightly restarting its exact covariance escapes it"
+  },
+  "endpoint_fixture_sha256": "61dd1f4420432cf722cd4768311c10cb15e33c13be1a7c847d5257e9fd5bf953",
+  "validated_MKL_multistarts": {
+    "run": 40408493648,
+    "threads": [
+      "default",
+      "MKL_NUM_THREADS=1;OMP_NUM_THREADS=1"
+    ],
+    "reference_sd": [
+      14.7192202934185,
+      14.7194865232176,
+      14.7190047580669
+    ],
+    "common_objective_spread": 1.74622982740402e-09,
+    "optimizer_codes": [
+      0,
+      0,
+      0
+    ],
+    "warnings": 0,
+    "convergence_messages": 0
+  },
+  "numerical_repair_commit": "e7697417017e738eb371098a8332ad475740c9d8",
+  "dependency_repair": {
+    "failed_run": 40410870077,
+    "cause": "cached nloptr required libflexiblas.so.3 absent from MKL image",
+    "cache_version": "mkl-native-v1",
+    "forced_source_packages": [
+      "nloptr",
+      "mvtnorm"
+    ],
+    "preflight_requires": [
+      "nloptr",
+      "lme4",
+      "emmeans"
+    ],
+    "superseded_run_cancelled": 40413434042
+  },
+  "optional_dependency_witness": {
+    "condition": "private lme4 copy has renamed shared library; installed user libraries unchanged",
+    "passed": 12,
+    "failed": 0,
+    "warnings": 0,
+    "expected_skips": 7
+  },
+  "final_MKL_qualification": {
+    "run": 40413879004,
+    "job": 121891248405,
+    "source_commit": "d5fdc546637848e9fe23314b50532478ba5916fb",
+    "status": "OK",
+    "errors": 0,
+    "warnings": 0,
+    "notes": 0,
+    "test_passed": 6194,
+    "test_failed": 0,
+    "test_warnings": 0,
+    "test_skips": 62,
+    "brown_skips": 0,
+    "skip_scope": "44 CRAN-gated, 16 source-availability, 2 explicitly opt-in slow sweeps",
+    "lme4": "2.1-0",
+    "BLAS": "Intel MKL 2025.3",
+    "R": "4.7.0 development r90763",
+    "artifact_id": 12695008707,
+    "artifact_sha256": "d398476f72c900f35acbdb526e01294e13a4576a20fea05d8013e6a68e9de076",
+    "source_tarball_sha256": "3312b93e45be02f57a3fa79bb5f554843499bd668a855cde6c29013c330c19ca",
+    "source_tarball_bytes": 6806217,
+    "packaged_brown_test_and_endpoint_fixture": "byte-identical to candidate",
+    "check_options": "--no-manual --no-build-vignettes --as-cran"
+  }
+}

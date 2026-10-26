@@ -1,6 +1,12 @@
 # Restored cancellation and release qualification — 26 October 2026
 
-**Decision: hold CRAN submission.** The repaired candidate is qualified by local and primary hosted checks, but one MKL reference-parity failure remains unexplained. Publication is independently blocked by GitHub's required approving review on [PR 6](https://github.com/bbuchsbaum/mixeff/pull/6). A merge attempt returned HTTP 405; branch protection was not bypassed.
+**Later MKL update:** the original discrepancy was subsequently reproduced,
+captured and diagnosed as an inferior lme4 reference endpoint. See
+[the reference repair assessment](2026-10-26-mkl-reference.md) for the new
+candidate and its qualification. The record below describes the earlier8065281
+candidate and preserves the evidence available at that time.
+
+**Decision at this checkpoint: hold CRAN submission.** The repaired candidate is qualified by local and primary hosted checks, but one MKL reference-parity failure remains unexplained. Publication is independently blocked by GitHub's required approving review on [PR 6](https://github.com/bbuchsbaum/mixeff/pull/6). A merge attempt returned HTTP 405; branch protection was not bypassed.
 
 ## Candidate and repairs
 

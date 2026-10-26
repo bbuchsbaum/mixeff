@@ -3,11 +3,25 @@
 ## Submission status
 
 First CRAN submission, following an R-universe pre-release cycle. **Submission
-is on hold:** an MKL reference-parity failure remains unexplained, Windows
-builder results and merged-head R-universe qualification are outstanding.
+is on hold:** final artifact checks, Windows builder results and merged-head
+R-universe qualification are outstanding. The MKL mismatch has been reproduced
+and diagnosed as an inferior lme4 reference endpoint; the targeted repair passes its final canonical MKL check.
 PR 6 also requires an approving reviewer with write access before merge.
 
-## Candidate identity
+## Current repair candidate
+
+`e7697417017e738eb371098a8332ad475740c9d8` validates Brown reference
+convergence, preserves failed fit pairs, tightens only the affected reference
+fit's optimizer controls and replays the captured inferior endpoint in a
+regression. Production estimation code and existing parity tolerances are
+unchanged. Focused local validation: 128 passes, no failures/test warnings/skips.
+Canonical MKL run 40413879004 passes on d5fdc54: Status OK, 0 errors/warnings/notes;
+6,194 passing assertions, 0 failures/test warnings, 62 documented skips and no
+Brown skips. This source also isolates the MKL dependency cache and requires
+working reference libraries. See
+`assessment/2026-10-26-mkl-reference.md` for the reproduced failure and repair.
+
+## Prior full-release artifact identity
 
 Source `806528106473594aa7342c6585c2b56be5ed2649`, engine pin
 `004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b`. Later release-document updates
@@ -19,7 +33,11 @@ Size of tarball: 6807157 bytes
 The vendored Rust sources allow offline installation. The expected local
 incoming NOTE concerns a new submission and tarball size.
 
-## Current executed checks (26 October 2026)
+The size and SHA above describe the prior 8065281 artifact. Packaged tests have
+changed since then; regenerate the final artifact and refresh its submission
+receipts before submitting.
+
+## Executed checks at 8065281 (26 October 2026)
 
 - macOS arm64, R 4.5.1: tarball `R CMD check --as-cran --no-manual`,
   0 errors, 0 warnings, 1 expected incoming NOTE.
@@ -50,19 +68,20 @@ gcc-asan and nosuggests failed before checking mixeff: lmerTest could not
 load lme4 because libRlapack.so was missing. These are environmental gaps,
 not passing package checks.
 
-MKL job 121805238156 executed one failed Brown variance-component SD
-comparison (mixeff about14.7, lme4 about8.2). A standalone MKL probe and
-instrumented full-check run40398326331 pass unchanged assertions and
-runtime; saved check fits agree at14.707846 versus14.719799. Independent
-lme4 REML evaluation corroborates the latter fit. The original failure
-saved no fitted objects and remains unexplained. No tolerance was relaxed.
-This remains a submission blocker, not an environment-only exclusion.
+MKL job121805238156 originally failed Brown SD parity (mixeff about14.7,
+lme4 about8.2). Run 40407299066 reproduced and captured the failing reference:
+SD 8.175123, criterion 302385.8003502963. Tight optimization from that exact
+covariance improves the criterion by 0.1311357808 and reaches SD 14.719220.
+This identifies an inferior reference endpoint. Default and single-thread MKL
+multistarts agree near 14.719 with full convergence checks. Candidate e769741
+repairs the affected reference and adds the captured-endpoint regression;
+canonical MKL acceptance passes at d5fdc54. No parity tolerance was relaxed.
 
 ## Remaining release work
 
 Obtain the required PR review and merge; qualify the merged source through
 R-universe; obtain final Windows builder receipts and the remaining court
-results; resolve or explicitly adjudicate the MKL uncertainty. The source
+results; refresh the final source artifact. The source
 currently on R-universe is older (6e9a62a), so its native successes do not
 qualify this candidate. Its pre-existing wasm failure is tracked separately.
 

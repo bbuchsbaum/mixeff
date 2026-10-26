@@ -39,6 +39,14 @@ Local release qualification is recorded in `release-gate-report.txt` and the
 CRAN-readiness assessment. The historical counts below do not qualify this
 merged candidate; hosted checks and builder submissions must be refreshed.
 
+The 26 October local runtime candidate `bd3091471c9f6a15e8445366f18388b2da2eba8f`
+passed `R CMD check --as-cran --no-manual` on macOS arm64 / R 4.5.1:
+0 errors, 0 warnings, 1 expected incoming note (new submission and tarball size).
+The six vignettes and help examples passed; the separate 76-page PDF manual
+built successfully. Exact tarball identity and raw receipts are recorded under
+`release-evidence/cran-2026-10-26/`. This local result does not supersede the
+remaining upstream cancellation defect or the need for refreshed builder checks.
+
 The canonical acceptance command is `Rscript tools/release-gate.R
 --release-candidate`. It builds and hashes one source tarball, checks that
 artifact with `--as-cran`, installs it, and runs the suite with slow parity
@@ -70,7 +78,7 @@ and core aphantasia enabled. Manual/PDF validation is separate.
    the tarball size on some machines. The Rust sources are vendored so
    the package builds fully offline, which accounts for the size.
 
-   Size of tarball: 6804877 bytes
+   Size of tarball: 6805036 bytes
 
    The release gate refreshes this line from the artifact it builds.
 

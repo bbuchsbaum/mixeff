@@ -490,8 +490,10 @@ if (release_candidate) {
       if (is.na(old_flag)) Sys.unsetenv("MIXEFF_RUN_APHANTASIA_VIGNETTE") else
         Sys.setenv(MIXEFF_RUN_APHANTASIA_VIGNETTE = old_flag)
       if (inherits(rendered, "error")) stop(conditionMessage(rendered))
-      record("aphantasia vignette (live)", file.exists(rendered),
-             basename(rendered))
+      complete_html <- file.exists(rendered) &&
+        any(grepl("</html>", readLines(rendered, warn = FALSE), fixed = TRUE))
+      record("aphantasia vignette (live)", complete_html,
+             if (complete_html) basename(rendered) else "rendered HTML is incomplete")
     }
   })
 }

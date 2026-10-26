@@ -1,0 +1,46 @@
+* checking for file '/private/tmp/mixeff-cran-20261026-64ptil/candidate/DESCRIPTION' ... OK
+* preparing 'mixeff':
+* checking DESCRIPTION meta-information ... OK
+* cleaning src
+* running 'cleanup'
+* installing the package to build vignettes
+* creating vignettes ... ERROR
+--- re-building 'convergence.Rmd' using rmarkdown
+--- finished re-building 'convergence.Rmd'
+
+--- re-building 'glmm.Rmd' using rmarkdown
+
+Quitting from glmm.Rmd:302-331 [checks]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<error/rlang_error>
+Error in `refit()`:
+! could not find function "refit"
+---
+Backtrace:
+    x
+ 1. +-base::stopifnot(...)
+ 2. \-base::inherits(...)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Error: processing vignette 'glmm.Rmd' failed with diagnostics:
+could not find function "refit"
+--- failed re-building 'glmm.Rmd'
+
+--- re-building 'inference.Rmd' using rmarkdown
+--- finished re-building 'inference.Rmd'
+
+--- re-building 'lme4-migration.Rmd' using rmarkdown
+--- finished re-building 'lme4-migration.Rmd'
+
+--- re-building 'lmm.Rmd' using rmarkdown
+2026-10-26 10:52:21.595 R[93814:6532184] XType: Using static font registry.
+--- finished re-building 'lmm.Rmd'
+
+--- re-building 'mixeff.Rmd' using rmarkdown
+--- finished re-building 'mixeff.Rmd'
+
+SUMMARY: processing the following file failed:
+  'glmm.Rmd'
+
+Error: Vignette re-building failed.
+Execution halted

@@ -1,0 +1,129 @@
+* using log directory '/private/tmp/mixeff-cran-20261026-64ptil/check-complete/mixeff.Rcheck'
+* using R version 4.5.1 (2025-06-13)
+* using platform: aarch64-apple-darwin20
+* R was compiled by
+    Apple clang version 16.0.0 (clang-1600.0.26.6)
+    GNU Fortran (GCC) 14.2.0
+* running under: macOS Sonoma 14.3
+* using session charset: ASCII
+* using options '--no-manual --as-cran'
+* checking for file 'mixeff/DESCRIPTION' ... OK
+* this is package 'mixeff' version '0.2.0'
+* package encoding: UTF-8
+* checking CRAN incoming feasibility ... [3s/13s] NOTE
+Maintainer: 'Brad Buchsbaum <brad.buchsbaum@gmail.com>'
+
+New submission
+
+Size of tarball: 6804877 bytes
+* checking package namespace information ... OK
+* checking package dependencies ... OK
+* checking if this is a source package ... OK
+* checking if there is a namespace ... OK
+* checking for executable files ... OK
+* checking for hidden files and directories ... OK
+* checking for portable file names ... OK
+* checking for sufficient/correct file permissions ... OK
+* checking whether package 'mixeff' can be installed ... [153s/143s] OK
+* used C compiler: 'Apple clang version 15.0.0 (clang-1500.1.0.2.5)'
+* used SDK: 'MacOSX14.2.sdk'
+* checking installed package size ... INFO
+  installed size is 13.3Mb
+  sub-directories of 1Mb or more:
+    R      2.0Mb
+    libs   9.7Mb
+* checking package directory ... OK
+* checking for future file timestamps ... OK
+* checking 'build' directory ... OK
+* checking DESCRIPTION meta-information ... OK
+* checking top-level files ... OK
+* checking for left-over files ... OK
+* checking index information ... OK
+* checking package subdirectories ... OK
+* checking code files for non-ASCII characters ... OK
+* checking R files for syntax errors ... OK
+* checking whether the package can be loaded ... OK
+* checking whether the package can be loaded with stated dependencies ... OK
+* checking whether the package can be unloaded cleanly ... OK
+* checking whether the namespace can be loaded with stated dependencies ... OK
+* checking whether the namespace can be unloaded cleanly ... OK
+* checking whether startup messages can be suppressed ... OK
+* checking use of S3 registration ... OK
+* checking dependencies in R code ... OK
+* checking S3 generic/method consistency ... OK
+* checking replacement functions ... OK
+* checking foreign function calls ... OK
+* checking R code for possible problems ... OK
+* checking Rd files ... OK
+* checking Rd metadata ... OK
+* checking Rd line widths ... OK
+* checking Rd cross-references ... OK
+* checking for missing documentation entries ... OK
+* checking for code/documentation mismatches ... OK
+* checking Rd \usage sections ... OK
+* checking Rd contents ... OK
+* checking for unstated dependencies in examples ... OK
+* checking line endings in shell scripts ... OK
+* checking line endings in C/C++/Fortran sources/headers ... OK
+* checking line endings in Makefiles ... OK
+* checking compilation flags in Makevars ... OK
+* checking for GNU extensions in Makefiles ... OK
+* checking for portable use of $(BLAS_LIBS) and $(LAPACK_LIBS) ... OK
+* checking use of PKG_*FLAGS in Makefiles ... OK
+* checking use of SHLIB_OPENMP_*FLAGS in Makefiles ... OK
+* checking pragmas in C/C++ headers and code ... OK
+* checking compilation flags used ... OK
+* checking compiled code ... OK
+* checking Rust compilation ... OK
+* checking installed files from 'inst/doc' ... OK
+* checking files in 'vignettes' ... OK
+* checking examples ... ERROR
+Running examples in 'mixeff-Ex.R' failed
+The error most likely occurred in:
+
+> base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+> ### Name: refit
+> ### Title: Refit a mixeff model with a new response
+> ### Aliases: refit refit.default refit.mm_lmm refit.mm_glmm
+> 
+> ### ** Examples
+> 
+> set.seed(1)
+> df <- data.frame(
++   y = rpois(60, 3), x = rnorm(60),
++   g = factor(rep(seq_len(10), each = 6))
++ )
+> fit <- glmm(y ~ x + (1 | g), df, family = poisson(),
++             control = mm_control(verbose = -1))
+> ystar <- simulate(fit, nsim = 1, seed = 2)
+> fixef(refit(fit, ystar))
+Error in refit(fit, ystar) : could not find function "refit"
+Calls: fixef
+Execution halted
+* checking for unstated dependencies in 'tests' ... OK
+* checking tests ... [117s/113s] ERROR
+  Running 'testthat.R' [117s/113s]
+Running the tests in 'tests/testthat.R' failed.
+Last 13 lines of output:
+  `expected`: "glmm_bootstrap_joint_laplace_unavailable"
+  
+  -- Failure ('test-glmm-rx-fallback-convergence.R:125:3'): RX-fallback Wald rows are labelled in summary(), vcov() and inference_options() --
+  Expected `confint(fit, method = "bootstrap", nsim = 10)` to throw a error with class <mm_inference_unavailable>.
+  -- Failure ('test-lme4-shapes.R:353:3'): anova() returns lme4/lmerTest-shaped data frames --
+  Expected `names(a)` to be identical to `names(a4)`.
+  Differences:
+  `actual[3:6]`:   "NumDF" "DenDF" "F value" "Pr(>f_stat)"
+  `expected[3:6]`: "NumDF" "DenDF" "F value" "Pr(>F)"     
+  
+  
+  [ FAIL 12 | WARN 4 | SKIP 65 | PASS 6113 ]
+  Error:
+  ! Test failures.
+  Execution halted
+* checking for unstated dependencies in vignettes ... OK
+* checking package vignettes ... OK
+* checking re-building of vignette outputs ... OK
+* checking for non-standard things in the check directory ... OK
+* checking for detritus in the temp directory ... OK
+* DONE
+Status: 2 ERRORs, 1 NOTE

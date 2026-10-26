@@ -1,0 +1,41 @@
+{
+  "source_commit": "bd3091471c9f6a15e8445366f18388b2da2eba8f",
+  "merge_commit": "e6ca2dfb6f67f5591d296492963b2fecbd11953d",
+  "remediation_commit": "5557a756a6ccf25b4bc1471eda147ae19350242c",
+  "upstream_main": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+  "engine_pin": "10f176877309ab8f6360eaaef3ce39ca55165eb6",
+  "tarball_sha256": "16155175857debc1dd88c60cb9c6e43c379eafe1aa67569775da9966929bdf5c",
+  "tarball_bytes": 6805036,
+  "R": "4.5.1",
+  "platform": "aarch64-apple-darwin20",
+  "rustc": "1.91.1",
+  "R_CMD_check": {
+    "args": "--as-cran --no-manual",
+    "errors": 0,
+    "warnings": 0,
+    "notes": 1,
+    "note": "New submission; source tarball size",
+    "lme4": "2.0-1",
+    "test_pass": 6127,
+    "test_warning": 4,
+    "test_skip": 65
+  },
+  "PDF_manual": {
+    "pages": 76,
+    "bytes": 329124
+  },
+  "extended_suite": {
+    "lme4": "2.1-0",
+    "pass": 6851,
+    "fail": 0,
+    "warning": 104,
+    "skip": 3,
+    "unexpected_skip": 0,
+    "elapsed_seconds": 653,
+    "lint_count": 0,
+    "live_html_complete": true,
+    "saved_result_sha256": "92512884d98857baa5313f6982a5b3950b145e715b0fa8b9fa5f01ffdd8639a0",
+    "skip_audit": "Canonical release-gate allowlist applied to saved results; auxiliary script typo corrected in separate audit"
+  },
+  "remote_publication": false
+}

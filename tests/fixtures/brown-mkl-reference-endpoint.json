@@ -1,0 +1,46 @@
+{
+  "case": "rt_modality_full",
+  "fixture_md5": "897020488c3bd1fdf99bcf61f285c71d",
+  "source": {
+    "platform": "R-hub mkl/Fedora44, R 4.7.0 r90763, MKL 2025.3, gcc 16.2.1",
+    "run_id": "40407299066",
+    "artifact_id": "12692791075",
+    "sha256": "fee92304061682aedf7e9cb8718789bf0620c6ddac089ac7263a044e982b825c"
+  },
+  "captured_control": {
+    "optimizer": "bobyqa",
+    "optCtrl": {}
+  },
+  "cnms": {
+    "stim": [
+      "(Intercept)",
+      "modality"
+    ],
+    "PID": [
+      "(Intercept)",
+      "modality"
+    ]
+  },
+  "theta": {
+    "stim.(Intercept)": 0.06189797556727428,
+    "stim.modality.(Intercept)": 0.03199223603799164,
+    "stim.modality": 4.949336862269868e-06,
+    "PID.(Intercept)": 0.6612649975475482,
+    "PID.modality.(Intercept)": -0.05666307827827201,
+    "PID.modality": 0.3388719602474713
+  },
+  "stim_modality_sd": 8.17512312268143,
+  "residual_sigma": 255.5345933039475,
+  "common_objective": 302385.8003502963,
+  "tight_refit": {
+    "control": {
+      "optimizer": "bobyqa",
+      "rhobeg": 0.01,
+      "rhoend": 1e-09,
+      "maxfun": 20000
+    },
+    "stim_modality_sd": 14.7192202934,
+    "residual_sigma": 255.4580513584758,
+    "objective": 302385.6692145155
+  }
+}

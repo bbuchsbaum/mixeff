@@ -54,6 +54,13 @@ brown_figure_data <- function() {
   dat
 }
 
+brown_mkl_endpoint <- function() {
+  jsonlite::read_json(
+    brown_fixture_path("brown-mkl-reference-endpoint.json"),
+    simplifyVector = FALSE
+  )
+}
+
 brown_cases <- function() {
   list(
     rt_modality_full = list(
@@ -62,7 +69,12 @@ brown_cases <- function() {
         (1 + modality | stim),
       REML = TRUE,
       slow = TRUE,
-      control = lme4::lmerControl(optimizer = "bobyqa"),
+      # Default BOBYQA can stop at an inferior nearly singular endpoint on
+      # MKL. Tight controls escape the captured endpoint (regression below).
+      control = lme4::lmerControl(
+        optimizer = "bobyqa",
+        optCtrl = list(rhobeg = 0.01, rhoend = 1e-9, maxfun = 20000)
+      ),
       # NOTE (pin 4a2abb3, 2026-07-10): the reduced-rank/optimizer bugs that
       # used to fail rt_interaction are fixed; this maximal crossed model now
       # converges (both engines converged_interior, REML deviance 0.05 apart
@@ -401,6 +413,56 @@ test_that("Brown 2021 RT likelihood-ratio example agrees with lme4", {
     expect_equal(mm_cmp$LRT[[2L]], lme4_cmp$Chisq[[2L]], tolerance = 5e-3)
     expect_equal(mm_cmp$p_value[[2L]], lme4_cmp$`Pr(>Chisq)`[[2L]], tolerance = 1e-4)
   })
+})
+
+test_that("Brown captured lme4 endpoint is improved by a tight validated refit", {
+  mm_skip_if_no_lme4()
+  endpoint <- brown_mkl_endpoint()
+  dat <- brown_rt_data()
+  expect_identical(
+    unname(tools::md5sum(brown_fixture_path("brown_rt_dummy_data.csv.gz"))),
+    endpoint$fixture_md5
+  )
+  theta <- unlist(endpoint$theta, use.names = TRUE)
+  captured_control <- lme4::lmerControl(
+    optimizer = endpoint$captured_control$optimizer,
+    calc.derivs = TRUE
+  )
+  tight_control <- lme4::lmerControl(
+    optimizer = endpoint$tight_refit$control$optimizer,
+    optCtrl = list(
+      rhobeg = endpoint$tight_refit$control$rhobeg,
+      rhoend = endpoint$tight_refit$control$rhoend,
+      maxfun = endpoint$tight_refit$control$maxfun
+    ),
+    calc.derivs = TRUE
+  )
+  formula <- brown_cases()$rt_modality_full$formula
+  expected_cnms <- lapply(endpoint$cnms, unlist, use.names = FALSE)
+  # lme4's term order defines the theta slots. Check it before evaluating the
+  # captured numeric vector or using it as an optimizer start.
+  expect_identical(lme4::lFormula(formula, data = dat)$reTrms$cnms, expected_cnms)
+  # This evaluates the recorded endpoint directly; it does not rely on a
+  # current default optimizer run reproducing the historical failure.
+  devfun <- lme4::lmer(formula, data = dat, REML = TRUE,
+                        control = captured_control, devFunOnly = TRUE)
+  captured_objective <- as.numeric(devfun(theta))
+  expect_lt(abs(captured_objective - endpoint$common_objective), 1e-6)
+  mixeff_fit <- mixeff::lmm(formula, dat, REML = TRUE,
+                            control = mixeff::mm_control(verbose = -1))
+  refit <- brown_reference_fit(
+    list(formula = formula, data = dat, REML = TRUE, control = tight_control,
+         start = list(theta = theta)),
+    "mkl-captured-endpoint", mixeff_fit
+  )
+  expect_identical(names(lme4::getME(refit, "theta")), names(theta))
+  refit_objective <- -2 * as.numeric(stats::logLik(refit))
+  expect_gt(captured_objective - refit_objective, 0.1)
+  expect_lt(abs(refit_objective - endpoint$tight_refit$objective), 1e-5)
+  brown_expect_pair(
+    list(mixeff = mixeff_fit, lme4 = refit),
+    brown_cases()$rt_modality_full$tolerance, "rt_modality_full_mkl_refit"
+  )
 })
 
 test_that("Brown reference harness records a real optimizer nonconvergence", {

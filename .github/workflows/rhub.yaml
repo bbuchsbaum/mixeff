@@ -68,22 +68,35 @@ jobs:
       - name: Committed vendor snapshot matches the pin
         run: Rscript tools/check-vendor-drift.R
       - uses: r-hub/actions/setup-deps@v1
+        if: matrix.config.name != 'mkl'
         with:
           token: ${{ secrets.RHUB_TOKEN }}
           job-config: ${{ matrix.config.job-config }}
+      # The wrapper's cache key groups Fedora BLAS variants together. Keep
+      # MKL libraries separate, using the same underlying action/version.
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
+        if: matrix.config.name == 'mkl'
+        with:
+          cache-version: mkl-native-v1
+          packages: deps::.,any::sessioninfo
+          extra-packages: |
+            any::rcmdcheck
+            nloptr?source
+            mvtnorm?source
+          needs: check
+          dependencies: '"all"'
+          pak-version: devel
+          install-pandoc: true
+          install-quarto: false
+        env:
+          R_KEEP_PKG_SOURCE: yes
       - name: Validate MKL reference dependencies
         if: matrix.config.name == 'mkl'
         shell: Rscript {0}
         run: |
-          # R-hub's Fedora cache can contain an nloptr binary linked to
-          # FlexiBLAS, which is absent in the MKL image. Rebuild that optional
-          # reference dependency against this image; never skip MKL parity.
-          if (!requireNamespace("nloptr", quietly = TRUE)) {
-            install.packages("nloptr", repos = "https://cloud.r-project.org",
-                             type = "source", lib = Sys.getenv("R_LIBS_USER"))
-          }
           stopifnot(requireNamespace("nloptr", quietly = TRUE),
-                    requireNamespace("lme4", quietly = TRUE))
+                    requireNamespace("lme4", quietly = TRUE),
+                    requireNamespace("emmeans", quietly = TRUE))
           print(packageVersion("nloptr"))
           print(packageVersion("lme4"))
           print(extSoftVersion()[c("BLAS", "LAPACK")])

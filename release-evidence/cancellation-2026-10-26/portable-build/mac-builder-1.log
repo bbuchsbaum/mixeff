@@ -1,0 +1,142 @@
+* installing *source* package ‘mixeff’ ...
+** this is package ‘mixeff’ version ‘0.2.0’
+** using staged installation
+Using cargo 1.93.0 (083ac5135 2025-12-15)
+Using rustc 1.93.0 (254b59607 2026-01-19)
+Building for CRAN.
+Writing `src/Makevars`.
+`tools/config.R` has finished.
+** libs
+using C compiler: ‘Apple clang version 17.0.0 (clang-1700.6.3.2)’
+using SDK: ‘MacOSX14.4.sdk’
+clang -arch arm64 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG   -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2  -c entrypoint.c -o entrypoint.o
+if [ -d ./vendor ]; then \
+		echo "=== Using offline vendor directory ==="; \
+		mkdir -p /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/.cargo && \
+		cp rust/vendor-config.toml /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/.cargo/config.toml; \
+	elif [ -f ./rust/vendor.tar.xz ]; then \
+		echo "=== Using offline vendor tarball ==="; \
+		"/Library/Frameworks/R.framework/Resources/bin/Rscript" -e 'utils::untar("rust/vendor.tar.xz", tar = "internal")' && \
+		mkdir -p /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/.cargo && \
+		cp rust/vendor-config.toml /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/.cargo/config.toml; \
+	fi
+=== Using offline vendor tarball ===
+export CARGO_HOME=/Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/.cargo && \
+	export PATH="/opt/R/arm64/bin:/opt/gfortran/bin:/Applications/CMake.app/CMake.app/Contents/bin:/opt/R/arm64/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/opt/X11/bin:/Library/TeX/texbin:/usr/local/go/bin:/Users/pkgbuilds/.cargo/bin" && \
+	RUSTFLAGS=" --print=native-static-libs" cargo build -j 2 --offline --lib --release --manifest-path=./rust/Cargo.toml --target-dir ./rust/target 
+warning: a `-j` argument was passed to Cargo but Cargo is also configured with an external jobserver in its environment, ignoring the `-j` parameter
+   Compiling autocfg v1.5.0
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling libm v0.2.16
+   Compiling serde_core v1.0.228
+   Compiling libc v0.2.186
+   Compiling num-traits v0.2.19
+   Compiling serde v1.0.228
+   Compiling zerocopy v0.8.48
+   Compiling cfg-if v1.0.4
+   Compiling syn v2.0.117
+   Compiling rawpointer v0.2.1
+   Compiling typenum v1.20.0
+   Compiling getrandom v0.2.17
+   Compiling version_check v0.9.5
+   Compiling paste v1.0.15
+   Compiling generic-array v0.14.7
+   Compiling rand_core v0.6.4
+   Compiling bytemuck v1.25.0
+   Compiling safe_arch v0.7.4
+   Compiling num-integer v0.1.46
+   Compiling matrixmultiply v0.3.10
+   Compiling num-complex v0.2.4
+   Compiling approx v0.5.1
+   Compiling wide v0.7.33
+   Compiling serde_derive v1.0.228
+   Compiling ndarray v0.13.1
+   Compiling nalgebra-macros v0.2.2
+   Compiling num-rational v0.4.2
+   Compiling matrixmultiply v0.2.4
+   Compiling extendr-ffi v0.9.0
+   Compiling memchr v2.8.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling equivalent v1.0.2
+   Compiling rand_chacha v0.3.1
+   Compiling zmij v1.0.21
+   Compiling hashbrown v0.17.0
+   Compiling rand v0.8.6
+   Compiling indexmap v2.14.0
+   Compiling rand_distr v0.4.3
+   Compiling num-complex v0.4.6
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling num-traits v0.1.43
+   Compiling serde_json v1.0.149
+   Compiling itoa v1.0.18
+   Compiling simba v0.9.1
+   Compiling thiserror v2.0.18
+   Compiling winnow v0.7.15
+   Compiling digest v0.10.7
+   Compiling csv-core v0.1.13
+   Compiling thiserror-impl v2.0.18
+   Compiling cpufeatures v0.2.17
+   Compiling log v0.4.29
+   Compiling toml_edit v0.22.27
+   Compiling sprs v0.7.1
+   Compiling lazy_static v1.5.0
+   Compiling extendr-api v0.9.0
+   Compiling ryu v1.0.23
+   Compiling mixeff-rs v1.0.0-rc.5 (/Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/rust/upstream/mixeff-rs)
+   Compiling minilp v0.2.2
+   Compiling csv v1.4.0
+   Compiling toml v0.8.23
+   Compiling extendr-macros v0.9.0
+   Compiling sha2 v0.10.9
+   Compiling nalgebra v0.33.3
+   Compiling readonly v0.2.13
+   Compiling cobyla v1.0.0
+   Compiling once_cell v1.21.4
+   Compiling statrs v0.18.0
+   Compiling nalgebra-sparse v0.10.0
+   Compiling mixeff v0.2.0 (/Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/rust)
+note: link against the following native artifacts when linking against this static library. The order and any duplication can be significant on some platforms.
+
+note: native-static-libs: -liconv -lR -lSystem -lc -lm
+
+    Finished `release` profile [optimized] target(s) in 2m 06s
+# NOTE: the wrapper-generation step (`cargo run --bin document`) is
+# deliberately NOT part of installation. Installing must not regenerate
+# R/extendr-wrappers.R -- the committed wrappers ship in the tarball, the
+# package source may be read-only at install time, and `cargo run` has to
+# EXECUTE a freshly built binary, which fails outright when host and
+# --target differ (win-builder R-devel: "%1 is not a valid Win32
+# application", os error 193, after a clean library build). Regenerate
+# during development with `Rscript tools/document-rust.R`.
+# Always clean up CARGOTMP
+rm -Rf /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/.cargo;
+clang -arch arm64 -dynamiclib -Wl,-headerpad_max_install_names -undefined dynamic_lookup -L/Library/Frameworks/R.framework/Resources/lib -L/opt/R/arm64/lib -o mixeff.so entrypoint.o -L./rust/target/release -lmixeff -F/Library/Frameworks/R.framework/.. -framework R
+rm -Rf /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/.cargo /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/vendor ./rust/target
+installing to /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00LOCK-mixeff/00new/mixeff/libs
+** generating debug symbols (dSYM)
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(std-c48c539199cbc88b.std.f73b6248ed8abe8b-cgu.0.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(panic_unwind-d69228d077d46f36.panic_unwind.7112f9c795799583-cgu.0.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(hashbrown-9571ba9e0f6c7a90.hashbrown.df8ee38b896356be-cgu.0.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(alloc-14b12edc9f8cd90b.alloc.ef2fe32f695d90ab-cgu.0.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(core-a7a40eb546f9e2b0.core.dab634a26e66240f-cgu.0.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(compiler_builtins-bb76018b1173caf6.compiler_builtins.bb2d8bfdf3b709a9-cgu.014.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(compiler_builtins-bb76018b1173caf6.compiler_builtins.bb2d8bfdf3b709a9-cgu.160.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(compiler_builtins-bb76018b1173caf6.compiler_builtins.bb2d8bfdf3b709a9-cgu.166.rcgu.o) unable to open object file: No such file or directory
+warning: (arm64) /Volumes/PkgBuild/work/1793045109-362c7021c79baa3a/packages/sonoma-arm64/results/4.6/mixeff.Rcheck/00_pkg_src/mixeff/src/./rust/target/release/libmixeff.a(compiler_builtins-bb76018b1173caf6.compiler_builtins.bb2d8bfdf3b709a9-cgu.212.rcgu.o) unable to open object file: No such file or directory
+** R
+** inst
+** byte-compile and prepare package for lazy loading
+** help
+*** installing help indices
+** building package indices
+** installing vignettes
+** testing if installed package can be loaded from temporary location
+** checking absolute paths in shared objects and dynamic libraries
+** testing if installed package can be loaded from final location
+** testing if installed package keeps a record of temporary installation path
+* DONE (mixeff)

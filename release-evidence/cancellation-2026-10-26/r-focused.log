@@ -1,0 +1,105 @@
+
+Attaching package: 'mixeff'
+
+The following object is masked from 'package:testthat':
+
+    compare
+
+The following object is masked from 'package:stats':
+
+    step
+
+v | F W  S  OK | Context
+
+/ |          0 | benchmarking-vignette                                          
+- |          1 | benchmarking-vignette                                          2026-10-26 15:26:59.099 R[74509:8744034] XType: Using static font registry.
+
+/ |          4 | benchmarking-vignette                                          
+v |         24 | benchmarking-vignette [2.6s]
+
+/ |          0 | checklist-inference-features                                   
+- |          1 | checklist-inference-features                                   
+| |         15 | checklist-inference-features                                   
+/ |         20 | checklist-inference-features                                   
+- |         33 | checklist-inference-features                                   
+| |         43 | checklist-inference-features                                   
+\ |         50 | checklist-inference-features                                   
+\ |         58 | checklist-inference-features                                   
+/ |         80 | checklist-inference-features                                   
+| |         83 | checklist-inference-features                                   
+| |         95 | checklist-inference-features                                   
+- |        105 | checklist-inference-features                                   
+| |        119 | checklist-inference-features                                   
+v |        119 | checklist-inference-features [3.0s]
+
+/ |          0 | coverage-gate-2                                                
+\ |         22 | coverage-gate-2                                                
+- |         57 | coverage-gate-2                                                
+\ |         86 | coverage-gate-2                                                
+\ |        118 | coverage-gate-2                                                
+- |        141 | coverage-gate-2                                                
+\ |        170 | coverage-gate-2                                                
+/ |        192 | coverage-gate-2                                                
+\ |        210 | coverage-gate-2                                                
+/ |        240 | coverage-gate-2                                                
+v |        258 | coverage-gate-2 [1.0s]
+
+/ |          0 | coverage-gate-3                                                
+/ |         24 | coverage-gate-3                                                
+| |         47 | coverage-gate-3                                                
+- |         69 | coverage-gate-3                                                
+/ |         80 | coverage-gate-3                                                
+/ |        104 | coverage-gate-3                                                
+| |        123 | coverage-gate-3                                                
+\ |        146 | coverage-gate-3                                                
+/ |        164 | coverage-gate-3                                                
+v |        184 | coverage-gate-3
+
+/ |          0 | coverage-gate-4                                                
+| |         23 | coverage-gate-4                                                
+| |         51 | coverage-gate-4                                                
+\ |         78 | coverage-gate-4                                                
+- |        101 | coverage-gate-4                                                
+\ |        130 | coverage-gate-4                                                Running 200 bootstrap refits in a single native call with no progress output; expect roughly 200 x the cost of one fit. Silence this message with mm_control(verbose = -1).
+
+v |        150 | coverage-gate-4
+
+/ |          0 | coverage-gate                                                  
+\ |         26 | coverage-gate                                                  
+| |         47 | coverage-gate                                                  
+\ |         62 | coverage-gate                                                  
+/ |         84 | coverage-gate                                                  
+| |        115 | coverage-gate                                                  
+v |        121 | coverage-gate
+
+/ |          0 | doc-claims                                                     
+v |         14 | doc-claims
+
+/ |          0 | fit-handle                                                     
+| |         11 | fit-handle                                                     
+- |         41 | fit-handle                                                     
+- |         57 | fit-handle                                                     
+- |         81 | fit-handle                                                     
+- |         93 | fit-handle                                                     
+\ |        102 | fit-handle                                                     
+- |        105 | fit-handle                                                     
+\ |        106 | fit-handle                                                     
+| |        111 | fit-handle                                                     
+/ |        112 | fit-handle                                                     
+- |        117 | fit-handle                                                     
+\ |        118 | fit-handle                                                     
+| |        123 | fit-handle                                                     
+/ |        124 | fit-handle                                                     
+v |        128 | fit-handle [7.3s]
+
+/ |          0 | fitted-state                                                   
+| |         19 | fitted-state                                                   
+- |         41 | fitted-state                                                   
+v |         43 | fitted-state
+
+== Results =====================================================================
+Duration: 16.7 s
+
+[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1041 ]
+Warning message:
+package 'testthat' was built under R version 4.5.2 

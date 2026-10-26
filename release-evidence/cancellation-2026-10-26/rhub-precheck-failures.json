@@ -1,0 +1,90 @@
+[
+  {
+    "status": "fulfilled",
+    "value": {
+      "job_id": 121805237988,
+      "run_id": 40389108548,
+      "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+      "log_bytes": 75555,
+      "failure_lines": [
+        "2026-10-26T19:43:26.6491788Z tar (child): xz: Cannot exec: No such file or directory",
+        "2026-10-26T19:43:26.6509366Z Error: vendor.tar.xz lacks vendor/ root",
+        "2026-10-26T19:43:26.6621796Z ##[error]Process completed with exit code 1."
+      ]
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "job_id": 121805238095,
+      "run_id": 40389108548,
+      "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+      "log_bytes": 72024,
+      "failure_lines": [
+        "2026-10-26T19:43:09.4778955Z tar (child): xz: Cannot exec: No such file or directory",
+        "2026-10-26T19:43:09.4796036Z Error: vendor.tar.xz lacks vendor/ root",
+        "2026-10-26T19:43:09.4907152Z ##[error]Process completed with exit code 1."
+      ]
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "job_id": 121805238097,
+      "run_id": 40389108548,
+      "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+      "log_bytes": 77361,
+      "failure_lines": [
+        "2026-10-26T19:43:20.4790203Z tar (child): xz: Cannot exec: No such file or directory",
+        "2026-10-26T19:43:20.4817881Z Error: vendor.tar.xz lacks vendor/ root",
+        "2026-10-26T19:43:20.4984803Z ##[error]Process completed with exit code 1."
+      ]
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "job_id": 121805238305,
+      "run_id": 40389108548,
+      "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+      "log_bytes": 71787,
+      "failure_lines": [
+        "2026-10-26T19:43:09.6284524Z LAPACK: /opt/R/devel-rchk/lib/R/lib/libRlapack.so;  LAPACK version 3.12.1",
+        "2026-10-26T19:43:09.9653902Z [1] \"/opt/R/devel-rchk/lib/R/lib/libRlapack.so\"",
+        "2026-10-26T19:43:10.9207881Z tar (child): xz: Cannot exec: No such file or directory",
+        "2026-10-26T19:43:10.9223083Z Error: vendor.tar.xz lacks vendor/ root",
+        "2026-10-26T19:43:10.9333206Z ##[error]Process completed with exit code 1."
+      ]
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "job_id": 121805238005,
+      "run_id": 40389108548,
+      "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+      "log_bytes": 1153596,
+      "failure_lines": [
+        "2026-10-26T19:45:20.8088057Z Error: package or namespace load failed for ‘lme4’ in dyn.load(file, DLLpath = DLLpath, ...):",
+        "2026-10-26T19:45:20.8090426Z   libRlapack.so: cannot open shared object file: No such file or directory",
+        "2026-10-26T19:45:20.8091623Z ERROR: lazy loading failed for package ‘lmerTest’",
+        "2026-10-26T19:45:20.9361984Z ##[error]Process completed with exit code 1."
+      ]
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "job_id": 121805238096,
+      "run_id": 40389108548,
+      "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+      "log_bytes": 1134901,
+      "failure_lines": [
+        "2026-10-26T19:44:28.3910546Z Error: package or namespace load failed for ‘lme4’ in dyn.load(file, DLLpath = DLLpath, ...):",
+        "2026-10-26T19:44:28.3912697Z   libRlapack.so: cannot open shared object file: No such file or directory",
+        "2026-10-26T19:44:28.3913863Z ERROR: lazy loading failed for package ‘lmerTest’",
+        "2026-10-26T19:44:28.4272694Z ##[error]Process completed with exit code 1."
+      ]
+    }
+  }
+]

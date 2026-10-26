@@ -1,0 +1,77 @@
+Resetting rust
+gcc -o watchdog src/watchdog.c -O3
+gcc -o sched src/sched.c -O3
+gcc -Wall -o should_build src/should_build.c -O3
+mkdir CRAN.meta
+mkdir -p CRAN/src/contrib
+*** use 'sync.bioc.in' to run CRAN+BioC sync
+/Library/Developer/CommandLineTools/usr/bin/make  -C CRAN -f ../Makefile.CRAN cache
+ln -s ../CRAN.meta meta
+mkdir -p meta/src/contrib
+tar fxzO src/contrib/mixeff_0.2.0.tar.gz `echo src/contrib/mixeff_0.2.0.tar.gz | sed -e 's:.*/::' -e 's:_.*::'`/DESCRIPTION > meta/src/contrib/mixeff_0.2.0.DESCRIPTION
+../rmdup 'meta/src/contrib/*.DESCRIPTION'
+RBUILDS: /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages
+base: /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN
+sources: /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/src/contrib
+meta: /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/meta/src/contrib
+RBIN: R
+CLANGPATH: 
+minos target: macOS 14.0 (darwin23)
+SDK: 14.4 (MacOSX14.sdk)
+ [X11] Existing session at /var/run/com.apple.launchd.2kC1trQE5V/org.xquartz:0
+R version 4.6.1
+ SKIP_CHK: no
+ CHK_ONLY: no
+ UPDATE  : no
+OUTPUT:
+  Rlib: /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/sonoma-arm64/Rlib/4.6
+  bin : /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/sonoma-arm64/bin/4.6
+  res : /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/sonoma-arm64/results/4.6
+RLIBS=/Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/sonoma-arm64/Rlib/4.6:/Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/sonoma-arm64/CRANlib/4.6
+2026-10-27 08:41:50.968 system_profiler[78488:38295452] hw.cpufamily: 0x1b588bb3
+2026-10-27 08:41:51.065 system_profiler[78492:38295468] hw.cpufamily: 0x1b588bb3
+2026-10-27 08:41:51.158 system_profiler[78496:38295482] hw.cpufamily: 0x1b588bb3
+2026-10-27 08:41:51.261 system_profiler[78500:38295496] hw.cpufamily: 0x1b588bb3
+Machine : Mac mini, Apple M1 
+System  : macOS 26.6 (25G72)
+Profile : r-release-macosx-arm64
+SDK     : macOS 14.4 (C compiler: clang-1700.6.3.2, FORTRAN compiler: GNU Fortran (GCC) 14.2.0)
+
+Building package dependency tree..
+(from /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/src/contrib)
+./dtree --desc /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/meta/src/contrib /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/src/contrib > /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/dep.list
+NOTE: there is no source for package broom [broom], installed CRAN version will be used.
+NOTE: there is no source for package broom.mixed [broom.mixed], installed CRAN version will be used.
+NOTE: there is no source for package generics [generics], installed CRAN version will be used.
+NOTE: there is no source for package insight [insight], installed CRAN version will be used.
+NOTE: there is no source for package ggplot2 [ggplot2], installed CRAN version will be used.
+NOTE: there is no source for package emmeans [emmeans], installed CRAN version will be used.
+NOTE: there is no source for package estimability [estimability], installed CRAN version will be used.
+NOTE: there is no source for package jsonvalidate [jsonvalidate], installed CRAN version will be used.
+NOTE: there is no source for package knitr [knitr], installed CRAN version will be used.
+NOTE: there is no source for package lme4 [lme4], installed CRAN version will be used.
+NOTE: there is no source for package lmerTest [lmerTest], installed CRAN version will be used.
+NOTE: there is no source for package parallel [parallel], installed CRAN version will be used.
+NOTE: there is no source for package pbkrtest [pbkrtest], installed CRAN version will be used.
+NOTE: there is no source for package performance [performance], installed CRAN version will be used.
+NOTE: there is no source for package pkgload [pkgload], installed CRAN version will be used.
+NOTE: there is no source for package processx [processx], installed CRAN version will be used.
+NOTE: there is no source for package reformulas [reformulas], installed CRAN version will be used.
+NOTE: there is no source for package rextendr [rextendr], installed CRAN version will be used.
+NOTE: there is no source for package rmarkdown [rmarkdown], installed CRAN version will be used.
+NOTE: there is no source for package statmod [statmod], installed CRAN version will be used.
+NOTE: there is no source for package testthat [testthat], installed CRAN version will be used.
+NOTE: there is no source for package jsonlite [jsonlite], installed CRAN version will be used.
+NOTE: there is no source for package Matrix [Matrix], installed CRAN version will be used.
+NOTE: there is no source for package rlang [rlang], installed CRAN version will be used.
+Checking all packages..
+1793043712:20261027:084152:mixeff:
+  /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/src/contrib/mixeff_0.2.0.tar.gz
+ - looking for /Volumes/PkgBuild/work/1793043689-289e7ae870e19c75/packages/CRAN/meta/src/contrib/mixeff_0.2.0.DESCRIPTION
+ - using cached DESCRIPTION file for detection
+  - unpacking
+  - checking mixeff 
+  - installing from sources
+* installing *binary* package ‘mixeff’ ...
+* package ‘mixeff’ successfully unpacked and SHA256 sums checked
+* DONE (mixeff)

@@ -1,0 +1,72 @@
+{
+  "source_commit": "806528106473594aa7342c6585c2b56be5ed2649",
+  "engine_pin": "004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b",
+  "tarball_sha256": "a742c9973c1ed64a04d7d3aad3f1088cf53ff4c37cd14f1758c5539995ec0881",
+  "tarball_bytes": 6807157,
+  "full_gate": {
+    "result": "PASS",
+    "passed_steps": 14,
+    "failed_steps": 0,
+    "skipped_steps": 0,
+    "seconds": 2198
+  },
+  "as_cran": {
+    "errors": 0,
+    "warnings": 0,
+    "notes": 1
+  },
+  "hostile_PATH": "external tar refuses vendor.tar.xz, external xz always exits98",
+  "session": 94576,
+  "log": "/private/tmp/mixeff-cancellation-20261026-VIY20f/portable-release-gate.log",
+  "mac_builder_url": "https://mac.R-project.org/macbuilder/results/1793045109-362c7021c79baa3a/",
+  "mac_builder_result": {
+    "status": "OK",
+    "errors": 0,
+    "warnings": 0,
+    "notes": 0
+  },
+  "win_devel_retry": {
+    "state": "timeout_without_retry",
+    "session": 39386,
+    "timeout_seconds": 1800,
+    "attempts_after_queue_clears": 1,
+    "log": "/private/tmp/mixeff-cancellation-20261026-VIY20f/portable-builder/win-devel-queue-wait.log",
+    "exit_status": 3
+  },
+  "extended_suite": {
+    "passed": 6881,
+    "failed": 0,
+    "warnings": 0,
+    "skips": 3,
+    "unexpected_skips": 0,
+    "seconds": 997
+  },
+  "release_blocker": {
+    "issue": "bd-01M5WXZQV8HV23ZEERAGRYQEGB",
+    "kind": "MKL Brown standard-deviation parity failure",
+    "failed_job": 121805238156,
+    "diagnostic_run": 40398326331,
+    "diagnostic_branch": "audit/mkl-parity-20261026",
+    "diagnostic_commit": "3f8051b162410453dec98ebd106be7d799dd07ab",
+    "local_matched_lme4": "2.1-0",
+    "local_reference_sd": 14.71973,
+    "local_mixeff_sd": 14.707846,
+    "remote_reference_sd_rounded": 8.2,
+    "tolerances_changed": false,
+    "standalone_MKL_probe": "agrees; original failure remains unresolved",
+    "instrumented_full_MKL_check": {
+      "run": 40398326331,
+      "status": "OK",
+      "reference_sd": 14.719799017195525,
+      "mixeff_sd": 14.707846344965146,
+      "reference_common_objective": 302385.6692145177,
+      "mixeff_common_objective": 302385.6692150966,
+      "interpretation": "Non-reproduction; original failure remains unresolved"
+    }
+  },
+  "publication": {
+    "pr": 6,
+    "state": "open",
+    "merge_attempt": "GitHub405: requires one approving review with write access"
+  }
+}

@@ -1,0 +1,296 @@
+
+== vendor: license notice current ==
+[PASS] vendor: license notice current
+NULL
+
+== vendor: snapshot drift ==
+[PASS] vendor: snapshot drift
+NULL
+
+== R CMD build (release tarball) ==
+[PASS] R CMD build (release tarball) -- mixeff_0.2.0.tar.gz
+NULL
+
+== cran-comments.md tarball size current ==
+[PASS] cran-comments.md tarball size current -- updated 6805036 -> 6807157 bytes
+NULL
+
+== R CMD check --as-cran (built tarball) ==
+[PASS] R CMD check --as-cran (built tarball) -- 0E/0W/1N
+NULL
+
+== install built tarball ==
+[PASS] install built tarball
+NULL
+
+== lint_package == 0 ==
+[PASS] lint_package == 0 -- 0 lint(s)
+NULL
+
+== suite + error-UX + schema/manifest ==
+
+Attaching package: 'mixeff'
+
+The following object is masked from 'package:testthat':
+
+    compare
+
+The following object is masked from 'package:stats':
+
+    step
+
+2026-10-26 16:17:06.087 R[55213:8973904] XType: Using static font registry.
+Running 200 bootstrap refits in a single native call with no progress output; expect roughly 200 x the cost of one fit. Silence this message with mm_control(verbose = -1).
+boundary (singular) fit: see help('isSingular')
+NOTE: Results may be misleading due to involvement in interactions
+NOTE: Results may be misleading due to involvement in interactions
+NOTE: Results may be misleading due to involvement in interactions
+NOTE: Results may be misleading due to involvement in interactions
+NOTE: Results may be misleading due to involvement in interactions
+NOTE: Results may be misleading due to involvement in interactions
+NOTE: Results may be misleading due to involvement in interactions
+NOTE: Results may be misleading due to involvement in interactions
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 20; min rows/group: 6; median rows/group: 6
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 15; min rows/group: 4; median rows/group: 4
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 10; median rows/group: 10
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+method = "joint_laplace" optimizes to an engine-chosen budget in a single native call with no progress output; large fits can take minutes. Cap the budget with mm_control(max_feval = ) if needed. Silence this message with mm_control(verbose = -1).
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 10; median rows/group: 10
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 10; median rows/group: 10
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 10; median rows/group: 10
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 10; median rows/group: 10
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: wait_choice ~ 1 + Enjoyment_centered + (1 | ID)
+
+Random effects:
+  r0:
+    wrote:      (1 | ID)
+    canonical:  (1 | ID)
+    named form: re(group = ID, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `ID` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 37; min rows/group: 19; median rows/group: 39
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `Enjoyment_centered` varies within `ID`, so a `ID`-level slope is structurally possible
+method = "joint_laplace" optimizes to an engine-chosen budget in a single native call with no progress output; large fits can take minutes. Cap the budget with mm_control(max_feval = ) if needed. Silence this message with mm_control(verbose = -1).
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 5; median rows/group: 5
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 5; median rows/group: 5
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 12; min rows/group: 10; median rows/group: 10
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+method = "joint_laplace" optimizes to an engine-chosen budget in a single native call with no progress output; large fits can take minutes. Cap the budget with mm_control(max_feval = ) if needed. Silence this message with mm_control(verbose = -1).
+refitting model(s) with ML (instead of REML)
+refitting model(s) with ML (instead of REML)
+refitting model(s) with ML (instead of REML)
+refitting model(s) with ML (instead of REML)
+boundary (singular) fit: see help('isSingular')
+Random effects explanation:
+  formula: y ~ 1 + x + (1 | g)
+
+Random effects:
+  r0:
+    wrote:      (1 | g)
+    canonical:  (1 | g)
+    named form: re(group = g, intercept = TRUE, slopes = NULL, cov = "scalar")
+    scope:      `g` units may differ in average outcome.
+    covariance: scalar; theta parameters: 1
+    support:    sufficient; group levels: 20; min rows/group: 15; median rows/group: 15
+    variation:  intercept=not_assessed
+
+Design notes:
+  scope_note: `x` varies within `g`, so a `g`-level slope is structurally possible
+Random effects explanation:
+  formula: Reaction ~ 1 + Days + (1 + Days | Subject)
+
+Random effects:
+  r0:
+    wrote:      (Days | Subject)
+    canonical:  (1 + Days | Subject)
+    named form: re(group = Subject, intercept = TRUE, slopes = Days, cov = "full")
+    scope:      `Subject` units differ in baseline and `Days` slope; the model estimates whether these are associated.
+    covariance: full; theta parameters: 3
+    support:    sufficient; group levels: 18; min rows/group: 10; median rows/group: 10
+    variation:  Days=present; intercept=not_assessed
+Coercing factor response 'r2' to 0/1: treating 'Y' as 1 (success).
+[PASS] suite green (slow-parity + aphantasia tiers ON) -- 6881 pass / 0 fail / 3 skip in 997s
+[PASS] suite has no unhandled warnings -- 0 warning(s)
+[PASS] error-UX battery present
+[PASS] schema/manifest tests present
+[PASS] release-candidate: skips all allowlisted -- 3 skip(s), 0 outside allowlist
+NULL
+
+== aphantasia vignette (live) ==
+[PASS] aphantasia vignette (live) -- reproducing-aphantasia.html
+NULL
+
+== no-network source install ==
+[PASS] no-network source install
+NULL
+
+# mixeff release gate -- 0.2.0
+mode: release-candidate
+commit: 806528106473594aa7342c6585c2b56be5ed2649
+mixeff-rs pin: 004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b
+tarball: mixeff_0.2.0.tar.gz (6807157 bytes)
+tarball sha256: a742c9973c1ed64a04d7d3aad3f1088cf53ff4c37cd14f1758c5539995ec0881
+src/rust/vendor.tar.xz sha256: 6d012b636357cd4cc4ad75daf77d10bdc3acca4ab9fc5a56f446a788af26403a
+upstream Cargo.lock sha256: 2e0a37036734b2bc7aedb239d3d1983e13889002f3bc3d7924a54edb5f943abc
+R: R version 4.5.1 (2025-06-13) (aarch64-apple-darwin20)
+rustc: rustc 1.91.1 (ed61e7d7e 2025-11-07) | cargo: cargo 1.91.1 (ea2d97820 2025-10-10)
+elapsed: 2198s | PASS 14  FAIL 0  SKIP 0
+
+- [PASS] vendor: license notice current
+- [PASS] vendor: snapshot drift
+- [PASS] R CMD build (release tarball) -- mixeff_0.2.0.tar.gz
+- [PASS] cran-comments.md tarball size current -- updated 6805036 -> 6807157 bytes
+- [PASS] R CMD check --as-cran (built tarball) -- 0E/0W/1N
+- [PASS] install built tarball
+- [PASS] lint_package == 0 -- 0 lint(s)
+- [PASS] suite green (slow-parity + aphantasia tiers ON) -- 6881 pass / 0 fail / 3 skip in 997s
+- [PASS] suite has no unhandled warnings -- 0 warning(s)
+- [PASS] error-UX battery present
+- [PASS] schema/manifest tests present
+- [PASS] release-candidate: skips all allowlisted -- 3 skip(s), 0 outside allowlist
+- [PASS] aphantasia vignette (live) -- reproducing-aphantasia.html
+- [PASS] no-network source install
+
+Acceptance artifact: /private/tmp/mixeff-cancellation-20261026-VIY20f/portable/release-gate-report.txt

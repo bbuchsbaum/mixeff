@@ -1,0 +1,16 @@
+{
+  "builder": "mac-devel",
+  "submitted_utc": "2026-10-26 19:41:24",
+  "tarball_sha256": "722f88db7b71561870c7979a7e34e469f7fcbfbc3e51d14166fe3c89dad575c7",
+  "bytes": 6806958,
+  "status_code": 200,
+  "response": {
+    "submitted": true,
+    "id": "1793043689-289e7ae870e19c75",
+    "package": "mixeff",
+    "version": "0.2.0",
+    "rflavor": "r-devel",
+    "rfw": "4.6",
+    "url": "https://mac.R-project.org/macbuilder/results/1793043689-289e7ae870e19c75/"
+  }
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "job_id": 121798430117,
+    "url": "https://github.com/bbuchsbaum/mixeff/actions/runs/40387177326/job/121798430117",
+    "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+    "log_bytes": 976901,
+    "summary_lines": [
+      "2026-10-26T19:45:55.9088610Z Status: OK",
+      "2026-10-26T19:45:56.2659490Z 0 errors ✔ | 0 warnings ✔ | 0 notes ✔"
+    ]
+  },
+  {
+    "job_id": 121798428434,
+    "url": "https://github.com/bbuchsbaum/mixeff/actions/runs/40387176916/job/121798428434",
+    "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+    "log_bytes": 1281275,
+    "summary_lines": [
+      "2026-10-26T19:42:29.4342087Z [ FAIL 0 | WARN 0 | SKIP 9 | PASS 6758 ]",
+      "2026-10-26T19:45:17.9749698Z offline source install passed: mixeff_0.2.0.tar.gz"
+    ]
+  }
+]

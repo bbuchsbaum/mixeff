@@ -1,0 +1,39 @@
+   Compiling mixeff-rs v1.0.0-rc.5 (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine)
+warning: constant `R_HOST_X87_CONTROL_WORD` is never used
+   --> src/parallel.rs:202:7
+    |
+202 | const R_HOST_X87_CONTROL_WORD: u16 = 0x037F;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `mixeff-rs` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.95s
+     Running unittests src/lib.rs (target/debug/deps/mixeff_rs-da7d7fa5727556c7)
+
+running 22 tests
+test model::linear::snapshot::tests::ordinary_lmm_rejects_mutated_working_state ... ok
+test model::linear::snapshot::tests::review_snapshot_preserves_optimizer_strategy_controls ... ok
+test model::linear::snapshot::tests::snapshot_preserves_boundary_fit_and_conditional_queries ... ok
+test model::linear::snapshot::tests::snapshot_preserves_fixed_sampling_variance_semantics ... ok
+test model::linear::snapshot::tests::snapshot_replays_reduced_construction_and_final_factorization_policy ... ok
+test model::linear::snapshot::tests::snapshot_restores_weighted_transformed_refit_without_optimizer ... ok
+test model::snapshot::finite::tests::rejects_nonfinite_optional_evidence_before_json_discards_it ... ok
+test model::snapshot::tests::snapshot_integrity_covers_exact_payload_bytes_and_model_kind ... ok
+test model::snapshot::tests::snapshot_refuses_missing_and_incompatible_envelopes ... ok
+test model::linear::snapshot::tests::snapshot_requires_known_optimizer_strategy_controls ... ok
+test model::linear::snapshot::tests::snapshot_preserves_ordered_and_unordered_custom_contrasts ... ok
+test model::linear::snapshot::tests::snapshot_refuses_missing_or_contradictory_fit_evidence ... ok
+test model::generalized::snapshot::tests::snapshot_restores_fixed_negative_binomial_state_without_optimizer ... ok
+test model::generalized::snapshot::tests::snapshot_restores_joint_agq_without_optimizer ... ok
+test model::linear::snapshot::tests::snapshot_strategy_controls_survive_native_refits ... ok
+test model::generalized::snapshot::tests::snapshot_refuses_public_glmm_response_mutation ... ok
+test model::generalized::snapshot::tests::snapshot_restores_weighted_offset_glmm_without_optimizer ... ok
+test model::generalized::snapshot::tests::glmm_working_state_cannot_be_restored_as_a_standalone_lmm ... ok
+test model::generalized::snapshot::tests::restore_rejects_typed_glmm_parameter_and_metadata_corruption ... ok
+test model::generalized::snapshot::tests::snapshot_preserves_glmm_working_optimizer_strategies_and_refits ... ok
+test model::generalized::snapshot::tests::snapshot_preserves_fast_pirls_and_gamma_dispersion_queries ... ok
+test model::generalized::snapshot::tests::snapshot_restores_estimated_negative_binomial_state_without_optimizer ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 931 filtered out; finished in 4.01s
+

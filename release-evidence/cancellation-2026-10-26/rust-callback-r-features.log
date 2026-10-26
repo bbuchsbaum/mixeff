@@ -1,0 +1,10 @@
+   Compiling mixeff-rs v1.0.0-rc.5 (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.62s
+     Running tests/restored_interrupt_callback.rs (target/debug/deps/restored_interrupt_callback-e69e62859766b82a)
+
+running 2 tests
+test restored_lmm_reattaches_interrupt_without_changing_fitted_state ... ok
+test restored_glmm_reattaches_interrupt_without_changing_fitted_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+

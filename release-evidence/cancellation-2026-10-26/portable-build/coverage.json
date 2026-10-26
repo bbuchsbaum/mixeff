@@ -1,0 +1,11 @@
+{
+  "head": "806528106473594aa7342c6585c2b56be5ed2649",
+  "job_id": 121810206674,
+  "run_id": 40390580456,
+  "conclusion": "success",
+  "summary_lines": [
+    "2026-10-26T20:05:36.1907975Z mixeff Coverage: 94.20%",
+    "2026-10-26T20:05:37.2877937Z Overall coverage: 94.2%",
+    "2026-10-26T20:05:44.7604761Z Overall package coverage: 94.2%"
+  ]
+}

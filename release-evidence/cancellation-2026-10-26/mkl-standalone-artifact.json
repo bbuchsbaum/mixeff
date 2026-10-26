@@ -1,0 +1,7 @@
+{
+  "run": 40395281983,
+  "commit": "0e75413b89a08ff181c1f74c4208b27199fabc6d",
+  "artifact": 12687560271,
+  "sha256": "b7386b967f86b7b85d8b7a0fd90d84228faab6189f5cf9d23e5f1e6b551868b3",
+  "outcome": "Does not reproduce failure: reference SD14.719444 vs engine14.707846; common objective excess5.8138e-7. Original check failure remains unresolved."
+}

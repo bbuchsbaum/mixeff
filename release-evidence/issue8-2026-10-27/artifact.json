@@ -1,6 +1,7 @@
 {
   "package": "mixeff",
   "version": "0.2.0",
+  "source_commit": "e7a9e4588cde828d017bc4c08a4c6a0986e8d26c",
   "engine_pin": "a6b644490a8b83cd871045bb7d3e9065315aefab",
   "engine_test_followup": "1539b469d3664c827c9011b69b976995364b7fee",
   "tarball_sha256": "6c1fff4120e978aad334fbc975e2c049341db0c8339fc233a6897f49928f833a",

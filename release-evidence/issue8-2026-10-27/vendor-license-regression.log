@@ -1,0 +1,29 @@
+Cloning into '/private/tmp/mixeff-issue8/vendor-check'...
+done.
+[vendor-rust.R] requested rev: a6b644490a8b83cd871045bb7d3e9065315aefab
+[vendor-rust.R] provenance:    https://github.com/bbuchsbaum/mixeff-rs.git
+[vendor-rust.R] using local peer (has rev): /private/tmp/mixeff-issue8/engine
+[vendor-rust.R] resolved SHA:  a6b644490a8b83cd871045bb7d3e9065315aefab
+[vendor-rust.R] bundled mixeff-rs @ a6b644490a8b (101 files)
+[vendor-rust.R] wrote /private/tmp/mixeff-issue8/vendor-check/src/rust/upstream/mixeff-rs.lock
+[vendor-rust.R] Cargo.toml dep verified -> upstream/mixeff-rs
+[vendor-rust.R] running cargo vendor (this can take a minute)...
+[vendor-rust.R] wrote /private/tmp/mixeff-issue8/vendor-check/src/rust/vendor-config.toml
+[vendor-rust.R] wrote /private/tmp/mixeff-issue8/vendor-check/src/rust/vendor.tar.xz (4.1 MB)
+[vendor-rust.R] done. mixeff-rs @ a6b644490a8b, 76 vendored crates in src/vendor/
+wrote /private/tmp/mixeff-issue8/vendor-check/inst/AUTHORS (88 lines)
+wrote /private/tmp/mixeff-issue8/vendor-check/inst/COPYRIGHTS (190 lines)
+wrote /private/tmp/mixeff-issue8/vendor-check/inst/LICENSE.note
+[vendor-rust.R] next: devtools::check(document = FALSE)
+[vendor-rust.R] COMMIT the regenerated snapshot: src/rust/upstream/,
+                src/rust/vendor.tar.xz, and src/rust/vendor-config.toml
+                are tracked so the repo builds from a clean clone
+                (R-universe). A re-pin that does not re-commit them will
+                break the R-universe build. `git add src/rust/upstream
+                src/rust/vendor.tar.xz src/rust/vendor-config.toml`.
+[vendor-rust.R] REMINDER: you just pulled new engine code. Consult
+                planning/upstream-blocked.md and unblock any downstream
+                beads whose upstream mixeff-rs feature has now shipped
+                (mote ls --tag upstream-blocked).
+inst/LICENSE.note is current
+vendor snapshot current at a6b644490a8b with 4401 archive entries

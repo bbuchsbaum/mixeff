@@ -348,6 +348,13 @@ if (file.exists(attribution)) {
     stop("[vendor-rust.R] generate-crate-attribution.R failed; inst/AUTHORS / inst/COPYRIGHTS not refreshed.")
   }
 }
+# The license inventory also records resolved_sha. Refresh it in the same
+# operation so a successful re-pin cannot retain the previous engine revision.
+license_note <- file.path(pkg_root, "tools", "check-license-note.R")
+status <- system2("Rscript", c(shQuote(license_note), "--write"))
+if (!identical(status, 0L)) {
+  stop("[vendor-rust.R] check-license-note.R failed; inst/LICENSE.note not refreshed.")
+}
 cat("[vendor-rust.R] next: devtools::check(document = FALSE)\n")
 cat(paste0(
   "[vendor-rust.R] COMMIT the regenerated snapshot: src/rust/upstream/,\n",

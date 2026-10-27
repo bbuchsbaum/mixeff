@@ -25,6 +25,9 @@ submission/size; current-time verification unavailable). Tests report 6,268
 passes, 0 failures/test warnings and 62 documented skips. Vignettes and
 examples pass. This is not a refreshed full release gate or external-builder
 receipt; hosted results are recorded on PR 6 and upstream PR 14.
+That tarball belongs to `e7a9e45`, before the generated license notice was
+corrected to name the new pin. The follow-up also automates notice regeneration
+on future engine bumps. Regenerate the final submission artifact and receipts.
 
 ## Current repair candidate
 

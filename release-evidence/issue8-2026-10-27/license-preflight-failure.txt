@@ -1,0 +1,19 @@
+Source: e7a9e4588cde828d017bc4c08a4c6a0986e8d26c
+Hosted release-gate preflight failure; both jobs stopped before package installation.
+
+Job: https://github.com/bbuchsbaum/mixeff/actions/runs/40566213311/job/122408040445
+2026-10-27T19:08:50.7777769Z   R_LIB_FOR_PAK: /opt/R/4.6.1/lib/R/site-library
+2026-10-27T19:08:50.7778051Z ##[endgroup]
+2026-10-27T19:08:51.7785059Z ##[error]Error: inst/LICENSE.note is stale; run tools/check-license-note.R --write
+2026-10-27T19:08:51.7796119Z Execution halted
+2026-10-27T19:08:51.7861972Z ##[error]Process completed with exit code 1.
+2026-10-27T19:08:51.8107267Z Post job cleanup.
+
+Job: https://github.com/bbuchsbaum/mixeff/actions/runs/40566213311/job/122408040117
+2026-10-27T19:08:48.8312180Z   R_LIB_FOR_PAK: C:/R/site-library
+2026-10-27T19:08:48.8320825Z ##[endgroup]
+2026-10-27T19:08:51.3427630Z ##[error]Error: inst/LICENSE.note is stale; run tools/check-license-note.R --write
+2026-10-27T19:08:51.3434018Z Execution halted
+2026-10-27T19:08:51.4284393Z ##[error]Process completed with exit code 1.
+2026-10-27T19:08:51.4533225Z Post job cleanup.
+

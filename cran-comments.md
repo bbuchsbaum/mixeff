@@ -8,6 +8,24 @@ R-universe qualification are outstanding. The MKL mismatch has been reproduced
 and diagnosed as an inferior lme4 reference endpoint; the targeted repair passes its final canonical MKL check.
 PR 6 also requires an approving reviewer with write access before merge.
 
+## Issue 8 follow-up
+
+The scalar-control and joint-Hessian provenance reports also reproduce on the
+PR candidate. Upstream `a6b644490a8b83cd871045bb7d3e9065315aefab` broadcasts
+scalar absolute theta tolerances and initial steps, labels the intentionally
+unassessed optimizer Hessian accurately, and identifies the separate inference
+Hessian. R tests cover scalar/vector equivalence, refits, serialization and
+unchanged fitted numerical values. `assessment/2026-10-27-issue8.md` records
+this follow-up; older checks below retain their stated source/artifact scope.
+The new tarball (SHA-256
+`6c1fff4120e978aad334fbc975e2c049341db0c8339fc233a6897f49928f833a`,
+6,811,893 bytes) passes local macOS arm64 / R 4.5.1
+`R CMD check --as-cran --no-manual`: 0 errors, 0 warnings, 2 notes (new
+submission/size; current-time verification unavailable). Tests report 6,268
+passes, 0 failures/test warnings and 62 documented skips. Vignettes and
+examples pass. This is not a refreshed full release gate or external-builder
+receipt; hosted results are recorded on PR 6 and upstream PR 14.
+
 ## Current repair candidate
 
 `e7697417017e738eb371098a8332ad475740c9d8` validates Brown reference

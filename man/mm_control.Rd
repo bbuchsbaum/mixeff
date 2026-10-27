@@ -27,18 +27,25 @@ advisories).}
 \item{max_feval}{Optional positive integer capping the optimizer's objective
 evaluations. Most useful for \code{\link[=glmm]{glmm()}} with \code{method = "joint_laplace"},
 whose native joint optimizer otherwise runs to an engine-chosen budget.
-\code{NULL} (default) leaves the engine default in place.}
+\code{NULL} (default) leaves the engine default in place. Joint-Laplace fitting
+first runs a profiled initializer; this control is shared by the initializer
+and joint optimizer, not a total wall-time or whole-fit evaluation cap.
+Increasing it can therefore lengthen initialization as well as joint fitting.}
 
 \item{optimizer}{Optional optimizer name, overriding the driver's automatic
 choice. One of \code{"auto"} (default behavior), \code{"bobyqa"}, \code{"newuoa"},
 \code{"cobyla"}, \code{"pattern_search"}, \code{"trust_bq"}, or the PRIMA variants
 (\code{"prima_bobyqa"}, \code{"prima_cobyla"}, \code{"prima_lincoa"}, \code{"prima_newuoa"}).
 An unsupported or not-compiled choice raises a typed error rather than
-silently falling back. \code{NULL}/\code{"auto"} keep automatic selection.}
+silently falling back. The bundled R build excludes NLopt and PRIMA, so
+their named optimizers (including \code{"bobyqa"}) are unavailable in that build.
+\code{NULL}/\code{"auto"} keep automatic selection.}
 
 \item{start}{Optional numeric warm-start vector for the covariance
 parameters (theta). Its length must match the model's theta dimension
-(the engine validates this). \code{NULL} (default) cold-starts.}
+(the engine validates this). This is not a full GLMM beta/theta/mode
+warm start and does not bypass joint-Laplace initialization.
+\code{NULL} (default) cold-starts.}
 
 \item{ftol_rel, ftol_abs}{Optional positive relative/absolute convergence
 tolerances on the objective. \code{NULL} keeps the engine default.}
@@ -51,7 +58,11 @@ optimizer parameters. \code{NULL} keeps the engine default.}
 \code{maxfun}/\code{maxeval} -> \code{max_feval}; \code{ftol_rel}/\code{ftol_abs}/\code{xtol_rel} ->
 the arguments of the same name; \code{xtol_abs} (scalar or one per theta)
 -> the absolute parameter tolerance; \code{rhobeg} (scalar or one per
-theta) -> the optimizer's initial step. Unknown names are refused with
+theta) -> the optimizer's initial step. Scalars are broadcast once the
+theta dimension is known; nonscalar vectors must match it exactly.
+For joint GLMMs these theta controls also apply to the profiled initializer;
+they do not specify absolute tolerances for the joint beta coordinates.
+Unknown names are refused with
 an \code{mm_arg_error} rather than ignored. lme4's \verb{check.conv.*} options
 have no counterpart: mixeff does not emit post-hoc convergence
 warnings; the fit's convergence status is the engine's typed

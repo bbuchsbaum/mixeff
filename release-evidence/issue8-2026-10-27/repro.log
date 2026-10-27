@@ -1,0 +1,80 @@
+
+Attaching package: ‘mixeff’
+
+The following object is masked from ‘package:stats’:
+
+    step
+
+mixeff: 0.2.0 
+RemoteSha: 
+platform: aarch64-apple-darwin20 
+
+Scalar absolute tolerance, documented as allowed:
+failed to fit LMM: Invalid argument: xtol_abs length 1 does not match theta length 2 
+
+Explicit length-two tolerance vector:
+(Intercept)           x 
+  0.2294472   0.4531472 
+optimizer status: converged_interior 
+
+Joint-Laplace diagnostics on a small synthetic binary model:
+[1] "converged_interior"
+$method
+$method$not_available
+$method$not_available$reason
+[1] "active-subspace Hessian could not be computed by the derivative backend"
+
+
+
+$quality
+$quality$unavailable
+$quality$unavailable$reason
+[1] "active-subspace Hessian could not be computed by the derivative backend"
+
+
+
+$min_eigenvalue
+NULL
+
+$condition_number
+NULL
+
+$rank
+NULL
+
+$unavailable
+$unavailable$reason
+[1] "Hessian evidence unavailable; gradient checks alone do not complete derivative certification"
+
+
+$mm_method
+[1] "joint_laplace_active_hessian"
+
+$mm_status
+[1] "available"
+
+$mm_reliability
+[1] "moderate"
+
+R version 4.5.1 (2025-06-13)
+Platform: aarch64-apple-darwin20
+Running under: macOS Sonoma 14.3
+
+Matrix products: default
+BLAS:   /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib 
+LAPACK: /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+time zone: America/Toronto
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] mixeff_0.2.0
+
+loaded via a namespace (and not attached):
+[1] compiler_4.5.1 cli_3.6.6      jsonlite_2.0.0 rlang_1.3.0   

@@ -1,0 +1,1724 @@
+   Compiling mixeff-rs v1.0.0-rc.5 (/private/tmp/mixeff-issue8/engine)
+warning: constant `R_HOST_X87_CONTROL_WORD` is never used
+   --> src/parallel.rs:202:7
+    |
+202 | const R_HOST_X87_CONTROL_WORD: u16 = 0x037F;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `mixeff-rs` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.32s
+     Running unittests src/lib.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/mixeff_rs-8556c768001e40d1)
+
+running 969 tests
+test compiler::artifact::tests::compiled_artifact_policy_updates_reproducibility_thresholds ... ok
+test compiler::artifact::tests::compiled_artifact_builds_theta_maps ... ok
+test compiler::artifact::tests::compiled_artifact_rebuilds_theta_maps_with_optimizer_basis ... ok
+test compiler::artifact::tests::optimizer_basis_column_materialization_handles_factor_expansions ... ok
+test compiler::artifact::tests::split_zerocorr_factor_terms_map_to_expanded_optimizer_basis ... ok
+test compiler::artifact::tests::compiled_artifact_serializes_prefit_inference_table_as_null ... ok
+test compiler::artifact::tests::compiled_artifact_traces_structured_covariance_placeholders ... ok
+test compiler::artifact::tests::compiled_artifact_can_attach_design_audit ... ok
+test compiler::artifact::tests::compiled_artifact_can_disable_policy_recommendations ... ok
+test compiler::artifact::tests::compiled_artifact_exposes_requested_supported_fitted_model_state ... ok
+test compiler::audit::tests::crossed_expansion_covers_marginal_and_cell_paths ... ok
+test compiler::audit::tests::design_audit_emits_scope_note_for_unmodeled_possible_slope ... ok
+test compiler::audit::tests::design_audit_expands_cell_means_categorical_random_basis ... ok
+test compiler::audit::tests::cell_kernel_does_not_cover_crossed_marginal_units ... ok
+test compiler::audit::tests::design_audit_flags_fixed_random_intercept_redundancy ... ok
+test compiler::artifact::tests::compiled_artifact_builds_audit_report ... ok
+test compiler::audit::tests::design_audit_explains_no_intercept_factor_bypasses_explicit_contrast ... ok
+test compiler::audit::tests::design_audit_flags_repeated_unit_without_random_intercept ... ok
+test compiler::audit::tests::design_audit_expands_treatment_coded_categorical_random_basis ... ok
+test compiler::audit::tests::design_audit_flags_rank_deficient_fixed_effects ... ok
+test compiler::audit::tests::design_audit_flags_slope_without_within_group_variation ... ok
+test compiler::audit::tests::design_audit_flags_row_saturated_random_effect_term ... ok
+test compiler::audit::tests::design_audit_flags_structured_covariance_as_parsed_refused ... ok
+test compiler::audit::tests::design_audit_expands_cell_means_interaction_random_basis ... ok
+test compiler::audit::tests::design_audit_flags_zerocorr_factor_decorrelation ... ok
+test compiler::artifact::tests::compiled_artifact_deserializes_missing_inference_table_as_none ... ok
+test compiler::audit::tests::design_audit_reports_cell_grouping_counts ... ok
+test compiler::audit::tests::design_audit_reports_empty_factor_cells ... ok
+test compiler::audit::tests::design_audit_reports_full_rank_fixed_effects ... ok
+test compiler::artifact::tests::compiled_artifact_round_trips_json ... ok
+test compiler::artifact::tests::fixed_effect_inference_table_round_trips_on_artifact ... ok
+test compiler::audit::tests::design_audit_reports_missing_fixed_effect_column ... ok
+test compiler::artifact::tests::compiled_artifact_records_effective_covariance_summary ... ok
+test compiler::artifact::tests::fixed_effect_covariance_matrix_round_trips_on_artifact ... ok
+test compiler::audit::tests::design_audit_reports_median_grouping_count_for_unbalanced_groups ... ok
+test compiler::audit::tests::design_audit_reports_grouping_counts_and_slope_support ... ok
+test compiler::audit::tests::design_audit_reports_sufficient_random_effect_information_budget ... ok
+test compiler::audit::tests::design_audit_reports_split_double_bar_scalar_budgets ... ok
+test compiler::audit::tests::design_audit_reports_weak_scalar_information_budget ... ok
+test compiler::audit::tests::optimizer_certificate_accepts_joint_radius_stop ... ok
+test compiler::audit::tests::optimizer_certificate_accepts_joint_ftol_at_budget_boundary ... ok
+test compiler::audit::tests::design_audit_suppresses_scope_note_when_slope_is_in_split_block ... ok
+test compiler::audit::tests::design_audit_zerocorr_factor_decorrelation_is_silent_without_factor_or_zerocorr ... ok
+test compiler::diagnostics::tests::diagnostic_round_trips_json ... ok
+test compiler::audit::tests::optimizer_certificate_rejects_nonstationary_ftol_stop ... ok
+test compiler::diagnostics::tests::pedagogical_diagnostic_codes_use_stable_snake_case_names ... ok
+test compiler::estimability::tests::fixed_effect_hypothesis_validates_dimensions ... ok
+test compiler::audit::tests::optimizer_certificate_round_trips_json ... ok
+test compiler::estimability::tests::single_coefficient_hypothesis_builds_l_beta_equals_zero ... ok
+test compiler::estimability::tests::typed_estimability_constructors_keep_context_specific_statuses ... ok
+test compiler::explain::tests::explanation_reports_slope_only ... ok
+test compiler::audit::tests::design_audit_interaction_coding_matches_fitted_design ... ok
+test compiler::explain::tests::explanation_runs_without_fitting ... ok
+test compiler::ir::tests::cell_grouping_has_cell_dependence_story ... ok
+test compiler::audit::tests::design_audit_round_trips_json ... ok
+test compiler::ir::tests::compiles_diag_wrapper_as_single_diagonal_block ... ok
+test compiler::ir::tests::compiles_full_intercept_slope_term ... ok
+test compiler::ir::tests::compiles_structured_wrappers_as_typed_covariance_families ... ok
+test compiler::ir::tests::compiles_zero_correlation_as_scalar_block_group ... ok
+test compiler::ir::tests::crossed_star_grouping_compiles_expanded_terms ... ok
+test compiler::ir::tests::emits_conflicting_covariance_diagnostic ... ok
+test compiler::ir::tests::emits_covariance_assumption_for_double_bar_syntax ... ok
+test compiler::ir::tests::emits_covariance_assumption_for_split_random_effect_blocks ... ok
+test compiler::ir::tests::emits_crossed_grouping_canonicalization_diagnostics ... ok
+test compiler::ir::tests::emits_duplicate_random_term_diagnostic ... ok
+test compiler::ir::tests::emits_syntax_expansion_diagnostic_for_crossed_grouping ... ok
+test compiler::ir::tests::emits_syntax_expansion_diagnostic_for_nested_grouping ... ok
+test compiler::ir::tests::preserves_written_source_syntax_when_parser_canonicalizes ... ok
+test compiler::ir::tests::records_slope_only_intercept_omission ... ok
+test compiler::policy::tests::cholesky_zero_pad_tolerance_defaults_and_serializes_when_custom ... ok
+test compiler::policy::tests::as_specified_policy_makes_no_recommendations ... ok
+test compiler::policy::tests::maximal_feasible_does_not_refuse_fit_eligible_few_level_random_intercept ... ok
+test compiler::ir::tests::semantic_model_round_trips_json ... ok
+test compiler::policy::tests::maximal_feasible_drops_unsupported_slope_basis ... ok
+test compiler::policy::tests::maximal_feasible_refuses_random_distribution_with_too_few_levels ... ok
+test compiler::policy::tests::maximal_feasible_reduces_full_covariance_when_correlations_are_too_rich ... ok
+test compiler::print::tests::model_print_caution_boundary_renders_with_next_step ... ok
+test compiler::policy::tests::policy_recommendations_round_trip_json ... ok
+test compiler::print::tests::model_print_certified_fit_omits_next_line ... ok
+test compiler::print::tests::model_print_emits_convergence_line_for_unfitted_artifact ... ok
+test compiler::print::tests::model_print_shows_effective_formula_only_when_it_differs ... ok
+test compiler::print::tests::model_print_structural_failure_renders_failed_with_next_step ... ok
+test compiler::print::tests::model_print_renders_compact_summary_for_unfitted_artifact ... ok
+test compiler::random_term_card::tests::cross_card_constraint_round_trips_json ... ok
+test compiler::print::tests::model_print_truncates_diagnostics_to_top_n ... ok
+test compiler::random_term_card::tests::random_term_card_round_trips_json ... ok
+test compiler::print::tests::parameterization_drilldown_renders_random_term_traces ... ok
+test compiler::report::tests::glmm_artifact_without_verification_suggests_verify_convergence ... ok
+test compiler::report::tests::legacy_not_assessed_check_is_not_invented_as_a_policy_skip ... ok
+test compiler::report::tests::missing_hessian_does_not_certify_all_derivative_checks ... ok
+test compiler::report::tests::next_steps_line_preserves_optimizer_actions_when_no_structural_finding ... ok
+test compiler::report::tests::next_steps_line_suppresses_optimizer_tinkering_on_structural_finding ... ok
+test compiler::policy::tests::maximal_feasible_refuses_row_saturated_random_distribution ... ok
+test compiler::report::tests::double_bar_and_split_blocks_have_structurally_identical_cards ... ok
+test compiler::report::tests::estimator_substitution_renders_in_optimizer_section_and_serializes_optionally ... ok
+test compiler::report::tests::random_term_card_wording_is_nonempty_single_sentence_and_non_moralizing ... ok
+test compiler::report::tests::prefit_canonical_formula_summary_does_not_read_as_instability ... ok
+test compiler::report::tests::report_surfaces_missing_dependence_paths ... ok
+test compiler::report::tests::test_acceptable_stop_with_derivative_mismatch_is_not_optimized ... ok
+test compiler::report::tests::test_unacceptable_stop_promotes_to_non_converged ... ok
+test compiler::report::tests::verdict_boundary_fit_is_caution_optimizer ... ok
+test compiler::report::tests::report_runs_on_unfitted_artifact ... ok
+test compiler::report::tests::verdict_clean_fit_without_verification_is_ok_with_verify_hint ... ok
+test compiler::report::tests::verdict_clean_fit_with_verification_is_certified_clean ... ok
+test compiler::report::tests::random_term_cards_use_semantic_role_origin_side_table ... ok
+test compiler::report::tests::verdict_failed_hessian_is_caution_with_predictor_scaling ... ok
+test compiler::report::tests::verdict_for_unfitted_artifact_is_not_assessed ... ok
+test compiler::report::tests::verdict_fixed_rank_deficient_is_structural ... ok
+test compiler::report::tests::verdict_mixed_picks_structural_next_step ... ok
+test compiler::report::tests::verdict_finite_difference_verified_fit_is_ok_not_certified ... ok
+test compiler::report::tests::incomplete_checks_preserve_execution_state_and_optimizer_success ... ok
+test compiler::report::tests::verdict_separation_is_structural_directs_to_penalty ... ok
+test compiler::report::tests::verdict_row_saturated_re_is_structural_failed ... ok
+test compiler::report::tests::verdict_unacceptable_stop_is_failed ... ok
+test compiler::report::tests::verdict_weak_gradient_suggests_verify_convergence ... ok
+test compiler::report::tests::verdict_round_trips_json ... ok
+test compiler::theta_map::tests::expanded_categorical_basis_preserves_zero_correlation_diagonal_map ... ok
+test compiler::report::tests::report_makes_confounded_ha_quantification_design_readable ... ok
+test compiler::theta_map::tests::expanded_categorical_basis_uses_optimizer_columns_for_full_map ... ok
+test compiler::report::tests::report_round_trips_json ... ok
+test compiler::theta_map::tests::full_cholesky_map_uses_column_major_lower_triangle_order ... ok
+test compiler::theta_map::tests::structured_maps_carry_inactive_placeholder_slots ... ok
+test compiler::theta_map::tests::split_double_bar_maps_are_scalar_slots ... ok
+test compiler::theta_map::tests::theta_map_round_trips_json ... ok
+test compiler::audit::tests::unavailable_derivative_probes_do_not_become_nonfinite_measurements ... ok
+test datasets::tests::case_returns_owned_fit_and_dataframe ... ok
+test datasets::tests::loads_cbpp_glmm ... ok
+test datasets::tests::expected_for_finds_pinned_value ... ok
+test datasets::tests::loads_culcitalogreg_block_design_glmm ... ok
+test datasets::tests::loads_dyestuff_singular_pair ... ok
+test datasets::tests::loads_gopherdat2_offset_glmm ... ok
+test datasets::tests::loads_arabidopsis_overdispersed_poisson ... ok
+test datasets::tests::loads_nested_constant_response_diagnostic_case ... ok
+test datasets::tests::loads_pastes_nested ... ok
+test datasets::tests::loads_penicillin_crossed ... ok
+test datasets::tests::loads_oxide_three_level_nested ... ok
+test datasets::tests::loads_singular_maximal_case ... ok
+test error::tests::mixed_model_error_codes_are_stable_machine_strings ... ok
+test formula::parser::tests::backtick_identifier_allows_reserved_and_digit_starts ... ok
+test formula::parser::tests::backtick_identifier_with_spaces_and_odd_chars ... ok
+test datasets::tests::loads_sleepstudy ... ok
+test datasets::tests::loads_station_season_duration_diagnostic_case ... ok
+test datasets::tests::loads_contraception_hierarchical_binomial ... ok
+test formula::parser::tests::cell_grouping_with_colon ... ok
+test formula::parser::tests::complex_formula ... ok
+test formula::parser::tests::covariance_wrappers_parse_as_random_terms ... ok
+test formula::parser::tests::crossed_random_effects ... ok
+test formula::parser::tests::crossed_star_grouping_expands_to_main_effects_and_cell ... ok
+test formula::parser::tests::dotted_identifier ... ok
+test formula::parser::tests::empty_backtick_is_rejected ... ok
+test formula::parser::tests::empty_rhs_is_rejected ... ok
+test formula::parser::tests::error_empty ... ok
+test formula::parser::tests::error_missing_bar_in_random ... ok
+test formula::parser::tests::error_missing_response ... ok
+test formula::parser::tests::error_no_tilde ... ok
+test formula::parser::tests::error_unmatched_paren ... ok
+test formula::parser::tests::fixed_effects_implicit_intercept ... ok
+test formula::parser::tests::fixed_effects_explicit_intercept ... ok
+test formula::parser::tests::grammar_property_missing_separator_rejected ... ok
+test formula::parser::tests::grammar_property_numeric_literal_term_rejected ... ok
+test formula::parser::tests::grammar_property_trailing_operator_rejected ... ok
+test formula::parser::tests::in_formula_transformation_gives_actionable_refusal ... ok
+test formula::parser::tests::interaction_colon ... ok
+test formula::parser::tests::interaction_grouping ... ok
+test formula::parser::tests::minus_is_top_level_term_removal ... ok
+test formula::parser::tests::minus_on_random_effect_block_rejected ... ok
+test formula::parser::tests::nested_grouping_expands_to_main_and_cell ... ok
+test formula::parser::tests::nesting_slash ... ok
+test formula::parser::tests::minus_removes_interactions_regardless_of_variable_order ... ok
+test formula::parser::tests::no_fixed_intercept_with_random ... ok
+test formula::parser::tests::no_intercept_with_minus_one ... ok
+test formula::parser::tests::only_random_term_implicit_intercept ... ok
+test formula::parser::tests::no_intercept_with_zero ... ok
+test formula::parser::tests::random_intercept_and_slope ... ok
+test formula::parser::tests::random_slope_no_intercept ... ok
+test formula::parser::tests::random_intercept ... ok
+test formula::parser::tests::random_slope_syntax_has_implicit_intercept ... ok
+test formula::parser::tests::star_expansion ... ok
+test formula::parser::tests::stateful_transforms_are_refused_with_actionable_message ... ok
+test formula::parser::tests::stateless_subset_parses_with_canonical_labels ... ok
+test formula::parser::tests::three_way_star_expansion ... ok
+test formula::parser::tests::tokenize_ampersand_grouping ... ok
+test formula::parser::tests::tokenize_double_pipe ... ok
+test formula::parser::tests::tokenize_simple ... ok
+test formula::parser::tests::triple_interaction ... ok
+test formula::parser::tests::underscored_identifier ... ok
+test formula::parser::tests::unterminated_backtick_is_actionable_error ... ok
+test formula::parser::tests::whitespace_handling ... ok
+test formula::parser::tests::zerocorr ... ok
+test formula::terms::tests::test_formula_display_canonicalizes_terms ... ok
+test formula::terms::tests::test_formula_display_handles_zero_correlation_and_group_interactions ... ok
+test formula::transform::tests::backtick_identifier_in_transform ... ok
+test formula::transform::tests::bare_call_log_reaction ... ok
+test formula::transform::tests::canonical_label_drops_whitespace_and_trailing_zero ... ok
+test formula::transform::tests::collision_with_correct_precomputed_column_is_accepted ... ok
+test formula::transform::tests::collision_with_wrong_precomputed_column_is_rejected ... ok
+test formula::transform::tests::deeply_nested_calls_are_refused_not_aborted ... ok
+test formula::transform::tests::empty_i_gives_actionable_error ... ok
+test formula::transform::tests::deeply_nested_parens_are_refused_not_aborted ... ok
+test formula::transform::tests::error_on_categorical_in_arithmetic ... ok
+test formula::transform::tests::error_on_missing_column ... ok
+test formula::transform::tests::error_on_non_finite_result ... ok
+test formula::transform::tests::evaluator_numeric_correctness ... ok
+test formula::transform::tests::explicit_paren_neg_base_parses_and_labels_correctly ... ok
+test formula::transform::tests::forbidden_constructs_are_refused ... ok
+test formula::transform::tests::integral_literal_labels_no_trailing_dot_zero ... ok
+test formula::transform::tests::large_integral_literal_round_trips ... ok
+test formula::transform::tests::negative_literal_power_numeric_correctness ... ok
+test formula::transform::tests::nested_call_sqrt_of_i ... ok
+test formula::transform::tests::parse_and_label_power ... ok
+test formula::transform::tests::nested_parens_precedence ... ok
+test formula::transform::tests::nesting_within_budget_still_parses ... ok
+test formula::transform::tests::parse_and_label_product_and_div_and_neg ... ok
+test formula::transform::tests::pow_is_right_associative ... ok
+test formula::transform::tests::scientific_notation_literal_round_trips_as_float ... ok
+test formula::transform::tests::unary_minus_neg_literal_power ... ok
+test formula::transform::tests::unary_minus_power_canonical_label_round_trips ... ok
+test formula::transform::tests::unary_minus_lower_precedence_than_power ... ok
+test linalg::block_ops::tests::test_copy_scale_inflate_scalar_lambda ... ok
+test linalg::block_ops::tests::test_copy_scale_inflate_zero_lambda ... ok
+test linalg::block_ops::tests::test_copy_rmul_lambda ... ok
+test linalg::block_ops::tests::test_copy_scale_inflate_identity_lambda ... ok
+test linalg::block_ops::tests::test_copy_scale_offdiag ... ok
+test linalg::block_ops::tests::test_lmul_lambda_transpose ... ok
+test linalg::block_ops::tests::test_lmul_lambda_transpose_identity ... ok
+test linalg::block_ops::tests::test_rmul_lambda ... ok
+test linalg::chol_unblocked::tests::test_chol_1x1 ... ok
+test linalg::block_ops::tests::test_rmul_lambda_identity ... ok
+test linalg::chol_unblocked::tests::test_chol_2x2 ... ok
+test linalg::chol_unblocked::tests::test_chol_blocks ... ok
+test linalg::chol_unblocked::tests::test_chol_3x3 ... ok
+test linalg::chol_unblocked::tests::test_chol_diag ... ok
+test linalg::chol_unblocked::tests::test_chol_diag_negative ... ok
+test linalg::chol_unblocked::tests::test_chol_diag_rejects_nan_entry ... ok
+test linalg::chol_unblocked::tests::test_chol_diag_with_zero ... ok
+test linalg::chol_unblocked::tests::test_chol_empty ... ok
+test linalg::chol_unblocked::tests::test_chol_identity ... ok
+test linalg::chol_unblocked::tests::test_chol_not_square ... ok
+test linalg::chol_unblocked::tests::test_chol_rejects_inf_diagonal ... ok
+test linalg::chol_unblocked::tests::test_chol_rejects_nan_diagonal ... ok
+test linalg::chol_unblocked::tests::test_chol_singular_middle_column_clears_column_tail ... ok
+test linalg::chol_unblocked::tests::test_chol_singular_zero_diagonal ... ok
+test linalg::chol_unblocked::tests::test_chol_zero_matrix ... ok
+test linalg::logdet::tests::test_logdet_block_diagonal ... ok
+test linalg::logdet::tests::test_logdet_block_diagonal_empty ... ok
+test linalg::logdet::tests::test_logdet_block_diagonal_single_block ... ok
+test linalg::logdet::tests::test_logdet_block_diagonal_from_chol ... ok
+test linalg::logdet::tests::test_logdet_diag_single ... ok
+test linalg::logdet::tests::test_logdet_diag ... ok
+test linalg::logdet::tests::test_logdet_from_chol ... ok
+test linalg::logdet::tests::test_logdet_triangular_1x1 ... ok
+test linalg::logdet::tests::test_logdet_triangular_known ... ok
+test linalg::logdet::tests::test_logdet_triangular_identity ... ok
+test linalg::pivot::tests::gram_certificate_ambiguous_on_non_finite_or_bad_shape ... ok
+test linalg::pivot::tests::gram_certificate_ambiguous_on_exact_collinearity ... ok
+test linalg::pivot::tests::gram_certificate_ambiguous_inside_safety_margin ... ok
+test linalg::pivot::tests::gram_certificate_certifies_well_conditioned_design ... ok
+test linalg::pivot::tests::gram_certificate_diag_ratio_tracks_pivoted_qr_diag ... ok
+test linalg::logdet::tests::test_logdet_triangular_not_square - should panic ... ok
+test linalg::pivot::tests::gram_certificate_empty_design_is_trivially_certified ... ok
+test linalg::pivot::tests::stats_rank_n_le_2_uses_proven_qr_path ... ok
+test linalg::pivot::tests::rank_deficient_pivot_keeps_earlier_collinear_column_like_r ... ok
+test linalg::pivot::tests::test_pivoted_qr_empty ... ok
+test linalg::pivot::tests::test_pivoted_qr_identity ... ok
+test linalg::pivot::tests::test_pivoted_qr_factorization_reconstructs_permuted_matrix ... ok
+test linalg::pivot::tests::test_pivoted_qr_rank_deficient ... ok
+test linalg::pivot::tests::test_pivoted_qr_rectangular_tall ... ok
+test linalg::pivot::tests::test_pivoted_qr_rectangular_wide ... ok
+test linalg::pivot::tests::test_pivoted_qr_single_column ... ok
+test linalg::pivot::tests::test_pivoted_qr_zero_matrix ... ok
+test linalg::pivot::tests::test_stats_rank_all_zero ... ok
+test linalg::pivot::tests::test_stats_rank_full_rank ... ok
+test linalg::pivot::tests::test_stats_rank_full_rank_intercept_plus_predictor ... ok
+test linalg::pivot::tests::test_stats_rank_intercept_preserved_when_pivot_would_move_it ... ok
+test linalg::pivot::tests::test_stats_rank_dependent_column_matches_lapack_julia ... ok
+test linalg::pivot::tests::test_stats_rank_zero_cols ... ok
+test linalg::pivot::tests::test_stats_rank_rank_deficient ... ok
+test linalg::rank_update::tests::test_rank_update_dense_dimension_mismatch ... ok
+test linalg::pivot::tests::test_stats_rank_qr_missing_cells_relative_order ... ok
+test linalg::rank_update::tests::test_rank_update_dense_identity ... ok
+test linalg::rank_update::tests::test_rank_update_dense_known_values ... ok
+test linalg::rank_update::tests::test_rank_update_dense_rectangular ... ok
+test linalg::rank_update::tests::test_rank_update_diag ... ok
+test linalg::rank_update::tests::test_rank_update_diag_with_scaling ... ok
+test linalg::rank_update::tests::test_rank_update_sparse_dense ... ok
+test linalg::rank_update::tests::test_rank_update_sparse_dense_with_scaling ... ok
+test linalg::rank_update::tests::test_rank_update_sparse_dense_dimension_mismatch ... ok
+test linalg::rank_update::tests::test_rank_update_sparse_symmetric ... ok
+test model::data::tests::add_numeric_rejects_non_finite ... ok
+test model::data::tests::helmert_contrast_matches_r_contr_helmert_4 ... ok
+test model::data::tests::contrast_constructors_reject_under_two_levels ... ok
+test model::data::tests::add_numeric_unchecked_allows_non_finite ... ok
+test model::data::tests::polynomial_contrast_is_orthonormal_and_ordered ... ok
+test model::data::tests::polynomial_contrast_matches_r_contr_poly_4 ... ok
+test model::data::tests::sum_contrast_last_row_is_minus_one ... ok
+test model::data::tests::test_add_categorical_with_contrast_validates_shape_and_names ... ok
+test model::data::tests::test_add_categorical_with_levels_unknown_value_returns_err ... ok
+test model::data::tests::test_add_column_length_mismatch_returns_err ... ok
+test model::data::tests::treatment_contrast_has_zero_reference_row ... ok
+test model::fixed_design::tests::compiled_design_accepts_frontend_supplied_offset_and_weights ... ok
+test model::data::tests::test_cluster_resample_relabels_nested_factors_per_draw ... ok
+test model::fixed_design::tests::compiled_design_fixed_eta_includes_offset_without_dense_materialization ... ok
+test model::fixed_design::tests::compiled_design_validates_shared_observation_count ... ok
+test model::data::tests::test_cluster_resample_relabels_duplicate_clusters ... ok
+test model::fixed_design::tests::dense_backend_cross_products_match_matrix_algebra ... ok
+test model::fixed_design::tests::dense_backend_selects_columns_in_requested_order ... ok
+test model::fixed_design::tests::dense_backend_validates_dimensions ... ok
+test model::fixed_design::tests::dense_summary_reports_materialized_size ... ok
+test model::fixed_design::tests::fixed_design_auto_policy_keeps_small_numeric_design_dense ... ok
+test model::fixed_design::tests::fixed_design_auto_policy_streams_when_dense_bytes_exceed_limit ... ok
+test model::fixed_design::tests::fixed_design_enum_dispatches_to_streamed_backend ... ok
+test model::fixed_design::tests::fixed_design_policy_forces_dense_backend ... ok
+test model::fixed_design::tests::fixed_design_policy_validates_density_threshold ... ok
+test model::fixed_design::tests::fixed_design_policy_forces_streamed_backend ... ok
+test model::fixed_design::tests::fixed_design_rejects_invalid_column_selection ... ok
+test model::fixed_design::tests::no_intercept_first_factor_gets_full_indicator_coding ... ok
+test model::fixed_design::tests::streamed_backend_crosses_random_terms_without_dense_x ... ok
+test model::fixed_design::tests::non_marginal_interaction_matches_r_full_dummy_expansion ... ok
+test model::fixed_design::tests::streamed_backend_matches_dense_cross_products ... ok
+test model::fixed_design::tests::streamed_backend_reports_active_entry_density ... ok
+test model::fixed_design::tests::streamed_backend_row_dot_beta_uses_active_entries_only ... ok
+test model::fixed_design::tests::streamed_backend_selects_columns_without_materializing_dense_x ... ok
+test model::fixed_design::tests::streamed_backend_validates_rows_and_canonicalizes_duplicates ... ok
+test model::fixed_design::tests::streamed_builder_cross_products_match_materialized_formula_design ... ok
+test datasets::tests::every_dataset_has_provenance_and_pinned_fit ... ok
+test model::fixed_design::tests::streamed_builder_matches_dense_interaction_order_and_values ... ok
+test model::fixed_design::tests::streamed_builder_matches_dense_main_effect_treatment_coding ... ok
+test model::fixed_design::tests::streamed_weighted_xtz_matches_dense_weighted_design ... ok
+test model::fixed_design::tests::streamed_weighted_cross_products_match_dense_weighted_design ... ok
+test model::fixed_design::tests::streamed_builder_preserves_feterm_rank_and_pivot_order ... ok
+test model::fixed_design::tests::streamed_weighting_validates_sqrt_weights ... ok
+test model::generalized::certify::tests::intentionally_unassessed_optimizer_hessian_preserves_assessed_quality ... ok
+test model::fixed_design::tests::fixed_design_auto_policy_streams_high_cardinality_factor ... ok
+test model::generalized::dispersion::tests::design_rank_matches_lme4_q_eff ... ok
+test datasets::tests::iter_returns_every_shipped_dataset_in_sorted_order ... ok
+test formula::parser::tests::grammar_property_wellformed_formulas_parse ... ok
+test linalg::pivot::tests::gram_certificate_certifies_high_cardinality_dummy_design ... ok
+test model::generalized::joint::wald_tail_tests::joint_wald_p_values_preserve_representable_normal_tails ... ok
+test model::generalized::pirls::diagonal_block_solve_tests::block_solves_are_bit_identical_to_densified_row_solves ... ok
+test model::generalized::pirls::nested_sparse_regression::large_shape_negative_binomial_deviance_preserves_small_differences ... ok
+test model::generalized::pirls::nested_sparse_regression::fixed_beta_pirls_refuses_invalid_gamma_mean_at_zero_theta ... ok
+test model::generalized::dispersion::tests::design_rank_matches_dense_svd_for_crossed_nested_and_slope_terms ... ok
+test model::generalized::dispersion::tests::surrogate_phi_trajectory_matches_lme4_on_a_long_path ... ok
+test datasets::tests::iter_cases_flattens_all_recommended_fits ... ok
+test datasets::tests::iter_with_tag_and_difficulty_select_correctly ... ok
+test model::generalized::snapshot::tests::snapshot_refuses_public_glmm_response_mutation ... ok
+test model::generalized::snapshot::tests::glmm_working_state_cannot_be_restored_as_a_standalone_lmm ... ok
+test datasets::tests::loads_mrk17_exp1_optimizer_stress ... ok
+test model::generalized::snapshot::tests::snapshot_restores_fixed_negative_binomial_state_without_optimizer ... ok
+test model::generalized::tests::agq_deviance_restores_state_on_normal_path ... ok
+test model::generalized::snapshot::tests::snapshot_restores_weighted_offset_glmm_without_optimizer ... ok
+test model::generalized::tests::aphantasia_primary_joint_laplace_falls_back_to_rx_standard_errors ... ignored
+test model::generalized::tests::binomial_response_counts_above_one_are_refused ... ok
+test model::generalized::tests::agq_restore_guard_restores_state_on_panic ... ok
+test model::generalized::snapshot::tests::restore_rejects_typed_glmm_parameter_and_metadata_corruption ... ok
+test model::generalized::snapshot::tests::snapshot_preserves_glmm_working_optimizer_strategies_and_refits ... ok
+test model::generalized::snapshot::tests::snapshot_restores_joint_agq_without_optimizer ... ok
+test model::fixed_design::tests::streamed_builder_handles_high_cardinality_factor_without_dense_x ... ok
+test datasets::tests::loads_insteval_large_n_crossed ... ok
+test model::generalized::tests::deferred_joint_laplace_inference_is_completed_before_probes ... ok
+test model::generalized::tests::deferred_inspection_sees_invalid_agq_diagnostic_recorded_after_fit ... ok
+test model::generalized::tests::deferred_pirls_certificate_matches_in_place_completion ... ok
+test model::generalized::tests::experimental_joint_cbpp_objective_matches_lme4_at_lme4_parameters ... ok
+test model::generalized::tests::experimental_joint_failed_stop_records_uncertified_certificate ... ok
+test model::generalized::tests::deferred_pirls_certificate_is_completed_by_verification_and_reset_by_refit ... ok
+test model::generalized::tests::fast_glmm_fit_propagates_pirls_host_interrupt_callback_error ... ok
+test model::generalized::tests::fixed_beta_pirls_exits_with_fe_blocks_bit_identical_to_a_full_rebuild ... ok
+test model::generalized::tests::glmm_builder_matches_direct_construction_byte_for_byte ... ok
+test model::generalized::tests::experimental_joint_failed_stop_returns_labelled_fast_pirls_fallback ... ok
+test model::generalized::tests::glmm_fit_metadata_deserializes_legacy_json_without_method_fields ... ok
+test model::generalized::tests::glmm_fit_metadata_records_requested_and_effective_methods ... ok
+test model::generalized::tests::glmm_joint_inference_deferral_cost ... ignored
+test model::generalized::tests::glmm_joint_options_reject_unwired_optimizer_before_fitting ... ok
+test model::generalized::tests::glmm_post_fit_tail_cost ... ignored
+test model::generalized::tests::glmm_refit_cost ... ignored
+test datasets::tests::all_shipped_datasets_load ... ok
+test model::generalized::tests::glmm_verify_convergence_is_not_run_before_fit ... ok
+test model::generalized::tests::glmm_replicate_standard_errors_use_glmm_scale_covariance ... ok
+test model::generalized::tests::glmm_verify_convergence_profiled_restarts_agree ... ok
+test model::generalized::tests::glmm_verify_convergence_joint_restarts_agree ... ok
+test model::generalized::tests::glmm_verify_convergence_reports_estimator_substitution_not_objective_drift ... ok
+test model::generalized::tests::deferred_joint_laplace_inference_prediction_variance_matches_eager ... ok
+test model::generalized::tests::contraception_intercept_fast_pirls_matches_mixedmodels_fast_true_objective ... ok
+test model::generalized::tests::joint_glmm_decrement_certifies_stiff_gradient_and_flags_flat_gap ... ok
+test model::generalized::tests::joint_glmm_diagonal_decrement_is_evidence_only ... ok
+test model::generalized::tests::joint_glmm_escalated_stationarity_pass_certifies_with_evidence_trail ... ok
+test model::generalized::tests::joint_and_fast_fits_leave_fe_blocks_matching_a_forced_rebuild ... ok
+test model::generalized::tests::joint_glmm_ftol_at_budget_boundary_keeps_not_available_joint_candidate ... ok
+test model::generalized::tests::glmm_fast_options_record_caller_native_optimizer_override ... ok
+test model::generalized::tests::joint_glmm_noise_dominated_stationarity_is_not_assessed ... ok
+test model::generalized::tests::joint_glmm_nonfinite_objective_stop_is_not_converged_interior ... ok
+test model::generalized::tests::joint_glmm_not_assessed_stationarity_keeps_joint_candidate ... ok
+test model::generalized::tests::joint_glmm_refit_interrupt_preserves_the_original_template ... ok
+test model::generalized::joint::centered_adoption_tests::centered_adoption_conditional_objective_matches_independent_oracle ... ok
+test model::generalized::tests::joint_glmm_refit_refuses_estimator_substitution ... ok
+test model::generalized::snapshot::tests::snapshot_preserves_fast_pirls_and_gamma_dispersion_queries ... ok
+test model::generalized::tests::joint_glmm_stationarity_failure_is_not_converged_interior ... ok
+test model::generalized::tests::joint_glmm_unavailable_gradient_preserves_assessed_failures ... ok
+test model::generalized::tests::joint_glmm_refit_preserves_caller_optimizer_and_controls ... ok
+test model::generalized::tests::deferred_joint_laplace_inference_across_verification_refit_and_stage_switch ... ok
+test model::generalized::tests::joint_glmm_bootstrap_matches_explicit_joint_replicates ... ok
+test model::generalized::tests::joint_trust_bq_confirmation_rules ... ok
+test model::generalized::tests::joint_trust_bq_propagates_host_interrupt_callback_error ... ok
+test model::generalized::tests::joint_trust_bq_transform_decorrelates_only_well_conditioned_blocks ... ok
+test model::generalized::tests::newton_decrement_block_falls_back_to_diagonal_when_working_curvature_disagrees ... ok
+test model::generalized::tests::newton_decrement_escalated_readings_are_judged_in_gap_units ... ok
+test model::generalized::tests::newton_decrement_handles_bound_active_and_one_sided_coordinates ... ok
+test model::generalized::tests::newton_decrement_recovers_quadratic_gap ... ok
+test model::generalized::tests::newton_decrement_refuses_nonpositive_curvature ... ok
+test model::generalized::tests::profiled_glmm_certificate_records_first_order_evidence_or_explicit_skip ... ok
+test model::generalized::tests::re_only_update_marks_fe_blocks_stale_until_refreshed_or_fully_factored ... ok
+test model::generalized::pirls::nested_sparse_regression::grouseticks_poisson_fit_keeps_sparse_l_blocks ... ok
+test model::generalized::tests::response_constant_cache_key_is_checked_once_per_objective_evaluation ... ok
+test model::generalized::tests::response_constant_cache_matches_uncached_and_follows_the_response ... ok
+test model::generalized::tests::joint_glmm_estimated_negative_binomial_refit_runs_outer_iterations ... ok
+test model::generalized::tests::stateless_transform_glmm_end_to_end ... ok
+test model::generalized::tests::test_cbpp_agq_deviance_uses_case_weights ... ok
+test model::generalized::tests::test_continuous_mixture_quantile_matches_single_normal_reference ... ok
+test model::generalized::tests::test_cbpp_binomial_glmm_with_case_weights ... ok
+test model::generalized::tests::scalar_tolerance_matches_explicit_vector_glmm ... ok
+test model::generalized::tests::test_discrete_mixture_quantile_matches_single_poisson_reference ... ok
+test model::generalized::tests::test_gamma_glmm_fit_estimates_lme4_sigma_dispersion ... ok
+test model::generalized::tests::test_gamma_glmm_near_zero_random_effect_is_diagnostic ... ok
+test model::generalized::tests::test_gamma_glmm_refit_rejects_nonpositive_response ... ok
+test model::generalized::tests::test_gamma_inverse_gaussian_deviance_finite_at_nonpositive_mu ... ok
+test model::generalized::tests::test_gamma_pirls_components_are_link_specific ... ok
+test model::generalized::tests::test_contra_glmm_theta_and_deviance ... ok
+test model::generalized::tests::test_glmm_accepts_near_constant ... ok
+test model::generalized::tests::test_glmm_bernoulli_future_observation_bounds_are_support_points ... ok
+test model::generalized::tests::test_glmm_binomial_future_observation_refused_with_trial_count_reason ... ok
+test model::generalized::tests::joint_fit_propagates_host_interrupts_after_the_profiled_start ... ok
+test model::generalized::tests::test_glmm_compiler_artifact_records_boundary_metadata ... ok
+test model::generalized::tests::test_glmm_constructor_accepts_gamma_with_positive_response ... ok
+test model::generalized::tests::test_glmm_constructor_accepts_normal_nonidentity_dispersion_family ... ok
+test model::generalized::tests::test_glmm_constructor_rejects_nonpositive_gamma_response ... ok
+test model::generalized::tests::test_glmm_constructor_rejects_unsupported_family_link_pairs ... ok
+test model::generalized::tests::test_glmm_constructor_supports_requested_family_link_pairs ... ok
+test model::generalized::tests::test_contra_glmm_nagq_7_deviance ... ok
+test model::generalized::dispersion::tests::surrogate_phi_trajectory_reproduces_the_step_by_step_loop ... ok
+test model::generalized::tests::joint_glmm_newton_decrement_calibration ... ok
+test model::generalized::tests::test_glmm_final_theta_update_propagates_invalid_theta_error ... ok
+test model::generalized::tests::joint_glmm_refit_retains_estimator_for_every_start_and_quadrature ... ok
+test model::generalized::tests::test_glmm_link_scale_rows_do_not_carry_future_observation_columns ... ok
+test model::generalized::tests::test_glmm_bootstrap_does_not_warm_start ... ok
+test model::generalized::tests::test_glmm_new_with_compiler_policy_applies_internal_policy ... ok
+test model::generalized::tests::test_glmm_offset_enters_linear_predictor ... ok
+test model::generalized::tests::test_glmm_offset_validation ... ok
+test model::generalized::tests::test_glmm_pirls_certified_prediction_variance_rows_available ... ok
+test model::generalized::tests::test_glmm_pirls_uncertified_fit_keeps_degraded_with_refit_guidance ... ok
+test model::generalized::tests::test_glmm_predict_new_same_data_matches_fitted_on_response_and_link_scale ... ok
+test model::generalized::tests::test_glmm_predict_new_unseen_levels_follow_policy ... ok
+test model::generalized::tests::test_glmm_deviance_agq_restores_state ... ok
+test model::generalized::tests::test_glmm_predict_new_variance_returns_degraded_working_delta_payload ... ok
+test model::generalized::tests::test_glmm_predict_new_variance_unseen_level_keeps_unavailable_reason ... ok
+test model::generalized::tests::test_glmm_predict_new_with_offset_applies_offset_on_link_scale ... ok
+test model::generalized::tests::test_glmm_profile_likelihood_methods_refuse_with_explicit_reason ... ok
+test model::generalized::tests::test_glmm_rectify_after_fit ... ok
+test model::generalized::snapshot::tests::snapshot_restores_estimated_negative_binomial_state_without_optimizer ... ok
+test model::generalized::tests::test_glmm_fast_false_uses_labelled_joint_or_fallback_path ... ok
+test model::generalized::tests::test_glmm_rejects_constant_response_bernoulli ... ok
+test model::generalized::tests::test_glmm_rejects_constant_response_poisson ... ok
+test model::generalized::tests::test_glmm_nagq_sweep_converges_on_contra ... ok
+test model::generalized::tests::test_glmm_response_scale_confidence_bounds_stay_in_family_range ... ok
+test model::generalized::tests::test_glmm_theta_probe_penalizes_invalid_theta ... ok
+test model::generalized::tests::test_glmm_validate_agq_accepts_single_scalar_re ... ok
+test model::generalized::tests::test_glmm_validate_agq_rejects_multi_term_random_effects ... ok
+test model::generalized::tests::test_glmm_validate_agq_rejects_vector_random_effect ... ok
+test model::generalized::tests::test_glmm_refit_resets_theta_to_initial ... ok
+test model::generalized::tests::test_inverse_gaussian_cdf_matches_scipy_reference ... ok
+test model::generalized::tests::test_matrix_block_diag_covers_all_variants ... ok
+test model::generalized::tests::test_negative_binomial_constructor_requires_fixed_theta ... ok
+test model::generalized::tests::test_glmm_fast_false_nagq_uses_labelled_joint_agq_or_fallback_path ... ok
+test model::generalized::tests::test_negative_binomial_fixed_theta_fit_records_metadata ... ok
+test model::generalized::tests::test_negative_binomial_pirls_uses_fixed_theta_variance ... ok
+test model::generalized::tests::test_pirls_handles_bernoulli_near_separation ... ok
+test model::generalized::tests::test_pirls_handles_poisson_log_extreme_offset_scale ... ok
+test model::generalized::tests::test_pirls_handles_poisson_sqrt_zero_mean_start ... ok
+test model::generalized::tests::test_pirls_no_inf_weight_under_binary_noncanonical_links ... ok
+test model::generalized::tests::test_pirls_no_inf_weight_under_logit ... ok
+test model::generalized::tests::test_pirls_no_iter0_break_on_first_step_halving_slack ... ok
+test model::generalized::tests::test_pirls_working_response_subtracts_offset ... ok
+test model::generalized::tests::test_poisson_glmm_near_zero_random_effect_classifies_boundary ... ok
+test model::generalized::tests::test_standard_normal_ln_cdf_tail_is_continuous_and_consistent ... ok
+test model::generalized::tests::test_negative_binomial_estimated_theta_fit_records_metadata ... ok
+test model::kernel::gradient_oracle_tests::column_oracle_matches_the_model_gradient ... ok
+test model::linear::active_face::tests::face_expansion_reproduces_rank_deficient_covariance ... ok
+test model::generalized::tests::warm_refit_reaches_the_cold_refit_optimum_with_fewer_evaluations ... ok
+test model::linear::blocks::nalgebra_summation_order::wide_xtx_takes_the_blocked_gemm_path_above_the_pinned_width ... ok
+test model::linear::blocks::nalgebra_summation_order::skinny_xtx_is_a_sequential_dot_per_cell_up_to_the_pinned_width ... ok
+test model::linear::blocks::sparse_product_paths::block_matvecs_are_bit_identical_to_the_dense_loops ... ok
+test model::linear::blocks::sparse_product_paths::dense_dense_path_is_unchanged_bitwise ... ok
+test model::linear::blocks::nalgebra_summation_order::xty_gemv_accumulates_in_observation_order_for_any_width ... ok
+test model::generalized::tests::test_glmm_predict_new_variance_reports_joint_laplace_conditional_rows_available ... ok
+test model::linear::blocks::sparse_product_paths::sparse_operands_into_dense_target_match_dense_gemm ... ok
+test model::linear::blocks::sparse_product_paths::sparse_target_covering_the_product_stays_sparse_and_matches_dense ... ok
+test model::linear::blocks::sparse_product_paths::sparse_target_missing_a_product_entry_falls_back_to_dense ... ok
+test model::linear::blocks::subtract_block_times_slice_tests::matches_dense_row_dot_for_every_block_storage ... ok
+test model::linear::blocks::wtxy_re_cross_product::matches_reference_bitwise ... ok
+test model::linear::blocks::wtxy_re_cross_product::re_cross_product_into_matches_allocating_kernel_bitwise ... ok
+test model::linear::blocks::wtxy_re_cross_product::wtxy_cross_product_matches_fixed_design_route_bitwise ... ok
+test model::linear::bootstrap::interval_helper_tests::interval_helpers_do_not_panic_on_empty_input ... ok
+test model::linear::blocks::sparse_product_paths::mixed_block_layouts_match_dense_cholesky_across_theta_path ... ok
+test model::generalized::tests::test_glmm_refit_after_resample_matches_cold_fit ... ok
+test model::linear::dense_kernels::tests::blocked_cholesky_reconstructs_rank_deficient_input ... ok
+test model::generalized::tests::test_grouseticks_poisson_glmm_deviance ... ok
+test model::linear::dense_kernels::tests::symmetric_downdate_matches_full_gemm_on_lower_triangle ... ok
+test model::generalized::tests::test_glmm_fit_with_options_rejects_invalid_nagq_up_front ... ok
+test model::linear::dense_kernels::tests::cholesky_negative_pivot_beyond_tolerance_is_posdef_exception_in_both_regimes ... ok
+test model::linear::gradient::certificate::inspected_certificate_reports_the_exact_gradient ... ok
+test model::linear::gradient::cost::certificate_evidence_cost ... ignored
+test model::linear::gradient::cost::crossed_gradient_phase_costs ... ignored
+test model::linear::gradient::cost::gradient_cost_in_evaluation_equivalents ... ignored
+test model::linear::gradient::cost::singular_maximal_gradient_loop_trace ... ignored
+test model::linear::gradient::cost::singular_maximal_trajectories ... ignored
+test model::linear::gradient::oracle_fit::gradient_oracle_matches_the_interpolation_optimum_on_a_single_vector_term ... ok
+test model::generalized::tests::test_gaussian_inverse_link_matches_lme4_2_1_profiled_and_joint ... ok
+test model::linear::gradient::oracle_fit::gradient_oracle_stops_cleanly_at_a_zero_variance_boundary ... ok
+test model::linear::gradient::oracle_fit::nested_adoption_default_budget_reml_parity ... ok
+test model::linear::gradient::oracle_fit::nested_adoption_gradient_matches_dense_and_finite_differences ... ok
+test model::linear::gradient::tests::blocked_gradient_matches_dense_reference_crossed_and_nested_terms ... ok
+test model::linear::dense_kernels::tests::unblocked_cholesky_is_bit_identical_to_old_kernel ... ok
+test model::linear::gradient::tests::blocked_gradient_matches_dense_reference_weighted ... ok
+test model::linear::gradient::certificate::analytic_derivative_evidence_matches_the_finite_difference_evidence ... ok
+test model::linear::gradient::tests::dense_reference_matches_finite_differences_on_scalar_and_weighted_fits ... ok
+test model::linear::gradient::tests::dense_reference_matches_finite_differences_on_crossed_vector_terms ... ok
+test model::linear::gradient::tests::dense_reference_matches_finite_differences_on_vector_sleepstudy ... ok
+test model::linear::inference::tests::asymptotic_wald_helper_preserves_normal_tails_and_unavailability ... ok
+test model::linear::snapshot::tests::ordinary_lmm_rejects_mutated_working_state ... ok
+test model::linear::gradient::tests::dense_reference_matches_one_sided_finite_differences_at_the_boundary ... ok
+test model::linear::snapshot::tests::review_snapshot_preserves_optimizer_strategy_controls ... ok
+test model::linear::snapshot::tests::snapshot_preserves_boundary_fit_and_conditional_queries ... ok
+test model::linear::snapshot::tests::snapshot_preserves_fixed_sampling_variance_semantics ... ok
+test model::linear::snapshot::tests::snapshot_refuses_missing_or_contradictory_fit_evidence ... ok
+test model::linear::snapshot::tests::snapshot_preserves_ordered_and_unordered_custom_contrasts ... ok
+test model::linear::snapshot::tests::snapshot_requires_known_optimizer_strategy_controls ... ok
+test model::linear::snapshot::tests::snapshot_restores_weighted_transformed_refit_without_optimizer ... ok
+test model::linear::snapshot::tests::snapshot_replays_reduced_construction_and_final_factorization_policy ... ok
+test model::linear::tests::deferred_certificate_evidence_matches_eager_completion ... ok
+test model::linear::tests::inference_covariance_provenance_survives_tables_and_legacy_json ... ok
+test model::linear::tests::lmm_builder_build_returns_unfitted_model ... ok
+test model::linear::tests::lmm_fit_options_record_caller_optimizer_tolerances_and_start ... ok
+test model::linear::tests::lmm_prior_weights_are_validated_before_use ... ok
+test model::linear::tests::no_intercept_factor_model_is_a_reparameterization ... ok
+test model::linear::snapshot::tests::snapshot_strategy_controls_survive_native_refits ... ok
+test model::linear::tests::refit_resets_the_inspected_certificate ... ok
+test model::linear::tests::reml_logdet_treats_non_positive_lxx_pivot_as_infeasible ... ok
+test model::linear::tests::scalar_tolerance_matches_explicit_vector_lmm ... ok
+test model::linear::tests::predict_new_on_training_data_matches_fitted_for_categorical_codings ... ok
+test model::linear::tests::shared_parity_fixture_reaches_its_rank_deficient_reml_optimum ... ok
+test model::linear::tests::scalar_tolerance_validation_preserves_vector_and_start_contracts ... ok
+test model::linear::gradient::tests::blocked_gradient_matches_dense_reference_single_term ... ok
+test model::linear::tests::streamed_rank_fallback_over_dense_bound_is_a_warning ... ok
+test model::linear::tests::streamed_rank_deficient_design_falls_back_to_dense_householder ... ok
+test model::linear::tests::test_active_face_poc_reduces_rank_one_two_by_two_covariance_search ... ok
+test model::linear::tests::test_active_face_refit_defaults_off ... ok
+test model::generalized::tests::deferred_joint_laplace_inference_matches_pinned_eager_values ... ok
+test model::linear::tests::test_active_face_refit_noop_on_full_rank_fit ... ok
+test model::linear::tests::test_analytic_jac_vcov_beta_varpar_matches_central_differences ... ok
+test model::linear::tests::test_apply_lambda_transpose_to_rhs_consistent_with_parmap_order ... ok
+test model::linear::tests::test_block_index ... ok
+test model::linear::tests::test_blocked_forward_solve_zero_pivot_guard_uniform ... ok
+test model::linear::tests::test_bootstrap_fixed_effect_coefficient_row_from_certified_payload ... ok
+test model::linear::tests::test_bootstrap_fixed_effect_contrast_row_uses_payload_statistics ... ok
+test model::linear::tests::test_bootstrap_fixed_effect_row_from_null_simulate_refit_payload ... ok
+test model::linear::tests::test_bootstrap_fixed_effect_row_requires_enough_finite_statistics ... ok
+test model::linear::tests::test_bootstrap_multi_df_payload_matches_joint_f_oracle_and_p_value_accounting ... ok
+test model::linear::tests::test_cholesky_block_dense ... ok
+test model::linear::tests::test_cholesky_block_diagonal ... ok
+test model::linear::tests::test_cholesky_rejects_near_singular_negative_pivot_at_unit_scale ... ok
+test model::linear::tests::test_cholesky_strict_mode_matches_julia ... ok
+test model::linear::tests::test_cholesky_zero_pad_scales_with_diagonal ... ok
+test model::linear::tests::test_active_face_detection_records_lower_rank_four_by_four_block ... ok
+test model::linear::tests::test_cobyla_records_maxeval ... ok
+test model::linear::tests::test_cobyla_validates_configured_initial_step ... ok
+test model::linear::tests::test_coeftable_omits_p_values_for_regularized_fit_intent ... ok
+test model::linear::tests::test_coeftable_rank_deficient_nan_dropped ... ok
+test model::linear::tests::test_copy_and_rmul_lambda_sparse_matches_dense ... ok
+test model::linear::tests::test_copy_and_scale_offdiag_vsize2_matches_reference ... ok
+test model::linear::tests::test_copy_scale_inflate_vsize2_matches_reference ... ok
+test model::linear::tests::test_create_al_single_vsize2_matches_generic_blocks ... ok
+test model::linear::tests::test_crossed_fit_matches_julia_on_shared_fixture ... ok
+test model::linear::tests::test_crossed_objective_matches_julia_on_shared_fixture ... ok
+test model::linear::tests::test_crossed_scalar_re_cross_product_stays_sparse ... ok
+test model::linear::tests::test_dense_crossed_block_guard_accepts_small_blocks ... ok
+test model::linear::tests::test_dense_crossed_block_guard_reports_problem_too_large ... ok
+test model::linear::tests::test_dispersion_under_fixed_sigma_matches_julia ... ok
+test model::linear::tests::test_dyestuff_objective_at_specific_theta ... ok
+test model::linear::tests::test_explicit_categorical_contrast_basis_respects_non_marginal_interaction_expansion ... ok
+test model::linear::tests::test_fast_vsize2_profiled_objective_matches_generic_update ... ok
+test model::linear::tests::test_fixed_design_solver_blocks_match_femat_blocks_unweighted ... ok
+test model::linear::tests::test_fixed_design_solver_blocks_match_femat_blocks_weighted ... ok
+test model::linear::tests::test_fixed_effect_covariance_artifact_round_trips_from_fitted_models ... ok
+test model::linear::tests::test_fixed_effect_joint_f_is_invariant_to_restriction_row_order_and_scaling ... ok
+test model::linear::tests::test_fixed_effect_joint_f_uses_effective_rank_for_redundant_restrictions ... ok
+test model::linear::tests::test_fixed_sigma_constrains_scalar_re_fit ... ok
+test model::linear::tests::test_forced_prima_bobyqa_requires_prima_feature ... ok
+test model::linear::tests::streamed_full_rank_design_takes_gram_certified_rank_path ... ok
+test model::linear::tests::test_is_singular_consistent_with_effective_covariance_status ... ok
+test model::linear::tests::test_is_singular_detects_rank_deficient_lambda ... ok
+test model::linear::tests::test_jac_vcov_beta_varpar_returns_symmetric_matrices_and_sigma_derivative ... ok
+test model::linear::tests::test_kenward_roger_adjusted_vcov_returns_pbkrtest_style_artifacts ... ok
+test model::linear::gradient::oracle_fit::gradient_oracle_reaches_the_interpolation_optimum_on_crossed_terms_with_fewer_evaluations ... ok
+test model::linear::tests::test_kenward_roger_sigma_g_scalar_random_intercept_components ... ok
+test model::linear::tests::test_kenward_roger_sigma_g_vector_random_effect_components ... ok
+test model::linear::tests::test_kkt_guided_restart_repairs_scalar_invalid_boundary_stop ... ok
+test model::linear::tests::test_kkt_guided_restart_repairs_two_by_two_invalid_boundary_stop ... ok
+test model::linear::tests::test_large_theta_auto_fit_matches_or_beats_cobyla_baseline ... ok
+test model::linear::tests::test_large_theta_fit_records_maxeval_status ... ok
+test model::linear::tests::test_large_theta_fit_records_maxtime_status ... ok
+test model::linear::tests::test_large_theta_fit_uses_trust_bq_gradient_oracle ... ok
+test model::linear::tests::test_lmm_accepts_diag_wrapper_as_diagonal_covariance ... ok
+test model::linear::tests::test_lmm_compiler_theta_maps_follow_optimizer_reterm_order ... ok
+test model::generalized::tests::test_glmm_repeated_refit_does_not_accumulate_retained_state ... ok
+test model::linear::tests::test_lmm_design_compiled_reduces_full_covariance_before_fit ... ok
+test model::linear::tests::test_lmm_explicit_kenward_roger_ml_request_does_not_fallback ... ok
+test model::linear::tests::test_lmm_explicit_kenward_roger_multi_df_request_returns_f_test ... ok
+test model::linear::tests::test_lmm_explicit_satterthwaite_multi_df_request_returns_f_test ... ok
+test model::linear::tests::test_lmm_fixed_effect_covariance_matrix_available_for_full_rank_fit ... ok
+test model::linear::tests::test_lmm_fixed_effect_inference_table_omits_p_values_after_selection_time_reduction ... ok
+test model::linear::tests::test_lmm_fixed_effect_inference_table_omits_p_values_for_regularized_fit_intent ... ok
+test model::linear::tests::test_lmm_kenward_roger_multi_df_rows_match_pbkrtest_fixture ... ok
+test model::linear::tests::test_lmm_kenward_roger_scalar_rows_match_pbkrtest_fixture ... ok
+test model::linear::tests::test_lmm_kenward_roger_scaled_f_matches_pbkrtest_krmodcomp ... ok
+test model::linear::tests::test_lmm_optimizer_certificate_records_budget_stop ... ok
+test model::linear::tests::test_lmm_satterthwaite_scalar_rows_match_lmer_test_fixture ... ok
+test model::linear::tests::test_logdet_block ... ok
+test model::linear::tests::test_lrt_dyestuff_null_vs_intercept_only ... ok
+test model::linear::tests::test_mmtrust_psd_scalar_poc_matches_theta_optimizer_objective ... ok
+test model::linear::tests::test_mmtrust_psd_two_by_two_poc_matches_theta_optimizer_objective ... ok
+test model::generalized::tests::joint_laplace_rx_fallback_matches_glmer_rx_vcov ... ok
+test model::linear::tests::test_optimizer_return_values_consistent_across_backends ... ok
+test model::linear::tests::test_optsum_fitlog_population ... ok
+test model::linear::tests::test_optsum_fitlog_theta_dimensions ... ok
+test model::linear::tests::test_native_auto_crossed_large_recourse_targets_crossed_vector_blocks ... ok
+test model::linear::tests::test_pattern_search_descends_correlated_directions ... ok
+test model::linear::tests::test_parametricbootstrap_beta_length ... ok
+test model::linear::tests::test_pattern_search_records_maxeval ... ok
+test model::linear::tests::test_penicillin_model_structure ... ok
+test model::linear::tests::test_predict_new_unknown_level_population ... ok
+test model::linear::tests::test_random_effect_categorical_slope_uses_cell_means_without_intercept ... ok
+test model::linear::tests::test_random_effect_categorical_slope_uses_treatment_coding_with_intercept ... ok
+test model::linear::tests::test_random_effect_factor_in_double_bar_gets_full_covariance_like_lme4 ... ok
+test model::linear::tests::test_random_effect_interaction_uses_cell_means_without_intercept ... ok
+test model::linear::tests::test_random_effect_no_intercept_factor_uses_cell_means_with_explicit_contrast ... ok
+test model::linear::tests::test_random_effect_three_way_interaction_basis_is_materialized ... ok
+test model::linear::tests::test_ranef_u_matches_solve_lower_block_rhs ... ok
+test model::linear::tests::test_rank_deficient_fixed_effects ... ok
+test model::linear::tests::test_rank_k_downdate_small_dense_large_k_matches_gemm ... ok
+test model::linear::tests::test_rank_k_downdate_vsize2_blockdiag_large_k_matches_gemm ... ok
+test model::linear::tests::test_rdiv_lower_transpose_blockdiag_vsize2_matches_dense_reference ... ok
+test model::linear::tests::test_rdiv_lower_transpose_diagonal ... ok
+test model::linear::tests::test_rectify_runs_for_cobyla_and_pattern_search_backends ... ok
+test model::linear::tests::test_rectify_theta_columns_matches_julia_sign_convention ... ok
+test model::linear::tests::test_refit_after_reml_objective_matches ... ok
+test model::linear::tests::test_refit_preserves_reml_flag ... ok
+test model::linear::tests::test_refit_rejects_constant_response ... ok
+test model::linear::tests::test_restorereplicates_rejects_mismatched_model_shape ... ok
+test model::linear::tests::test_satterthwaite_multi_df_denominator_df_combines_direction_dfs ... ok
+test model::linear::tests::test_scalar_single_theta_fit_is_locally_optimal ... ok
+test model::linear::tests::test_scalar_single_theta_records_maxeval ... ok
+test model::linear::tests::test_scalar_vsize1_fast_objective_matches_generic_block_update ... ok
+test model::linear::tests::test_singular_fixture_maximal_model_has_too_rich_information_budget ... ok
+test model::linear::tests::test_sleepstudy_model_structure ... ok
+test model::linear::tests::test_sleepstudy_vector_re_leverage_sum_matches_julia ... ok
+test model::linear::tests::test_sleepstudy_zerocorr_re_matches_julia ... ok
+test model::generalized::tests::joint_laplace_nlopt_ftol_confirmation_respects_tight_budgets ... ok
+test model::linear::tests::test_trust_bq_certificate_stop_accepts_scalar_interior ... ok
+test model::linear::tests::test_trust_bq_certificate_stop_accepts_scalar_valid_boundary ... ok
+test model::linear::tests::test_trust_bq_certificate_stop_accepts_two_by_two_valid_rank_deficient ... ok
+test model::linear::tests::test_trust_bq_certificate_stop_rejects_scalar_invalid_boundary ... ok
+test model::linear::tests::test_trust_bq_diagonal_first_ladder_matches_single_start_objective ... ok
+test model::linear::tests::test_trust_bq_ladder_is_noop_without_off_diagonal_theta ... ok
+test model::linear::tests::test_trust_bq_model_family_policy_records_crossed_large_theta_contract ... ok
+test model::linear::tests::test_trust_bq_model_family_policy_records_moderate_theta_contract ... ok
+test model::linear::tests::test_trust_bq_model_family_policy_records_small_theta_contract ... ok
+test model::linear::tests::test_trust_bq_sample_reuse_defaults_to_family_policy ... ok
+test model::linear::tests::test_lmm_constructor_keeps_high_cardinality_fixed_design_streamed ... ok
+test model::linear::tests::test_trust_bq_sample_reuse_override_is_audit_recorded ... ok
+test model::linear::tests::test_trust_bq_sample_reuse_resolve_maps_every_variant ... ok
+test model::linear::tests::test_trust_bq_start_ladder_defaults_off ... ok
+test model::linear::tests::test_unweighted_objective_unchanged_by_weight_normalization ... ok
+test model::linear::tests::test_varest_under_fixed_sigma_matches_julia ... ok
+test model::linear::tests::test_vcov_varpar_estimate_returns_hessian_diagnostics_and_restores_state ... ok
+test model::linear::tests::test_vector_fit_uses_bobyqa_with_bounded_evaluations ... ok
+test model::linear::tests::test_weighted_lmm_objective_matches_julia_normalization ... ok
+test model::linear::tests::test_weighted_lrt_matches_profiled_target_difference ... ok
+test model::linear::tests::test_trust_bq_sample_reuse_override_changes_optimizer_trace ... ok
+test model::linear::tests::test_zerocorr_factor_split_terms_record_no_error_diagnostics ... ok
+test model::linear::tests::trust_bq_propagates_host_interrupt_callback_error ... ok
+test model::linear::tests::type_i_sequences_terms_by_interaction_order ... ok
+test model::linear::tests::type_iii_f_is_invariant_to_reference_level_relabeling ... ok
+test model::linear::tests::type_iii_marginal_covariate_slope_averages_over_interacting_factor ... ok
+test model::linear::tests::type_iii_marginal_weights_on_unbalanced_interaction_worked_example ... ok
+test model::linear::tests::unused_grouping_levels_are_dropped_like_lme4 ... ok
+test model::linear::tests::verify_convergence_completes_deferred_evidence_first ... ok
+test model::linear::tests::test_streamed_fixed_effect_lmm_fit_matches_dense_backend ... ok
+test model::snapshot::finite::tests::rejects_nonfinite_optional_evidence_before_json_discards_it ... ok
+test model::snapshot::tests::snapshot_integrity_covers_exact_payload_bytes_and_model_kind ... ok
+test model::snapshot::tests::snapshot_refuses_missing_and_incompatible_envelopes ... ok
+test model::summary_estimates::tests::constructs_unfitted_model_with_fixed_sigma_and_marker ... ok
+test model::summary_estimates::tests::defaults_match_contract ... ok
+test model::summary_estimates::tests::fit_recovers_intercept_with_zero_heterogeneity ... ok
+test model::summary_estimates::tests::fit_smoke_three_study_frame_does_not_panic ... ok
+test model::summary_estimates::tests::kenward_roger_inherits_weighted_model_refusal ... ok
+test model::summary_estimates::tests::ordinary_lmm_still_rejects_constant_response ... ok
+test model::summary_estimates::tests::rejects_formula_response_mismatch ... ok
+test model::summary_estimates::tests::rejects_missing_variance_column ... ok
+test model::summary_estimates::tests::rejects_non_finite_estimate ... ok
+test model::summary_estimates::tests::rejects_non_finite_variance ... ok
+test model::summary_estimates::tests::rejects_non_positive_variance ... ok
+test model::summary_estimates::tests::rejects_normalized_variance_overflow ... ok
+test model::summary_estimates::tests::rejects_relative_with_non_positive_sigma ... ok
+test model::summary_estimates::tests::rejects_relative_with_overflowing_sigma_square ... ok
+test model::summary_estimates::tests::rejects_same_estimate_and_variance_columns ... ok
+test model::linear::tests::weighted_lmm_simulation_scales_residual_noise_by_weights ... ok
+test model::summary_estimates::tests::rejects_weight_overflow_from_tiny_variance ... ok
+test model::summary_estimates::tests::relative_scale_carries_sigma ... ok
+test model::summary_estimates::tests::relative_scale_matches_absolute_when_sigma_one ... ok
+test model::summary_estimates::tests::satterthwaite_refuses_summary_estimate_fit ... ok
+test model::summary_estimates::tests::varcorr_omits_residual_row_for_summary_estimate_fit ... ok
+test model::traits::tests::test_cloglog_link_round_trips_and_handles_extremes ... ok
+test model::traits::tests::test_family_variance_functions ... ok
+test model::summary_estimates::tests::varest_returns_one_for_summary_estimate_fit ... ok
+test model::traits::tests::test_inverse_link_mu_eta_preserves_sign ... ok
+test optimizer::trust_bq::tests::quadratic_model_translation_is_exact_for_the_surrogate ... ok
+test optimizer::trust_bq::tests::indefinite_oracle_step_minimizes_its_feasible_ray ... ok
+test optimizer::trust_bq::tests::sr1_update_recovers_a_constant_hessian_from_secant_pairs ... ok
+test optimizer::trust_bq::tests::trust_bq_accepted_step_model_reuse_is_cheaper_and_reaches_same_optimum ... ok
+test optimizer::trust_bq::tests::trust_bq_gradient_handles_rosenbrock_like_valley ... ok
+test optimizer::trust_bq::tests::trust_bq_gradient_rejects_non_finite_objective_and_bad_gradient_length ... ok
+test optimizer::trust_bq::tests::trust_bq_gradient_respects_bounded_boundary_optimum ... ok
+test optimizer::trust_bq::tests::trust_bq_gradient_solves_shifted_quadratic_in_a_handful_of_oracle_calls ... ok
+test optimizer::trust_bq::tests::trust_bq_early_stops_on_objective_stagnation ... ok
+test optimizer::trust_bq::tests::trust_bq_progress_callback_can_certify_before_budget ... ok
+test optimizer::trust_bq::tests::trust_bq_rejected_step_model_reuse_is_cheaper_and_reaches_same_optimum ... ok
+test optimizer::trust_bq::tests::trust_bq_handles_rosenbrock_like_valley ... ok
+test optimizer::trust_bq::tests::trust_bq_rejects_zero_stall_iterations ... ok
+test optimizer::trust_bq::tests::trust_bq_respects_bounded_boundary_optimum ... ok
+test optimizer::trust_bq::tests::trust_bq_sample_reuse_is_exact_and_cheaper ... ok
+test optimizer::trust_bq::tests::trust_bq_solves_shifted_quadratic ... ok
+test optimizer::trust_bq::tests::trust_bq_trace_classification_labels_are_stable ... ok
+test model::linear::tests::test_pattern_search_matches_nlopt_on_correlated_crossed_fixture ... ok
+test optimizer::trust_bq::tests::trust_bq_translated_model_reuse_cuts_rosenbrock_valley_cost ... ok
+test optimizer::trust_bq::tests::trust_bq_rejected_step_model_reuse_is_not_a_free_lunch_on_a_curved_valley ... ok
+test parallel::pipeline_tests::pipeline_propagates_producer_and_consumer_errors ... ok
+test model::linear::tests::test_weighted_streamed_fixed_effect_lmm_fit_matches_dense_backend ... ok
+test parallel::cancel_tests::poll_error_cancels_remaining_jobs ... ok
+test parallel::tests::worker_floating_point_matches_calling_thread ... ok
+test parallel::pipeline_tests::pipeline_resumes_a_worker_panic_instead_of_hanging ... ok
+test pathology::certificate::tests::certify_detects_collinear_fixed_effects ... ok
+test pathology::certificate::tests::certify_detects_reduced_rank_truth ... ok
+test pathology::certificate::tests::certify_detects_singletons_with_slope ... ok
+test pathology::certificate::tests::certify_detects_zero_variance_boundary ... ok
+test pathology::certificate::tests::certify_does_not_panic_on_malformed_spec ... ok
+test pathology::certificate::tests::certify_is_engine_free_for_easy_design ... ok
+test pathology::certificate::tests::generate_refuses_malformed_spec_instead_of_panicking ... ok
+test pathology::certificate::tests::weak_id_score_drops_with_collinear_predictors ... ok
+test pathology::certificate::tests::weak_id_score_is_invariant_under_uniform_predictor_rescale ... ok
+test pathology::certificate::tests::weak_id_widens_status_set_on_otherwise_easy_design ... ok
+test pathology::separation::tests::conditional_separation_empty_inputs ... ok
+test pathology::separation::tests::conditional_separation_handles_singleton_groups ... ok
+test pathology::separation::tests::conditional_separation_picks_all_zero_and_all_one_groups ... ok
+test pathology::separation::tests::fe_complete_separation_strict_sign_split ... ok
+test pathology::separation::tests::fe_overlap_no_separation ... ok
+test pathology::separation::tests::fe_quasi_complete_separation_with_tie ... ok
+test pathology::spec::tests::test_pathology_generate_supported_pairs_succeed ... ok
+test pathology::spec::tests::test_pathology_generate_unsupported_family_returns_err ... ok
+test stats::block_description::tests::test_html_matches_julia_example ... ok
+test stats::block_description::tests::test_latex_matches_julia_example ... ok
+test stats::block_description::tests::test_markdown_matches_julia_example ... ok
+test stats::block_description::tests::test_plaintext_includes_core_layout ... ok
+test parallel::tests::polled_map_keeps_item_order_for_every_thread_count ... ok
+test parallel::pipeline_tests::pipeline_delivers_in_order_identically_for_every_thread_count ... ok
+test stats::bootstrap::tests::test_bernoulli_glmm_parametricbootstrap_runs ... ok
+test stats::bootstrap::tests::test_glmm_parametricbootstrap_requires_fitted_model ... ok
+test stats::bootstrap::tests::test_fixed_effect_null_bootstrap_threads_are_bit_identical ... ok
+test parallel::tests::worker_floating_point_matches_extended_precision_caller ... ok
+test model::linear::tests::test_kenward_roger_low_rank_matches_dense_reference ... ok
+test stats::bootstrap::tests::test_glmm_simulate_response_respects_family_support ... ok
+test stats::bootstrap::tests::test_glmm_parametricbootstrap_threads_match_under_extended_precision ... ok
+test stats::bootstrap::tests::test_glmm_parametricbootstrap_threads_are_bit_identical ... ok
+test stats::bootstrap::tests::test_shortest_cov_int_all_nan_is_degenerate_not_panic ... ok
+test stats::bootstrap::tests::test_shortest_cov_int_does_not_panic_on_nan_failed_refits ... ok
+test stats::bootstrap::tests::test_shortest_cov_int_full_coverage ... ok
+test stats::bootstrap::tests::test_shortest_cov_int_invalid_level_is_not_a_panic ... ok
+test stats::bootstrap::tests::test_shortest_cov_int_narrow_window ... ok
+test stats::bootstrap::tests::test_shortest_cov_int_picks_tightest_cluster ... ok
+test stats::coeftable::tests::caller_and_legacy_tables_do_not_guess_covariance_provenance ... ok
+test stats::coeftable::tests::test_coeftable_can_carry_missing_p_value_reasons ... ok
+test stats::coeftable::tests::test_coeftable_display ... ok
+test stats::coeftable::tests::test_coeftable_dyestuff_intercept_significant ... ok
+test stats::coeftable::tests::test_coeftable_p_symmetric ... ok
+test stats::coeftable::tests::test_coeftable_wald_confint ... ok
+test stats::coeftable::tests::test_coeftable_wald_confint_degenerate ... ok
+test stats::coeftable::tests::test_coeftable_wald_p_values_preserve_representable_normal_tails ... ok
+test stats::coeftable::tests::test_coeftable_z_and_p ... ok
+test stats::coeftable::tests::test_coeftable_zero_se_gives_nan ... ok
+test stats::lrt::tests::test_linear_model_fit_compares_with_mixed_model_like_fit ... ok
+test stats::lrt::tests::test_linear_model_fit_rejects_non_nested_mixed_comparison ... ok
+test stats::lrt::tests::test_lrt_accepts_distinct_fits_with_identical_response_values ... ok
+test stats::lrt::tests::test_lrt_accepts_random_intercept_nested_in_random_slope_same_group ... ok
+test stats::lrt::tests::test_lrt_accepts_reml_with_identical_fe ... ok
+test stats::lrt::tests::test_lrt_chi_nonneg_invariant ... ok
+test stats::lrt::tests::test_lrt_display_includes_formula_table ... ok
+test stats::lrt::tests::test_lrt_flags_loglik_within_tol ... ok
+test stats::lrt::tests::test_lrt_html_includes_table_markup ... ok
+test stats::lrt::tests::test_lrt_latex_matches_julia_header ... ok
+test stats::lrt::tests::test_lrt_markdown_matches_julia_style_table ... ok
+test stats::lrt::tests::test_lrt_ml_with_nested_fe_still_works ... ok
+test stats::lrt::tests::test_lrt_rejects_decreasing_loglikelihood ... ok
+test stats::lrt::tests::test_lrt_rejects_fixed_effect_non_nested_column_space ... ok
+test stats::lrt::tests::test_lrt_rejects_glmm_vs_lmm_family_mix ... ok
+test stats::lrt::tests::test_lrt_rejects_mixing_families ... ok
+test stats::lrt::tests::test_lrt_rejects_mixing_links ... ok
+test stats::lrt::tests::test_lrt_rejects_mixing_reml_and_ml ... ok
+test stats::lrt::tests::test_lrt_rejects_non_increasing_dof ... ok
+test stats::lrt::tests::test_lrt_rejects_random_effect_non_nested_terms ... ok
+test stats::lrt::tests::test_lrt_rejects_reml_with_fe_mismatch ... ok
+test stats::lrt::tests::test_lrt_rejects_same_nobs_with_different_response_values ... ok
+test stats::lrt::tests::test_lrt_strict_violation_still_rejects ... ok
+test stats::lrt::tests::test_model_comparison_assessment_classifies_covariance_difference ... ok
+test stats::lrt::tests::test_model_comparison_assessment_classifies_incompatible_inputs ... ok
+test stats::lrt::tests::test_model_comparison_assessment_classifies_nested_fixed_effects ... ok
+test stats::lrt::tests::test_model_comparison_assessment_classifies_nested_random_effects ... ok
+test stats::lrt::tests::test_model_comparison_assessment_classifies_non_nested_fixed_effects ... ok
+test stats::lrt::tests::test_model_comparison_assessment_classifies_non_nested_random_effects ... ok
+test stats::lrt::tests::test_model_comparison_assessment_classifies_same_model_space ... ok
+test stats::lrt::tests::test_model_comparison_assessment_marks_ml_refit_for_reml_fixed_effect_change ... ok
+test stats::lrt::tests::test_model_comparison_sequence_assesses_adjacent_pairs ... ok
+test stats::lrt::tests::test_model_comparison_table_can_omit_lrt_when_ic_requested ... ok
+test stats::lrt::tests::test_model_comparison_table_keeps_ic_rows_for_non_nested_models ... ok
+test stats::lrt::tests::test_model_comparison_table_lrt_method_rejects_non_nested_fixed_effects ... ok
+test stats::lrt::tests::test_model_comparison_table_marks_incompatible_pairs ... ok
+test stats::lrt::tests::test_model_comparison_table_reports_ml_refit_required_without_refitting ... ok
+test stats::lrt::tests::test_model_comparison_table_reports_valid_lrt_columns_for_nested_models ... ok
+test stats::lrt::tests::test_parametric_bootstrap_lrt_rejects_bad_arguments ... ok
+test stats::bootstrap::tests::test_poisson_glmm_parametricbootstrap_runs_and_is_seed_deterministic ... ok
+test stats::lrt::tests::test_pvalue_requires_a_single_comparison ... ok
+test stats::model_summary::tests::fallback_wald_p_values_preserve_representable_normal_tails ... ok
+test stats::model_summary::tests::fit_summary_payload_for_glmm_names_family_and_link ... ok
+test stats::model_summary::tests::fit_summary_payload_for_lmm_is_versioned_and_serializable ... ok
+test stats::model_summary::tests::summary_table_components_are_serde_roundtrippable ... ok
+test stats::model_summary::tests::test_from_generalized_model_omits_residual_for_bernoulli ... ok
+test stats::model_summary::tests::test_from_linear_model_adds_random_effect_only_rows ... ok
+test stats::model_summary::tests::test_latex_uses_sigma_subscripts ... ok
+test stats::model_summary::tests::test_markdown_glmm_matches_julia_example ... ok
+test stats::model_summary::tests::test_markdown_lmm_matches_julia_example ... ok
+test stats::model_summary::tests::test_markdown_re_without_fe_matches_julia_example ... ok
+test stats::profile::tests::confint_reports_nan_instead_of_extrapolating_past_profile_grid ... ok
+test stats::profile::tests::failed_beta_profiles_are_recorded_per_parameter ... ok
+test stats::lrt::tests::test_parametric_bootstrap_lrt_runs_and_is_seed_deterministic ... ok
+test stats::bootstrap::tests::test_lmm_parametricbootstrap_threads_are_bit_identical ... ok
+test model::linear::dense_kernels::tests::rdiv_matches_old_kernel ... ok
+test stats::profile::tests::normal_quantile_matches_known_values ... ok
+test stats::profile::tests::profile_beta_dyestuff_returns_constrained_ml_table ... ok
+test stats::bootstrap::tests::test_gamma_glmm_parametricbootstrap_runs_with_positive_draws ... ok
+test stats::profile::tests::profile_beta_reml_is_explicitly_unavailable ... ok
+test stats::bootstrap::tests::test_joint_gamma_glmm_parametricbootstrap_has_successful_replicates ... ok
+test stats::profile::tests::profile_beta_tables_match_dense_oracle_sleepstudy ... ignored, dense O(n^3) oracle; run with --release
+test stats::profile::tests::profile_dyestuff_combines_sigma_and_scalar_theta ... ok
+test stats::profile::tests::profile_likelihood_confint_matches_julia_fixture_for_supported_cases ... ok
+test stats::profile::tests::profile_likelihood_julia_parity_fixture_is_versioned ... ok
+test stats::profile::tests::profile_sigma_dyestuff_returns_consistent_table ... ok
+test stats::profile::tests::profile_theta_optimizes_remaining_theta_coordinates ... ok
+test stats::profile::tests::profile_theta_scalar_dyestuff_returns_consistent_table ... ok
+test model::linear::dense_kernels::tests::blocked_cholesky_matches_old_kernel_on_spd_and_singular_inputs ... ok
+test stats::profile::tests::fixed_beta_components_match_dense_oracle ... ok
+test stats::profile::tests::sdcor_profile_scalar_term_ml_matches_lme4 ... ok
+test stats::profile::tests::test_profile_confint_brackets_estimate ... ok
+test stats::profile::tests::test_profile_sigma_clamp_no_walk_below_threshold ... ok
+test stats::profile::tests::test_profile_sigma_logspace_walk_consistent ... ok
+test stats::profile::tests::test_profile_theta_dense_grid_on_curved_profile ... ok
+test stats::profile::tests::test_profile_theta_julia_parity_fixture_keeps_scalar_theta_supported ... ok
+test stats::profile::tests::test_profile_theta_sparse_grid_emits_warning_or_errors ... ok
+test stats::spline::tests::cubic_recovery_moderate ... ok
+test stats::spline::tests::interpolates_at_knots ... ok
+test stats::spline::tests::linear_data_stays_linear ... ok
+test stats::spline::tests::rejects_non_increasing_x ... ok
+test stats::spline::tests::two_point_is_linear ... ok
+test stats::varcorr::tests::estimated_sigma_default_renders_residual_unchanged ... ok
+test stats::varcorr::tests::fixed_sampling_variance_omits_residual_in_all_renderers ... ok
+test stats::varcorr::tests::test_html_with_corr_and_residual ... ok
+test stats::varcorr::tests::test_html_without_corr_or_residual ... ok
+test stats::varcorr::tests::test_latex_with_corr_and_residual ... ok
+test stats::varcorr::tests::test_latex_without_corr_or_residual ... ok
+test stats::varcorr::tests::test_scalar_re_std_dev_is_sigma_times_theta ... ok
+test stats::varcorr::tests::test_to_markdown_with_corr_and_residual ... ok
+test stats::varcorr::tests::test_to_markdown_without_corr_or_residual ... ok
+test stats::varcorr::tests::test_varcorr_group_and_column_names ... ok
+test stats::varcorr::tests::test_vector_re_std_dev_and_correlation ... ok
+test types::blocked_sparse::tests::test_densify_below_threshold ... ok
+test types::blocked_sparse::tests::test_density ... ok
+test types::blocked_sparse::tests::test_element_access ... ok
+test types::blocked_sparse::tests::test_nnz ... ok
+test types::blocked_sparse::tests::test_size ... ok
+test types::blocked_sparse::tests::test_to_dense ... ok
+test types::fe_mat::tests::test_cross_product_unweighted ... ok
+test types::fe_mat::tests::test_new ... ok
+test types::fe_mat::tests::test_reweight ... ok
+test types::fe_term::tests::certified_full_rank_matches_qr_constructor_on_full_rank_input ... ok
+test types::fe_term::tests::from_rank_and_pivot_matches_new_for_full_and_deficient_designs ... ok
+test types::fe_term::tests::test_feterm_rank_intercept_preserving ... ok
+test types::fe_term::tests::test_feterm_rank_matches_stats_rank ... ok
+test types::fe_term::tests::test_full_rank ... ok
+test types::fe_term::tests::test_rank_deficient ... ok
+test types::fe_term::tests::test_zero_columns ... ok
+test types::gauss_hermite::tests::test_gh1 ... ok
+test types::gauss_hermite::tests::test_gh2 ... ok
+test types::gauss_hermite::tests::test_gh2_memoized ... ok
+test types::gauss_hermite::tests::test_gh3 ... ok
+test types::gauss_hermite::tests::test_gh9_weights_sum_to_one ... ok
+test types::gauss_hermite::tests::test_iter ... ok
+test types::gauss_hermite::tests::test_symmetry ... ok
+test types::matrix_block::tests::test_matrix_block_unit_solves ... ok
+test types::opt_summary::extended_float::tests::retains_trial_objective_bits_without_null_conversion ... ok
+test types::opt_summary::tests::converged_is_true_only_for_clean_convergence ... ok
+test types::opt_summary::tests::convergence_status_classifies_every_backend_vocabulary ... ok
+test types::opt_summary::tests::convergence_status_unwraps_gradient_oracle_prefix ... ok
+test types::opt_summary::tests::convergence_status_unwraps_joint_glmm_prefixes ... ok
+test types::opt_summary::tests::convergence_status_unwraps_kkt_boundary_restart ... ok
+test types::opt_summary::tests::convergence_status_unwraps_start_ladder_and_active_face ... ok
+test types::opt_summary::tests::test_backend_name ... ok
+test types::opt_summary::tests::test_display_contains_core_fields ... ok
+test types::opt_summary::tests::test_empty_initial ... ok
+test types::opt_summary::tests::test_html_contains_core_markup ... ok
+test types::opt_summary::tests::test_is_fitted ... ok
+test types::opt_summary::tests::test_latex_contains_core_markup ... ok
+test types::opt_summary::tests::test_log_eval ... ok
+test types::opt_summary::tests::test_markdown_contains_core_rows ... ok
+test types::opt_summary::tests::test_n_params ... ok
+test types::opt_summary::tests::test_new_defaults ... ok
+test types::opt_summary::tests::test_prima_renderers_use_backend_specific_opt_params ... ok
+test types::ragged_array::tests::test_invalid_ref - should panic ... ok
+test types::ragged_array::tests::test_len_and_empty ... ok
+test types::ragged_array::tests::test_mismatched_lengths - should panic ... ok
+test types::ragged_array::tests::test_sum_by_group ... ok
+test types::ragged_array::tests::test_sum_into ... ok
+test types::re_mat::tests::test_covariance_kernel_patterns_own_theta_indices ... ok
+test types::re_mat::tests::test_diagonal_kernel_preserves_diagonal_theta_values ... ok
+test types::re_mat::tests::test_get_set_theta ... ok
+test types::re_mat::tests::test_lmul_lambda_scalar ... ok
+test types::re_mat::tests::test_lower_bound ... ok
+test types::re_mat::tests::test_remat_set_theta_returns_err_on_length_mismatch ... ok
+test types::re_mat::tests::test_reweight ... ok
+test types::re_mat::tests::test_scalar_construction ... ok
+test types::re_mat::tests::test_sparse_dimensions ... ok
+test types::re_mat::tests::test_vector_construction ... ok
+test types::re_mat::tests::test_zerocorr ... ok
+test types::uniform_block_diagonal::tests::test_copy_to_dense ... ok
+test types::uniform_block_diagonal::tests::test_copy_with_identity ... ok
+test types::uniform_block_diagonal::tests::test_element_access ... ok
+test types::uniform_block_diagonal::tests::test_index_trait ... ok
+test types::uniform_block_diagonal::tests::test_new_from_blocks ... ok
+test types::uniform_block_diagonal::tests::test_out_of_bounds - should panic ... ok
+test types::uniform_block_diagonal::tests::test_size ... ok
+test types::uniform_block_diagonal::tests::test_to_dense ... ok
+test model::generalized::tests::deferred_joint_laplace_inference_matches_eager_path ... ok
+test stats::profile::tests::sdcor_profile_intervals_match_lme4_confint_profile ... ok
+test stats::profile::tests::non_monotone_correlation_profile_is_recorded_not_fatal ... ok
+test model::linear::tests::test_active_face_refit_improves_maximal_singular_fit ... ok
+test stats::profile::tests::profile_with_threads_is_bit_identical_to_serial ... ok
+test model::linear::blocks::sparse_product_paths::nested_scalar_terms_keep_sparse_l_and_match_dense_cholesky ... ok
+test stats::profile::tests::irregular_profile_threads_match_serial ... ok
+test model::generalized::joint::centered_adoption_tests::centered_adoption_joint_fit_preserves_parity_and_stationarity ... ok
+test model::linear::tests::test_high_cardinality_streamed_fit_uses_sparse_fixed_re_block_and_matches_dense ... ok
+test model::generalized::tests::joint_laplace_nlopt_stop_is_robust_to_start_perturbations ... ok
+test stats::profile::tests::profile_beta_large_n_stays_linear_in_memory ... ok
+test stats::profile::tests::profile_beta_tables_match_dense_oracle ... ok
+test model::linear::tests::test_cobyla_nlopt_delta_audit_stays_within_documented_envelope ... ok
+
+test result: ok. 959 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 58.27s
+
+     Running unittests src/main.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/mixeff_rs-3dde7c660e55bfbd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/aphantasia_fixture.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/aphantasia_fixture-8d6ecbc0fb8b1d2d)
+
+running 2 tests
+test aphantasia_fixture_snapshot_has_expected_reference_contract ... ok
+test intact_prepared_frame_builds_native_glmm_design_without_refitting ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/architecture.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/architecture-bb2c2e2d30153a8f)
+
+running 3 tests
+test test_no_compiler_certificate_module ... ok
+test test_lmm_kernel_does_not_import_upper_layers ... ok
+test test_linalg_and_types_do_not_import_upstream_layers ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/boundary_lrt_contract.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/boundary_lrt_contract-6c01fbd7faa0e13f)
+
+running 5 tests
+test boundary_lrt_certifies_one_added_random_intercept_parameter ... ok
+test boundary_lrt_refuses_fixed_effect_comparisons ... ok
+test boundary_lrt_keeps_mixture_for_an_added_variance ... ok
+test boundary_lrt_uses_plain_chisq_for_an_added_correlation ... ok
+test lmm_comparison_detects_random_effect_nesting ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/compiled_spec_equivalence.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/compiled_spec_equivalence-9771f2cf9fd4b91a)
+
+running 10 tests
+test compile_refuses_what_construction_refuses ... ok
+test compiled_glmm_builder_refuses_a_second_policy ... ok
+test unstable::spec_artifact_matches_the_standalone_compile_and_audit ... ok
+test unfitted_models_from_both_routes_carry_the_same_artifact ... ok
+test unstable::lmm_deferred_certificate_survives_fit_time_reads_and_completes_exactly ... ok
+test unstable::glmm_deferred_certificate_survives_fit_time_reads_and_completes_exactly ... ok
+test lmm_from_compiled_spec_is_bit_identical_to_one_step_construction ... ok
+test glmm_from_compiled_spec_is_bit_identical_to_builder_construction ... ok
+test unstable::a_live_fitted_lmm_answers_follow_ons_exactly_like_cold_refits ... ok
+test unstable::a_live_fitted_glmm_answers_follow_ons_exactly_like_cold_refits ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 57.29s
+
+     Running tests/compiler_contract_snapshots.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/compiler_contract_snapshots-8096df4a43fd0027)
+
+running 25 tests
+test cbpp_glmm_artifact_matches_wire_fixture ... ok
+test cbpp_glmm_audit_report_matches_wire_fixture ... ok
+test confounded_fixed_random_artifact_matches_wire_fixture ... ok
+test design_compiled_model_state_matches_wire_fixture ... ok
+test compiled_artifact_matches_wire_fixture ... ok
+test categorical_random_basis_artifact_matches_wire_fixture ... ok
+test confounded_fixed_random_audit_report_matches_wire_fixture ... ok
+test design_compiled_artifact_matches_wire_fixture ... ok
+test full_rank_terms_never_carry_interpretable_submodel ... ok
+test audit_report_matches_wire_fixture ... ok
+test penicillin_artifact_matches_wire_fixture ... ok
+test penicillin_audit_report_matches_wire_fixture ... ok
+test intercept_dominant_reduced_rank_emits_interpretable_submodel ... ok
+test sleepstudy_artifact_matches_wire_fixture ... ok
+test intercept_dominant_reduced_rank_audit_report_matches_wire_fixture ... ok
+test pedagogical_diagnostics_artifact_matches_wire_fixture ... ok
+test singular_prefit_audit_report_matches_wire_fixture ... ok
+test sleepstudy_double_bar_and_split_cards_match_wire_fixture ... ok
+test sleepstudy_random_term_card_matches_wire_fixture ... ok
+test sleepstudy_audit_report_matches_wire_fixture ... ok
+test rank_mixture_artifact_matches_wire_fixture ... ok
+test rank_mixture_does_not_emit_interpretable_submodel ... ok
+test rank_mixture_model_state_matches_wire_fixture ... ok
+test rank_mixture_audit_report_matches_wire_fixture ... ok
+test fixed_effect_inference_tables_match_wire_fixture ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/compiler_contract_structure.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/compiler_contract_structure-b5d963001bdb685d)
+
+running 3 tests
+test fitted_cobyla_inference_table_structure_is_well_formed ... ok
+test audit_report_schema_and_structure_are_stable_on_default_build ... ok
+test prefit_artifact_schema_and_structure_are_stable_on_default_build ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/covariance_pluggability.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/covariance_pluggability-941af095a20c5996)
+
+running 3 tests
+test structured_covariance_wrappers_are_parsed_refused_with_artifact_status ... ok
+test lme4_full_and_diagonal_covariance_fixtures_match ... ok
+test mixedmodels_full_and_diagonal_covariance_baselines_match ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/cross_engine_scoreboard.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/cross_engine_scoreboard-8f25e62b9e59d120)
+
+running 4 tests
+test cross_engine_reference_json_shape_is_stable ... ok
+test cross_engine_scoreboard_documents_divergence_without_oracle_promotion ... ok
+test fully_identified_fixture_checks_loglik_before_coefficients ... ok
+test cross_engine_scoreboard_is_reference_order_invariant ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/crossed_correlation_parameter.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/crossed_correlation_parameter-d1ff9ed8a7c0cd7c)
+
+running 3 tests
+test vector_random_effect_reports_within_block_correlation_parameter ... ok
+test nested_scalar_random_intercepts_do_not_claim_crossed_correlation ... ok
+test crossed_scalar_random_intercepts_report_absent_cross_block_correlation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dataset_metamorphic.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/dataset_metamorphic-6eaeb3f5150f6975)
+
+running 5 tests
+test boundary_certificate_is_stable_under_row_permutation ... ok
+test double_bar_matches_explicit_independent_random_terms ... ok
+test nested_formula_expansion_matches_explicit_nested_terms ... ok
+test row_order_invariance_preserves_sleepstudy_fit_and_levels ... ok
+test predictor_rescaling_preserves_sleepstudy_fitted_values ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/dense_lmm_oracle.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/dense_lmm_oracle-e799b19adbc3e83a)
+
+running 5 tests
+test dense_oracle_rejects_rank_deficient_fixed_effect_design ... ok
+test dense_oracle_matches_scalar_random_intercept_ml ... ok
+test dense_oracle_matches_near_zero_variance_boundary_ml ... ok
+test dense_oracle_matches_random_intercept_slope_ml ... ok
+test dense_oracle_matches_crossed_random_intercepts_ml ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/difficult_model_scoreboard.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/difficult_model_scoreboard-68a7a5ddc84c8f0e)
+
+running 4 tests
+test drifted_unit_test_scenario_is_rejected ... ok
+test difficult_scoreboard_covers_required_axes_and_reuses_parity_scorecard ... ok
+test unit_test_backed_recovery_scenarios_point_to_existing_tests ... ok
+test comparison_backed_scenarios_compute_certification_times_and_metrics ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/fitted_state_process.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/fitted_state_process-ba0737d1e54790fc)
+
+running 2 tests
+test restored_process_child ... ignored, invoked by snapshots_support_post_fit_queries_in_a_fresh_process
+test snapshots_support_post_fit_queries_in_a_fresh_process ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/fixture_hygiene.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/fixture_hygiene-e5c20a1938246a02)
+
+running 5 tests
+test every_golden_has_provenance_sibling ... ok
+test comparison_manifest_matches_registry_derived ... ok
+test csv_header_contains_every_declared_column ... ok
+test levels_txt_matches_meta_levels ... ok
+test every_pinned_fit_matches_within_tolerance ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/glmm_artifact_contract.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/glmm_artifact_contract-2011c32eb5dbfef1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/glmm_comparison_gates.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/glmm_comparison_gates-d412e74b2372f8cc)
+
+running 8 tests
+test glmm_report_contains_expected_numeric_classifications ... ok
+test glmm_fast_path_gaps_match_mixedmodels_jl_fast_oracle ... ok
+test grouseticks_joint_oracle_pins_fast_false_target_without_promoting_current_fast_path ... ok
+test glmm_lme4_matching_rows_stay_within_numeric_gates ... ok
+test glmm_comparison_rows_have_expected_status_and_payload_shape ... ok
+test experimental_joint_laplace_attempt_is_labelled_and_fallback_safe ... ok
+test glmm_included_response_constant_objective_matches_lme4_for_poisson_parity_rows ... ok
+test experimental_joint_binomial_rows_stay_below_promotion_gate ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.02s
+
+     Running tests/glmm_diagnostic_taxonomy.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/glmm_diagnostic_taxonomy-4ba6977c920239a6)
+
+running 2 tests
+test response_constant_convention_is_a_mode_not_a_failure ... ok
+test five_glmm_failure_modes_map_to_distinct_artifact_signals ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/glmm_diagnostics.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/glmm_diagnostics-79520f554fe8720e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/glmm_link_lme4.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/glmm_link_lme4-73041a73201ec958)
+
+running 1 test
+test test_requested_glmm_links_match_lme4_fixtures ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/glmm_speed_parity.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/glmm_speed_parity-044207a527028453)
+
+running 3 tests
+test glmm_speed_report_exposes_ratios_fevals_and_optimizer_codes ... ok
+test glmm_speed_rows_cover_representative_cases_and_thresholds ... ok
+test glmm_fast_false_speed_rows_cover_certified_joint_cases_and_thresholds ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/joint_hessian_provenance.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/joint_hessian_provenance-393c767747f8df29)
+
+running 1 test
+test available_joint_covariance_does_not_rewrite_optimizer_hessian_scope ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/lint_policy.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lint_policy-678f058ee69ee2e9)
+
+running 1 test
+test numerical_range_loop_exceptions_must_not_be_crate_wide ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/lme4_issue_124.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lme4_issue_124-112f9fca82011a74)
+
+running 3 tests
+test lme4_issue_124_diagnostic_does_not_fire_for_baseline_model ... ok
+test lme4_issue_124_diagnostic_does_not_fire_for_rare_mixed_x2_level ... ok
+test lme4_issue_124_near_separation_fits_with_finite_parameters ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/lmm_batch.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lmm_batch-d6e7981e068d2334)
+
+running 17 tests
+test requesting_rayon_parallelism_without_feature_is_a_typed_error ... ok
+test invalid_and_constant_columns_are_column_local ... ok
+test profile_at_theta_matches_existing_matrix_profiler ... ok
+test profile_at_theta_is_invariant_to_chunk_size ... ok
+test streaming::sink_error_propagates ... ok
+test streaming::streaming_emits_classification_failures_then_fitted_columns ... ok
+test streaming::sink_stop_marks_unemitted_columns_unsupported ... ok
+test optimize_per_column_agrees_with_scalar_refit_loop ... ok
+test chained_warm_start_matches_template_starts_and_validates_order ... ok
+test streaming::streaming_per_column_matches_materialized_rows ... ok
+test optimize_shared_theta_profiles_at_returned_theta ... ok
+test optimize_grouped_returns_one_theta_per_requested_group ... ok
+test adaptive::adaptive_discovers_theta_clusters ... ok
+test adaptive::adaptive_failures_stay_column_local ... ok
+test adaptive::adaptive_matches_per_column_within_refinement_tolerance ... ok
+test adaptive::adaptive_refines_columns_a_bad_group_would_hurt ... ok
+test adaptive::adaptive_is_deterministic ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/lmm_engine_bootstrap.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lmm_engine_bootstrap-c977f96425e78377)
+
+running 13 tests
+test test_parametricbootstrap_summaries_reject_bad_inputs ... ok
+test test_parametricbootstrap_quantile_summaries ... ok
+test test_parametricbootstrap_percentile_intervals ... ok
+test test_parametricbootstrap_shortest_intervals_filter_nonfinite ... ok
+test test_parametricbootstrap_save_restore_preserves_nan_status ... ok
+test test_parametricbootstrap_run_metadata_records_accounting_and_boundary_rate ... ok
+test try_parametricbootstrap_propagates_host_interrupt ... ok
+test test_parametricbootstrap_theta_length ... ok
+test test_parametricbootstrap_length ... ok
+test test_parametricbootstrap_save_restore_round_trip ... ok
+test test_parametricbootstrap_sigma_positive ... ok
+test test_parametricbootstrap_objectives_finite ... ok
+test test_parametricbootstrap_sigma_near_fitted ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/lmm_engine_compiler.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lmm_engine_compiler-e76ff344282a45b7)
+
+running 42 tests
+test test_lmm_carries_compiler_artifact_design_audit ... ok
+test test_fixed_theta_algebra_is_row_permutation_invariant ... ok
+test test_jac_vcov_beta_varpar_rejects_boundary_stencil_without_changing_state ... ok
+test test_kenward_roger_adjusted_vcov_rejects_unweighted_prerequisite_gap ... ok
+test test_cluster_resample_full_model_contrast_payload_returns_intervals ... ok
+test test_lmm_design_compiled_refuses_unsupported_random_distribution ... ok
+test test_lmm_compiler_artifact_records_rank_deficient_fixed_effects ... ok
+test test_lmm_design_compiled_refuses_row_saturated_random_effect ... ok
+test test_fixed_effect_null_bootstrap_target_projects_beta_and_simulates ... ok
+test test_lmm_convergence_verification_is_not_run_before_fit ... ok
+test test_fixed_effect_null_bootstrap_table_callable_returns_inference_table ... ok
+test test_effective_covariance_rank_uses_policy_thresholds ... ok
+test test_lmm_fit_with_compiler_policy_applies_policy_then_fits ... ok
+test test_lmm_explicit_satterthwaite_request_returns_scalar_t_test ... ok
+test test_lmm_fixed_effect_inference_table_marks_aliased_column_not_estimable ... ok
+test test_lmm_fixed_effect_contrast_table_is_rust_owned ... ok
+test test_lmm_fixed_effect_covariance_matrix_unavailable_for_rank_deficient_fit ... ok
+test test_lmm_optimizer_certificate_records_boundary_fit ... ok
+test test_coeftable_with_method_surfaces_satterthwaite_df ... ok
+test test_lmm_new_with_compiler_policy_applies_policy_before_fit ... ok
+test test_kenward_roger_lbddf_handles_rank_deficient_restriction_matrix ... ok
+test test_lmm_fixed_effect_inference_table_returns_ordered_satterthwaite_rows ... ok
+test test_lmm_fixed_effect_inference_table_omits_p_values_for_predictive_fit_intent ... ok
+test test_kenward_roger_lbddf_scalar_contrast_matches_expected_scale ... ok
+test test_lmm_fixed_effect_term_rows_are_rust_owned ... ok
+test test_lmm_set_compiler_policy_rejects_after_fit ... ok
+test test_lmm_test_contrast_marks_aliased_column_not_estimable ... ok
+test test_kenward_roger_lbddf_multi_df_contrast_returns_rank_df ... ok
+test test_scalar_objective_matches_julia_on_shared_fixture ... ok
+test test_lmm_test_contrast_returns_labeled_asymptotic_result ... ok
+test test_lmm_optimizer_certificate_records_interior_fit ... ok
+test test_objective_at_reuses_work_blocks_without_drift ... ok
+test test_lmm_satterthwaite_boundary_and_rank_deficient_cases_return_reasons ... ok
+test test_lmm_explicit_kenward_roger_scalar_request_returns_t_test ... ok
+test test_lmm_fixed_effect_term_hypotheses_have_explicit_type_semantics ... ok
+test test_vector_objective_matches_julia_on_shared_fixture ... ok
+test test_vcov_beta_varpar_matches_fitted_vcov_and_restores_state ... ok
+test test_two_by_two_covariance_kkt_certificate_flags_invalid_boundary_stop ... ok
+test test_two_by_two_covariance_kkt_certificate_valid_rank_one_rho_one ... ok
+test test_fixed_effect_null_bootstrap_multi_df_term_returns_joint_f_row ... ok
+test test_fixed_effect_h0_simulation_smoke_for_analytic_p_values ... ok
+test test_singular_fixture_zcp_fit_exposes_reduced_effective_rank ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/lmm_engine_contrasts.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lmm_engine_contrasts-eff32840c1bb96fc)
+
+running 3 tests
+test test_builtin_sum_contrast_fit_matches_treatment_fit_and_names_columns ... ok
+test test_sleepstudy_zerocorr_varcorr_std_devs ... ok
+test test_sleepstudy_independent_re_equivalent_to_zerocorr ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/lmm_engine_fit.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lmm_engine_fit-2fc831a170bc1491)
+
+running 62 tests
+test lmm_fit_options_reject_bad_start_theta_before_fitting ... ok
+test test_deviance_varpar_rejects_invalid_inputs_without_changing_state ... ok
+test test_dof_residual_matches_julia ... ok
+test test_dyestuff2_singular_fit_matches_julia ... ok
+test test_dyestuff_aic_bic_matches_julia ... ok
+test test_dyestuff2_sigma_matches_julia ... ok
+test stateless_transform_end_to_end_fit ... ok
+test test_dyestuff_condvar_shape ... ok
+test test_dyestuff_cond_is_one ... ok
+test test_dyestuff_ml_matches_julia ... ok
+test test_dyestuff_logdet_pwrss_varest ... ok
+test test_deviance_varpar_matches_ml_scalar_fit_and_restores_state ... ok
+test lmm_builder_matches_direct_construction_byte_for_byte ... ok
+test test_dyestuff_re_std_dev_matches_julia ... ok
+test test_dyestuff_ranef_u_sums_to_zero ... ok
+test test_cooks_distance_length ... ok
+test test_dyestuff_response_and_model_matrix ... ok
+test test_dyestuff_refit_new_response ... ok
+test test_is_singular_reflects_theta_at_lower_bound ... ok
+test test_cooks_distance_nonnegative ... ok
+test test_dyestuff_reml_matches_julia ... ok
+test test_cooks_distance_sum_finite ... ok
+test test_cooks_distance_parity_sleepstudy ... ok
+test test_ml_loglikelihood_aic_bic_relationships ... ok
+test test_ml_ranef_dimensions_scalar_re ... ok
+test test_lmm_set_theta_propagates_remat_err ... ok
+test test_ml_nobs_and_dof_scalar_re ... ok
+test test_pastes_batch_cask_only_model ... ok
+test test_lmm_refuses_structured_random_covariance_before_fit ... ok
+test test_lmm_audit_report_updates_after_fit ... ok
+test test_deviance_varpar_matches_reml_vector_fit_and_restores_state ... ok
+test test_scalar_covariance_kkt_certificate_flags_invalid_boundary_stop ... ok
+test test_response_accessor_matches_stored_response ... ok
+test test_pastes_varcorr_and_logdet_match_julia ... ok
+test test_pastes_nested_re_matches_julia ... ok
+test test_scalar_covariance_kkt_certificate_interior_converged ... ok
+test test_scalar_covariance_kkt_certificate_valid_zero_variance ... ok
+test test_scalar_covariance_kkt_certificate_marks_tiny_positive_variance_weak ... ok
+test test_set_theta_does_not_panic_on_bad_input ... ok
+test test_singular_re_fit_is_singular ... ok
+test test_penicillin_logdet_and_varest ... ok
+test test_penicillin_crossed_re_matches_julia ... ok
+test test_penicillin_std_devs ... ok
+test test_penicillin_ranef_b_last_element ... ok
+test test_penicillin_model_size ... ok
+test test_penicillin_condvar_matches_julia ... ok
+test test_sleepstudy_random_slope_only_matches_julia ... ok
+test test_ranef_u_regression_current_outputs ... ok
+test test_sleepstudy_condvar_matches_julia ... ok
+test test_penicillin_ranef_u_first_element ... ok
+test test_sleepstudy_dof_residual ... ok
+test test_weighted_model_matches_julia ... ok
+test test_penicillin_varcorr_std_devs_match_julia ... ok
+test test_sleepstudy_model_size ... ok
+test test_sleepstudy_ranef_b_first_element ... ok
+test test_sleepstudy_ranef_u_shape_and_first_element ... ok
+test test_sleepstudy_vector_re_logdet_and_pwrss ... ok
+test test_penicillin_varest_and_logdet ... ok
+test test_sleepstudy_vector_re_cond_matches_julia ... ok
+test test_sleepstudy_vector_re_matches_julia ... ok
+test test_sleepstudy_re_std_devs_match_julia ... ok
+test test_vector_re_fit_is_invariant_to_row_order ... ok
+
+test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/lmm_engine_inference.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lmm_engine_inference-8397d86700f53d3d)
+
+running 10 tests
+test test_coeftable_dyestuff_shape ... ok
+test test_ml_fixef_and_stderror ... ok
+test test_coeftable_p_values_consistent_with_stderror ... ok
+test test_vcov_varpar_rejects_boundary_hessian_without_changing_state ... ok
+test test_ml_wald_confint ... ok
+test test_lrt_nested_scalar_re_models ... ok
+test test_pastes_lrt_pvalue_matches_julia ... ok
+test test_coeftable_sleepstudy_two_rows ... ok
+test test_lrt_sleepstudy_matches_julia ... ok
+test test_lrt_sleepstudy_deviances_and_chisq ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/lmm_engine_prediction.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/lmm_engine_prediction-5e6e8dde886a7e93)
+
+running 18 tests
+test test_predict_new_categorical_encoding_is_training_anchored ... ok
+test test_dyestuff_fitted_and_residuals ... ok
+test test_ml_fitted_plus_residuals_equals_response ... ok
+test test_predict_new_same_data_equals_fitted_for_cell_grouping ... ok
+test test_predict_training_equals_fitted ... ok
+test test_dyestuff_leverage_matches_julia ... ok
+test test_predict_new_unknown_level_missing ... ok
+test test_predict_new_retains_builtin_helmert_contrast_snapshot ... ok
+test test_predict_new_variance_unseen_level_reports_structured_reason ... ok
+test test_predict_new_variance_rejects_invalid_interval_level ... ok
+test stateless_transform_predict_round_trip_is_stateless ... ok
+test test_simulate_length_and_distribution ... ok
+test test_profile_response_matrix_matches_scalar_model_for_single_column ... ok
+test test_predict_with_unseen_level_returns_typed_err ... ok
+test test_profile_response_matrix_batches_columns_consistently ... ok
+test test_predict_new_same_data_equals_fitted ... ok
+test test_predict_new_variance_same_data_has_fixed_random_and_combined_components ... ok
+test test_predict_new_same_data_equals_fitted_for_same_group_random_blocks ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+
+     Running tests/nested_constant_response.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/nested_constant_response-d83f1d811fcc238d)
+
+running 3 tests
+test nested_slash_formula_expands_to_same_diagnostic_target ... ok
+test nested_constant_response_prefit_message_points_to_observation_unit ... ok
+test nested_constant_response_fit_attempt_keeps_structural_explanation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/parity_agq.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_agq-e7b68ac1316730ab)
+
+running 3 tests
+test test_gh_norm_constants_match_julia ... ok
+test test_cbpp_agq5_deviance_matches_julia ... ok
+test test_agq_scales_correctly_with_strong_intercept_variance ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/parity_dispersion_glmm_lme4.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_dispersion_glmm_lme4-3fb6a85963997372)
+
+running 9 tests
+test inverse_gaussian_log_glmm_matches_lme4_2_1_nagq0 ... ok
+test gamma_log_glmm_matches_lme4_2_1_nagq0 ... ok
+test gaussian_log_glmm_matches_lme4_2_1_nagq0 ... ok
+test gaussian_log_glmm_matches_lme4_2_1_agq ... ok
+test gaussian_log_glmm_matches_lme4_2_1_laplace ... ok
+test gamma_log_glmm_matches_lme4_2_1_agq ... ok
+test inverse_gaussian_log_glmm_matches_lme4_2_1_agq ... ok
+test inverse_gaussian_log_glmm_matches_lme4_2_1_laplace ... ok
+test gamma_log_glmm_matches_lme4_2_1_laplace ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.84s
+
+     Running tests/parity_divergence_contract.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_divergence_contract-aae748f494ab06af)
+
+running 9 tests
+test mixedmodels_fast_oracle_scope_is_explicit_for_large_profiled_rows ... ok
+test culcitalogreg_laplace_is_promoted_to_joint_laplace_parity ... ok
+test culcitalogreg_agq_is_promoted_to_joint_agq_parity ... ok
+test glmm_coefficient_parity_is_pinned_separately_from_objective_constants ... ok
+test glmm_fast_pirls_divergences_are_quantified_and_kept_non_lme4 ... ok
+test gopherdat2_keeps_coefficient_parity_but_documents_near_boundary_singularity_gap ... ok
+test contraception_intercept_laplace_is_promoted_to_joint_laplace_parity ... ok
+test boundary_pathology_lmm_divergences_stay_diagnostic_not_parity ... ok
+test cbpp_laplace_is_promoted_to_joint_laplace_parity ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/parity_gamma_glmm.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_gamma_glmm-a082eef33ca86dde)
+
+running 5 tests
+test test_lme4_issue_643_gamma_log_fixture_records_engine_divergence ... ok
+test test_gamma_log_glmm_matches_lme4_2_1_not_mixedmodels_jl_unit_phi ... ok
+test test_gamma_log_fit_is_invariant_to_row_order ... ok
+test test_gamma_glmm_parametric_bootstrap_is_seeded_and_positive ... ok
+test test_lme4_issue_643_gamma_log_simulation_and_bootstrap_are_sane ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.11s
+
+     Running tests/parity_glmm_correlated_slope.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_glmm_correlated_slope-802796f4cf5dc96e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parity_glmm_high_baseline.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_glmm_high_baseline-542f603026674ad6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parity_glmm_native.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_glmm_native-62685512dccc93e9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parity_glmm_patents_poisson.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_glmm_patents_poisson-54e7a2b3fe83797c)
+
+running 2 tests
+test patents_poisson_joint_laplace_matches_glmer ... ok
+test patents_poisson_joint_start_survives_rounding_perturbations ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 51.27s
+
+     Running tests/parity_nb_theta_glmer.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_nb_theta_glmer-219e62867fbabc30)
+
+running 1 test
+test estimated_nb_theta_matches_glmer_nb ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 37.90s
+
+     Running tests/parity_negative_binomial_glmm.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_negative_binomial_glmm-8f7a05204fff44f2)
+
+running 3 tests
+test test_negative_binomial_fixed_theta_tracks_lme4_fixture ... ok
+test test_negative_binomial_estimated_theta_tracks_glmer_nb_fixture ... ok
+test test_negative_binomial_estimated_theta_joint_laplace_path_is_labelled ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+
+     Running tests/parity_parmap.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_parmap-7849a6dec5a246a0)
+
+running 1 test
+test test_parmap_vsize3_lower_triangular_order ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parity_ranef.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_ranef-c65a65b7bdf98b9e)
+
+running 3 tests
+test test_three_re_term_ranef ... ok
+test test_kb07_ranef_b_matches_julia ... ok
+test test_kb07_ranef_u_matches_julia ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/parity_rank_deficient.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_rank_deficient-79fc364242fc9549)
+
+running 4 tests
+test test_rank_deficient_dof_matches_julia ... ok
+test test_rank_deficient_sigma2_reml_matches_julia ... ok
+test test_rank_deficient_aic_bic_matches_julia ... ok
+test test_issue_809_wide_fixed_effects_are_rank_saturated_not_fit_success ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/parity_scorecard.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/parity_scorecard-e5b7f89e6dd9e231)
+
+running 3 tests
+test non_release_scorecard_rows_are_explained_and_not_presented_as_lme4_parity ... ok
+test release_blocking_scorecard_rows_pass_checked_in_comparison_artifacts ... ok
+test parity_scorecard_covers_every_dataset_fit_once ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/pathology_corpus.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/pathology_corpus-9811b10c025e4e88)
+
+running 32 tests
+test certify_is_deterministic_and_seed_independent ... ok
+test easy_fixture_does_not_trigger_weak_identification ... ok
+test crossed_sparse_connected_does_not_trigger_disconnected_crossings ... ok
+test crossed_block_diagonal_certifies_disconnected_components ... ok
+test easy_fixture_tags_no_glmm_policy_axes ... ok
+test crossed_block_diagonal_certificate_is_seed_independent ... ok
+test random_slope_singletons_certificate_is_engine_free_and_seed_independent ... ok
+test lint_rejects_constructed_multi_axis_spec ... ok
+test boundary_stratum_lands_on_or_near_zero_variance ... ok
+test pathology_toml_fixtures_match_current_contract_version ... ok
+test collinear_fe_transform_triggers_structural_unidentifiability ... ok
+test conditional_separation_fixture_certifies_conditional_only ... ok
+test easy_stratum_converges_to_interior ... ok
+test imbalance_transform_produces_right_skewed_group_sizes ... ok
+test random_slope_singletons_certifies_structurally_unidentifiable ... ok
+test set_group_sizes_overrides_existing_sizes ... ok
+test singletons_via_transform_matches_inline_singleton_fixture ... ok
+test scale_mismatch_transform_preserves_identifiability ... ok
+test fe_separation_fixture_certifies_fe_only ... ok
+test crossed_block_diagonal_engine_runs_with_two_grouping_factors ... ok
+test weak_id_score_invariant_under_uniform_and_per_axis_rescale ... ok
+test transforms_compose_without_field_collisions ... ok
+test weakly_identified_fixture_widens_expected_status_set ... ok
+test reduced_rank_stratum_collapses_to_supported_subspace ... ok
+test separation_detector_runs_quickly_on_corpus_sizes ... ok
+test refusal_stratum_rejects_or_pins_slope_to_boundary ... ok
+test separation_expected_statuses_admits_converged_penalised ... ok
+test separation_extreme_prevalence_certifies_both_tiers ... ok
+test every_corpus_fixture_satisfies_single_axis_policy ... ok
+test separation_fixtures_carry_only_separation_axis_among_glmm_axes ... ok
+test extreme_prevalence_transform_promotes_to_bernoulli_logit ... ok
+test test_certificate_unified_expected_statuses ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/prima_backend_parity.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/prima_backend_parity-7999d4e805ceaf7a)
+
+running 2 tests
+test prima_backend_manifest_keeps_only_bobyqa_wired_for_now ... ok
+test prima_backend_manifest_matches_rust_optimizer_labels ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/profile_likelihood_json.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/profile_likelihood_json-42ae0f82dda0784d)
+
+running 2 tests
+test reml_profile_payload_explicitly_notes_beta_omission ... ok
+test profile_confint_payload_round_trips_as_json ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/public_api.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/public_api-85f3062639a20558)
+
+running 8 tests
+test intended_stats_barrel_exports_compile_for_downstream_users ... ok
+test intended_types_exports_compile_for_downstream_users ... ok
+test intended_model_barrel_exports_compile_for_downstream_users ... ok
+test stable_result_and_error_types_are_send_sync ... ok
+test model_and_stats_barrels_do_not_use_glob_reexports ... ok
+test unstable_storage_helpers_are_not_top_level_reexports ... ok
+test downstream_crate_cannot_touch_sealed_model_internals ... FAILED
+test downstream_crate_cannot_import_internal_barrel_items ... FAILED
+
+failures:
+
+---- downstream_crate_cannot_touch_sealed_model_internals stdout ----
+
+thread 'downstream_crate_cannot_touch_sealed_model_internals' (20826954) panicked at tests/public_api.rs:209:9:
+expected `field `feterm`` in sealed API failure, got:
+error: failed to run custom build command for `nlopt v0.8.1`
+
+Caused by:
+  process didn't exit successfully: `/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-64e7d099fad3bf8c/build-script-build` (exit status: 101)
+  --- stdout
+  CMAKE_TOOLCHAIN_FILE_aarch64-apple-darwin = None
+  CMAKE_TOOLCHAIN_FILE_aarch64_apple_darwin = None
+  HOST_CMAKE_TOOLCHAIN_FILE = None
+  CMAKE_TOOLCHAIN_FILE = None
+  CMAKE_GENERATOR_aarch64-apple-darwin = None
+  CMAKE_GENERATOR_aarch64_apple_darwin = None
+  HOST_CMAKE_GENERATOR = None
+  CMAKE_GENERATOR = None
+  CMAKE_PREFIX_PATH_aarch64-apple-darwin = None
+  CMAKE_PREFIX_PATH_aarch64_apple_darwin = None
+  HOST_CMAKE_PREFIX_PATH = None
+  CMAKE_PREFIX_PATH = None
+  CMAKE_aarch64-apple-darwin = None
+  CMAKE_aarch64_apple_darwin = None
+  HOST_CMAKE = None
+  CMAKE = None
+
+  --- stderr
+  running: cd "/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-19b8a80f8b7f6248/out/build" && CMAKE_PREFIX_PATH="" LC_ALL="C" "cmake" "/Users/bbuchsbaum/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nlopt-0.8.1/./nlopt-2.9.1" "-B" "/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-19b8a80f8b7f6248/out/build" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DBUILD_SHARED_LIBS=OFF" "-DNLOPT_CXX=OFF" "-DNLOPT_PYTHON=OFF" "-DNLOPT_OCTAVE=OFF" "-DNLOPT_MATLAB=OFF" "-DNLOPT_GUILE=OFF" "-DNLOPT_SWIG=OFF" "-DNLOPT_LINK_PYTHON=OFF" "-DCMAKE_INSTALL_PREFIX=/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-19b8a80f8b7f6248/out" "-DCMAKE_C_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=14.2 -w" "-DCMAKE_C_COMPILER=/usr/bin/cc" "-DCMAKE_CXX_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=14.2 -w" "-DCMAKE_CXX_COMPILER=/usr/bin/c++" "-DCMAKE_ASM_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=14.2 -w" "-DCMAKE_ASM_COMPILER=/usr/bin/cc" "-DCMAKE_BUILD_TYPE=Debug"
+
+  thread 'main' (20828538) panicked at /Users/bbuchsbaum/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cmake-0.1.58/src/lib.rs:1132:5:
+
+  failed to execute command: No such file or directory (os error 2)
+  is `cmake` not installed?
+
+  build script failed, must exit now
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- downstream_crate_cannot_import_internal_barrel_items stdout ----
+
+thread 'downstream_crate_cannot_import_internal_barrel_items' (20826953) panicked at tests/public_api.rs:119:5:
+expected MatrixBlock import failure, got:
+error: failed to run custom build command for `nlopt v0.8.1`
+
+Caused by:
+  process didn't exit successfully: `/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-64e7d099fad3bf8c/build-script-build` (exit status: 101)
+  --- stdout
+  CMAKE_TOOLCHAIN_FILE_aarch64-apple-darwin = None
+  CMAKE_TOOLCHAIN_FILE_aarch64_apple_darwin = None
+  HOST_CMAKE_TOOLCHAIN_FILE = None
+  CMAKE_TOOLCHAIN_FILE = None
+  CMAKE_GENERATOR_aarch64-apple-darwin = None
+  CMAKE_GENERATOR_aarch64_apple_darwin = None
+  HOST_CMAKE_GENERATOR = None
+  CMAKE_GENERATOR = None
+  CMAKE_PREFIX_PATH_aarch64-apple-darwin = None
+  CMAKE_PREFIX_PATH_aarch64_apple_darwin = None
+  HOST_CMAKE_PREFIX_PATH = None
+  CMAKE_PREFIX_PATH = None
+  CMAKE_aarch64-apple-darwin = None
+  CMAKE_aarch64_apple_darwin = None
+  HOST_CMAKE = None
+  CMAKE = None
+
+  --- stderr
+  running: cd "/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-19b8a80f8b7f6248/out/build" && CMAKE_PREFIX_PATH="" LC_ALL="C" "cmake" "/Users/bbuchsbaum/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nlopt-0.8.1/./nlopt-2.9.1" "-B" "/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-19b8a80f8b7f6248/out/build" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DBUILD_SHARED_LIBS=OFF" "-DNLOPT_CXX=OFF" "-DNLOPT_PYTHON=OFF" "-DNLOPT_OCTAVE=OFF" "-DNLOPT_MATLAB=OFF" "-DNLOPT_GUILE=OFF" "-DNLOPT_SWIG=OFF" "-DNLOPT_LINK_PYTHON=OFF" "-DCMAKE_INSTALL_PREFIX=/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/build/nlopt-19b8a80f8b7f6248/out" "-DCMAKE_C_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=14.2 -w" "-DCMAKE_C_COMPILER=/usr/bin/cc" "-DCMAKE_CXX_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=14.2 -w" "-DCMAKE_CXX_COMPILER=/usr/bin/c++" "-DCMAKE_ASM_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=14.2 -w" "-DCMAKE_ASM_COMPILER=/usr/bin/cc" "-DCMAKE_BUILD_TYPE=Debug"
+
+  thread 'main' (20829544) panicked at /Users/bbuchsbaum/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cmake-0.1.58/src/lib.rs:1132:5:
+
+  failed to execute command: No such file or directory (os error 2)
+  is `cmake` not installed?
+
+  build script failed, must exit now
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+
+failures:
+    downstream_crate_cannot_import_internal_barrel_items
+    downstream_crate_cannot_touch_sealed_model_internals
+
+test result: FAILED. 6 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.89s
+
+error: test failed, to rerun pass `--test public_api`

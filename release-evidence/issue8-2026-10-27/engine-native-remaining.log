@@ -1,0 +1,65 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests/public_api.rs (target/debug/deps/public_api-d695c1014f88a73a)
+
+running 8 tests
+test intended_model_barrel_exports_compile_for_downstream_users ... ok
+test intended_types_exports_compile_for_downstream_users ... ok
+test intended_stats_barrel_exports_compile_for_downstream_users ... ok
+test stable_result_and_error_types_are_send_sync ... ok
+test unstable_storage_helpers_are_not_top_level_reexports ... ok
+test model_and_stats_barrels_do_not_use_glob_reexports ... ok
+test downstream_crate_cannot_touch_sealed_model_internals ... ok
+test downstream_crate_cannot_import_internal_barrel_items ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.05s
+
+     Running tests/random_factor_coding_lme4.rs (target/debug/deps/random_factor_coding_lme4-01a3079e4c056ce4)
+
+running 4 tests
+test double_bar_numeric_only_is_unchanged ... ok
+test no_intercept_random_basis_uses_r_model_matrix_coding ... ok
+test double_bar_with_factor_expands_like_lme4 ... ok
+test double_bar_with_numeric_and_factor_expands_like_lme4 ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/restored_interrupt_callback.rs (target/debug/deps/restored_interrupt_callback-e69e62859766b82a)
+
+running 2 tests
+test restored_lmm_reattaches_interrupt_without_changing_fitted_state ... ok
+test restored_glmm_reattaches_interrupt_without_changing_fitted_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/station_season_duration.rs (target/debug/deps/station_season_duration-ffa24ed35d804c18)
+
+running 2 tests
+test forum_model_is_flagged_as_over_requested_before_fit ... ok
+test forum_model_fit_is_not_reported_as_clean_interior_convergence ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+   Doc-tests mixeff_rs
+
+running 17 tests
+test src/lib.rs - unstable_internal_method (line 123) ... ignored
+test src/guide/mod.rs - guide::what_is_supported (line 100) ... ok
+test src/pathology/transforms.rs - pathology::transforms (line 6) ... ignored
+test src/pathology/transforms.rs - pathology::transforms::pareto_sizes (line 215) ... ignored
+test src/formula/mod.rs - formula (line 8) ... ok
+test src/formula/parser.rs - formula::parser::parse_formula (line 1085) ... ok
+test src/guide/mod.rs - guide::reading_results (line 31) ... ok
+test src/guide/mod.rs - guide::getting_started (line 82) ... ok
+test src/lib.rs - ReadmeDoctests (line 254) ... ok
+test src/guide/mod.rs - guide::glmms (line 34) ... ok
+test src/lib.rs - (line 36) ... ok
+test src/lib.rs - prelude (line 183) ... ok
+test src/guide/mod.rs - guide::getting_started (line 28) ... ok
+test src/model/generalized/mod.rs - model::generalized::GeneralizedLinearMixedModelBuilder (line 295) ... ok
+test src/model/linear/compiled.rs - model::linear::compiled::CompiledModelSpec (line 42) ... ok
+test src/guide/mod.rs - guide::when_the_crate_refuses (line 42) ... ok
+test src/model/linear/mod.rs - model::linear::LinearMixedModelBuilder (line 1152) ... ok
+
+test result: ok. 14 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 3.36s
+

@@ -1,0 +1,15 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running tests/glmm_artifact_contract.rs (target/debug/deps/glmm_artifact_contract-a13bf59853902a90)
+
+running 7 tests
+test joint_laplace_glmm_wald_rows_match_glmer_on_osf_study1b_correlated_slopes ... ok
+test profiled_bernoulli_vcov_uses_unit_glmm_dispersion_scale ... ok
+test joint_laplace_glmm_boundary_theta_still_certifies_fixed_effect_rows ... ok
+test binomial_separation_keeps_glmm_wald_rows_unavailable_with_reason ... ok
+test native_glmm_artifact_records_support_contract_metadata ... ok
+test joint_laplace_glmm_artifact_reports_certified_wald_rows_when_hessian_passes ... ok
+test joint_laplace_glmm_wald_rows_match_glmer_on_correlated_random_slopes has been running for over 60 seconds
+test joint_laplace_glmm_wald_rows_match_glmer_on_correlated_random_slopes ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.44s
+

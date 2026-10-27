@@ -1,5 +1,11 @@
 # mixeff 0.2.0
 
+* Scalar `optCtrl$xtol_abs` and `rhobeg` now broadcast to the theta dimension
+  in the engine; nonscalar mismatches and invalid values remain errors.
+* Joint-Laplace diagnostics distinguish the unassessed fit-time Hessian from
+  the later inference Hessian. Optimizer certificates print derivative-evidence
+  quality and reasons; covariance notes identify its parameter block and backend.
+
 ## Restored-model cancellation and release checks
 
 * Restoring a fitted snapshot now reattaches the R interrupt callback without

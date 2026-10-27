@@ -1,0 +1,1678 @@
+﻿2026-10-27T18:48:34.2596244Z Current runner version: '2.338.0'
+2026-10-27T18:48:34.2615999Z ##[group]Runner Image Provisioner
+2026-10-27T18:48:34.2616596Z Hosted Compute Agent
+2026-10-27T18:48:34.2617066Z Version: 20261021.618
+2026-10-27T18:48:34.2617487Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-10-27T18:48:34.2617983Z Build Date: 2026-10-21T00:45:21Z
+2026-10-27T18:48:34.2618391Z Worker ID: {654787dd-c017-47f7-8853-4a9736556002}
+2026-10-27T18:48:34.2618838Z Region: southcentralus
+2026-10-27T18:48:34.2619234Z Cloud: Azure
+2026-10-27T18:48:34.2619597Z ##[endgroup]
+2026-10-27T18:48:34.2620676Z ##[group]Operating System
+2026-10-27T18:48:34.2621061Z Ubuntu
+2026-10-27T18:48:34.2621384Z 26.04.1
+2026-10-27T18:48:34.2621764Z LTS
+2026-10-27T18:48:34.2622111Z ##[endgroup]
+2026-10-27T18:48:34.2622468Z ##[group]Runner Image
+2026-10-27T18:48:34.2622845Z Image: ubuntu-26.04
+2026-10-27T18:48:34.2623195Z Version: 20261012.163.1
+2026-10-27T18:48:34.2624005Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261012.163/images/ubuntu/Ubuntu2604-Readme.md
+2026-10-27T18:48:34.2624941Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261012.163
+2026-10-27T18:48:34.2625520Z ##[endgroup]
+2026-10-27T18:48:34.2626723Z ##[group]GITHUB_TOKEN Permissions
+2026-10-27T18:48:34.2628183Z Contents: read
+2026-10-27T18:48:34.2628527Z Metadata: read
+2026-10-27T18:48:34.2628923Z Packages: read
+2026-10-27T18:48:34.2629265Z ##[endgroup]
+2026-10-27T18:48:34.2630704Z Secret source: Actions
+2026-10-27T18:48:34.2631361Z Cache mode: write
+2026-10-27T18:48:34.2631908Z Prepare workflow directory
+2026-10-27T18:48:34.2892001Z Prepare all required actions
+2026-10-27T18:48:34.2924508Z Getting action download info
+2026-10-27T18:48:34.5571044Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-27T18:48:34.6403214Z Download action repository 'dtolnay/rust-toolchain@stable' (SHA:b725eda525362e7cf34af9a7243cac1e3f01a7ec)
+2026-10-27T18:48:34.8924560Z Complete job name: test no-default+unstable (ubuntu-latest)
+2026-10-27T18:48:34.9452136Z ##[group]Run actions/checkout@v4
+2026-10-27T18:48:34.9452563Z with:
+2026-10-27T18:48:34.9452818Z   repository: bbuchsbaum/mixeff-rs
+2026-10-27T18:48:34.9454874Z   token: ***
+2026-10-27T18:48:34.9455119Z   ssh-strict: true
+2026-10-27T18:48:34.9455371Z   ssh-user: git
+2026-10-27T18:48:34.9455753Z   persist-credentials: true
+2026-10-27T18:48:34.9456032Z   clean: true
+2026-10-27T18:48:34.9456293Z   sparse-checkout-cone-mode: true
+2026-10-27T18:48:34.9456587Z   fetch-depth: 1
+2026-10-27T18:48:34.9456832Z   fetch-tags: false
+2026-10-27T18:48:34.9457093Z   show-progress: true
+2026-10-27T18:48:34.9457354Z   lfs: false
+2026-10-27T18:48:34.9457596Z   submodules: false
+2026-10-27T18:48:34.9457855Z   set-safe-directory: true
+2026-10-27T18:48:34.9458152Z   allow-unsafe-pr-checkout: false
+2026-10-27T18:48:34.9458515Z env:
+2026-10-27T18:48:34.9458754Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:34.9459025Z ##[endgroup]
+2026-10-27T18:48:35.1440666Z Syncing repository: bbuchsbaum/mixeff-rs
+2026-10-27T18:48:35.1442258Z ##[group]Getting Git version info
+2026-10-27T18:48:35.1442704Z Working directory is '/home/runner/work/mixeff-rs/mixeff-rs'
+2026-10-27T18:48:35.1443318Z [command]/usr/bin/git version
+2026-10-27T18:48:35.1452700Z git version 2.55.0
+2026-10-27T18:48:35.1465153Z ##[endgroup]
+2026-10-27T18:48:35.1475396Z Temporarily overriding HOME='/home/runner/work/_temp/bddafdfe-7bb2-4977-b49d-57296e4c040e' before making global git config changes
+2026-10-27T18:48:35.1476996Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-27T18:48:35.1478849Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/mixeff-rs/mixeff-rs
+2026-10-27T18:48:35.1525945Z Deleting the contents of '/home/runner/work/mixeff-rs/mixeff-rs'
+2026-10-27T18:48:35.1529703Z ##[group]Initializing the repository
+2026-10-27T18:48:35.1532286Z [command]/usr/bin/git init /home/runner/work/mixeff-rs/mixeff-rs
+2026-10-27T18:48:35.1626794Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-27T18:48:35.1630060Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-27T18:48:35.1631026Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-27T18:48:35.1631805Z hint: call:
+2026-10-27T18:48:35.1632200Z hint:
+2026-10-27T18:48:35.1632719Z hint: 	git config --global init.defaultBranch <name>
+2026-10-27T18:48:35.1633316Z hint:
+2026-10-27T18:48:35.1633902Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-27T18:48:35.1634847Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-27T18:48:35.1635568Z hint:
+2026-10-27T18:48:35.1636170Z hint: 	git branch -m <name>
+2026-10-27T18:48:35.1636659Z hint:
+2026-10-27T18:48:35.1637305Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-27T18:48:35.1638347Z Initialized empty Git repository in /home/runner/work/mixeff-rs/mixeff-rs/.git/
+2026-10-27T18:48:35.1640275Z [command]/usr/bin/git remote add origin https://github.com/bbuchsbaum/mixeff-rs
+2026-10-27T18:48:35.1693156Z ##[endgroup]
+2026-10-27T18:48:35.1693951Z ##[group]Disabling automatic garbage collection
+2026-10-27T18:48:35.1695989Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-27T18:48:35.1722678Z ##[endgroup]
+2026-10-27T18:48:35.1723128Z ##[group]Setting up auth
+2026-10-27T18:48:35.1727219Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-27T18:48:35.1752766Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-27T18:48:35.2085292Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-27T18:48:35.2113257Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-27T18:48:35.2346358Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-27T18:48:35.2378287Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-27T18:48:35.2618218Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-27T18:48:35.2655065Z ##[endgroup]
+2026-10-27T18:48:35.2656017Z ##[group]Fetching the repository
+2026-10-27T18:48:35.2665405Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +a6b644490a8b83cd871045bb7d3e9065315aefab:refs/remotes/origin/fix/scalar-tolerance-diagnostics
+2026-10-27T18:48:37.2790952Z From https://github.com/bbuchsbaum/mixeff-rs
+2026-10-27T18:48:37.2792976Z  * [new ref]         a6b644490a8b83cd871045bb7d3e9065315aefab -> origin/fix/scalar-tolerance-diagnostics
+2026-10-27T18:48:37.2797172Z ##[endgroup]
+2026-10-27T18:48:37.2798398Z ##[group]Determining the checkout info
+2026-10-27T18:48:37.2799679Z ##[endgroup]
+2026-10-27T18:48:37.2800573Z [command]/usr/bin/git sparse-checkout disable
+2026-10-27T18:48:37.2843996Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-27T18:48:37.2869499Z ##[group]Checking out the ref
+2026-10-27T18:48:37.2872263Z [command]/usr/bin/git checkout --progress --force -B fix/scalar-tolerance-diagnostics refs/remotes/origin/fix/scalar-tolerance-diagnostics
+2026-10-27T18:48:37.4174123Z Switched to a new branch 'fix/scalar-tolerance-diagnostics'
+2026-10-27T18:48:37.4176097Z branch 'fix/scalar-tolerance-diagnostics' set up to track 'origin/fix/scalar-tolerance-diagnostics'.
+2026-10-27T18:48:37.4199247Z ##[endgroup]
+2026-10-27T18:48:37.4242123Z [command]/usr/bin/git log -1 --format=%H
+2026-10-27T18:48:37.4265059Z a6b644490a8b83cd871045bb7d3e9065315aefab
+2026-10-27T18:48:37.4724382Z ##[group]Run dtolnay/rust-toolchain@stable
+2026-10-27T18:48:37.4725347Z with:
+2026-10-27T18:48:37.4726063Z   toolchain: stable
+2026-10-27T18:48:37.4726676Z env:
+2026-10-27T18:48:37.4727258Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:37.4727922Z ##[endgroup]
+2026-10-27T18:48:37.4787147Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-10-27T18:48:37.4916633Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-10-27T18:48:37.4917526Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-10-27T18:48:37.4918743Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-10-27T18:48:37.4920048Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-10-27T18:48:37.4920810Z [36;1m  exit 1[0m
+2026-10-27T18:48:37.4921644Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-10-27T18:48:37.4922637Z [36;1m  if [[ Linux == macOS ]]; then[0m
+2026-10-27T18:48:37.4923912Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-10-27T18:48:37.4925147Z [36;1m  else[0m
+2026-10-27T18:48:37.4926307Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-10-27T18:48:37.4927405Z [36;1m  fi[0m
+2026-10-27T18:48:37.4928161Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-10-27T18:48:37.4929414Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-10-27T18:48:37.4930521Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-10-27T18:48:37.4931761Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-10-27T18:48:37.4932949Z [36;1melse[0m
+2026-10-27T18:48:37.4933500Z [36;1m  delimiter=EOF[0m
+2026-10-27T18:48:37.4934288Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-10-27T18:48:37.4935503Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-10-27T18:48:37.4936607Z [36;1mfi[0m
+2026-10-27T18:48:37.5071283Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:37.5072116Z env:
+2026-10-27T18:48:37.5072657Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:37.5073277Z   toolchain: stable
+2026-10-27T18:48:37.5073830Z ##[endgroup]
+2026-10-27T18:48:37.5199256Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=41]
+2026-10-27T18:48:37.5205093Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-10-27T18:48:37.5242145Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+2026-10-27T18:48:37.5243246Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV[0m
+2026-10-27T18:48:37.5295018Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:37.5295902Z env:
+2026-10-27T18:48:37.5296411Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:37.5296989Z ##[endgroup]
+2026-10-27T18:48:37.5403480Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=19]
+2026-10-27T18:48:37.5408215Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-10-27T18:48:37.5462813Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-10-27T18:48:37.5463670Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-10-27T18:48:37.5465291Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain none -y[0m
+2026-10-27T18:48:37.5467031Z [36;1m  echo "$CARGO_HOME/bin" >> $GITHUB_PATH[0m
+2026-10-27T18:48:37.5467747Z [36;1mfi[0m
+2026-10-27T18:48:37.5534209Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:37.5535470Z env:
+2026-10-27T18:48:37.5536153Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:37.5536914Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:37.5537566Z ##[endgroup]
+2026-10-27T18:48:37.5648717Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=success;conclusion=success;duration_ms=23]
+2026-10-27T18:48:37.5653289Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-10-27T18:48:37.5664929Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-10-27T18:48:37.5679135Z ##[start-action display=rustup toolchain install stable;id=__dtolnay_rust-toolchain.__run_4]
+2026-10-27T18:48:37.5717847Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-10-27T18:48:37.5720099Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-10-27T18:48:37.5721625Z [36;1mflags=()[0m
+2026-10-27T18:48:37.5722313Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-10-27T18:48:37.5723549Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-10-27T18:48:37.5725123Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-10-27T18:48:37.5726706Z [36;1mlog=$(mktemp)[0m
+2026-10-27T18:48:37.5727528Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-10-27T18:48:37.5728164Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-10-27T18:48:37.5729869Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-10-27T18:48:37.5731953Z [36;1m    break[0m
+2026-10-27T18:48:37.5732577Z [36;1m  else[0m
+2026-10-27T18:48:37.5733085Z [36;1m    status=$?[0m
+2026-10-27T18:48:37.5733910Z [36;1m  fi[0m
+2026-10-27T18:48:37.5734903Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-10-27T18:48:37.5737456Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-10-27T18:48:37.5738970Z [36;1m    exit "$status"[0m
+2026-10-27T18:48:37.5739739Z [36;1m  fi[0m
+2026-10-27T18:48:37.5740762Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-10-27T18:48:37.5742043Z [36;1m  sleep 30[0m
+2026-10-27T18:48:37.5742866Z [36;1mdone[0m
+2026-10-27T18:48:37.5822643Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:37.5823395Z env:
+2026-10-27T18:48:37.5823879Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:37.5824470Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:37.5825079Z   toolchain: stable
+2026-10-27T18:48:37.5825598Z   targets: 
+2026-10-27T18:48:37.5826223Z   components: 
+2026-10-27T18:48:37.5826761Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-10-27T18:48:37.5827347Z ##[endgroup]
+2026-10-27T18:48:37.7949554Z info: syncing channel updates for stable-x86_64-unknown-linux-gnu
+2026-10-27T18:48:37.9807238Z info: latest update on 2026-10-15 for version 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-27T18:48:37.9905911Z info: removing previous version of component rustfmt
+2026-10-27T18:48:37.9922785Z info: removing previous version of component clippy
+2026-10-27T18:48:37.9932084Z info: removing previous version of component cargo
+2026-10-27T18:48:37.9966229Z info: removing previous version of component rust-std
+2026-10-27T18:48:38.0003792Z info: removing previous version of component rustc
+2026-10-27T18:48:38.0040939Z info: downloading 5 components
+2026-10-27T18:48:45.4127625Z 
+2026-10-27T18:48:45.4186616Z   stable-x86_64-unknown-linux-gnu updated - rustc 1.99.1 (58cf8f9c3 2026-10-13) (from rustc 1.99.0 (b940084d7 2026-09-28))
+2026-10-27T18:48:45.4186986Z 
+2026-10-27T18:48:45.4434301Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=7875]
+2026-10-27T18:48:45.4441000Z ##[start-action display=rustup default stable;id=__dtolnay_rust-toolchain.__run_5]
+2026-10-27T18:48:45.4456619Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-10-27T18:48:45.4456974Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-10-27T18:48:45.4508653Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:45.4508844Z env:
+2026-10-27T18:48:45.4508965Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.4509106Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.4509249Z   toolchain: stable
+2026-10-27T18:48:45.4509375Z ##[endgroup]
+2026-10-27T18:48:45.4611037Z info: using existing install for stable-x86_64-unknown-linux-gnu
+2026-10-27T18:48:45.4616633Z info: default toolchain set to stable-x86_64-unknown-linux-gnu
+2026-10-27T18:48:45.4616784Z 
+2026-10-27T18:48:45.4669981Z   stable-x86_64-unknown-linux-gnu unchanged - rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-27T18:48:45.4670222Z 
+2026-10-27T18:48:45.4685857Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=24]
+2026-10-27T18:48:45.4689093Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-10-27T18:48:45.4703229Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-10-27T18:48:45.4703753Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-10-27T18:48:45.4704127Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-10-27T18:48:45.4704417Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-10-27T18:48:45.4752812Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:45.4753002Z env:
+2026-10-27T18:48:45.4753122Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.4753268Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.4753413Z   toolchain: stable
+2026-10-27T18:48:45.4753536Z ##[endgroup]
+2026-10-27T18:48:45.5047003Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=35]
+2026-10-27T18:48:45.5049043Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-10-27T18:48:45.5064441Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-10-27T18:48:45.5064683Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-10-27T18:48:45.5064872Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-10-27T18:48:45.5065041Z [36;1mfi[0m
+2026-10-27T18:48:45.5117340Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:45.5117536Z env:
+2026-10-27T18:48:45.5117664Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.5117813Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.5117962Z ##[endgroup]
+2026-10-27T18:48:45.5186129Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=13]
+2026-10-27T18:48:45.5187667Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-10-27T18:48:45.5201797Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-10-27T18:48:45.5202027Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-10-27T18:48:45.5202220Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-10-27T18:48:45.5202392Z [36;1mfi[0m
+2026-10-27T18:48:45.5248491Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:45.5248684Z env:
+2026-10-27T18:48:45.5248807Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.5248952Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.5249097Z   CARGO_INCREMENTAL: 0
+2026-10-27T18:48:45.5249223Z ##[endgroup]
+2026-10-27T18:48:45.5313957Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=12]
+2026-10-27T18:48:45.5317146Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-10-27T18:48:45.5348196Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-10-27T18:48:45.5348660Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-10-27T18:48:45.5349052Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-10-27T18:48:45.5349561Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-10-27T18:48:45.5349892Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-10-27T18:48:45.5350190Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-10-27T18:48:45.5350474Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-10-27T18:48:45.5350793Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-10-27T18:48:45.5351075Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-10-27T18:48:45.5351269Z [36;1m  fi[0m
+2026-10-27T18:48:45.5351383Z [36;1mfi[0m
+2026-10-27T18:48:45.5396174Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:45.5396367Z env:
+2026-10-27T18:48:45.5396485Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.5396631Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.5396778Z   CARGO_INCREMENTAL: 0
+2026-10-27T18:48:45.5396901Z   toolchain: stable
+2026-10-27T18:48:45.5397022Z ##[endgroup]
+2026-10-27T18:48:45.5650151Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=33]
+2026-10-27T18:48:45.5654011Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-10-27T18:48:45.5668818Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-10-27T18:48:45.5669255Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-10-27T18:48:45.5669622Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-10-27T18:48:45.5669893Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-10-27T18:48:45.5670086Z [36;1mfi[0m
+2026-10-27T18:48:45.5721881Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:45.5722073Z env:
+2026-10-27T18:48:45.5722193Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.5722337Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.5722487Z   CARGO_INCREMENTAL: 0
+2026-10-27T18:48:45.5722614Z   toolchain: stable
+2026-10-27T18:48:45.5722743Z ##[endgroup]
+2026-10-27T18:48:45.5882006Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=22]
+2026-10-27T18:48:45.5886034Z ##[start-action display=rustc +stable --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-10-27T18:48:45.5899864Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-10-27T18:48:45.5900081Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-10-27T18:48:45.5946584Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T18:48:45.5946780Z env:
+2026-10-27T18:48:45.5946921Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.5947095Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.5947273Z   CARGO_INCREMENTAL: 0
+2026-10-27T18:48:45.5947501Z   toolchain: stable
+2026-10-27T18:48:45.5947625Z ##[endgroup]
+2026-10-27T18:48:45.6089919Z rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-10-27T18:48:45.6090123Z binary: rustc
+2026-10-27T18:48:45.6090280Z commit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67
+2026-10-27T18:48:45.6090553Z commit-date: 2026-10-13
+2026-10-27T18:48:45.6090709Z host: x86_64-unknown-linux-gnu
+2026-10-27T18:48:45.6090848Z release: 1.99.1
+2026-10-27T18:48:45.6091099Z LLVM version: 23.1.1
+2026-10-27T18:48:45.6104449Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=21]
+2026-10-27T18:48:45.6156075Z ##[group]Run cargo test --no-default-features --features unstable-internals
+2026-10-27T18:48:45.6156395Z [36;1mcargo test --no-default-features --features unstable-internals[0m
+2026-10-27T18:48:45.6205008Z shell: /usr/bin/bash -e {0}
+2026-10-27T18:48:45.6205297Z env:
+2026-10-27T18:48:45.6205426Z   CARGO_TERM_COLOR: always
+2026-10-27T18:48:45.6205568Z   CARGO_HOME: /home/runner/.cargo
+2026-10-27T18:48:45.6205905Z   CARGO_INCREMENTAL: 0
+2026-10-27T18:48:45.6206036Z ##[endgroup]
+2026-10-27T18:48:45.6520081Z [1m[92m    Updating[0m crates.io index
+2026-10-27T18:48:46.0637226Z [1m[92m Downloading[0m crates ...
+2026-10-27T18:48:46.1867347Z [1m[92m  Downloaded[0m approx v0.5.1
+2026-10-27T18:48:46.1891788Z [1m[92m  Downloaded[0m anes v0.1.6
+2026-10-27T18:48:46.1910283Z [1m[92m  Downloaded[0m anstyle v1.0.14
+2026-10-27T18:48:46.1931253Z [1m[92m  Downloaded[0m cpufeatures v0.2.17
+2026-10-27T18:48:46.2052929Z [1m[92m  Downloaded[0m autocfg v1.5.0
+2026-10-27T18:48:46.2066255Z [1m[92m  Downloaded[0m generic-array v0.14.7
+2026-10-27T18:48:46.2160602Z [1m[92m  Downloaded[0m aho-corasick v1.1.4
+2026-10-27T18:48:46.2196413Z [1m[92m  Downloaded[0m proc-macro2 v1.0.106
+2026-10-27T18:48:46.2216395Z [1m[92m  Downloaded[0m toml_datetime v0.6.11
+2026-10-27T18:48:46.2235995Z [1m[92m  Downloaded[0m safe_arch v0.7.4
+2026-10-27T18:48:46.2266712Z [1m[92m  Downloaded[0m memchr v2.8.0
+2026-10-27T18:48:46.2303217Z [1m[92m  Downloaded[0m nalgebra-macros v0.2.2
+2026-10-27T18:48:46.2311106Z [1m[92m  Downloaded[0m version_check v0.9.5
+2026-10-27T18:48:46.2319311Z [1m[92m  Downloaded[0m wide v0.7.33
+2026-10-27T18:48:46.2351136Z [1m[92m  Downloaded[0m rawpointer v0.2.1
+2026-10-27T18:48:46.2358313Z [1m[92m  Downloaded[0m cfg-if v1.0.4
+2026-10-27T18:48:46.2365252Z [1m[92m  Downloaded[0m ciborium v0.2.2
+2026-10-27T18:48:46.2381593Z [1m[92m  Downloaded[0m block-buffer v0.10.4
+2026-10-27T18:48:46.2389540Z [1m[92m  Downloaded[0m ciborium-ll v0.2.2
+2026-10-27T18:48:46.2416409Z [1m[92m  Downloaded[0m clap_lex v1.1.0
+2026-10-27T18:48:46.2416865Z [1m[92m  Downloaded[0m crypto-common v0.1.7
+2026-10-27T18:48:46.2417493Z [1m[92m  Downloaded[0m same-file v1.0.6
+2026-10-27T18:48:46.2417997Z [1m[92m  Downloaded[0m cast v0.3.0
+2026-10-27T18:48:46.2427413Z [1m[92m  Downloaded[0m unicode-ident v1.0.24
+2026-10-27T18:48:46.2447240Z [1m[92m  Downloaded[0m zmij v1.0.21
+2026-10-27T18:48:46.2459676Z [1m[92m  Downloaded[0m num-complex v0.4.6
+2026-10-27T18:48:46.2469825Z [1m[92m  Downloaded[0m equivalent v1.0.2
+2026-10-27T18:48:46.2476432Z [1m[92m  Downloaded[0m rand_chacha v0.3.1
+2026-10-27T18:48:46.2496525Z [1m[92m  Downloaded[0m is-terminal v0.4.17
+2026-10-27T18:48:46.2496976Z [1m[92m  Downloaded[0m num-complex v0.2.4
+2026-10-27T18:48:46.2498739Z [1m[92m  Downloaded[0m oorandom v11.1.5
+2026-10-27T18:48:46.2506199Z [1m[92m  Downloaded[0m criterion-plot v0.5.0
+2026-10-27T18:48:46.2518195Z [1m[92m  Downloaded[0m serde_spanned v0.6.9
+2026-10-27T18:48:46.2536894Z [1m[92m  Downloaded[0m itoa v1.0.18
+2026-10-27T18:48:46.2537196Z [1m[92m  Downloaded[0m digest v0.10.7
+2026-10-27T18:48:46.2550744Z [1m[92m  Downloaded[0m quote v1.0.45
+2026-10-27T18:48:46.2574640Z [1m[92m  Downloaded[0m ciborium-io v0.2.2
+2026-10-27T18:48:46.2596284Z [1m[92m  Downloaded[0m num-traits v0.1.43
+2026-10-27T18:48:46.2596629Z [1m[92m  Downloaded[0m either v1.15.0
+2026-10-27T18:48:46.2606151Z [1m[92m  Downloaded[0m tinytemplate v1.2.1
+2026-10-27T18:48:46.2620413Z [1m[92m  Downloaded[0m walkdir v2.5.0
+2026-10-27T18:48:46.2637179Z [1m[92m  Downloaded[0m num-integer v0.1.46
+2026-10-27T18:48:46.2650566Z [1m[92m  Downloaded[0m csv-core v0.1.13
+2026-10-27T18:48:46.2661485Z [1m[92m  Downloaded[0m paste v1.0.15
+2026-10-27T18:48:46.2689646Z [1m[92m  Downloaded[0m sha2 v0.10.9
+2026-10-27T18:48:46.2712184Z [1m[92m  Downloaded[0m rand_core v0.6.4
+2026-10-27T18:48:46.2723990Z [1m[92m  Downloaded[0m thiserror-impl v2.0.18
+2026-10-27T18:48:46.2736690Z [1m[92m  Downloaded[0m serde_json v1.0.149
+2026-10-27T18:48:46.2801220Z [1m[92m  Downloaded[0m thiserror v2.0.18
+2026-10-27T18:48:46.2857551Z [1m[92m  Downloaded[0m num-rational v0.4.2
+2026-10-27T18:48:46.2869024Z [1m[92m  Downloaded[0m ppv-lite86 v0.2.21
+2026-10-27T18:48:46.2878204Z [1m[92m  Downloaded[0m minilp v0.2.2
+2026-10-27T18:48:46.2891772Z [1m[92m  Downloaded[0m half v2.7.1
+2026-10-27T18:48:46.2910166Z [1m[92m  Downloaded[0m num-traits v0.2.19
+2026-10-27T18:48:46.2928030Z [1m[92m  Downloaded[0m once_cell v1.21.4
+2026-10-27T18:48:46.2945010Z [1m[92m  Downloaded[0m typenum v1.19.0
+2026-10-27T18:48:46.2964499Z [1m[92m  Downloaded[0m matrixmultiply v0.2.4
+2026-10-27T18:48:46.2980329Z [1m[92m  Downloaded[0m toml v0.8.23
+2026-10-27T18:48:46.2996332Z [1m[92m  Downloaded[0m cobyla v1.0.0
+2026-10-27T18:48:46.3014778Z [1m[92m  Downloaded[0m rand_distr v0.4.3
+2026-10-27T18:48:46.3033289Z [1m[92m  Downloaded[0m getrandom v0.2.17
+2026-10-27T18:48:46.3052430Z [1m[92m  Downloaded[0m clap_builder v4.6.0
+2026-10-27T18:48:46.3095298Z [1m[92m  Downloaded[0m log v0.4.29
+2026-10-27T18:48:46.3111877Z [1m[92m  Downloaded[0m simba v0.9.1
+2026-10-27T18:48:46.3131315Z [1m[92m  Downloaded[0m ryu v1.0.23
+2026-10-27T18:48:46.3152713Z [1m[92m  Downloaded[0m serde_core v1.0.228
+2026-10-27T18:48:46.3170834Z [1m[92m  Downloaded[0m bytemuck v1.25.0
+2026-10-27T18:48:46.3191607Z [1m[92m  Downloaded[0m serde_derive v1.0.228
+2026-10-27T18:48:46.3211892Z [1m[92m  Downloaded[0m zerocopy-derive v0.8.48
+2026-10-27T18:48:46.3272735Z [1m[92m  Downloaded[0m clap v4.6.1
+2026-10-27T18:48:46.3336054Z [1m[92m  Downloaded[0m matrixmultiply v0.3.10
+2026-10-27T18:48:46.3360328Z [1m[92m  Downloaded[0m nalgebra-sparse v0.10.0
+2026-10-27T18:48:46.3392000Z [1m[92m  Downloaded[0m num-bigint v0.4.6
+2026-10-27T18:48:46.3422563Z [1m[92m  Downloaded[0m serde v1.0.228
+2026-10-27T18:48:46.3445456Z [1m[92m  Downloaded[0m sprs v0.7.1
+2026-10-27T18:48:46.3469491Z [1m[92m  Downloaded[0m toml_edit v0.22.27
+2026-10-27T18:48:46.3498297Z [1m[92m  Downloaded[0m itertools v0.10.5
+2026-10-27T18:48:46.3540316Z [1m[92m  Downloaded[0m rand v0.8.6
+2026-10-27T18:48:46.3562539Z [1m[92m  Downloaded[0m indexmap v2.13.0
+2026-10-27T18:48:46.3590894Z [1m[92m  Downloaded[0m criterion v0.5.1
+2026-10-27T18:48:46.3638375Z [1m[92m  Downloaded[0m winnow v0.7.15
+2026-10-27T18:48:46.3702260Z [1m[92m  Downloaded[0m statrs v0.18.0
+2026-10-27T18:48:46.3742122Z [1m[92m  Downloaded[0m hashbrown v0.16.1
+2026-10-27T18:48:46.3776414Z [1m[92m  Downloaded[0m libm v0.2.16
+2026-10-27T18:48:46.3849079Z [1m[92m  Downloaded[0m regex v1.12.3
+2026-10-27T18:48:46.3884467Z [1m[92m  Downloaded[0m ndarray v0.13.1
+2026-10-27T18:48:46.3955846Z [1m[92m  Downloaded[0m zerocopy v0.8.48
+2026-10-27T18:48:46.4103232Z [1m[92m  Downloaded[0m syn v2.0.117
+2026-10-27T18:48:46.4175303Z [1m[92m  Downloaded[0m regex-syntax v0.8.10
+2026-10-27T18:48:46.4222864Z [1m[92m  Downloaded[0m nalgebra v0.33.3
+2026-10-27T18:48:46.4386272Z [1m[92m  Downloaded[0m regex-automata v0.4.14
+2026-10-27T18:48:46.4483698Z [1m[92m  Downloaded[0m libc v0.2.183
+2026-10-27T18:48:46.4747440Z [1m[92m  Downloaded[0m csv v1.4.0
+2026-10-27T18:48:46.5567338Z [1m[92m   Compiling[0m proc-macro2 v1.0.106
+2026-10-27T18:48:46.5567804Z [1m[92m   Compiling[0m unicode-ident v1.0.24
+2026-10-27T18:48:46.5591163Z [1m[92m   Compiling[0m quote v1.0.45
+2026-10-27T18:48:46.5593296Z [1m[92m   Compiling[0m autocfg v1.5.0
+2026-10-27T18:48:46.5981296Z [1m[92m   Compiling[0m libm v0.2.16
+2026-10-27T18:48:46.7069589Z [1m[92m   Compiling[0m serde_core v1.0.228
+2026-10-27T18:48:46.7999209Z [1m[92m   Compiling[0m num-traits v0.2.19
+2026-10-27T18:48:46.9234193Z [1m[92m   Compiling[0m serde v1.0.228
+2026-10-27T18:48:47.1321926Z [1m[92m   Compiling[0m syn v2.0.117
+2026-10-27T18:48:47.1677359Z [1m[92m   Compiling[0m zerocopy v0.8.48
+2026-10-27T18:48:47.3176934Z [1m[92m   Compiling[0m libc v0.2.183
+2026-10-27T18:48:47.6907400Z [1m[92m   Compiling[0m cfg-if v1.0.4
+2026-10-27T18:48:47.9516175Z [1m[92m   Compiling[0m typenum v1.19.0
+2026-10-27T18:48:48.3477619Z [1m[92m   Compiling[0m rawpointer v0.2.1
+2026-10-27T18:48:48.3764335Z [1m[92m   Compiling[0m getrandom v0.2.17
+2026-10-27T18:48:48.3827106Z [1m[92m   Compiling[0m num-integer v0.1.46
+2026-10-27T18:48:48.4807296Z [1m[92m   Compiling[0m version_check v0.9.5
+2026-10-27T18:48:48.5347104Z [1m[92m   Compiling[0m rand_core v0.6.4
+2026-10-27T18:48:48.5747615Z [1m[92m   Compiling[0m paste v1.0.15
+2026-10-27T18:48:48.6348008Z [1m[92m   Compiling[0m generic-array v0.14.7
+2026-10-27T18:48:48.6483479Z [1m[92m   Compiling[0m bytemuck v1.25.0
+2026-10-27T18:48:48.6917196Z [1m[92m   Compiling[0m num-complex v0.2.4
+2026-10-27T18:48:48.7208849Z [1m[92m   Compiling[0m matrixmultiply v0.3.10
+2026-10-27T18:48:48.7523924Z [1m[92m   Compiling[0m safe_arch v0.7.4
+2026-10-27T18:48:48.7616430Z [1m[92m   Compiling[0m zmij v1.0.21
+2026-10-27T18:48:48.8023711Z [1m[92m   Compiling[0m memchr v2.8.0
+2026-10-27T18:48:48.9417103Z [1m[92m   Compiling[0m wide v0.7.33
+2026-10-27T18:48:49.3197057Z [1m[92m   Compiling[0m approx v0.5.1
+2026-10-27T18:48:49.3867923Z [1m[92m   Compiling[0m ndarray v0.13.1
+2026-10-27T18:48:49.4553386Z [1m[92m   Compiling[0m itoa v1.0.18
+2026-10-27T18:48:49.4827303Z [1m[92m   Compiling[0m serde_json v1.0.149
+2026-10-27T18:48:49.5237238Z [1m[92m   Compiling[0m serde_derive v1.0.228
+2026-10-27T18:48:49.5546440Z [1m[92m   Compiling[0m zerocopy-derive v0.8.48
+2026-10-27T18:48:49.5660935Z [1m[92m   Compiling[0m nalgebra-macros v0.2.2
+2026-10-27T18:48:50.2307295Z [1m[92m   Compiling[0m num-rational v0.4.2
+2026-10-27T18:48:50.2587285Z [1m[92m   Compiling[0m matrixmultiply v0.2.4
+2026-10-27T18:48:50.4866908Z [1m[92m   Compiling[0m hashbrown v0.16.1
+2026-10-27T18:48:50.5937317Z [1m[92m   Compiling[0m equivalent v1.0.2
+2026-10-27T18:48:50.8657099Z [1m[92m   Compiling[0m indexmap v2.13.0
+2026-10-27T18:48:51.8567254Z [1m[92m   Compiling[0m num-complex v0.4.6
+2026-10-27T18:48:51.9078099Z [1m[92m   Compiling[0m toml_datetime v0.6.11
+2026-10-27T18:48:52.0487087Z [1m[92m   Compiling[0m serde_spanned v0.6.9
+2026-10-27T18:48:52.0976979Z [1m[92m   Compiling[0m block-buffer v0.10.4
+2026-10-27T18:48:52.1287042Z [1m[92m   Compiling[0m simba v0.9.1
+2026-10-27T18:48:52.1457070Z [1m[92m   Compiling[0m crypto-common v0.1.7
+2026-10-27T18:48:52.1977077Z [1m[92m   Compiling[0m num-traits v0.1.43
+2026-10-27T18:48:52.2227374Z [1m[92m   Compiling[0m winnow v0.7.15
+2026-10-27T18:48:52.2986930Z [1m[92m   Compiling[0m thiserror v2.0.18
+2026-10-27T18:48:52.4707097Z [1m[92m   Compiling[0m sprs v0.7.1
+2026-10-27T18:48:53.0397589Z [1m[92m   Compiling[0m digest v0.10.7
+2026-10-27T18:48:53.1327041Z [1m[92m   Compiling[0m ppv-lite86 v0.2.21
+2026-10-27T18:48:53.2084311Z [1m[92m   Compiling[0m half v2.7.1
+2026-10-27T18:48:53.3436707Z [1m[92m   Compiling[0m rand_chacha v0.3.1
+2026-10-27T18:48:53.3857166Z [1m[92m   Compiling[0m toml_edit v0.22.27
+2026-10-27T18:48:53.4047047Z [1m[92m   Compiling[0m thiserror-impl v2.0.18
+2026-10-27T18:48:53.6006974Z [1m[92m   Compiling[0m rand v0.8.6
+2026-10-27T18:48:54.0576978Z [1m[92m   Compiling[0m rand_distr v0.4.3
+2026-10-27T18:48:54.1507758Z [1m[92m   Compiling[0m csv-core v0.1.13
+2026-10-27T18:48:54.2833371Z [1m[92m   Compiling[0m ryu v1.0.23
+2026-10-27T18:48:54.3337013Z [1m[92m   Compiling[0m ciborium-io v0.2.2
+2026-10-27T18:48:54.3653682Z [1m[92m   Compiling[0m cpufeatures v0.2.17
+2026-10-27T18:48:54.3654534Z [1m[92m   Compiling[0m regex-syntax v0.8.10
+2026-10-27T18:48:54.3926969Z [1m[92m   Compiling[0m either v1.15.0
+2026-10-27T18:48:54.4806974Z [1m[92m   Compiling[0m log v0.4.29
+2026-10-27T18:48:54.5647439Z [1m[92m   Compiling[0m mixeff-rs v1.0.0-rc.5 (/home/runner/work/mixeff-rs/mixeff-rs)
+2026-10-27T18:48:54.7127140Z [1m[92m   Compiling[0m clap_lex v1.1.0
+2026-10-27T18:48:54.8237117Z [1m[92m   Compiling[0m anstyle v1.0.14
+2026-10-27T18:48:54.9476069Z [1m[92m   Compiling[0m nalgebra v0.33.3
+2026-10-27T18:48:55.0047318Z [1m[92m   Compiling[0m clap_builder v4.6.0
+2026-10-27T18:48:55.7957239Z [1m[92m   Compiling[0m regex-automata v0.4.14
+2026-10-27T18:48:56.1146955Z [1m[92m   Compiling[0m minilp v0.2.2
+2026-10-27T18:48:56.6907221Z [1m[92m   Compiling[0m toml v0.8.23
+2026-10-27T18:48:57.0617402Z [1m[92m   Compiling[0m itertools v0.10.5
+2026-10-27T18:48:57.3567138Z [1m[92m   Compiling[0m sha2 v0.10.9
+2026-10-27T18:48:57.6027423Z [1m[92m   Compiling[0m ciborium-ll v0.2.2
+2026-10-27T18:48:57.6287453Z [1m[92m   Compiling[0m csv v1.4.0
+2026-10-27T18:48:57.7397075Z [1m[92m   Compiling[0m cobyla v1.0.0
+2026-10-27T18:48:57.8946981Z [1m[92m   Compiling[0m cast v0.3.0
+2026-10-27T18:48:57.9866945Z [1m[92m   Compiling[0m same-file v1.0.6
+2026-10-27T18:48:57.9977480Z [1m[92m   Compiling[0m criterion-plot v0.5.0
+2026-10-27T18:48:58.0144760Z [1m[92m   Compiling[0m ciborium v0.2.2
+2026-10-27T18:48:58.0527337Z [1m[92m   Compiling[0m walkdir v2.5.0
+2026-10-27T18:48:58.2587357Z [1m[92m   Compiling[0m regex v1.12.3
+2026-10-27T18:48:58.2857323Z [1m[92m   Compiling[0m clap v4.6.1
+2026-10-27T18:48:58.3157610Z [1m[92m   Compiling[0m tinytemplate v1.2.1
+2026-10-27T18:48:58.4167169Z [1m[92m   Compiling[0m is-terminal v0.4.17
+2026-10-27T18:48:58.4547133Z [1m[92m   Compiling[0m oorandom v11.1.5
+2026-10-27T18:48:58.5057202Z [1m[92m   Compiling[0m once_cell v1.21.4
+2026-10-27T18:48:58.5467872Z [1m[92m   Compiling[0m anes v0.1.6
+2026-10-27T18:48:58.6406952Z [1m[92m   Compiling[0m criterion v0.5.1
+2026-10-27T18:49:00.1752640Z [1m[92m   Compiling[0m nalgebra-sparse v0.10.0
+2026-10-27T18:49:00.1753367Z [1m[92m   Compiling[0m statrs v0.18.0
+2026-10-27T18:49:37.2117321Z [1m[33mwarning[0m[1m: function `engine` is never used[0m
+2026-10-27T18:49:37.2122777Z    [1m[94m--> [0mtests/parity_gamma_glmm.rs:302:4
+2026-10-27T18:49:37.2123334Z     [1m[94m|[0m
+2026-10-27T18:49:37.2124031Z [1m[94m302[0m [1m[94m|[0m fn engine<'a>(fixture: &'a GammaGlmmFixture, name: &str) -> &'a EngineReference {
+2026-10-27T18:49:37.2124772Z     [1m[94m|[0m    [1m[33m^^^^^^[0m
+2026-10-27T18:49:37.2125244Z     [1m[94m|[0m
+2026-10-27T18:49:37.2126148Z     [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+2026-10-27T18:49:37.2126706Z 
+2026-10-27T18:49:38.9817613Z [1m[33mwarning[0m: `mixeff-rs` (test "parity_gamma_glmm") generated 1 warning
+2026-10-27T18:49:43.9756122Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 58.34s
+2026-10-27T18:49:44.0164496Z [1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/mixeff_rs-506cb4eef497328d)
+2026-10-27T18:49:44.0183869Z 
+2026-10-27T18:49:44.0184001Z running 958 tests
+2026-10-27T18:49:44.0210999Z test compiler::artifact::tests::compiled_artifact_builds_theta_maps ... ok
+2026-10-27T18:49:44.0211548Z test compiler::artifact::tests::compiled_artifact_can_disable_policy_recommendations ... ok
+2026-10-27T18:49:44.0212093Z test compiler::artifact::tests::compiled_artifact_can_attach_design_audit ... ok
+2026-10-27T18:49:44.0212551Z test compiler::artifact::tests::compiled_artifact_builds_audit_report ... ok
+2026-10-27T18:49:44.0213057Z test compiler::artifact::tests::compiled_artifact_policy_updates_reproducibility_thresholds ... ok
+2026-10-27T18:49:44.0213662Z test compiler::artifact::tests::compiled_artifact_rebuilds_theta_maps_with_optimizer_basis ... ok
+2026-10-27T18:49:44.0214369Z test compiler::artifact::tests::compiled_artifact_deserializes_missing_inference_table_as_none ... ok
+2026-10-27T18:49:44.0215005Z test compiler::artifact::tests::compiled_artifact_exposes_requested_supported_fitted_model_state ... ok
+2026-10-27T18:49:44.0215756Z test compiler::artifact::tests::compiled_artifact_serializes_prefit_inference_table_as_null ... ok
+2026-10-27T18:49:44.0216329Z test compiler::artifact::tests::compiled_artifact_traces_structured_covariance_placeholders ... ok
+2026-10-27T18:49:44.0217285Z test compiler::artifact::tests::compiled_artifact_records_effective_covariance_summary ... ok
+2026-10-27T18:49:44.0217846Z test compiler::artifact::tests::fixed_effect_covariance_matrix_round_trips_on_artifact ... ok
+2026-10-27T18:49:44.0218344Z test compiler::artifact::tests::compiled_artifact_round_trips_json ... ok
+2026-10-27T18:49:44.0219018Z test compiler::artifact::tests::optimizer_basis_column_materialization_handles_factor_expansions ... ok
+2026-10-27T18:49:44.0219574Z test compiler::audit::tests::cell_kernel_does_not_cover_crossed_marginal_units ... ok
+2026-10-27T18:49:44.0232259Z test compiler::artifact::tests::fixed_effect_inference_table_round_trips_on_artifact ... ok
+2026-10-27T18:49:44.0233136Z test compiler::audit::tests::crossed_expansion_covers_marginal_and_cell_paths ... ok
+2026-10-27T18:49:44.0233936Z test compiler::audit::tests::design_audit_emits_scope_note_for_unmodeled_possible_slope ... ok
+2026-10-27T18:49:44.0234738Z test compiler::artifact::tests::split_zerocorr_factor_terms_map_to_expanded_optimizer_basis ... ok
+2026-10-27T18:49:44.0236234Z test compiler::audit::tests::design_audit_expands_cell_means_categorical_random_basis ... ok
+2026-10-27T18:49:44.0237015Z test compiler::audit::tests::design_audit_flags_fixed_random_intercept_redundancy ... ok
+2026-10-27T18:49:44.0238147Z test compiler::audit::tests::design_audit_expands_treatment_coded_categorical_random_basis ... ok
+2026-10-27T18:49:44.0239533Z test compiler::audit::tests::design_audit_flags_rank_deficient_fixed_effects ... ok
+2026-10-27T18:49:44.0240348Z test compiler::audit::tests::design_audit_flags_repeated_unit_without_random_intercept ... ok
+2026-10-27T18:49:44.0241161Z test compiler::audit::tests::design_audit_explains_no_intercept_factor_bypasses_explicit_contrast ... ok
+2026-10-27T18:49:44.0242490Z test compiler::audit::tests::design_audit_flags_slope_without_within_group_variation ... ok
+2026-10-27T18:49:44.0243130Z test compiler::audit::tests::design_audit_flags_row_saturated_random_effect_term ... ok
+2026-10-27T18:49:44.0244388Z test compiler::audit::tests::design_audit_expands_cell_means_interaction_random_basis ... ok
+2026-10-27T18:49:44.0245017Z test compiler::audit::tests::design_audit_flags_zerocorr_factor_decorrelation ... ok
+2026-10-27T18:49:44.0245927Z test compiler::audit::tests::design_audit_flags_structured_covariance_as_parsed_refused ... ok
+2026-10-27T18:49:44.0247155Z test compiler::audit::tests::design_audit_reports_full_rank_fixed_effects ... ok
+2026-10-27T18:49:44.0247743Z test compiler::audit::tests::design_audit_reports_cell_grouping_counts ... ok
+2026-10-27T18:49:44.0248408Z test compiler::audit::tests::design_audit_reports_median_grouping_count_for_unbalanced_groups ... ok
+2026-10-27T18:49:44.0249740Z test compiler::audit::tests::design_audit_reports_grouping_counts_and_slope_support ... ok
+2026-10-27T18:49:44.0250404Z test compiler::audit::tests::design_audit_reports_split_double_bar_scalar_budgets ... ok
+2026-10-27T18:49:44.0251046Z test compiler::audit::tests::design_audit_reports_missing_fixed_effect_column ... ok
+2026-10-27T18:49:44.0251791Z test compiler::audit::tests::design_audit_reports_sufficient_random_effect_information_budget ... ok
+2026-10-27T18:49:44.0252472Z test compiler::audit::tests::design_audit_reports_weak_scalar_information_budget ... ok
+2026-10-27T18:49:44.0253162Z test compiler::audit::tests::design_audit_suppresses_scope_note_when_slope_is_in_split_block ... ok
+2026-10-27T18:49:44.0256561Z test compiler::audit::tests::design_audit_zerocorr_factor_decorrelation_is_silent_without_factor_or_zerocorr ... ok
+2026-10-27T18:49:44.0257390Z test compiler::audit::tests::design_audit_round_trips_json ... ok
+2026-10-27T18:49:44.0258030Z test compiler::audit::tests::optimizer_certificate_accepts_joint_ftol_at_budget_boundary ... ok
+2026-10-27T18:49:44.0258684Z test compiler::audit::tests::optimizer_certificate_accepts_joint_radius_stop ... ok
+2026-10-27T18:49:44.0259304Z test compiler::audit::tests::design_audit_reports_empty_factor_cells ... ok
+2026-10-27T18:49:44.0260132Z test compiler::audit::tests::optimizer_certificate_rejects_nonstationary_ftol_stop ... ok
+2026-10-27T18:49:44.0260816Z test compiler::audit::tests::optimizer_certificate_round_trips_json ... ok
+2026-10-27T18:49:44.0262066Z test compiler::audit::tests::design_audit_interaction_coding_matches_fitted_design ... ok
+2026-10-27T18:49:44.0262773Z test compiler::diagnostics::tests::diagnostic_round_trips_json ... ok
+2026-10-27T18:49:44.0263318Z test compiler::estimability::tests::fixed_effect_hypothesis_validates_dimensions ... ok
+2026-10-27T18:49:44.0264009Z test compiler::estimability::tests::single_coefficient_hypothesis_builds_l_beta_equals_zero ... ok
+2026-10-27T18:49:44.0264733Z test compiler::estimability::tests::typed_estimability_constructors_keep_context_specific_statuses ... ok
+2026-10-27T18:49:44.0265399Z test compiler::explain::tests::explanation_reports_slope_only ... ok
+2026-10-27T18:49:44.0266129Z test compiler::explain::tests::explanation_runs_without_fitting ... ok
+2026-10-27T18:49:44.0266677Z test compiler::ir::tests::cell_grouping_has_cell_dependence_story ... ok
+2026-10-27T18:49:44.0267215Z test compiler::ir::tests::compiles_diag_wrapper_as_single_diagonal_block ... ok
+2026-10-27T18:49:44.0267672Z test compiler::ir::tests::compiles_full_intercept_slope_term ... ok
+2026-10-27T18:49:44.0268280Z test compiler::ir::tests::compiles_structured_wrappers_as_typed_covariance_families ... ok
+2026-10-27T18:49:44.0269129Z test compiler::ir::tests::compiles_zero_correlation_as_scalar_block_group ... ok
+2026-10-27T18:49:44.0269495Z test compiler::ir::tests::crossed_star_grouping_compiles_expanded_terms ... ok
+2026-10-27T18:49:44.0272594Z test compiler::ir::tests::emits_covariance_assumption_for_double_bar_syntax ... ok
+2026-10-27T18:49:44.0273037Z test compiler::ir::tests::emits_conflicting_covariance_diagnostic ... ok
+2026-10-27T18:49:44.0273499Z test compiler::ir::tests::emits_covariance_assumption_for_split_random_effect_blocks ... ok
+2026-10-27T18:49:44.0274000Z test compiler::ir::tests::emits_crossed_grouping_canonicalization_diagnostics ... ok
+2026-10-27T18:49:44.0274446Z test compiler::ir::tests::emits_duplicate_random_term_diagnostic ... ok
+2026-10-27T18:49:44.0274831Z test compiler::ir::tests::emits_syntax_expansion_diagnostic_for_crossed_grouping ... ok
+2026-10-27T18:49:44.0276088Z test compiler::ir::tests::emits_syntax_expansion_diagnostic_for_nested_grouping ... ok
+2026-10-27T18:49:44.0276612Z test compiler::ir::tests::preserves_written_source_syntax_when_parser_canonicalizes ... ok
+2026-10-27T18:49:44.0280335Z test compiler::diagnostics::tests::pedagogical_diagnostic_codes_use_stable_snake_case_names ... ok
+2026-10-27T18:49:44.0280831Z test compiler::ir::tests::records_slope_only_intercept_omission ... ok
+2026-10-27T18:49:44.0281221Z test compiler::ir::tests::semantic_model_round_trips_json ... ok
+2026-10-27T18:49:44.0286012Z test compiler::policy::tests::as_specified_policy_makes_no_recommendations ... ok
+2026-10-27T18:49:44.0286534Z test compiler::policy::tests::cholesky_zero_pad_tolerance_defaults_and_serializes_when_custom ... ok
+2026-10-27T18:49:44.0287106Z test compiler::policy::tests::maximal_feasible_does_not_refuse_fit_eligible_few_level_random_intercept ... ok
+2026-10-27T18:49:44.0291086Z test compiler::policy::tests::maximal_feasible_reduces_full_covariance_when_correlations_are_too_rich ... ok
+2026-10-27T18:49:44.0291706Z test compiler::audit::tests::unavailable_derivative_probes_do_not_become_nonfinite_measurements ... ok
+2026-10-27T18:49:44.0292301Z test compiler::policy::tests::maximal_feasible_refuses_random_distribution_with_too_few_levels ... ok
+2026-10-27T18:49:44.0292833Z test compiler::policy::tests::maximal_feasible_drops_unsupported_slope_basis ... ok
+2026-10-27T18:49:44.0294306Z test compiler::print::tests::model_print_certified_fit_omits_next_line ... ok
+2026-10-27T18:49:44.0295843Z test compiler::policy::tests::maximal_feasible_refuses_row_saturated_random_distribution ... ok
+2026-10-27T18:49:44.0297073Z test compiler::print::tests::model_print_emits_convergence_line_for_unfitted_artifact ... ok
+2026-10-27T18:49:44.0299165Z test compiler::print::tests::model_print_renders_compact_summary_for_unfitted_artifact ... ok
+2026-10-27T18:49:44.0299723Z test compiler::print::tests::model_print_shows_effective_formula_only_when_it_differs ... ok
+2026-10-27T18:49:44.0300323Z test compiler::policy::tests::policy_recommendations_round_trip_json ... ok
+2026-10-27T18:49:44.0300813Z test compiler::print::tests::model_print_structural_failure_renders_failed_with_next_step ... ok
+2026-10-27T18:49:44.0301543Z test compiler::print::tests::model_print_caution_boundary_renders_with_next_step ... ok
+2026-10-27T18:49:44.0302163Z test compiler::print::tests::model_print_truncates_diagnostics_to_top_n ... ok
+2026-10-27T18:49:44.0302776Z test compiler::print::tests::parameterization_drilldown_renders_random_term_traces ... ok
+2026-10-27T18:49:44.0303436Z test compiler::random_term_card::tests::cross_card_constraint_round_trips_json ... ok
+2026-10-27T18:49:44.0306292Z test compiler::random_term_card::tests::random_term_card_round_trips_json ... ok
+2026-10-27T18:49:44.0313174Z test compiler::report::tests::double_bar_and_split_blocks_have_structurally_identical_cards ... ok
+2026-10-27T18:49:44.0327514Z test compiler::report::tests::glmm_artifact_without_verification_suggests_verify_convergence ... ok
+2026-10-27T18:49:44.0328699Z test compiler::report::tests::estimator_substitution_renders_in_optimizer_section_and_serializes_optionally ... ok
+2026-10-27T18:49:44.0329471Z test compiler::report::tests::legacy_not_assessed_check_is_not_invented_as_a_policy_skip ... ok
+2026-10-27T18:49:44.0330172Z test compiler::report::tests::missing_hessian_does_not_certify_all_derivative_checks ... ok
+2026-10-27T18:49:44.0330857Z test compiler::report::tests::next_steps_line_suppresses_optimizer_tinkering_on_structural_finding ... ok
+2026-10-27T18:49:44.0331602Z test compiler::report::tests::next_steps_line_preserves_optimizer_actions_when_no_structural_finding ... ok
+2026-10-27T18:49:44.0332368Z test compiler::report::tests::random_term_card_wording_is_nonempty_single_sentence_and_non_moralizing ... ok
+2026-10-27T18:49:44.0333074Z test compiler::report::tests::prefit_canonical_formula_summary_does_not_read_as_instability ... ok
+2026-10-27T18:49:44.0333650Z test compiler::report::tests::random_term_cards_use_semantic_role_origin_side_table ... ok
+2026-10-27T18:49:44.0334215Z test compiler::report::tests::incomplete_checks_preserve_execution_state_and_optimizer_success ... ok
+2026-10-27T18:49:44.0334748Z test compiler::report::tests::report_runs_on_unfitted_artifact ... ok
+2026-10-27T18:49:44.0335296Z test compiler::report::tests::test_acceptable_stop_with_derivative_mismatch_is_not_optimized ... ok
+2026-10-27T18:49:44.0335919Z test compiler::report::tests::report_round_trips_json ... ok
+2026-10-27T18:49:44.0336336Z test compiler::report::tests::test_unacceptable_stop_promotes_to_non_converged ... ok
+2026-10-27T18:49:44.0336851Z test compiler::report::tests::report_makes_confounded_ha_quantification_design_readable ... ok
+2026-10-27T18:49:44.0337397Z test compiler::report::tests::verdict_boundary_fit_is_caution_optimizer ... ok
+2026-10-27T18:49:44.0337909Z test compiler::report::tests::verdict_clean_fit_without_verification_is_ok_with_verify_hint ... ok
+2026-10-27T18:49:44.0338453Z test compiler::report::tests::verdict_clean_fit_with_verification_is_certified_clean ... ok
+2026-10-27T18:49:44.0338940Z test compiler::report::tests::report_surfaces_missing_dependence_paths ... ok
+2026-10-27T18:49:44.0339313Z test compiler::report::tests::verdict_failed_hessian_is_caution_with_predictor_scaling ... ok
+2026-10-27T18:49:44.0339654Z test compiler::report::tests::verdict_finite_difference_verified_fit_is_ok_not_certified ... ok
+2026-10-27T18:49:44.0340157Z test compiler::report::tests::verdict_for_unfitted_artifact_is_not_assessed ... ok
+2026-10-27T18:49:44.0340617Z test compiler::report::tests::verdict_mixed_picks_structural_next_step ... ok
+2026-10-27T18:49:44.0341076Z test compiler::report::tests::verdict_fixed_rank_deficient_is_structural ... ok
+2026-10-27T18:49:44.0341870Z test compiler::report::tests::verdict_separation_is_structural_directs_to_penalty ... ok
+2026-10-27T18:49:44.0342407Z test compiler::report::tests::verdict_unacceptable_stop_is_failed ... ok
+2026-10-27T18:49:44.0342810Z test compiler::report::tests::verdict_round_trips_json ... ok
+2026-10-27T18:49:44.0343359Z test compiler::report::tests::verdict_row_saturated_re_is_structural_failed ... ok
+2026-10-27T18:49:44.0343837Z test compiler::report::tests::verdict_weak_gradient_suggests_verify_convergence ... ok
+2026-10-27T18:49:44.0344325Z test compiler::theta_map::tests::expanded_categorical_basis_preserves_zero_correlation_diagonal_map ... ok
+2026-10-27T18:49:44.0344699Z test compiler::theta_map::tests::expanded_categorical_basis_uses_optimizer_columns_for_full_map ... ok
+2026-10-27T18:49:44.0345021Z test compiler::theta_map::tests::split_double_bar_maps_are_scalar_slots ... ok
+2026-10-27T18:49:44.0345339Z test compiler::theta_map::tests::full_cholesky_map_uses_column_major_lower_triangle_order ... ok
+2026-10-27T18:49:44.0346060Z test compiler::theta_map::tests::structured_maps_carry_inactive_placeholder_slots ... ok
+2026-10-27T18:49:44.0346515Z test compiler::theta_map::tests::theta_map_round_trips_json ... ok
+2026-10-27T18:49:44.0366219Z test datasets::tests::expected_for_finds_pinned_value ... ok
+2026-10-27T18:49:44.0406740Z test datasets::tests::case_returns_owned_fit_and_dataframe ... ok
+2026-10-27T18:49:44.0616139Z test datasets::tests::iter_returns_every_shipped_dataset_in_sorted_order ... ok
+2026-10-27T18:49:44.0636587Z test datasets::tests::every_dataset_has_provenance_and_pinned_fit ... ok
+2026-10-27T18:49:44.0660131Z test datasets::tests::loads_arabidopsis_overdispersed_poisson ... ok
+2026-10-27T18:49:44.0675512Z test datasets::tests::loads_cbpp_glmm ... ok
+2026-10-27T18:49:44.0751053Z test datasets::tests::loads_contraception_hierarchical_binomial ... ok
+2026-10-27T18:49:44.0773777Z test datasets::tests::iter_cases_flattens_all_recommended_fits ... ok
+2026-10-27T18:49:44.0786778Z test datasets::tests::loads_dyestuff_singular_pair ... ok
+2026-10-27T18:49:44.0806549Z test datasets::tests::loads_culcitalogreg_block_design_glmm ... ok
+2026-10-27T18:49:44.0807372Z test datasets::tests::loads_gopherdat2_offset_glmm ... ok
+2026-10-27T18:49:44.1356545Z test datasets::tests::iter_with_tag_and_difficulty_select_correctly ... ok
+2026-10-27T18:49:44.1386146Z test datasets::tests::loads_nested_constant_response_diagnostic_case ... ok
+2026-10-27T18:49:44.1416041Z test datasets::tests::loads_oxide_three_level_nested ... ok
+2026-10-27T18:49:44.1445939Z test datasets::tests::loads_pastes_nested ... ok
+2026-10-27T18:49:44.1475949Z test datasets::tests::loads_penicillin_crossed ... ok
+2026-10-27T18:49:44.1505907Z test datasets::tests::loads_singular_maximal_case ... ok
+2026-10-27T18:49:44.1535867Z test datasets::tests::loads_sleepstudy ... ok
+2026-10-27T18:49:44.1565942Z test datasets::tests::loads_station_season_duration_diagnostic_case ... ok
+2026-10-27T18:49:44.1596201Z test error::tests::mixed_model_error_codes_are_stable_machine_strings ... ok
+2026-10-27T18:49:44.1644377Z test formula::parser::tests::backtick_identifier_allows_reserved_and_digit_starts ... ok
+2026-10-27T18:49:44.1645234Z test formula::parser::tests::backtick_identifier_with_spaces_and_odd_chars ... ok
+2026-10-27T18:49:44.1645966Z test formula::parser::tests::cell_grouping_with_colon ... ok
+2026-10-27T18:49:44.1646406Z test formula::parser::tests::complex_formula ... ok
+2026-10-27T18:49:44.1646864Z test formula::parser::tests::covariance_wrappers_parse_as_random_terms ... ok
+2026-10-27T18:49:44.1647375Z test formula::parser::tests::crossed_random_effects ... ok
+2026-10-27T18:49:44.1647893Z test formula::parser::tests::crossed_star_grouping_expands_to_main_effects_and_cell ... ok
+2026-10-27T18:49:44.1648444Z test formula::parser::tests::dotted_identifier ... ok
+2026-10-27T18:49:44.1648860Z test formula::parser::tests::empty_backtick_is_rejected ... ok
+2026-10-27T18:49:44.1649323Z test formula::parser::tests::empty_rhs_is_rejected ... ok
+2026-10-27T18:49:44.1650231Z test formula::parser::tests::error_empty ... ok
+2026-10-27T18:49:44.1651282Z test formula::parser::tests::error_missing_bar_in_random ... ok
+2026-10-27T18:49:44.1651748Z test formula::parser::tests::error_missing_response ... ok
+2026-10-27T18:49:44.1652428Z test formula::parser::tests::error_no_tilde ... ok
+2026-10-27T18:49:44.1652859Z test formula::parser::tests::error_unmatched_paren ... ok
+2026-10-27T18:49:44.1653360Z test formula::parser::tests::fixed_effects_explicit_intercept ... ok
+2026-10-27T18:49:44.1654224Z test formula::parser::tests::fixed_effects_implicit_intercept ... ok
+2026-10-27T18:49:44.1654801Z test formula::parser::tests::grammar_property_missing_separator_rejected ... ok
+2026-10-27T18:49:44.1655379Z test formula::parser::tests::grammar_property_numeric_literal_term_rejected ... ok
+2026-10-27T18:49:44.1656106Z test formula::parser::tests::grammar_property_trailing_operator_rejected ... ok
+2026-10-27T18:49:44.1656723Z test formula::parser::tests::grammar_property_wellformed_formulas_parse ... ok
+2026-10-27T18:49:44.1657356Z test formula::parser::tests::in_formula_transformation_gives_actionable_refusal ... ok
+2026-10-27T18:49:44.1657885Z test formula::parser::tests::interaction_colon ... ok
+2026-10-27T18:49:44.1658343Z test formula::parser::tests::interaction_grouping ... ok
+2026-10-27T18:49:44.1658818Z test formula::parser::tests::minus_is_top_level_term_removal ... ok
+2026-10-27T18:49:44.1659372Z test formula::parser::tests::minus_on_random_effect_block_rejected ... ok
+2026-10-27T18:49:44.1659972Z test formula::parser::tests::minus_removes_interactions_regardless_of_variable_order ... ok
+2026-10-27T18:49:44.1660627Z test formula::parser::tests::nested_grouping_expands_to_main_and_cell ... ok
+2026-10-27T18:49:44.1661113Z test formula::parser::tests::nesting_slash ... ok
+2026-10-27T18:49:44.1661594Z test formula::parser::tests::no_fixed_intercept_with_random ... ok
+2026-10-27T18:49:44.1662082Z test formula::parser::tests::no_intercept_with_minus_one ... ok
+2026-10-27T18:49:44.1662590Z test formula::parser::tests::no_intercept_with_zero ... ok
+2026-10-27T18:49:44.1663079Z test formula::parser::tests::only_random_term_implicit_intercept ... ok
+2026-10-27T18:49:44.1663597Z test formula::parser::tests::random_intercept ... ok
+2026-10-27T18:49:44.1664044Z test formula::parser::tests::random_intercept_and_slope ... ok
+2026-10-27T18:49:44.1664553Z test formula::parser::tests::random_slope_no_intercept ... ok
+2026-10-27T18:49:44.1665069Z test formula::parser::tests::random_slope_syntax_has_implicit_intercept ... ok
+2026-10-27T18:49:44.1666065Z test formula::parser::tests::star_expansion ... ok
+2026-10-27T18:49:44.1666531Z test formula::parser::tests::stateful_transforms_are_refused_with_actionable_message ... ok
+2026-10-27T18:49:44.1667237Z test formula::parser::tests::stateless_subset_parses_with_canonical_labels ... ok
+2026-10-27T18:49:44.1667771Z test formula::parser::tests::three_way_star_expansion ... ok
+2026-10-27T18:49:44.1668284Z test formula::parser::tests::tokenize_ampersand_grouping ... ok
+2026-10-27T18:49:44.1668752Z test formula::parser::tests::tokenize_double_pipe ... ok
+2026-10-27T18:49:44.1669201Z test formula::parser::tests::tokenize_simple ... ok
+2026-10-27T18:49:44.1669623Z test formula::parser::tests::triple_interaction ... ok
+2026-10-27T18:49:44.1670093Z test formula::parser::tests::underscored_identifier ... ok
+2026-10-27T18:49:44.1670612Z test formula::parser::tests::unterminated_backtick_is_actionable_error ... ok
+2026-10-27T18:49:44.1671146Z test formula::parser::tests::whitespace_handling ... ok
+2026-10-27T18:49:44.1671550Z test formula::parser::tests::zerocorr ... ok
+2026-10-27T18:49:44.1672041Z test formula::terms::tests::test_formula_display_canonicalizes_terms ... ok
+2026-10-27T18:49:44.1672672Z test formula::terms::tests::test_formula_display_handles_zero_correlation_and_group_interactions ... ok
+2026-10-27T18:49:44.1673344Z test formula::transform::tests::backtick_identifier_in_transform ... ok
+2026-10-27T18:49:44.1673840Z test formula::transform::tests::bare_call_log_reaction ... ok
+2026-10-27T18:49:44.1674570Z test formula::transform::tests::canonical_label_drops_whitespace_and_trailing_zero ... ok
+2026-10-27T18:49:44.1675231Z test formula::transform::tests::collision_with_correct_precomputed_column_is_accepted ... ok
+2026-10-27T18:49:44.1676118Z test formula::transform::tests::collision_with_wrong_precomputed_column_is_rejected ... ok
+2026-10-27T18:49:44.1676735Z test formula::transform::tests::deeply_nested_calls_are_refused_not_aborted ... ok
+2026-10-27T18:49:44.1677372Z test formula::transform::tests::deeply_nested_parens_are_refused_not_aborted ... ok
+2026-10-27T18:49:44.1677934Z test formula::transform::tests::empty_i_gives_actionable_error ... ok
+2026-10-27T18:49:44.1678658Z test formula::transform::tests::error_on_categorical_in_arithmetic ... ok
+2026-10-27T18:49:44.1679246Z test formula::transform::tests::error_on_missing_column ... ok
+2026-10-27T18:49:44.1679757Z test formula::transform::tests::error_on_non_finite_result ... ok
+2026-10-27T18:49:44.1680259Z test formula::transform::tests::evaluator_numeric_correctness ... ok
+2026-10-27T18:49:44.1680872Z test formula::transform::tests::explicit_paren_neg_base_parses_and_labels_correctly ... ok
+2026-10-27T18:49:44.1681465Z test formula::transform::tests::forbidden_constructs_are_refused ... ok
+2026-10-27T18:49:44.1682070Z test formula::transform::tests::integral_literal_labels_no_trailing_dot_zero ... ok
+2026-10-27T18:49:44.1682636Z test formula::transform::tests::large_integral_literal_round_trips ... ok
+2026-10-27T18:49:44.1683237Z test formula::transform::tests::negative_literal_power_numeric_correctness ... ok
+2026-10-27T18:49:44.1683764Z test formula::transform::tests::nested_call_sqrt_of_i ... ok
+2026-10-27T18:49:44.1684266Z test formula::transform::tests::nested_parens_precedence ... ok
+2026-10-27T18:49:44.1684774Z test formula::transform::tests::nesting_within_budget_still_parses ... ok
+2026-10-27T18:49:44.1685320Z test formula::transform::tests::parse_and_label_power ... ok
+2026-10-27T18:49:44.1685935Z test formula::transform::tests::parse_and_label_product_and_div_and_neg ... ok
+2026-10-27T18:49:44.1686501Z test formula::transform::tests::pow_is_right_associative ... ok
+2026-10-27T18:49:44.1687025Z test formula::transform::tests::scientific_notation_literal_round_trips_as_float ... ok
+2026-10-27T18:49:44.1687647Z test formula::transform::tests::unary_minus_lower_precedence_than_power ... ok
+2026-10-27T18:49:44.1688648Z test formula::transform::tests::unary_minus_neg_literal_power ... ok
+2026-10-27T18:49:44.1689273Z test formula::transform::tests::unary_minus_power_canonical_label_round_trips ... ok
+2026-10-27T18:49:44.1689809Z test linalg::block_ops::tests::test_copy_rmul_lambda ... ok
+2026-10-27T18:49:44.1690589Z test linalg::block_ops::tests::test_copy_scale_inflate_identity_lambda ... ok
+2026-10-27T18:49:44.1691136Z test linalg::block_ops::tests::test_copy_scale_inflate_scalar_lambda ... ok
+2026-10-27T18:49:44.1691660Z test linalg::block_ops::tests::test_copy_scale_inflate_zero_lambda ... ok
+2026-10-27T18:49:44.1692129Z test linalg::block_ops::tests::test_copy_scale_offdiag ... ok
+2026-10-27T18:49:44.1692599Z test linalg::block_ops::tests::test_lmul_lambda_transpose ... ok
+2026-10-27T18:49:44.1693080Z test linalg::block_ops::tests::test_lmul_lambda_transpose_identity ... ok
+2026-10-27T18:49:44.1693570Z test linalg::block_ops::tests::test_rmul_lambda ... ok
+2026-10-27T18:49:44.1694110Z test linalg::block_ops::tests::test_rmul_lambda_identity ... ok
+2026-10-27T18:49:44.1694494Z test linalg::chol_unblocked::tests::test_chol_1x1 ... ok
+2026-10-27T18:49:44.1694850Z test linalg::chol_unblocked::tests::test_chol_2x2 ... ok
+2026-10-27T18:49:44.1699163Z test linalg::chol_unblocked::tests::test_chol_3x3 ... ok
+2026-10-27T18:49:44.1699526Z test linalg::chol_unblocked::tests::test_chol_blocks ... ok
+2026-10-27T18:49:44.1699892Z test linalg::chol_unblocked::tests::test_chol_diag ... ok
+2026-10-27T18:49:44.1718112Z test linalg::chol_unblocked::tests::test_chol_diag_negative ... ok
+2026-10-27T18:49:44.1732004Z test linalg::chol_unblocked::tests::test_chol_diag_rejects_nan_entry ... ok
+2026-10-27T18:49:44.1733142Z test datasets::tests::loads_mrk17_exp1_optimizer_stress ... ok
+2026-10-27T18:49:44.1733694Z test linalg::chol_unblocked::tests::test_chol_diag_with_zero ... ok
+2026-10-27T18:49:44.1734332Z test linalg::chol_unblocked::tests::test_chol_empty ... ok
+2026-10-27T18:49:44.1734863Z test linalg::chol_unblocked::tests::test_chol_not_square ... ok
+2026-10-27T18:49:44.1735456Z test linalg::chol_unblocked::tests::test_chol_rejects_inf_diagonal ... ok
+2026-10-27T18:49:44.1736177Z test linalg::chol_unblocked::tests::test_chol_identity ... ok
+2026-10-27T18:49:44.1736717Z test linalg::chol_unblocked::tests::test_chol_rejects_nan_diagonal ... ok
+2026-10-27T18:49:44.1737367Z test linalg::chol_unblocked::tests::test_chol_singular_middle_column_clears_column_tail ... ok
+2026-10-27T18:49:44.1738336Z test linalg::chol_unblocked::tests::test_chol_zero_matrix ... ok
+2026-10-27T18:49:44.1738856Z test linalg::logdet::tests::test_logdet_block_diagonal ... ok
+2026-10-27T18:49:44.1739393Z test linalg::chol_unblocked::tests::test_chol_singular_zero_diagonal ... ok
+2026-10-27T18:49:44.1739972Z test linalg::logdet::tests::test_logdet_block_diagonal_empty ... ok
+2026-10-27T18:49:44.1740519Z test linalg::logdet::tests::test_logdet_block_diagonal_from_chol ... ok
+2026-10-27T18:49:44.1741130Z test linalg::logdet::tests::test_logdet_block_diagonal_single_block ... ok
+2026-10-27T18:49:44.1741658Z test linalg::logdet::tests::test_logdet_diag ... ok
+2026-10-27T18:49:44.1742126Z test linalg::logdet::tests::test_logdet_diag_single ... ok
+2026-10-27T18:49:44.1742606Z test linalg::logdet::tests::test_logdet_from_chol ... ok
+2026-10-27T18:49:44.1743087Z test linalg::logdet::tests::test_logdet_triangular_1x1 ... ok
+2026-10-27T18:49:44.1743599Z test linalg::logdet::tests::test_logdet_triangular_identity ... ok
+2026-10-27T18:49:44.1744123Z test linalg::logdet::tests::test_logdet_triangular_known ... ok
+2026-10-27T18:49:44.1744734Z test linalg::logdet::tests::test_logdet_triangular_not_square - should panic ... ok
+2026-10-27T18:49:44.1745376Z test linalg::pivot::tests::gram_certificate_ambiguous_inside_safety_margin ... ok
+2026-10-27T18:49:44.1746406Z test linalg::pivot::tests::gram_certificate_ambiguous_on_exact_collinearity ... ok
+2026-10-27T18:49:44.1756513Z test linalg::pivot::tests::gram_certificate_ambiguous_on_non_finite_or_bad_shape ... ok
+2026-10-27T18:49:44.1757659Z test linalg::pivot::tests::gram_certificate_certifies_well_conditioned_design ... ok
+2026-10-27T18:49:44.1758829Z test linalg::pivot::tests::gram_certificate_diag_ratio_tracks_pivoted_qr_diag ... ok
+2026-10-27T18:49:44.1759518Z test linalg::pivot::tests::gram_certificate_empty_design_is_trivially_certified ... ok
+2026-10-27T18:49:44.1760618Z test linalg::pivot::tests::rank_deficient_pivot_keeps_earlier_collinear_column_like_r ... ok
+2026-10-27T18:49:44.1761498Z test linalg::pivot::tests::stats_rank_n_le_2_uses_proven_qr_path ... ok
+2026-10-27T18:49:44.1762036Z test linalg::pivot::tests::test_pivoted_qr_empty ... ok
+2026-10-27T18:49:44.1762639Z test linalg::pivot::tests::test_pivoted_qr_factorization_reconstructs_permuted_matrix ... ok
+2026-10-27T18:49:44.1763236Z test linalg::pivot::tests::test_pivoted_qr_identity ... ok
+2026-10-27T18:49:44.1763751Z test linalg::pivot::tests::test_pivoted_qr_rank_deficient ... ok
+2026-10-27T18:49:44.1764285Z test linalg::pivot::tests::test_pivoted_qr_rectangular_tall ... ok
+2026-10-27T18:49:44.1764824Z test linalg::pivot::tests::test_pivoted_qr_rectangular_wide ... ok
+2026-10-27T18:49:44.1765351Z test linalg::pivot::tests::test_pivoted_qr_single_column ... ok
+2026-10-27T18:49:44.1766212Z test linalg::pivot::tests::test_pivoted_qr_zero_matrix ... ok
+2026-10-27T18:49:44.1766714Z test linalg::pivot::tests::test_stats_rank_all_zero ... ok
+2026-10-27T18:49:44.1796605Z test linalg::pivot::tests::test_stats_rank_dependent_column_matches_lapack_julia ... ok
+2026-10-27T18:49:44.1797199Z test linalg::pivot::tests::test_stats_rank_full_rank ... ok
+2026-10-27T18:49:44.1798814Z test linalg::pivot::tests::test_stats_rank_full_rank_intercept_plus_predictor ... ok
+2026-10-27T18:49:44.1816406Z test linalg::pivot::tests::test_stats_rank_intercept_preserved_when_pivot_would_move_it ... ok
+2026-10-27T18:49:44.1818591Z test linalg::pivot::tests::test_stats_rank_qr_missing_cells_relative_order ... ok
+2026-10-27T18:49:44.1836313Z test linalg::pivot::tests::test_stats_rank_rank_deficient ... ok
+2026-10-27T18:49:44.1836843Z test linalg::pivot::tests::test_stats_rank_zero_cols ... ok
+2026-10-27T18:49:44.1837408Z test linalg::rank_update::tests::test_rank_update_dense_dimension_mismatch ... ok
+2026-10-27T18:49:44.1838009Z test linalg::rank_update::tests::test_rank_update_dense_identity ... ok
+2026-10-27T18:49:44.1838582Z test linalg::rank_update::tests::test_rank_update_dense_known_values ... ok
+2026-10-27T18:49:44.1839177Z test linalg::rank_update::tests::test_rank_update_dense_rectangular ... ok
+2026-10-27T18:49:44.1839721Z test linalg::rank_update::tests::test_rank_update_diag ... ok
+2026-10-27T18:49:44.1840275Z test linalg::rank_update::tests::test_rank_update_diag_with_scaling ... ok
+2026-10-27T18:49:44.1840882Z test linalg::rank_update::tests::test_rank_update_sparse_dense ... ok
+2026-10-27T18:49:44.1841495Z test linalg::rank_update::tests::test_rank_update_sparse_dense_dimension_mismatch ... ok
+2026-10-27T18:49:44.1842158Z test linalg::rank_update::tests::test_rank_update_sparse_dense_with_scaling ... ok
+2026-10-27T18:49:44.1842803Z test linalg::rank_update::tests::test_rank_update_sparse_symmetric ... ok
+2026-10-27T18:49:44.1843356Z test model::data::tests::add_numeric_rejects_non_finite ... ok
+2026-10-27T18:49:44.1843885Z test model::data::tests::add_numeric_unchecked_allows_non_finite ... ok
+2026-10-27T18:49:44.1844765Z test model::data::tests::contrast_constructors_reject_under_two_levels ... ok
+2026-10-27T18:49:44.1856804Z test model::data::tests::helmert_contrast_matches_r_contr_helmert_4 ... ok
+2026-10-27T18:49:44.1857700Z test model::data::tests::polynomial_contrast_is_orthonormal_and_ordered ... ok
+2026-10-27T18:49:44.1866386Z test model::data::tests::polynomial_contrast_matches_r_contr_poly_4 ... ok
+2026-10-27T18:49:44.1866929Z test model::data::tests::sum_contrast_last_row_is_minus_one ... ok
+2026-10-27T18:49:44.1867887Z test model::data::tests::test_add_categorical_with_contrast_validates_shape_and_names ... ok
+2026-10-27T18:49:44.1876698Z test model::data::tests::test_add_categorical_with_levels_unknown_value_returns_err ... ok
+2026-10-27T18:49:44.1886530Z test model::data::tests::test_add_column_length_mismatch_returns_err ... ok
+2026-10-27T18:49:44.1917859Z test model::data::tests::test_cluster_resample_relabels_duplicate_clusters ... ok
+2026-10-27T18:49:44.1953290Z test model::data::tests::test_cluster_resample_relabels_nested_factors_per_draw ... ok
+2026-10-27T18:49:44.1953993Z test model::data::tests::treatment_contrast_has_zero_reference_row ... ok
+2026-10-27T18:49:44.1954677Z test model::fixed_design::tests::compiled_design_accepts_frontend_supplied_offset_and_weights ... ok
+2026-10-27T18:49:44.1955500Z test model::fixed_design::tests::compiled_design_fixed_eta_includes_offset_without_dense_materialization ... ok
+2026-10-27T18:49:44.1956665Z test model::fixed_design::tests::compiled_design_validates_shared_observation_count ... ok
+2026-10-27T18:49:44.1957370Z test model::fixed_design::tests::dense_backend_cross_products_match_matrix_algebra ... ok
+2026-10-27T18:49:44.1958054Z test model::fixed_design::tests::dense_backend_selects_columns_in_requested_order ... ok
+2026-10-27T18:49:44.1966886Z test model::fixed_design::tests::dense_backend_validates_dimensions ... ok
+2026-10-27T18:49:44.1976744Z test model::fixed_design::tests::dense_summary_reports_materialized_size ... ok
+2026-10-27T18:49:44.2029946Z test linalg::pivot::tests::gram_certificate_certifies_high_cardinality_dummy_design ... ok
+2026-10-27T18:49:44.2037542Z test model::fixed_design::tests::fixed_design_auto_policy_keeps_small_numeric_design_dense ... ok
+2026-10-27T18:49:44.2052990Z test model::fixed_design::tests::fixed_design_auto_policy_streams_when_dense_bytes_exceed_limit ... ok
+2026-10-27T18:49:44.2068180Z test model::fixed_design::tests::fixed_design_enum_dispatches_to_streamed_backend ... ok
+2026-10-27T18:49:44.2083204Z test model::fixed_design::tests::fixed_design_policy_forces_dense_backend ... ok
+2026-10-27T18:49:44.2107300Z test model::fixed_design::tests::fixed_design_policy_forces_streamed_backend ... ok
+2026-10-27T18:49:44.2116344Z test model::fixed_design::tests::fixed_design_policy_validates_density_threshold ... ok
+2026-10-27T18:49:44.2116966Z test model::fixed_design::tests::fixed_design_rejects_invalid_column_selection ... ok
+2026-10-27T18:49:44.2117665Z test model::fixed_design::tests::no_intercept_first_factor_gets_full_indicator_coding ... ok
+2026-10-27T18:49:44.2118365Z test model::fixed_design::tests::non_marginal_interaction_matches_r_full_dummy_expansion ... ok
+2026-10-27T18:49:44.2119102Z test model::fixed_design::tests::streamed_backend_crosses_random_terms_without_dense_x ... ok
+2026-10-27T18:49:44.2119780Z test model::fixed_design::tests::streamed_backend_matches_dense_cross_products ... ok
+2026-10-27T18:49:44.2120419Z test model::fixed_design::tests::streamed_backend_reports_active_entry_density ... ok
+2026-10-27T18:49:44.2121100Z test model::fixed_design::tests::fixed_design_auto_policy_streams_high_cardinality_factor ... ok
+2026-10-27T18:49:44.2121820Z test model::fixed_design::tests::streamed_backend_row_dot_beta_uses_active_entries_only ... ok
+2026-10-27T18:49:44.2122541Z test model::fixed_design::tests::streamed_backend_selects_columns_without_materializing_dense_x ... ok
+2026-10-27T18:49:44.2123304Z test model::fixed_design::tests::streamed_backend_validates_rows_and_canonicalizes_duplicates ... ok
+2026-10-27T18:49:44.2124071Z test model::fixed_design::tests::streamed_builder_cross_products_match_materialized_formula_design ... ok
+2026-10-27T18:49:44.2124830Z test model::fixed_design::tests::streamed_builder_matches_dense_interaction_order_and_values ... ok
+2026-10-27T18:49:44.2167918Z test model::fixed_design::tests::streamed_builder_matches_dense_main_effect_treatment_coding ... ok
+2026-10-27T18:49:44.2196407Z test model::fixed_design::tests::streamed_builder_preserves_feterm_rank_and_pivot_order ... ok
+2026-10-27T18:49:44.2226453Z test model::fixed_design::tests::streamed_weighted_cross_products_match_dense_weighted_design ... ok
+2026-10-27T18:49:44.2256002Z test model::fixed_design::tests::streamed_weighted_xtz_matches_dense_weighted_design ... ok
+2026-10-27T18:49:44.2285926Z test model::fixed_design::tests::streamed_weighting_validates_sqrt_weights ... ok
+2026-10-27T18:49:44.2286823Z test model::generalized::certify::tests::intentionally_unassessed_optimizer_hessian_preserves_assessed_quality ... ok
+2026-10-27T18:49:44.2676723Z test model::generalized::dispersion::tests::design_rank_matches_dense_svd_for_crossed_nested_and_slope_terms ... ok
+2026-10-27T18:49:44.2706394Z test model::generalized::dispersion::tests::design_rank_matches_lme4_q_eff ... ok
+2026-10-27T18:49:44.3036505Z test model::generalized::dispersion::tests::surrogate_phi_trajectory_matches_lme4_on_a_long_path ... ok
+2026-10-27T18:49:44.3926523Z test model::fixed_design::tests::streamed_builder_handles_high_cardinality_factor_without_dense_x ... ok
+2026-10-27T18:49:44.3936974Z test datasets::tests::loads_insteval_large_n_crossed ... ok
+2026-10-27T18:49:44.5376699Z test datasets::tests::all_shipped_datasets_load ... ok
+2026-10-27T18:49:44.5406134Z test model::generalized::joint::wald_tail_tests::joint_wald_p_values_preserve_representable_normal_tails ... ok
+2026-10-27T18:49:44.5436123Z test model::generalized::pirls::diagonal_block_solve_tests::block_solves_are_bit_identical_to_densified_row_solves ... ok
+2026-10-27T18:49:44.5556277Z test model::generalized::pirls::nested_sparse_regression::fixed_beta_pirls_refuses_invalid_gamma_mean_at_zero_theta ... ok
+2026-10-27T18:49:45.4776876Z test model::generalized::joint::centered_adoption_tests::centered_adoption_conditional_objective_matches_independent_oracle ... ok
+2026-10-27T18:49:45.4851736Z test model::generalized::pirls::nested_sparse_regression::large_shape_negative_binomial_deviance_preserves_small_differences ... ok
+2026-10-27T18:49:45.6787176Z test model::generalized::snapshot::tests::glmm_working_state_cannot_be_restored_as_a_standalone_lmm ... ok
+2026-10-27T18:49:46.0286830Z test model::generalized::snapshot::tests::restore_rejects_typed_glmm_parameter_and_metadata_corruption ... ok
+2026-10-27T18:49:47.0548290Z test model::generalized::pirls::nested_sparse_regression::grouseticks_poisson_fit_keeps_sparse_l_blocks ... ok
+2026-10-27T18:49:47.3417092Z test model::generalized::dispersion::tests::surrogate_phi_trajectory_reproduces_the_step_by_step_loop ... ok
+2026-10-27T18:49:47.5086810Z test model::generalized::snapshot::tests::snapshot_preserves_glmm_working_optimizer_strategies_and_refits ... ok
+2026-10-27T18:49:47.5517344Z test model::generalized::snapshot::tests::snapshot_refuses_public_glmm_response_mutation ... ok
+2026-10-27T18:49:47.6549741Z test model::generalized::snapshot::tests::snapshot_restores_fixed_negative_binomial_state_without_optimizer ... ok
+2026-10-27T18:49:47.7756719Z test model::generalized::snapshot::tests::snapshot_restores_joint_agq_without_optimizer ... ok
+2026-10-27T18:49:48.1127928Z test model::generalized::snapshot::tests::snapshot_restores_weighted_offset_glmm_without_optimizer ... ok
+2026-10-27T18:49:48.1286912Z test model::generalized::tests::agq_deviance_restores_state_on_normal_path ... ok
+2026-10-27T18:49:48.1406295Z test model::generalized::tests::agq_restore_guard_restores_state_on_panic ... ok
+2026-10-27T18:49:48.1436182Z test model::generalized::tests::aphantasia_primary_joint_laplace_falls_back_to_rx_standard_errors ... ignored
+2026-10-27T18:49:48.1466142Z test model::generalized::tests::binomial_response_counts_above_one_are_refused ... ok
+2026-10-27T18:49:48.2286837Z test model::generalized::snapshot::tests::snapshot_preserves_fast_pirls_and_gamma_dispersion_queries ... ok
+2026-10-27T18:49:48.8689191Z test model::generalized::tests::contraception_intercept_fast_pirls_matches_mixedmodels_fast_true_objective ... ok
+2026-10-27T18:49:49.0326159Z test model::generalized::tests::deferred_inspection_sees_invalid_agq_diagnostic_recorded_after_fit ... ok
+2026-10-27T18:49:50.0677209Z test model::generalized::tests::deferred_joint_laplace_inference_is_completed_before_probes ... ok
+2026-10-27T18:49:52.5876883Z test model::generalized::tests::deferred_joint_laplace_inference_across_verification_refit_and_stage_switch ... ok
+2026-10-27T18:49:53.5757289Z test model::generalized::snapshot::tests::snapshot_restores_estimated_negative_binomial_state_without_optimizer ... ok
+2026-10-27T18:49:53.6497448Z test model::generalized::tests::deferred_pirls_certificate_is_completed_by_verification_and_reset_by_refit ... ok
+2026-10-27T18:49:53.6696645Z test model::generalized::tests::deferred_pirls_certificate_matches_in_place_completion ... ok
+2026-10-27T18:49:53.6697303Z test model::generalized::tests::fast_glmm_fit_propagates_pirls_host_interrupt_callback_error ... ok
+2026-10-27T18:49:53.7176791Z test model::generalized::tests::fixed_beta_pirls_exits_with_fe_blocks_bit_identical_to_a_full_rebuild ... ok
+2026-10-27T18:49:53.7306828Z test model::generalized::tests::glmm_builder_matches_direct_construction_byte_for_byte ... ok
+2026-10-27T18:49:53.7307613Z test model::generalized::tests::deferred_joint_laplace_inference_prediction_variance_matches_eager ... ok
+2026-10-27T18:49:53.7326452Z test model::generalized::tests::glmm_fit_metadata_deserializes_legacy_json_without_method_fields ... ok
+2026-10-27T18:49:53.7327200Z test model::generalized::tests::glmm_fit_metadata_records_requested_and_effective_methods ... ok
+2026-10-27T18:49:53.7328000Z test model::generalized::tests::glmm_joint_inference_deferral_cost ... ignored
+2026-10-27T18:49:53.7426770Z test model::generalized::tests::glmm_joint_options_reject_unwired_optimizer_before_fitting ... ok
+2026-10-27T18:49:53.7566352Z test model::generalized::tests::glmm_native_uncertified_profiled_optimum_leaves_explicit_skip_reason ... ok
+2026-10-27T18:49:53.7586555Z test model::generalized::tests::glmm_post_fit_tail_cost ... ignored
+2026-10-27T18:49:53.7635897Z test model::generalized::tests::glmm_refit_cost ... ignored
+2026-10-27T18:49:53.9967105Z test model::generalized::tests::glmm_replicate_standard_errors_use_glmm_scale_covariance ... ok
+2026-10-27T18:49:53.9977042Z test model::generalized::tests::glmm_verify_convergence_is_not_run_before_fit ... ok
+2026-10-27T18:49:54.1086784Z test model::generalized::tests::glmm_fast_options_record_caller_native_optimizer_override ... ok
+2026-10-27T18:49:54.2096633Z test model::generalized::tests::glmm_verify_convergence_profiled_restarts_agree ... ok
+2026-10-27T18:49:54.5256752Z test model::generalized::tests::glmm_verify_convergence_joint_restarts_agree_native ... ok
+2026-10-27T18:49:54.6086948Z test model::generalized::tests::joint_and_fast_fits_leave_fe_blocks_matching_a_forced_rebuild ... ok
+2026-10-27T18:49:55.9647774Z test model::generalized::tests::joint_fit_propagates_host_interrupts_after_the_profiled_start ... ok
+2026-10-27T18:49:55.9676682Z test model::generalized::tests::joint_glmm_decrement_certifies_stiff_gradient_and_flags_flat_gap ... ok
+2026-10-27T18:49:55.9686237Z test model::generalized::tests::joint_glmm_diagonal_decrement_is_evidence_only ... ok
+2026-10-27T18:49:55.9716200Z test model::generalized::tests::joint_glmm_escalated_stationarity_pass_certifies_with_evidence_trail ... ok
+2026-10-27T18:49:57.3886790Z test model::generalized::tests::joint_glmm_estimated_negative_binomial_refit_runs_outer_iterations ... ok
+2026-10-27T18:49:57.3976500Z test model::generalized::tests::joint_glmm_ftol_at_budget_boundary_keeps_not_available_joint_candidate ... ok
+2026-10-27T18:49:57.7566895Z test model::generalized::tests::joint_glmm_bootstrap_matches_explicit_joint_replicates ... ok
+2026-10-27T18:49:57.7596239Z test model::generalized::tests::joint_glmm_noise_dominated_stationarity_is_not_assessed ... ok
+2026-10-27T18:49:57.7656200Z test model::generalized::tests::joint_glmm_nonfinite_objective_stop_is_not_converged_interior ... ok
+2026-10-27T18:49:57.7726284Z test model::generalized::tests::joint_glmm_not_assessed_stationarity_keeps_joint_candidate ... ok
+2026-10-27T18:49:58.1497172Z test model::generalized::tests::joint_glmm_refit_interrupt_preserves_the_original_template ... ok
+2026-10-27T18:49:58.7933359Z test model::generalized::tests::joint_glmm_refit_preserves_caller_optimizer_and_controls ... ok
+2026-10-27T18:49:59.0046707Z test model::generalized::tests::joint_glmm_refit_refuses_estimator_substitution ... ok
+2026-10-27T18:49:59.5236979Z test model::generalized::tests::joint_glmm_newton_decrement_calibration ... ok
+2026-10-27T18:49:59.5286240Z test model::generalized::tests::joint_glmm_stationarity_failure_is_not_converged_interior ... ok
+2026-10-27T18:49:59.5346143Z test model::generalized::tests::joint_glmm_unavailable_gradient_preserves_assessed_failures ... ok
+2026-10-27T18:50:04.0677192Z test model::generalized::tests::joint_glmm_refit_retains_estimator_for_every_start_and_quadrature ... ok
+2026-10-27T18:50:04.0706040Z test model::generalized::tests::joint_trust_bq_confirmation_rules ... ok
+2026-10-27T18:50:19.4929981Z test model::generalized::tests::joint_trust_bq_ftol_confirmation_respects_tight_budgets ... ok
+2026-10-27T18:50:21.0466851Z test model::generalized::tests::joint_laplace_rx_fallback_matches_glmer_rx_vcov ... ok
+2026-10-27T18:50:21.0496587Z test model::generalized::tests::joint_trust_bq_propagates_host_interrupt_callback_error ... ok
+2026-10-27T18:50:24.4017089Z test model::generalized::tests::joint_trust_bq_polish_resolves_small_gradient_gap ... ok
+2026-10-27T18:50:28.6486858Z test model::generalized::tests::deferred_joint_laplace_inference_matches_eager_path ... ok
+2026-10-27T18:50:28.6636755Z test model::generalized::tests::joint_trust_bq_transform_decorrelates_only_well_conditioned_blocks ... ok
+2026-10-27T18:50:28.6637745Z test model::generalized::tests::newton_decrement_block_falls_back_to_diagonal_when_working_curvature_disagrees ... ok
+2026-10-27T18:50:28.6726462Z test model::generalized::tests::newton_decrement_escalated_readings_are_judged_in_gap_units ... ok
+2026-10-27T18:50:28.6727292Z test model::generalized::tests::newton_decrement_handles_bound_active_and_one_sided_coordinates ... ok
+2026-10-27T18:50:28.6727861Z test model::generalized::tests::newton_decrement_recovers_quadratic_gap ... ok
+2026-10-27T18:50:28.6728524Z test model::generalized::tests::newton_decrement_refuses_nonpositive_curvature ... ok
+2026-10-27T18:50:28.7041855Z test model::generalized::tests::profiled_glmm_certificate_records_first_order_evidence_or_explicit_skip ... ok
+2026-10-27T18:50:28.7366607Z test model::generalized::tests::re_only_update_marks_fe_blocks_stale_until_refreshed_or_fully_factored ... ok
+2026-10-27T18:50:28.7736455Z test model::generalized::tests::response_constant_cache_key_is_checked_once_per_objective_evaluation ... ok
+2026-10-27T18:50:29.0776855Z test model::generalized::tests::response_constant_cache_matches_uncached_and_follows_the_response ... ok
+2026-10-27T18:50:29.4511959Z test model::generalized::tests::scalar_tolerance_matches_explicit_vector_glmm ... ok
+2026-10-27T18:50:29.4706701Z test model::generalized::tests::stateless_transform_glmm_end_to_end ... ok
+2026-10-27T18:50:29.5606749Z test model::generalized::tests::test_budgeted_native_joint_laplace_records_high_baseline_multi_re_metadata ... ok
+2026-10-27T18:50:29.5626301Z test model::generalized::tests::test_continuous_mixture_quantile_matches_single_normal_reference ... ok
+2026-10-27T18:50:29.5636069Z test model::generalized::tests::test_discrete_mixture_quantile_matches_single_poisson_reference ... ok
+2026-10-27T18:50:29.8116920Z test model::generalized::tests::test_gamma_glmm_fit_estimates_lme4_sigma_dispersion ... ok
+2026-10-27T18:50:29.8716853Z test model::generalized::tests::test_gamma_glmm_near_zero_random_effect_is_diagnostic ... ok
+2026-10-27T18:50:29.8736481Z test model::generalized::tests::test_gamma_glmm_refit_rejects_nonpositive_response ... ok
+2026-10-27T18:50:29.8737392Z test model::generalized::tests::test_gamma_inverse_gaussian_deviance_finite_at_nonpositive_mu ... ok
+2026-10-27T18:50:29.8738108Z test model::generalized::tests::test_gamma_pirls_components_are_link_specific ... ok
+2026-10-27T18:50:39.0453925Z test model::generalized::tests::test_gaussian_inverse_link_matches_lme4_2_1_profiled_and_joint ... ok
+2026-10-27T18:50:39.0464543Z test model::generalized::tests::test_glmm_accepts_near_constant ... ok
+2026-10-27T18:50:39.1316795Z test model::generalized::tests::test_glmm_bernoulli_future_observation_bounds_are_support_points ... ok
+2026-10-27T18:50:39.1786254Z test model::generalized::tests::test_glmm_binomial_future_observation_refused_with_trial_count_reason ... ok
+2026-10-27T18:50:39.8746646Z test model::generalized::tests::test_glmm_bootstrap_does_not_warm_start ... ok
+2026-10-27T18:50:39.8948584Z test model::generalized::tests::test_glmm_compiler_artifact_records_boundary_metadata ... ok
+2026-10-27T18:50:39.8966378Z test model::generalized::tests::test_glmm_constructor_accepts_gamma_with_positive_response ... ok
+2026-10-27T18:50:39.8976419Z test model::generalized::tests::test_glmm_constructor_accepts_normal_nonidentity_dispersion_family ... ok
+2026-10-27T18:50:39.9026006Z test model::generalized::tests::test_glmm_constructor_rejects_nonpositive_gamma_response ... ok
+2026-10-27T18:50:39.9026657Z test model::generalized::tests::test_glmm_constructor_rejects_unsupported_family_link_pairs ... ok
+2026-10-27T18:50:39.9056212Z test model::generalized::tests::test_glmm_constructor_supports_requested_family_link_pairs ... ok
+2026-10-27T18:50:40.6006583Z test model::generalized::tests::test_glmm_deviance_agq_restores_state ... ok
+2026-10-27T18:50:42.9517929Z test model::generalized::joint::centered_adoption_tests::centered_adoption_joint_fit_preserves_parity_and_stationarity ... ok
+2026-10-27T18:50:42.9756272Z test model::generalized::tests::test_glmm_final_theta_update_propagates_invalid_theta_error ... ok
+2026-10-27T18:50:43.2126403Z test model::generalized::tests::test_glmm_fit_uses_native_cobyla_without_nlopt ... ok
+2026-10-27T18:50:43.4953437Z test model::generalized::tests::test_glmm_fast_false_uses_native_joint_or_fallback_path_without_nlopt ... ok
+2026-10-27T18:50:43.5470340Z test model::generalized::tests::test_glmm_fit_uses_native_pattern_search_when_requested ... ok
+2026-10-27T18:50:44.9276428Z test model::generalized::tests::test_glmm_joint_laplace_honors_configured_max_feval_without_nlopt ... ok
+2026-10-27T18:50:44.9456177Z test model::generalized::tests::test_glmm_link_scale_rows_do_not_carry_future_observation_columns ... ok
+2026-10-27T18:50:44.9669181Z test model::generalized::tests::test_glmm_new_with_compiler_policy_applies_internal_policy ... ok
+2026-10-27T18:50:44.9696042Z test model::generalized::tests::test_glmm_offset_enters_linear_predictor ... ok
+2026-10-27T18:50:44.9706234Z test model::generalized::tests::test_glmm_offset_validation ... ok
+2026-10-27T18:50:44.9846025Z test model::generalized::tests::test_glmm_pattern_search_handles_multitheta_poisson_fit ... ok
+2026-10-27T18:50:45.0056192Z test model::generalized::tests::test_glmm_pirls_native_prediction_variance_rows_degrade_without_certificate ... ok
+2026-10-27T18:50:45.0326121Z test model::generalized::tests::test_glmm_pirls_uncertified_fit_keeps_degraded_with_refit_guidance ... ok
+2026-10-27T18:50:45.0386063Z test model::generalized::tests::test_glmm_predict_new_same_data_matches_fitted_on_response_and_link_scale ... ok
+2026-10-27T18:50:45.0446011Z test model::generalized::tests::test_glmm_predict_new_unseen_levels_follow_policy ... ok
+2026-10-27T18:50:46.2598835Z test model::generalized::tests::test_glmm_predict_new_variance_reports_joint_laplace_conditional_rows_available ... ok
+2026-10-27T18:50:46.2834704Z test model::generalized::tests::test_glmm_predict_new_variance_returns_degraded_working_delta_payload ... ok
+2026-10-27T18:50:46.2936268Z test model::generalized::tests::test_glmm_predict_new_variance_unseen_level_keeps_unavailable_reason ... ok
+2026-10-27T18:50:46.3016076Z test model::generalized::tests::test_glmm_predict_new_with_offset_applies_offset_on_link_scale ... ok
+2026-10-27T18:50:46.3076101Z test model::generalized::tests::test_glmm_profile_likelihood_methods_refuse_with_explicit_reason ... ok
+2026-10-27T18:50:46.3696346Z test model::generalized::tests::test_glmm_rectify_after_fit ... ok
+2026-10-27T18:50:48.4106947Z test model::generalized::tests::test_glmm_refit_after_resample_matches_cold_fit ... ok
+2026-10-27T18:50:49.1095187Z test model::generalized::tests::test_glmm_refit_resets_theta_to_initial ... ok
+2026-10-27T18:50:49.1116236Z test model::generalized::tests::test_glmm_rejects_constant_response_bernoulli ... ok
+2026-10-27T18:50:49.1116815Z test model::generalized::tests::test_glmm_rejects_constant_response_poisson ... ok
+2026-10-27T18:50:55.1496964Z test model::generalized::tests::test_glmm_repeated_refit_does_not_accumulate_retained_state ... ok
+2026-10-27T18:50:55.2501718Z test model::generalized::tests::test_glmm_response_scale_confidence_bounds_stay_in_family_range ... ok
+2026-10-27T18:50:55.2736616Z test model::generalized::tests::test_glmm_theta_probe_penalizes_invalid_theta ... ok
+2026-10-27T18:50:55.2956785Z test model::generalized::tests::test_glmm_validate_agq_accepts_single_scalar_re ... ok
+2026-10-27T18:50:55.3116708Z test model::generalized::tests::test_glmm_validate_agq_rejects_multi_term_random_effects ... ok
+2026-10-27T18:50:55.3301594Z test model::generalized::tests::test_glmm_validate_agq_rejects_vector_random_effect ... ok
+2026-10-27T18:50:55.3316255Z test model::generalized::tests::test_inverse_gaussian_cdf_matches_scipy_reference ... ok
+2026-10-27T18:50:55.3346041Z test model::generalized::tests::test_matrix_block_diag_covers_all_variants ... ok
+2026-10-27T18:50:55.3346619Z test model::generalized::tests::test_negative_binomial_constructor_requires_fixed_theta ... ok
+2026-10-27T18:50:55.4366615Z test model::generalized::tests::test_negative_binomial_estimated_theta_fit_records_metadata ... ok
+2026-10-27T18:50:55.4396142Z test model::generalized::tests::test_negative_binomial_fixed_theta_fit_records_metadata ... ok
+2026-10-27T18:50:55.4426572Z test model::generalized::tests::test_negative_binomial_pirls_uses_fixed_theta_variance ... ok
+2026-10-27T18:50:55.4446445Z test model::generalized::tests::test_pirls_handles_bernoulli_near_separation ... ok
+2026-10-27T18:50:55.4447185Z test model::generalized::tests::test_pirls_handles_poisson_log_extreme_offset_scale ... ok
+2026-10-27T18:50:55.4448128Z test model::generalized::tests::test_pirls_handles_poisson_sqrt_zero_mean_start ... ok
+2026-10-27T18:50:55.4448769Z test model::generalized::tests::test_pirls_no_inf_weight_under_binary_noncanonical_links ... ok
+2026-10-27T18:50:55.4449389Z test model::generalized::tests::test_pirls_no_inf_weight_under_logit ... ok
+2026-10-27T18:50:55.4449982Z test model::generalized::tests::test_pirls_no_iter0_break_on_first_step_halving_slack ... ok
+2026-10-27T18:50:55.4450645Z test model::generalized::tests::test_pirls_working_response_subtracts_offset ... ok
+2026-10-27T18:50:55.4451342Z test model::generalized::tests::test_poisson_glmm_near_zero_random_effect_classifies_boundary ... ok
+2026-10-27T18:50:55.4456867Z test model::generalized::tests::test_standard_normal_ln_cdf_tail_is_continuous_and_consistent ... ok
+2026-10-27T18:50:55.5026591Z test model::generalized::tests::warm_refit_reaches_the_cold_refit_optimum_with_fewer_evaluations ... ok
+2026-10-27T18:50:55.5136361Z test model::kernel::gradient_oracle_tests::column_oracle_matches_the_model_gradient ... ok
+2026-10-27T18:50:55.5137056Z test model::linear::active_face::tests::face_expansion_reproduces_rank_deficient_covariance ... ok
+2026-10-27T18:50:55.6126775Z test model::linear::blocks::nalgebra_summation_order::skinny_xtx_is_a_sequential_dot_per_cell_up_to_the_pinned_width ... ok
+2026-10-27T18:50:55.6376786Z test model::linear::blocks::nalgebra_summation_order::wide_xtx_takes_the_blocked_gemm_path_above_the_pinned_width ... ok
+2026-10-27T18:50:55.7206678Z test model::linear::blocks::nalgebra_summation_order::xty_gemv_accumulates_in_observation_order_for_any_width ... ok
+2026-10-27T18:50:55.7356535Z test model::linear::blocks::sparse_product_paths::block_matvecs_are_bit_identical_to_the_dense_loops ... ok
+2026-10-27T18:50:55.7446261Z test model::linear::blocks::sparse_product_paths::dense_dense_path_is_unchanged_bitwise ... ok
+2026-10-27T18:50:56.2407532Z test model::linear::blocks::sparse_product_paths::mixed_block_layouts_match_dense_cholesky_across_theta_path ... ok
+2026-10-27T18:50:59.6306893Z test model::generalized::tests::test_glmm_fit_with_options_rejects_invalid_nagq_up_front ... ok
+2026-10-27T18:50:59.6407167Z test model::linear::blocks::sparse_product_paths::sparse_operands_into_dense_target_match_dense_gemm ... ok
+2026-10-27T18:50:59.6566522Z test model::linear::blocks::sparse_product_paths::sparse_target_covering_the_product_stays_sparse_and_matches_dense ... ok
+2026-10-27T18:50:59.6698031Z test model::linear::blocks::sparse_product_paths::sparse_target_missing_a_product_entry_falls_back_to_dense ... ok
+2026-10-27T18:50:59.6726383Z test model::linear::blocks::subtract_block_times_slice_tests::matches_dense_row_dot_for_every_block_storage ... ok
+2026-10-27T18:50:59.6816183Z test model::linear::blocks::wtxy_re_cross_product::matches_reference_bitwise ... ok
+2026-10-27T18:50:59.6866091Z test model::linear::blocks::wtxy_re_cross_product::re_cross_product_into_matches_allocating_kernel_bitwise ... ok
+2026-10-27T18:50:59.6926153Z test model::linear::blocks::wtxy_re_cross_product::wtxy_cross_product_matches_fixed_design_route_bitwise ... ok
+2026-10-27T18:50:59.6956030Z test model::linear::bootstrap::interval_helper_tests::interval_helpers_do_not_panic_on_empty_input ... ok
+2026-10-27T18:51:02.0406971Z test model::linear::blocks::sparse_product_paths::nested_scalar_terms_keep_sparse_l_and_match_dense_cholesky ... ok
+2026-10-27T18:51:02.1410241Z test model::linear::dense_kernels::tests::blocked_cholesky_reconstructs_rank_deficient_input ... ok
+2026-10-27T18:51:03.0256715Z test model::linear::dense_kernels::tests::cholesky_negative_pivot_beyond_tolerance_is_posdef_exception_in_both_regimes ... ok
+2026-10-27T18:51:05.9597247Z test model::linear::dense_kernels::tests::blocked_cholesky_matches_old_kernel_on_spd_and_singular_inputs ... ok
+2026-10-27T18:51:06.1016907Z test model::linear::dense_kernels::tests::symmetric_downdate_matches_full_gemm_on_lower_triangle ... ok
+2026-10-27T18:51:06.7936712Z test model::linear::dense_kernels::tests::unblocked_cholesky_is_bit_identical_to_old_kernel ... ok
+2026-10-27T18:51:06.9176796Z test model::linear::dense_kernels::tests::rdiv_matches_old_kernel ... ok
+2026-10-27T18:51:06.9246338Z test model::linear::gradient::certificate::inspected_certificate_reports_the_exact_gradient ... ok
+2026-10-27T18:51:06.9276069Z test model::linear::gradient::cost::certificate_evidence_cost ... ignored
+2026-10-27T18:51:06.9305909Z test model::linear::gradient::cost::crossed_gradient_phase_costs ... ignored
+2026-10-27T18:51:06.9306420Z test model::linear::gradient::cost::gradient_cost_in_evaluation_equivalents ... ignored
+2026-10-27T18:51:06.9335959Z test model::linear::gradient::cost::singular_maximal_gradient_loop_trace ... ignored
+2026-10-27T18:51:06.9365892Z test model::linear::gradient::cost::singular_maximal_trajectories ... ignored
+2026-10-27T18:51:06.9586250Z test model::linear::gradient::oracle_fit::gradient_oracle_matches_the_interpolation_optimum_on_a_single_vector_term ... ok
+2026-10-27T18:51:07.5887206Z test model::linear::gradient::certificate::analytic_derivative_evidence_matches_the_finite_difference_evidence ... ok
+2026-10-27T18:51:07.5926506Z test model::linear::gradient::oracle_fit::gradient_oracle_stops_cleanly_at_a_zero_variance_boundary ... ok
+2026-10-27T18:51:07.6090028Z test model::linear::gradient::oracle_fit::nested_adoption_default_budget_reml_parity ... ok
+2026-10-27T18:51:07.7006420Z test model::linear::gradient::oracle_fit::nested_adoption_gradient_matches_dense_and_finite_differences ... ok
+2026-10-27T18:51:07.9376787Z test model::linear::gradient::tests::blocked_gradient_matches_dense_reference_crossed_and_nested_terms ... ok
+2026-10-27T18:51:08.2086883Z test model::linear::gradient::tests::blocked_gradient_matches_dense_reference_single_term ... ok
+2026-10-27T18:51:08.2476713Z test model::linear::gradient::tests::blocked_gradient_matches_dense_reference_weighted ... ok
+2026-10-27T18:51:08.3806656Z test model::linear::gradient::tests::dense_reference_matches_finite_differences_on_crossed_vector_terms ... ok
+2026-10-27T18:51:08.4336329Z test model::linear::gradient::tests::dense_reference_matches_finite_differences_on_scalar_and_weighted_fits ... ok
+2026-10-27T18:51:08.4556296Z test model::linear::gradient::oracle_fit::gradient_oracle_reaches_the_interpolation_optimum_on_crossed_terms_with_fewer_evaluations ... ok
+2026-10-27T18:51:08.4826229Z test model::linear::gradient::tests::dense_reference_matches_one_sided_finite_differences_at_the_boundary ... ok
+2026-10-27T18:51:08.4856111Z test model::linear::inference::tests::asymptotic_wald_helper_preserves_normal_tails_and_unavailability ... ok
+2026-10-27T18:51:08.4866273Z test model::linear::gradient::tests::dense_reference_matches_finite_differences_on_vector_sleepstudy ... ok
+2026-10-27T18:51:08.4885940Z test model::linear::snapshot::tests::ordinary_lmm_rejects_mutated_working_state ... ok
+2026-10-27T18:51:08.4946017Z test model::linear::snapshot::tests::review_snapshot_preserves_optimizer_strategy_controls ... ok
+2026-10-27T18:51:08.5006039Z test model::linear::snapshot::tests::snapshot_preserves_boundary_fit_and_conditional_queries ... ok
+2026-10-27T18:51:08.5125997Z test model::linear::snapshot::tests::snapshot_preserves_fixed_sampling_variance_semantics ... ok
+2026-10-27T18:51:08.5423839Z test model::linear::snapshot::tests::snapshot_refuses_missing_or_contradictory_fit_evidence ... ok
+2026-10-27T18:51:08.5456369Z test model::linear::snapshot::tests::snapshot_preserves_ordered_and_unordered_custom_contrasts ... ok
+2026-10-27T18:51:08.5548998Z test model::linear::snapshot::tests::snapshot_requires_known_optimizer_strategy_controls ... ok
+2026-10-27T18:51:08.5626967Z test model::linear::snapshot::tests::snapshot_restores_weighted_transformed_refit_without_optimizer ... ok
+2026-10-27T18:51:08.5656204Z test model::linear::snapshot::tests::snapshot_replays_reduced_construction_and_final_factorization_policy ... ok
+2026-10-27T18:51:08.5716035Z test model::linear::tests::deferred_certificate_evidence_matches_eager_completion ... ok
+2026-10-27T18:51:08.6016284Z test model::linear::tests::inference_covariance_provenance_survives_tables_and_legacy_json ... ok
+2026-10-27T18:51:08.6065995Z test model::linear::tests::lmm_builder_build_returns_unfitted_model ... ok
+2026-10-27T18:51:08.6076292Z test model::linear::tests::lmm_fit_options_record_caller_optimizer_tolerances_and_start ... ok
+2026-10-27T18:51:08.6106071Z test model::linear::tests::lmm_prior_weights_are_validated_before_use ... ok
+2026-10-27T18:51:08.6125929Z test model::linear::tests::no_intercept_factor_model_is_a_reparameterization ... ok
+2026-10-27T18:51:08.6486686Z test model::linear::snapshot::tests::snapshot_strategy_controls_survive_native_refits ... ok
+2026-10-27T18:51:08.6516266Z test model::linear::tests::predict_new_on_training_data_matches_fitted_for_categorical_codings ... ok
+2026-10-27T18:51:08.6525463Z test model::linear::tests::reml_logdet_treats_non_positive_lxx_pivot_as_infeasible ... ok
+2026-10-27T18:51:08.6526246Z test model::linear::tests::refit_resets_the_inspected_certificate ... ok
+2026-10-27T18:51:08.6636202Z test model::linear::tests::scalar_tolerance_matches_explicit_vector_lmm ... ok
+2026-10-27T18:51:08.6666071Z test model::linear::tests::scalar_tolerance_validation_preserves_vector_and_start_contracts ... ok
+2026-10-27T18:51:08.6676517Z test model::linear::tests::shared_parity_fixture_reaches_its_rank_deficient_reml_optimum ... ok
+2026-10-27T18:51:08.9527008Z test model::linear::tests::streamed_rank_deficient_design_falls_back_to_dense_householder ... ok
+2026-10-27T18:51:09.1246886Z test model::linear::tests::streamed_rank_fallback_over_dense_bound_is_a_warning ... ok
+2026-10-27T18:51:09.5006717Z test model::linear::tests::streamed_full_rank_design_takes_gram_certified_rank_path ... ok
+2026-10-27T18:51:09.5346858Z test model::linear::tests::test_active_face_detection_records_lower_rank_four_by_four_block ... ok
+2026-10-27T18:51:09.5396821Z test model::linear::tests::test_active_face_poc_reduces_rank_one_two_by_two_covariance_search ... ok
+2026-10-27T18:51:09.5426669Z test model::linear::tests::test_active_face_refit_defaults_off ... ok
+2026-10-27T18:51:09.5506744Z test model::linear::tests::test_active_face_refit_noop_on_full_rank_fit ... ok
+2026-10-27T18:51:09.5507588Z test model::linear::tests::test_apply_lambda_transpose_to_rhs_consistent_with_parmap_order ... ok
+2026-10-27T18:51:09.5508176Z test model::linear::tests::test_block_index ... ok
+2026-10-27T18:51:09.5508879Z test model::linear::tests::test_blocked_forward_solve_zero_pivot_guard_uniform ... ok
+2026-10-27T18:51:09.5522404Z test model::linear::tests::test_bootstrap_fixed_effect_coefficient_row_from_certified_payload ... ok
+2026-10-27T18:51:09.5539786Z test model::linear::tests::test_bootstrap_fixed_effect_contrast_row_uses_payload_statistics ... ok
+2026-10-27T18:51:09.5716169Z test model::linear::tests::test_bootstrap_fixed_effect_row_from_null_simulate_refit_payload ... ok
+2026-10-27T18:51:09.5716866Z test model::linear::tests::test_bootstrap_fixed_effect_row_requires_enough_finite_statistics ... ok
+2026-10-27T18:51:09.5746120Z test model::linear::tests::test_bootstrap_multi_df_payload_matches_joint_f_oracle_and_p_value_accounting ... ok
+2026-10-27T18:51:09.5746676Z test model::linear::tests::test_cholesky_block_dense ... ok
+2026-10-27T18:51:09.5775956Z test model::linear::tests::test_cholesky_block_diagonal ... ok
+2026-10-27T18:51:09.5806122Z test model::linear::tests::test_cholesky_rejects_near_singular_negative_pivot_at_unit_scale ... ok
+2026-10-27T18:51:09.5835947Z test model::linear::tests::test_cholesky_strict_mode_matches_julia ... ok
+2026-10-27T18:51:09.5853209Z test model::linear::tests::test_cholesky_zero_pad_scales_with_diagonal ... ok
+2026-10-27T18:51:09.5896431Z test model::linear::tests::test_cobyla_records_maxeval ... ok
+2026-10-27T18:51:09.5926070Z test model::linear::tests::test_cobyla_validates_configured_initial_step ... ok
+2026-10-27T18:51:09.5956022Z test model::linear::tests::test_coeftable_omits_p_values_for_regularized_fit_intent ... ok
+2026-10-27T18:51:09.5985965Z test model::linear::tests::test_coeftable_rank_deficient_nan_dropped ... ok
+2026-10-27T18:51:09.6015980Z test model::linear::tests::test_copy_and_rmul_lambda_sparse_matches_dense ... ok
+2026-10-27T18:51:09.6046073Z test model::linear::tests::test_copy_and_scale_offdiag_vsize2_matches_reference ... ok
+2026-10-27T18:51:09.6076099Z test model::linear::tests::test_copy_scale_inflate_vsize2_matches_reference ... ok
+2026-10-27T18:51:09.6096058Z test model::linear::tests::test_create_al_single_vsize2_matches_generic_blocks ... ok
+2026-10-27T18:51:09.6166156Z test model::linear::tests::test_crossed_objective_matches_julia_on_shared_fixture ... ok
+2026-10-27T18:51:09.6205974Z test model::linear::tests::test_crossed_scalar_re_cross_product_stays_sparse ... ok
+2026-10-27T18:51:09.6238440Z test model::linear::tests::test_dense_crossed_block_guard_accepts_small_blocks ... ok
+2026-10-27T18:51:09.6256405Z test model::linear::tests::test_dense_crossed_block_guard_reports_problem_too_large ... ok
+2026-10-27T18:51:09.6266347Z test model::linear::tests::test_dispersion_under_fixed_sigma_matches_julia ... ok
+2026-10-27T18:51:09.6267021Z test model::linear::tests::test_dyestuff_objective_at_specific_theta ... ok
+2026-10-27T18:51:09.6267720Z test model::linear::tests::test_explicit_categorical_contrast_basis_respects_non_marginal_interaction_expansion ... ok
+2026-10-27T18:51:09.6268473Z test model::linear::tests::test_fast_vsize2_profiled_objective_matches_generic_update ... ok
+2026-10-27T18:51:09.6269141Z test model::linear::tests::test_analytic_jac_vcov_beta_varpar_matches_central_differences ... ok
+2026-10-27T18:51:09.6269822Z test model::linear::tests::test_fixed_design_solver_blocks_match_femat_blocks_unweighted ... ok
+2026-10-27T18:51:09.6270510Z test model::linear::tests::test_fixed_design_solver_blocks_match_femat_blocks_weighted ... ok
+2026-10-27T18:51:09.6271252Z test model::linear::tests::test_fixed_effect_joint_f_is_invariant_to_restriction_row_order_and_scaling ... ok
+2026-10-27T18:51:09.6286338Z test model::linear::tests::test_fixed_effect_joint_f_uses_effective_rank_for_redundant_restrictions ... ok
+2026-10-27T18:51:09.6287006Z test model::linear::tests::test_fixed_effect_covariance_artifact_round_trips_from_fitted_models ... ok
+2026-10-27T18:51:09.6316190Z test model::linear::tests::test_forced_prima_bobyqa_requires_prima_feature ... ok
+2026-10-27T18:51:09.6346153Z test model::linear::tests::test_fixed_sigma_constrains_scalar_re_fit ... ok
+2026-10-27T18:51:09.6376130Z test model::linear::tests::test_is_singular_consistent_with_effective_covariance_status ... ok
+2026-10-27T18:51:09.6406059Z test model::linear::tests::test_is_singular_detects_rank_deficient_lambda ... ok
+2026-10-27T18:51:09.6416252Z test model::linear::tests::test_jac_vcov_beta_varpar_returns_symmetric_matrices_and_sigma_derivative ... ok
+2026-10-27T18:51:09.9376801Z test model::linear::tests::test_kenward_roger_adjusted_vcov_returns_pbkrtest_style_artifacts ... ok
+2026-10-27T18:51:12.6397058Z test model::linear::tests::test_kenward_roger_low_rank_matches_dense_reference ... ok
+2026-10-27T18:51:12.6444568Z test model::linear::tests::test_kenward_roger_sigma_g_scalar_random_intercept_components ... ok
+2026-10-27T18:51:12.9356982Z test model::linear::tests::test_kenward_roger_sigma_g_vector_random_effect_components ... ok
+2026-10-27T18:51:12.9386190Z test model::linear::tests::test_kkt_guided_restart_repairs_scalar_invalid_boundary_stop ... ok
+2026-10-27T18:51:12.9416082Z test model::linear::tests::test_kkt_guided_restart_repairs_two_by_two_invalid_boundary_stop ... ok
+2026-10-27T18:51:12.9445981Z test model::linear::tests::test_lmm_accepts_diag_wrapper_as_diagonal_covariance ... ok
+2026-10-27T18:51:12.9476445Z test model::linear::tests::test_lmm_compiler_theta_maps_follow_optimizer_reterm_order ... ok
+2026-10-27T18:51:14.4396649Z test model::linear::tests::test_lmm_constructor_keeps_high_cardinality_fixed_design_streamed ... ok
+2026-10-27T18:51:14.4426393Z test model::linear::tests::test_lmm_design_compiled_reduces_full_covariance_before_fit ... ok
+2026-10-27T18:51:14.4446160Z test model::linear::tests::test_lmm_explicit_kenward_roger_ml_request_does_not_fallback ... ok
+2026-10-27T18:51:14.4536075Z test model::linear::tests::test_lmm_explicit_kenward_roger_multi_df_request_returns_f_test ... ok
+2026-10-27T18:51:14.4545990Z test model::linear::tests::test_lmm_explicit_satterthwaite_multi_df_request_returns_f_test ... ok
+2026-10-27T18:51:14.4596015Z test model::linear::tests::test_lmm_fixed_effect_covariance_matrix_available_for_full_rank_fit ... ok
+2026-10-27T18:51:14.4626051Z test model::linear::tests::test_lmm_fixed_effect_inference_table_omits_p_values_after_selection_time_reduction ... ok
+2026-10-27T18:51:14.4656115Z test model::linear::tests::test_lmm_fixed_effect_inference_table_omits_p_values_for_regularized_fit_intent ... ok
+2026-10-27T18:51:14.4857158Z test model::linear::tests::test_lmm_kenward_roger_scaled_f_matches_pbkrtest_krmodcomp ... ok
+2026-10-27T18:51:14.4895940Z test model::linear::tests::test_lmm_optimizer_certificate_records_budget_stop ... ok
+2026-10-27T18:51:14.4945839Z test model::linear::tests::test_logdet_block ... ok
+2026-10-27T18:51:14.4975891Z test model::linear::tests::test_lrt_dyestuff_null_vs_intercept_only ... ok
+2026-10-27T18:51:14.5005961Z test model::linear::tests::test_mmtrust_psd_scalar_poc_matches_theta_optimizer_objective ... ok
+2026-10-27T18:51:14.5246218Z test model::linear::tests::test_mmtrust_psd_two_by_two_poc_matches_theta_optimizer_objective ... ok
+2026-10-27T18:51:14.5486445Z test model::linear::tests::test_native_auto_crossed_large_recourse_targets_crossed_vector_blocks ... ok
+2026-10-27T18:51:14.6116711Z test model::linear::tests::test_native_default_kenward_roger_rows_are_finite_with_realistic_tolerances ... ok
+2026-10-27T18:51:14.6206341Z test model::linear::tests::test_native_default_pastes_varcorr_contract_and_certificate_are_stable ... ok
+2026-10-27T18:51:14.6416326Z test model::linear::tests::test_native_default_satterthwaite_rows_are_finite_with_realistic_tolerances ... ok
+2026-10-27T18:51:15.1426733Z test model::linear::tests::test_native_default_singular_zcp_fit_keeps_certificate_state_observable ... ok
+2026-10-27T18:51:15.1456042Z test model::linear::tests::test_optimizer_return_values_consistent_across_backends ... ok
+2026-10-27T18:51:15.1485903Z test model::linear::tests::test_optsum_fitlog_population ... ok
+2026-10-27T18:51:15.1515900Z test model::linear::tests::test_optsum_fitlog_theta_dimensions ... ok
+2026-10-27T18:51:15.1536264Z test model::linear::tests::test_parametricbootstrap_beta_length ... ok
+2026-10-27T18:51:15.1576113Z test model::linear::tests::test_pattern_search_descends_correlated_directions ... ok
+2026-10-27T18:51:15.1606268Z test model::linear::tests::test_pattern_search_records_maxeval ... ok
+2026-10-27T18:51:15.1666014Z test model::linear::tests::test_penicillin_model_structure ... ok
+2026-10-27T18:51:15.1666441Z test model::linear::tests::test_predict_new_unknown_level_population ... ok
+2026-10-27T18:51:15.1671843Z test model::linear::tests::test_random_effect_categorical_slope_uses_cell_means_without_intercept ... ok
+2026-10-27T18:51:15.1696209Z test model::linear::tests::test_random_effect_categorical_slope_uses_treatment_coding_with_intercept ... ok
+2026-10-27T18:51:15.1696909Z test model::linear::tests::test_random_effect_factor_in_double_bar_gets_full_covariance_like_lme4 ... ok
+2026-10-27T18:51:15.1726095Z test model::linear::tests::test_random_effect_interaction_uses_cell_means_without_intercept ... ok
+2026-10-27T18:51:15.1736280Z test model::linear::tests::test_random_effect_no_intercept_factor_uses_cell_means_with_explicit_contrast ... ok
+2026-10-27T18:51:15.1750007Z test model::linear::tests::test_random_effect_three_way_interaction_basis_is_materialized ... ok
+2026-10-27T18:51:15.1751203Z test model::linear::tests::test_ranef_u_matches_solve_lower_block_rhs ... ok
+2026-10-27T18:51:15.1783559Z test model::linear::tests::test_rank_deficient_fixed_effects ... ok
+2026-10-27T18:51:15.1786032Z test model::linear::tests::test_rank_k_downdate_small_dense_large_k_matches_gemm ... ok
+2026-10-27T18:51:15.1806171Z test model::linear::tests::test_rank_k_downdate_vsize2_blockdiag_large_k_matches_gemm ... ok
+2026-10-27T18:51:15.1836077Z test model::linear::tests::test_rdiv_lower_transpose_blockdiag_vsize2_matches_dense_reference ... ok
+2026-10-27T18:51:15.1865508Z test model::linear::tests::test_rdiv_lower_transpose_diagonal ... ok
+2026-10-27T18:51:15.1875988Z test model::linear::tests::test_rectify_runs_for_cobyla_and_pattern_search_backends ... ok
+2026-10-27T18:51:15.1876539Z test model::linear::tests::test_rectify_theta_columns_matches_julia_sign_convention ... ok
+2026-10-27T18:51:15.1877039Z test model::linear::tests::test_refit_after_reml_objective_matches ... ok
+2026-10-27T18:51:15.1877476Z test model::linear::tests::test_refit_preserves_reml_flag ... ok
+2026-10-27T18:51:15.1877895Z test model::linear::tests::test_refit_rejects_constant_response ... ok
+2026-10-27T18:51:15.1878382Z test model::linear::tests::test_restorereplicates_rejects_mismatched_model_shape ... ok
+2026-10-27T18:51:15.1878972Z test model::linear::tests::test_satterthwaite_multi_df_denominator_df_combines_direction_dfs ... ok
+2026-10-27T18:51:15.1895532Z test model::linear::tests::test_scalar_single_theta_fit_is_locally_optimal ... ok
+2026-10-27T18:51:15.1908145Z test model::linear::tests::test_scalar_single_theta_records_maxeval ... ok
+2026-10-27T18:51:15.1956065Z test model::linear::tests::test_scalar_vsize1_fast_objective_matches_generic_block_update ... ok
+2026-10-27T18:51:15.1986004Z test model::linear::tests::test_singular_fixture_maximal_model_has_too_rich_information_budget ... ok
+2026-10-27T18:51:15.1996050Z test model::linear::tests::test_sleepstudy_model_structure ... ok
+2026-10-27T18:51:15.2056206Z test model::linear::tests::test_sleepstudy_vector_re_leverage_sum_matches_julia ... ok
+2026-10-27T18:51:15.2086120Z test model::linear::tests::test_sleepstudy_zerocorr_re_matches_julia ... ok
+2026-10-27T18:51:15.6997867Z test model::generalized::tests::joint_trust_bq_reaches_the_nlopt_optimum ... ok
+2026-10-27T18:51:15.7036293Z test model::linear::tests::test_trust_bq_certificate_stop_accepts_scalar_interior ... ok
+2026-10-27T18:51:15.7056062Z test model::linear::tests::test_trust_bq_certificate_stop_accepts_scalar_valid_boundary ... ok
+2026-10-27T18:51:15.7112731Z test model::linear::tests::test_trust_bq_certificate_stop_accepts_two_by_two_valid_rank_deficient ... ok
+2026-10-27T18:51:15.7136014Z test model::linear::tests::test_trust_bq_certificate_stop_rejects_scalar_invalid_boundary ... ok
+2026-10-27T18:51:15.7226304Z test model::linear::tests::test_trust_bq_diagonal_first_ladder_matches_single_start_objective ... ok
+2026-10-27T18:51:15.7227023Z test model::linear::tests::test_trust_bq_ladder_is_noop_without_off_diagonal_theta ... ok
+2026-10-27T18:51:15.7256105Z test model::linear::tests::test_trust_bq_model_family_policy_records_crossed_large_theta_contract ... ok
+2026-10-27T18:51:15.7286016Z test model::linear::tests::test_trust_bq_model_family_policy_records_moderate_theta_contract ... ok
+2026-10-27T18:51:15.7296176Z test model::linear::tests::test_trust_bq_model_family_policy_records_small_theta_contract ... ok
+2026-10-27T18:51:15.7315998Z test model::linear::tests::test_trust_bq_sample_reuse_defaults_to_family_policy ... ok
+2026-10-27T18:51:16.0526739Z test model::linear::tests::test_streamed_fixed_effect_lmm_fit_matches_dense_backend ... ok
+2026-10-27T18:51:16.0565992Z test model::linear::tests::test_trust_bq_sample_reuse_override_is_audit_recorded ... ok
+2026-10-27T18:51:16.0595940Z test model::linear::tests::test_trust_bq_sample_reuse_resolve_maps_every_variant ... ok
+2026-10-27T18:51:16.0616030Z test model::linear::tests::test_trust_bq_start_ladder_defaults_off ... ok
+2026-10-27T18:51:16.0656603Z test model::linear::tests::test_unweighted_objective_unchanged_by_weight_normalization ... ok
+2026-10-27T18:51:16.0686002Z test model::linear::tests::test_varest_under_fixed_sigma_matches_julia ... ok
+2026-10-27T18:51:16.0696086Z test model::linear::tests::test_vcov_varpar_estimate_returns_hessian_diagnostics_and_restores_state ... ok
+2026-10-27T18:51:16.0716037Z test model::linear::tests::test_weighted_lmm_objective_matches_julia_normalization ... ok
+2026-10-27T18:51:16.0735951Z test model::linear::tests::test_weighted_lrt_matches_profiled_target_difference ... ok
+2026-10-27T18:51:16.4016894Z test model::linear::tests::test_trust_bq_sample_reuse_override_changes_optimizer_trace ... ok
+2026-10-27T18:51:16.4256338Z test model::linear::tests::test_weighted_streamed_fixed_effect_lmm_fit_matches_dense_backend ... ok
+2026-10-27T18:51:16.4256974Z test model::linear::tests::trust_bq_propagates_host_interrupt_callback_error ... ok
+2026-10-27T18:51:16.4316113Z test model::linear::tests::type_i_sequences_terms_by_interaction_order ... ok
+2026-10-27T18:51:16.4426248Z test model::linear::tests::type_iii_f_is_invariant_to_reference_level_relabeling ... ok
+2026-10-27T18:51:16.4456245Z test model::linear::tests::type_iii_marginal_covariate_slope_averages_over_interacting_factor ... ok
+2026-10-27T18:51:16.4478949Z test model::linear::tests::type_iii_marginal_weights_on_unbalanced_interaction_worked_example ... ok
+2026-10-27T18:51:16.4496023Z test model::linear::tests::unused_grouping_levels_are_dropped_like_lme4 ... ok
+2026-10-27T18:51:16.4496563Z test model::linear::tests::verify_convergence_completes_deferred_evidence_first ... ok
+2026-10-27T18:51:16.4676017Z test model::linear::tests::test_zerocorr_factor_split_terms_record_no_error_diagnostics ... ok
+2026-10-27T18:51:16.4706083Z test model::snapshot::finite::tests::rejects_nonfinite_optional_evidence_before_json_discards_it ... ok
+2026-10-27T18:51:16.4735990Z test model::snapshot::tests::snapshot_integrity_covers_exact_payload_bytes_and_model_kind ... ok
+2026-10-27T18:51:16.4766054Z test model::snapshot::tests::snapshot_refuses_missing_and_incompatible_envelopes ... ok
+2026-10-27T18:51:16.4795991Z test model::summary_estimates::tests::constructs_unfitted_model_with_fixed_sigma_and_marker ... ok
+2026-10-27T18:51:16.4825937Z test model::summary_estimates::tests::defaults_match_contract ... ok
+2026-10-27T18:51:16.4856029Z test model::summary_estimates::tests::fit_recovers_intercept_with_zero_heterogeneity ... ok
+2026-10-27T18:51:16.4886024Z test model::summary_estimates::tests::fit_smoke_three_study_frame_does_not_panic ... ok
+2026-10-27T18:51:16.4916004Z test model::summary_estimates::tests::kenward_roger_inherits_weighted_model_refusal ... ok
+2026-10-27T18:51:16.4945935Z test model::summary_estimates::tests::ordinary_lmm_still_rejects_constant_response ... ok
+2026-10-27T18:51:16.4975973Z test model::summary_estimates::tests::rejects_formula_response_mismatch ... ok
+2026-10-27T18:51:16.4976459Z test model::summary_estimates::tests::rejects_missing_variance_column ... ok
+2026-10-27T18:51:16.5005888Z test model::summary_estimates::tests::rejects_non_finite_estimate ... ok
+2026-10-27T18:51:16.5026069Z test model::summary_estimates::tests::rejects_non_finite_variance ... ok
+2026-10-27T18:51:16.5055928Z test model::summary_estimates::tests::rejects_non_positive_variance ... ok
+2026-10-27T18:51:16.5126020Z test model::summary_estimates::tests::rejects_normalized_variance_overflow ... ok
+2026-10-27T18:51:16.5145993Z test model::summary_estimates::tests::rejects_relative_with_non_positive_sigma ... ok
+2026-10-27T18:51:16.5156121Z test model::summary_estimates::tests::rejects_relative_with_overflowing_sigma_square ... ok
+2026-10-27T18:51:16.5176000Z test model::summary_estimates::tests::rejects_same_estimate_and_variance_columns ... ok
+2026-10-27T18:51:16.5205948Z test model::summary_estimates::tests::rejects_weight_overflow_from_tiny_variance ... ok
+2026-10-27T18:51:16.5215911Z test model::summary_estimates::tests::relative_scale_carries_sigma ... ok
+2026-10-27T18:51:16.5246482Z test model::summary_estimates::tests::relative_scale_matches_absolute_when_sigma_one ... ok
+2026-10-27T18:51:16.5265965Z test model::summary_estimates::tests::satterthwaite_refuses_summary_estimate_fit ... ok
+2026-10-27T18:51:16.5295921Z test model::summary_estimates::tests::varcorr_omits_residual_row_for_summary_estimate_fit ... ok
+2026-10-27T18:51:16.5296720Z test model::summary_estimates::tests::varest_returns_one_for_summary_estimate_fit ... ok
+2026-10-27T18:51:16.5297251Z test model::traits::tests::test_cloglog_link_round_trips_and_handles_extremes ... ok
+2026-10-27T18:51:16.5297707Z test model::traits::tests::test_family_variance_functions ... ok
+2026-10-27T18:51:16.5298137Z test model::traits::tests::test_inverse_link_mu_eta_preserves_sign ... ok
+2026-10-27T18:51:16.5298640Z test optimizer::trust_bq::tests::indefinite_oracle_step_minimizes_its_feasible_ray ... ok
+2026-10-27T18:51:16.5299209Z test optimizer::trust_bq::tests::quadratic_model_translation_is_exact_for_the_surrogate ... ok
+2026-10-27T18:51:16.5299799Z test optimizer::trust_bq::tests::sr1_update_recovers_a_constant_hessian_from_secant_pairs ... ok
+2026-10-27T18:51:16.5300435Z test optimizer::trust_bq::tests::trust_bq_accepted_step_model_reuse_is_cheaper_and_reaches_same_optimum ... ok
+2026-10-27T18:51:16.5301063Z test model::linear::tests::weighted_lmm_simulation_scales_residual_noise_by_weights ... ok
+2026-10-27T18:51:16.5356028Z test optimizer::trust_bq::tests::trust_bq_gradient_handles_rosenbrock_like_valley ... ok
+2026-10-27T18:51:16.5356667Z test optimizer::trust_bq::tests::trust_bq_gradient_rejects_non_finite_objective_and_bad_gradient_length ... ok
+2026-10-27T18:51:16.5375141Z test optimizer::trust_bq::tests::trust_bq_gradient_respects_bounded_boundary_optimum ... ok
+2026-10-27T18:51:16.5375936Z test optimizer::trust_bq::tests::trust_bq_gradient_solves_shifted_quadratic_in_a_handful_of_oracle_calls ... ok
+2026-10-27T18:51:16.5395972Z test optimizer::trust_bq::tests::trust_bq_early_stops_on_objective_stagnation ... ok
+2026-10-27T18:51:16.5426000Z test optimizer::trust_bq::tests::trust_bq_progress_callback_can_certify_before_budget ... ok
+2026-10-27T18:51:16.5456005Z test optimizer::trust_bq::tests::trust_bq_rejected_step_model_reuse_is_cheaper_and_reaches_same_optimum ... ok
+2026-10-27T18:51:16.5776131Z test optimizer::trust_bq::tests::trust_bq_handles_rosenbrock_like_valley ... ok
+2026-10-27T18:51:16.5806007Z test optimizer::trust_bq::tests::trust_bq_rejects_zero_stall_iterations ... ok
+2026-10-27T18:51:16.5815903Z test optimizer::trust_bq::tests::trust_bq_respects_bounded_boundary_optimum ... ok
+2026-10-27T18:51:16.5836004Z test optimizer::trust_bq::tests::trust_bq_sample_reuse_is_exact_and_cheaper ... ok
+2026-10-27T18:51:16.5865967Z test optimizer::trust_bq::tests::trust_bq_solves_shifted_quadratic ... ok
+2026-10-27T18:51:16.5896111Z test optimizer::trust_bq::tests::trust_bq_trace_classification_labels_are_stable ... ok
+2026-10-27T18:51:16.6274121Z test optimizer::trust_bq::tests::trust_bq_translated_model_reuse_cuts_rosenbrock_valley_cost ... ok
+2026-10-27T18:51:16.6274793Z test optimizer::trust_bq::tests::trust_bq_rejected_step_model_reuse_is_not_a_free_lunch_on_a_curved_valley ... ok
+2026-10-27T18:51:16.6328087Z test parallel::pipeline_tests::pipeline_delivers_in_order_identically_for_every_thread_count ... ok
+2026-10-27T18:51:16.6346760Z test parallel::pipeline_tests::pipeline_propagates_producer_and_consumer_errors ... ok
+2026-10-27T18:51:16.6760587Z test parallel::cancel_tests::poll_error_cancels_remaining_jobs ... ok
+2026-10-27T18:51:16.7361706Z test parallel::pipeline_tests::pipeline_resumes_a_worker_panic_instead_of_hanging ... ok
+2026-10-27T18:51:16.8032310Z test parallel::tests::polled_map_keeps_item_order_for_every_thread_count ... ok
+2026-10-27T18:51:16.8656666Z test parallel::tests::worker_floating_point_matches_calling_thread ... ok
+2026-10-27T18:51:16.8840522Z test parallel::tests::worker_floating_point_matches_extended_precision_caller ... ok
+2026-10-27T18:51:16.8841583Z test pathology::certificate::tests::certify_detects_collinear_fixed_effects ... ok
+2026-10-27T18:51:16.8843201Z test pathology::certificate::tests::certify_detects_reduced_rank_truth ... ok
+2026-10-27T18:51:16.8844111Z test pathology::certificate::tests::certify_detects_singletons_with_slope ... ok
+2026-10-27T18:51:16.8845000Z test pathology::certificate::tests::certify_detects_zero_variance_boundary ... ok
+2026-10-27T18:51:16.8846227Z test pathology::certificate::tests::certify_does_not_panic_on_malformed_spec ... ok
+2026-10-27T18:51:16.8847133Z test pathology::certificate::tests::certify_is_engine_free_for_easy_design ... ok
+2026-10-27T18:51:16.8847976Z test pathology::certificate::tests::generate_refuses_malformed_spec_instead_of_panicking ... ok
+2026-10-27T18:51:16.8849050Z test pathology::certificate::tests::weak_id_score_drops_with_collinear_predictors ... ok
+2026-10-27T18:51:16.8850120Z test pathology::certificate::tests::weak_id_score_is_invariant_under_uniform_predictor_rescale ... ok
+2026-10-27T18:51:16.8851106Z test pathology::certificate::tests::weak_id_widens_status_set_on_otherwise_easy_design ... ok
+2026-10-27T18:51:16.8852090Z test pathology::separation::tests::conditional_separation_empty_inputs ... ok
+2026-10-27T18:51:16.8852946Z test pathology::separation::tests::conditional_separation_handles_singleton_groups ... ok
+2026-10-27T18:51:16.8853691Z test pathology::separation::tests::conditional_separation_picks_all_zero_and_all_one_groups ... ok
+2026-10-27T18:51:16.8855162Z test pathology::separation::tests::fe_complete_separation_strict_sign_split ... ok
+2026-10-27T18:51:16.8857555Z test pathology::separation::tests::fe_overlap_no_separation ... ok
+2026-10-27T18:51:16.8859474Z test pathology::separation::tests::fe_quasi_complete_separation_with_tie ... ok
+2026-10-27T18:51:16.8861976Z test pathology::spec::tests::test_pathology_generate_supported_pairs_succeed ... ok
+2026-10-27T18:51:16.8863565Z test pathology::spec::tests::test_pathology_generate_unsupported_family_returns_err ... ok
+2026-10-27T18:51:16.8864405Z test stats::block_description::tests::test_html_matches_julia_example ... ok
+2026-10-27T18:51:16.8865320Z test stats::block_description::tests::test_latex_matches_julia_example ... ok
+2026-10-27T18:51:16.8867123Z test stats::block_description::tests::test_markdown_matches_julia_example ... ok
+2026-10-27T18:51:16.8867726Z test stats::block_description::tests::test_plaintext_includes_core_layout ... ok
+2026-10-27T18:51:16.8919303Z test parallel::tests::worker_threads_adopt_extended_precision_caller_control_state ... ok
+2026-10-27T18:51:16.9506379Z test stats::bootstrap::tests::test_bernoulli_glmm_parametricbootstrap_runs ... ok
+2026-10-27T18:51:17.1726667Z test stats::bootstrap::tests::test_fixed_effect_null_bootstrap_threads_are_bit_identical ... ok
+2026-10-27T18:51:17.1756090Z test stats::bootstrap::tests::test_glmm_parametricbootstrap_requires_fitted_model ... ok
+2026-10-27T18:51:17.6798770Z test stats::bootstrap::tests::test_glmm_parametricbootstrap_threads_are_bit_identical ... ok
+2026-10-27T18:51:17.9956952Z test stats::bootstrap::tests::test_glmm_parametricbootstrap_threads_match_under_extended_precision ... ok
+2026-10-27T18:51:18.2177381Z test stats::bootstrap::tests::test_glmm_simulate_response_respects_family_support ... ok
+2026-10-27T18:51:18.7016772Z test stats::bootstrap::tests::test_gamma_glmm_parametricbootstrap_runs_with_positive_draws ... ok
+2026-10-27T18:51:19.5612453Z test stats::bootstrap::tests::test_lmm_parametricbootstrap_threads_are_bit_identical ... ok
+2026-10-27T18:51:19.7027256Z test stats::bootstrap::tests::test_poisson_glmm_parametricbootstrap_runs_and_is_seed_deterministic ... ok
+2026-10-27T18:51:19.7086742Z test stats::bootstrap::tests::test_shortest_cov_int_all_nan_is_degenerate_not_panic ... ok
+2026-10-27T18:51:19.7116522Z test stats::bootstrap::tests::test_shortest_cov_int_does_not_panic_on_nan_failed_refits ... ok
+2026-10-27T18:51:19.7136651Z test stats::bootstrap::tests::test_shortest_cov_int_full_coverage ... ok
+2026-10-27T18:51:19.7166381Z test stats::bootstrap::tests::test_shortest_cov_int_invalid_level_is_not_a_panic ... ok
+2026-10-27T18:51:19.7176500Z test stats::bootstrap::tests::test_shortest_cov_int_narrow_window ... ok
+2026-10-27T18:51:19.7206096Z test stats::bootstrap::tests::test_shortest_cov_int_picks_tightest_cluster ... ok
+2026-10-27T18:51:19.7226082Z test stats::coeftable::tests::caller_and_legacy_tables_do_not_guess_covariance_provenance ... ok
+2026-10-27T18:51:19.7256006Z test stats::coeftable::tests::test_coeftable_can_carry_missing_p_value_reasons ... ok
+2026-10-27T18:51:19.7265984Z test stats::coeftable::tests::test_coeftable_display ... ok
+2026-10-27T18:51:19.7295965Z test stats::coeftable::tests::test_coeftable_dyestuff_intercept_significant ... ok
+2026-10-27T18:51:19.7315908Z test stats::coeftable::tests::test_coeftable_p_symmetric ... ok
+2026-10-27T18:51:19.7325953Z test stats::coeftable::tests::test_coeftable_wald_confint ... ok
+2026-10-27T18:51:19.7355975Z test stats::coeftable::tests::test_coeftable_wald_confint_degenerate ... ok
+2026-10-27T18:51:19.7376037Z test stats::coeftable::tests::test_coeftable_wald_p_values_preserve_representable_normal_tails ... ok
+2026-10-27T18:51:19.7406033Z test stats::coeftable::tests::test_coeftable_z_and_p ... ok
+2026-10-27T18:51:19.7415997Z test stats::coeftable::tests::test_coeftable_zero_se_gives_nan ... ok
+2026-10-27T18:51:19.7435956Z test stats::lrt::tests::test_linear_model_fit_compares_with_mixed_model_like_fit ... ok
+2026-10-27T18:51:19.7465963Z test stats::lrt::tests::test_linear_model_fit_rejects_non_nested_mixed_comparison ... ok
+2026-10-27T18:51:19.7476018Z test stats::lrt::tests::test_lrt_accepts_distinct_fits_with_identical_response_values ... ok
+2026-10-27T18:51:19.7506009Z test stats::lrt::tests::test_lrt_accepts_random_intercept_nested_in_random_slope_same_group ... ok
+2026-10-27T18:51:19.7525916Z test stats::lrt::tests::test_lrt_accepts_reml_with_identical_fe ... ok
+2026-10-27T18:51:19.7555873Z test stats::lrt::tests::test_lrt_chi_nonneg_invariant ... ok
+2026-10-27T18:51:19.7565960Z test stats::lrt::tests::test_lrt_display_includes_formula_table ... ok
+2026-10-27T18:51:19.7585908Z test stats::lrt::tests::test_lrt_flags_loglik_within_tol ... ok
+2026-10-27T18:51:19.7615938Z test stats::lrt::tests::test_lrt_html_includes_table_markup ... ok
+2026-10-27T18:51:19.7645866Z test stats::lrt::tests::test_lrt_latex_matches_julia_header ... ok
+2026-10-27T18:51:19.7675883Z test stats::lrt::tests::test_lrt_markdown_matches_julia_style_table ... ok
+2026-10-27T18:51:19.7705862Z test stats::lrt::tests::test_lrt_ml_with_nested_fe_still_works ... ok
+2026-10-27T18:51:19.7735860Z test stats::lrt::tests::test_lrt_rejects_decreasing_loglikelihood ... ok
+2026-10-27T18:51:19.7765897Z test stats::lrt::tests::test_lrt_rejects_fixed_effect_non_nested_column_space ... ok
+2026-10-27T18:51:19.7795851Z test stats::lrt::tests::test_lrt_rejects_glmm_vs_lmm_family_mix ... ok
+2026-10-27T18:51:19.7825835Z test stats::lrt::tests::test_lrt_rejects_mixing_families ... ok
+2026-10-27T18:51:19.7848070Z test stats::lrt::tests::test_lrt_rejects_mixing_links ... ok
+2026-10-27T18:51:19.7875895Z test stats::lrt::tests::test_lrt_rejects_mixing_reml_and_ml ... ok
+2026-10-27T18:51:19.7905913Z test stats::lrt::tests::test_lrt_rejects_non_increasing_dof ... ok
+2026-10-27T18:51:19.7935908Z test stats::lrt::tests::test_lrt_rejects_random_effect_non_nested_terms ... ok
+2026-10-27T18:51:19.7965991Z test stats::lrt::tests::test_lrt_rejects_reml_with_fe_mismatch ... ok
+2026-10-27T18:51:19.7975940Z test stats::lrt::tests::test_lrt_rejects_same_nobs_with_different_response_values ... ok
+2026-10-27T18:51:19.7995916Z test stats::lrt::tests::test_lrt_strict_violation_still_rejects ... ok
+2026-10-27T18:51:19.7996421Z test stats::lrt::tests::test_model_comparison_assessment_classifies_covariance_difference ... ok
+2026-10-27T18:51:19.7997003Z test stats::lrt::tests::test_model_comparison_assessment_classifies_incompatible_inputs ... ok
+2026-10-27T18:51:19.7997587Z test stats::lrt::tests::test_model_comparison_assessment_classifies_nested_fixed_effects ... ok
+2026-10-27T18:51:19.7998159Z test stats::lrt::tests::test_model_comparison_assessment_classifies_nested_random_effects ... ok
+2026-10-27T18:51:19.7999139Z test stats::lrt::tests::test_model_comparison_assessment_classifies_non_nested_fixed_effects ... ok
+2026-10-27T18:51:19.7999743Z test stats::lrt::tests::test_model_comparison_assessment_classifies_non_nested_random_effects ... ok
+2026-10-27T18:51:19.8000449Z test stats::lrt::tests::test_model_comparison_assessment_classifies_same_model_space ... ok
+2026-10-27T18:51:19.8001042Z test stats::lrt::tests::test_model_comparison_assessment_marks_ml_refit_for_reml_fixed_effect_change ... ok
+2026-10-27T18:51:19.8001615Z test stats::lrt::tests::test_model_comparison_sequence_assesses_adjacent_pairs ... ok
+2026-10-27T18:51:19.8002127Z test stats::lrt::tests::test_model_comparison_table_can_omit_lrt_when_ic_requested ... ok
+2026-10-27T18:51:19.8002674Z test stats::lrt::tests::test_model_comparison_table_keeps_ic_rows_for_non_nested_models ... ok
+2026-10-27T18:51:19.8003288Z test stats::lrt::tests::test_model_comparison_table_lrt_method_rejects_non_nested_fixed_effects ... ok
+2026-10-27T18:51:19.8026097Z test stats::lrt::tests::test_model_comparison_table_marks_incompatible_pairs ... ok
+2026-10-27T18:51:19.8056041Z test stats::lrt::tests::test_model_comparison_table_reports_ml_refit_required_without_refitting ... ok
+2026-10-27T18:51:19.8086061Z test stats::lrt::tests::test_model_comparison_table_reports_valid_lrt_columns_for_nested_models ... ok
+2026-10-27T18:51:19.8116003Z test stats::lrt::tests::test_parametric_bootstrap_lrt_rejects_bad_arguments ... ok
+2026-10-27T18:51:20.2416704Z test stats::lrt::tests::test_parametric_bootstrap_lrt_runs_and_is_seed_deterministic ... ok
+2026-10-27T18:51:20.2445940Z test stats::lrt::tests::test_pvalue_requires_a_single_comparison ... ok
+2026-10-27T18:51:20.2475979Z test stats::model_summary::tests::fallback_wald_p_values_preserve_representable_normal_tails ... ok
+2026-10-27T18:51:20.2505934Z test stats::model_summary::tests::fit_summary_payload_for_glmm_names_family_and_link ... ok
+2026-10-27T18:51:20.2536021Z test stats::model_summary::tests::fit_summary_payload_for_lmm_is_versioned_and_serializable ... ok
+2026-10-27T18:51:20.2565951Z test stats::model_summary::tests::summary_table_components_are_serde_roundtrippable ... ok
+2026-10-27T18:51:20.2586103Z test stats::model_summary::tests::test_from_generalized_model_omits_residual_for_bernoulli ... ok
+2026-10-27T18:51:20.2586722Z test stats::model_summary::tests::test_from_linear_model_adds_random_effect_only_rows ... ok
+2026-10-27T18:51:20.2587235Z test stats::model_summary::tests::test_latex_uses_sigma_subscripts ... ok
+2026-10-27T18:51:20.2587711Z test stats::model_summary::tests::test_markdown_glmm_matches_julia_example ... ok
+2026-10-27T18:51:20.2588200Z test stats::model_summary::tests::test_markdown_lmm_matches_julia_example ... ok
+2026-10-27T18:51:20.2588714Z test stats::model_summary::tests::test_markdown_re_without_fe_matches_julia_example ... ok
+2026-10-27T18:51:20.2589294Z test stats::profile::tests::confint_reports_nan_instead_of_extrapolating_past_profile_grid ... ok
+2026-10-27T18:51:20.2626048Z test stats::profile::tests::failed_beta_profiles_are_recorded_per_parameter ... ok
+2026-10-27T18:51:21.4397073Z test stats::bootstrap::tests::test_joint_gamma_glmm_parametricbootstrap_has_successful_replicates ... ok
+2026-10-27T18:51:21.8176843Z test model::linear::tests::test_high_cardinality_streamed_fit_uses_sparse_fixed_re_block_and_matches_dense ... ok
+2026-10-27T18:51:22.9006699Z test stats::profile::tests::fixed_beta_components_match_dense_oracle ... ok
+2026-10-27T18:51:22.9035958Z test stats::profile::tests::normal_quantile_matches_known_values ... ok
+2026-10-27T18:51:22.9076151Z test stats::profile::tests::profile_beta_dyestuff_returns_constrained_ml_table ... ok
+2026-10-27T18:51:24.4066667Z test model::generalized::tests::joint_trust_bq_stop_is_robust_to_start_perturbations has been running for over 60 seconds
+2026-10-27T18:51:26.1127238Z test stats::profile::tests::non_monotone_correlation_profile_is_recorded_not_fatal ... ok
+2026-10-27T18:51:26.1147300Z test stats::profile::tests::profile_beta_reml_is_explicitly_unavailable ... ok
+2026-10-27T18:51:28.3647094Z test stats::profile::tests::irregular_profile_threads_match_serial ... ok
+2026-10-27T18:51:28.3656397Z test stats::profile::tests::profile_beta_tables_match_dense_oracle_sleepstudy ... ignored, dense O(n^3) oracle; run with --release
+2026-10-27T18:51:28.3896026Z test stats::profile::tests::profile_dyestuff_combines_sigma_and_scalar_theta ... ok
+2026-10-27T18:51:28.4386551Z test stats::profile::tests::profile_likelihood_confint_matches_julia_fixture_for_supported_cases ... ok
+2026-10-27T18:51:28.4406173Z test stats::profile::tests::profile_likelihood_julia_parity_fixture_is_versioned ... ok
+2026-10-27T18:51:28.4426400Z test stats::profile::tests::profile_sigma_dyestuff_returns_consistent_table ... ok
+2026-10-27T18:51:28.4593775Z test stats::profile::tests::profile_theta_optimizes_remaining_theta_coordinates ... ok
+2026-10-27T18:51:28.4616151Z test stats::profile::tests::profile_theta_scalar_dyestuff_returns_consistent_table ... ok
+2026-10-27T18:51:32.9286989Z test stats::profile::tests::profile_with_threads_is_bit_identical_to_serial ... ok
+2026-10-27T18:51:34.8106938Z test stats::profile::tests::sdcor_profile_intervals_match_lme4_confint_profile ... ok
+2026-10-27T18:51:34.8956586Z test stats::profile::tests::sdcor_profile_scalar_term_ml_matches_lme4 ... ok
+2026-10-27T18:51:34.8985993Z test stats::profile::tests::test_profile_confint_brackets_estimate ... ok
+2026-10-27T18:51:34.9016048Z test stats::profile::tests::test_profile_sigma_clamp_no_walk_below_threshold ... ok
+2026-10-27T18:51:34.9045917Z test stats::profile::tests::test_profile_sigma_logspace_walk_consistent ... ok
+2026-10-27T18:51:34.9066035Z test stats::profile::tests::test_profile_theta_dense_grid_on_curved_profile ... ok
+2026-10-27T18:51:34.9066645Z test stats::profile::tests::test_profile_theta_julia_parity_fixture_keeps_scalar_theta_supported ... ok
+2026-10-27T18:51:34.9067258Z test stats::profile::tests::test_profile_theta_sparse_grid_emits_warning_or_errors ... ok
+2026-10-27T18:51:34.9067752Z test stats::spline::tests::cubic_recovery_moderate ... ok
+2026-10-27T18:51:34.9068127Z test stats::spline::tests::interpolates_at_knots ... ok
+2026-10-27T18:51:34.9068498Z test stats::spline::tests::linear_data_stays_linear ... ok
+2026-10-27T18:51:34.9068899Z test stats::spline::tests::rejects_non_increasing_x ... ok
+2026-10-27T18:51:34.9069266Z test stats::spline::tests::two_point_is_linear ... ok
+2026-10-27T18:51:34.9069704Z test stats::varcorr::tests::estimated_sigma_default_renders_residual_unchanged ... ok
+2026-10-27T18:51:34.9070251Z test stats::varcorr::tests::fixed_sampling_variance_omits_residual_in_all_renderers ... ok
+2026-10-27T18:51:34.9070749Z test stats::varcorr::tests::test_html_with_corr_and_residual ... ok
+2026-10-27T18:51:34.9071181Z test stats::varcorr::tests::test_html_without_corr_or_residual ... ok
+2026-10-27T18:51:34.9071621Z test stats::varcorr::tests::test_latex_with_corr_and_residual ... ok
+2026-10-27T18:51:34.9072065Z test stats::varcorr::tests::test_latex_without_corr_or_residual ... ok
+2026-10-27T18:51:34.9072537Z test stats::varcorr::tests::test_scalar_re_std_dev_is_sigma_times_theta ... ok
+2026-10-27T18:51:34.9073020Z test stats::varcorr::tests::test_to_markdown_with_corr_and_residual ... ok
+2026-10-27T18:51:34.9073486Z test stats::varcorr::tests::test_to_markdown_without_corr_or_residual ... ok
+2026-10-27T18:51:34.9073953Z test stats::varcorr::tests::test_varcorr_group_and_column_names ... ok
+2026-10-27T18:51:34.9074415Z test stats::varcorr::tests::test_vector_re_std_dev_and_correlation ... ok
+2026-10-27T18:51:34.9074871Z test types::blocked_sparse::tests::test_densify_below_threshold ... ok
+2026-10-27T18:51:34.9075282Z test types::blocked_sparse::tests::test_density ... ok
+2026-10-27T18:51:34.9075754Z test types::blocked_sparse::tests::test_element_access ... ok
+2026-10-27T18:51:34.9076079Z test types::blocked_sparse::tests::test_nnz ... ok
+2026-10-27T18:51:34.9076348Z test types::blocked_sparse::tests::test_size ... ok
+2026-10-27T18:51:34.9077047Z test types::blocked_sparse::tests::test_to_dense ... ok
+2026-10-27T18:51:34.9077403Z test types::fe_mat::tests::test_cross_product_unweighted ... ok
+2026-10-27T18:51:34.9077739Z test types::fe_mat::tests::test_new ... ok
+2026-10-27T18:51:34.9078023Z test types::fe_mat::tests::test_reweight ... ok
+2026-10-27T18:51:34.9078588Z test types::fe_term::tests::certified_full_rank_matches_qr_constructor_on_full_rank_input ... ok
+2026-10-27T18:51:34.9079159Z test types::fe_term::tests::from_rank_and_pivot_matches_new_for_full_and_deficient_designs ... ok
+2026-10-27T18:51:34.9079655Z test types::fe_term::tests::test_feterm_rank_intercept_preserving ... ok
+2026-10-27T18:51:34.9080067Z test types::fe_term::tests::test_feterm_rank_matches_stats_rank ... ok
+2026-10-27T18:51:34.9080429Z test types::fe_term::tests::test_full_rank ... ok
+2026-10-27T18:51:34.9080747Z test types::fe_term::tests::test_rank_deficient ... ok
+2026-10-27T18:51:34.9081068Z test types::fe_term::tests::test_zero_columns ... ok
+2026-10-27T18:51:34.9081377Z test types::gauss_hermite::tests::test_gh1 ... ok
+2026-10-27T18:51:34.9081675Z test types::gauss_hermite::tests::test_gh2 ... ok
+2026-10-27T18:51:34.9081999Z test types::gauss_hermite::tests::test_gh2_memoized ... ok
+2026-10-27T18:51:34.9082327Z test types::gauss_hermite::tests::test_gh3 ... ok
+2026-10-27T18:51:34.9082675Z test types::gauss_hermite::tests::test_gh9_weights_sum_to_one ... ok
+2026-10-27T18:51:34.9083028Z test types::gauss_hermite::tests::test_iter ... ok
+2026-10-27T18:51:34.9083339Z test types::gauss_hermite::tests::test_symmetry ... ok
+2026-10-27T18:51:34.9083706Z test types::matrix_block::tests::test_matrix_block_unit_solves ... ok
+2026-10-27T18:51:34.9084224Z test types::opt_summary::extended_float::tests::retains_trial_objective_bits_without_null_conversion ... ok
+2026-10-27T18:51:34.9084785Z test types::opt_summary::tests::converged_is_true_only_for_clean_convergence ... ok
+2026-10-27T18:51:34.9085311Z test types::opt_summary::tests::convergence_status_classifies_every_backend_vocabulary ... ok
+2026-10-27T18:51:34.9085959Z test types::opt_summary::tests::convergence_status_unwraps_gradient_oracle_prefix ... ok
+2026-10-27T18:51:34.9086474Z test types::opt_summary::tests::convergence_status_unwraps_joint_glmm_prefixes ... ok
+2026-10-27T18:51:34.9086980Z test types::opt_summary::tests::convergence_status_unwraps_kkt_boundary_restart ... ok
+2026-10-27T18:51:34.9087508Z test types::opt_summary::tests::convergence_status_unwraps_start_ladder_and_active_face ... ok
+2026-10-27T18:51:34.9087955Z test types::opt_summary::tests::test_backend_name ... ok
+2026-10-27T18:51:34.9088320Z test types::opt_summary::tests::test_display_contains_core_fields ... ok
+2026-10-27T18:51:34.9088701Z test types::opt_summary::tests::test_empty_initial ... ok
+2026-10-27T18:51:34.9089069Z test types::opt_summary::tests::test_html_contains_core_markup ... ok
+2026-10-27T18:51:34.9089449Z test types::opt_summary::tests::test_is_fitted ... ok
+2026-10-27T18:51:34.9089803Z test types::opt_summary::tests::test_latex_contains_core_markup ... ok
+2026-10-27T18:51:34.9090173Z test types::opt_summary::tests::test_log_eval ... ok
+2026-10-27T18:51:34.9090563Z test types::opt_summary::tests::test_markdown_contains_core_rows ... ok
+2026-10-27T18:51:34.9090934Z test types::opt_summary::tests::test_n_params ... ok
+2026-10-27T18:51:34.9091266Z test types::opt_summary::tests::test_new_defaults ... ok
+2026-10-27T18:51:34.9091691Z test types::opt_summary::tests::test_prima_renderers_use_backend_specific_opt_params ... ok
+2026-10-27T18:51:34.9092180Z test types::ragged_array::tests::test_invalid_ref - should panic ... ok
+2026-10-27T18:51:34.9092574Z test types::ragged_array::tests::test_len_and_empty ... ok
+2026-10-27T18:51:34.9092976Z test types::ragged_array::tests::test_mismatched_lengths - should panic ... ok
+2026-10-27T18:51:34.9093379Z test types::ragged_array::tests::test_sum_by_group ... ok
+2026-10-27T18:51:34.9093705Z test types::ragged_array::tests::test_sum_into ... ok
+2026-10-27T18:51:34.9094271Z test types::re_mat::tests::test_covariance_kernel_patterns_own_theta_indices ... ok
+2026-10-27T18:51:34.9094757Z test types::re_mat::tests::test_diagonal_kernel_preserves_diagonal_theta_values ... ok
+2026-10-27T18:51:34.9095166Z test types::re_mat::tests::test_get_set_theta ... ok
+2026-10-27T18:51:34.9095485Z test types::re_mat::tests::test_lmul_lambda_scalar ... ok
+2026-10-27T18:51:34.9126030Z test types::re_mat::tests::test_lower_bound ... ok
+2026-10-27T18:51:34.9126412Z test types::re_mat::tests::test_remat_set_theta_returns_err_on_length_mismatch ... ok
+2026-10-27T18:51:34.9126805Z test types::re_mat::tests::test_reweight ... ok
+2026-10-27T18:51:34.9127129Z test types::re_mat::tests::test_scalar_construction ... ok
+2026-10-27T18:51:34.9127470Z test types::re_mat::tests::test_sparse_dimensions ... ok
+2026-10-27T18:51:34.9127805Z test types::re_mat::tests::test_vector_construction ... ok
+2026-10-27T18:51:34.9128123Z test types::re_mat::tests::test_zerocorr ... ok
+2026-10-27T18:51:34.9128465Z test types::uniform_block_diagonal::tests::test_copy_to_dense ... ok
+2026-10-27T18:51:34.9128888Z test types::uniform_block_diagonal::tests::test_copy_with_identity ... ok
+2026-10-27T18:51:34.9129307Z test types::uniform_block_diagonal::tests::test_element_access ... ok
+2026-10-27T18:51:34.9129705Z test types::uniform_block_diagonal::tests::test_index_trait ... ok
+2026-10-27T18:51:34.9130113Z test types::uniform_block_diagonal::tests::test_new_from_blocks ... ok
+2026-10-27T18:51:34.9130571Z test types::uniform_block_diagonal::tests::test_out_of_bounds - should panic ... ok
+2026-10-27T18:51:34.9130994Z test types::uniform_block_diagonal::tests::test_size ... ok
+2026-10-27T18:51:34.9131352Z test types::uniform_block_diagonal::tests::test_to_dense ... ok
+2026-10-27T18:51:45.8773110Z test stats::profile::tests::profile_beta_tables_match_dense_oracle ... ok
+2026-10-27T18:51:52.4049179Z test stats::profile::tests::profile_beta_large_n_stays_linear_in_memory ... ok
+2026-10-27T18:52:38.1226238Z test model::generalized::tests::joint_trust_bq_stop_is_robust_to_start_perturbations ... ok
+2026-10-27T18:52:38.1226609Z 
+2026-10-27T18:52:38.1226767Z test result: ok. 948 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 174.10s
+2026-10-27T18:52:38.1226970Z 
+2026-10-27T18:52:38.1263245Z [1m[92m     Running[0m unittests src/main.rs (target/debug/deps/mixeff_rs-a69f7a0102f55dcf)
+2026-10-27T18:52:38.1275168Z 
+2026-10-27T18:52:38.1276819Z running 0 tests
+2026-10-27T18:52:38.1277715Z [1m[92m     Running[0m tests/aphantasia_fixture.rs (target/debug/deps/aphantasia_fixture-f9cf9d6ddc56004c)
+2026-10-27T18:52:38.1278069Z 
+2026-10-27T18:52:38.1278560Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-27T18:52:38.1278998Z 
+2026-10-27T18:52:38.1289617Z 
+2026-10-27T18:52:38.1289704Z running 4 tests
+2026-10-27T18:52:38.1296634Z test combined_native_joint_descends_from_profiled_start_without_fallback ... ignored, real aphantasia combined GLMM takes ~15 minutes; run intentionally for optimizer diagnostics
+2026-10-27T18:52:38.1297794Z test intact_native_joint_budget_grid_reports_real_fixture_progress ... ignored, real aphantasia intact GLMM takes minutes; run intentionally for optimizer diagnostics
+2026-10-27T18:52:38.2046171Z test aphantasia_fixture_snapshot_has_expected_reference_contract ... ok
+2026-10-27T18:52:38.2263428Z test intact_prepared_frame_builds_native_glmm_design_without_refitting ... ok
+2026-10-27T18:52:38.2264086Z 
+2026-10-27T18:52:38.2264576Z test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.10s
+2026-10-27T18:52:38.2264923Z 
+2026-10-27T18:52:38.2267603Z [1m[92m     Running[0m tests/architecture.rs (target/debug/deps/architecture-faba662eec05a1fe)
+2026-10-27T18:52:38.2278137Z 
+2026-10-27T18:52:38.2278316Z running 3 tests
+2026-10-27T18:52:38.2286290Z test test_no_compiler_certificate_module ... ok
+2026-10-27T18:52:38.2297774Z test test_lmm_kernel_does_not_import_upper_layers ... ok
+2026-10-27T18:52:38.2391659Z test test_linalg_and_types_do_not_import_upstream_layers ... ok
+2026-10-27T18:52:38.2391906Z 
+2026-10-27T18:52:38.2392421Z test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-10-27T18:52:38.2392615Z 
+2026-10-27T18:52:38.2394188Z [1m[92m     Running[0m tests/boundary_lrt_contract.rs (target/debug/deps/boundary_lrt_contract-7c3a6135a07a2ed4)
+2026-10-27T18:52:38.2406360Z 
+2026-10-27T18:52:38.2426506Z running 5 tests
+2026-10-27T18:52:38.2426831Z test boundary_lrt_certifies_one_added_random_intercept_parameter ... ok
+2026-10-27T18:52:38.2427402Z test boundary_lrt_refuses_fixed_effect_comparisons ... ok
+2026-10-27T18:52:38.2436618Z test boundary_lrt_keeps_mixture_for_an_added_variance ... ok
+2026-10-27T18:52:38.2450198Z test boundary_lrt_uses_plain_chisq_for_an_added_correlation ... ok
+2026-10-27T18:52:38.2477656Z test lmm_comparison_detects_random_effect_nesting ... ok
+2026-10-27T18:52:38.2477896Z 
+2026-10-27T18:52:38.2478113Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-10-27T18:52:38.2478411Z 
+2026-10-27T18:52:38.2481201Z [1m[92m     Running[0m tests/compiled_spec_equivalence.rs (target/debug/deps/compiled_spec_equivalence-f14b098dc64c721a)
+2026-10-27T18:52:38.2492730Z 
+2026-10-27T18:52:38.2492821Z running 10 tests
+2026-10-27T18:52:38.2516254Z test compile_refuses_what_construction_refuses ... ok
+2026-10-27T18:52:38.2546062Z test compiled_glmm_builder_refuses_a_second_policy ... ok
+2026-10-27T18:52:38.2766316Z test unfitted_models_from_both_routes_carry_the_same_artifact ... ok
+2026-10-27T18:52:40.2616641Z test lmm_from_compiled_spec_is_bit_identical_to_one_step_construction ... ok
+2026-10-27T18:52:45.1566781Z test unstable::glmm_deferred_certificate_survives_fit_time_reads_and_completes_exactly ... ok
+2026-10-27T18:52:45.2316618Z test unstable::lmm_deferred_certificate_survives_fit_time_reads_and_completes_exactly ... ok
+2026-10-27T18:52:45.2346167Z test unstable::spec_artifact_matches_the_standalone_compile_and_audit ... ok
+2026-10-27T18:52:47.4807844Z test glmm_from_compiled_spec_is_bit_identical_to_builder_construction ... ok
+2026-10-27T18:53:21.0296347Z test unstable::a_live_fitted_glmm_answers_follow_ons_exactly_like_cold_refits ... ok
+2026-10-27T18:53:21.1332519Z test unstable::a_live_fitted_lmm_answers_follow_ons_exactly_like_cold_refits ... ok
+2026-10-27T18:53:21.1332769Z 
+2026-10-27T18:53:21.1332934Z test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 42.88s
+2026-10-27T18:53:21.1333133Z 
+2026-10-27T18:53:21.1340561Z [1m[92m     Running[0m tests/compiler_contract_snapshots.rs (target/debug/deps/compiler_contract_snapshots-c5a1abc374ae5016)
+2026-10-27T18:53:21.1351222Z 
+2026-10-27T18:53:21.1351307Z running 0 tests
+2026-10-27T18:53:21.1351430Z 
+2026-10-27T18:53:21.1351799Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-27T18:53:21.1352117Z 
+2026-10-27T18:53:21.1353916Z [1m[92m     Running[0m tests/compiler_contract_structure.rs (target/debug/deps/compiler_contract_structure-61400c6544f5de4e)
+2026-10-27T18:53:21.1365570Z 
+2026-10-27T18:53:21.1365761Z running 3 tests
+2026-10-27T18:53:21.1384990Z test fitted_cobyla_inference_table_structure_is_well_formed ... ok
+2026-10-27T18:53:21.1385455Z test audit_report_schema_and_structure_are_stable_on_default_build ... ok
+2026-10-27T18:53:21.1399704Z test prefit_artifact_schema_and_structure_are_stable_on_default_build ... ok
+2026-10-27T18:53:21.1399981Z 
+2026-10-27T18:53:21.1400197Z test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-27T18:53:21.1400395Z 
+2026-10-27T18:53:21.1403129Z [1m[92m     Running[0m tests/covariance_pluggability.rs (target/debug/deps/covariance_pluggability-062cffc01d296a84)
+2026-10-27T18:53:21.1414155Z 
+2026-10-27T18:53:21.1414252Z running 3 tests
+2026-10-27T18:53:21.1446003Z test structured_covariance_wrappers_are_parsed_refused_with_artifact_status ... ok
+2026-10-27T18:53:21.1503673Z test mixedmodels_full_and_diagonal_covariance_baselines_match ... ok
+2026-10-27T18:53:21.1504478Z test lme4_full_and_diagonal_covariance_fixtures_match ... ok
+2026-10-27T18:53:21.1504702Z 
+2026-10-27T18:53:21.1504910Z test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-10-27T18:53:21.1505820Z 
+2026-10-27T18:53:21.1507945Z [1m[92m     Running[0m tests/cross_engine_scoreboard.rs (target/debug/deps/cross_engine_scoreboard-aabe7a78246882b6)
+2026-10-27T18:53:21.1515496Z 
+2026-10-27T18:53:21.1515571Z running 4 tests
+2026-10-27T18:53:21.1518972Z test cross_engine_reference_json_shape_is_stable ... ok
+2026-10-27T18:53:21.1519346Z test fully_identified_fixture_checks_loglik_before_coefficients ... ok
+2026-10-27T18:53:21.1519713Z test cross_engine_scoreboard_documents_divergence_without_oracle_promotion ... ok
+2026-10-27T18:53:21.1520782Z test cross_engine_scoreboard_is_reference_order_invariant ... ok
+2026-10-27T18:53:21.1521009Z 
+2026-10-27T18:53:21.1521221Z test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-27T18:53:21.1521516Z 
+2026-10-27T18:53:21.1521990Z [1m[92m     Running[0m tests/crossed_correlation_parameter.rs (target/debug/deps/crossed_correlation_parameter-24e9467295153c6e)
+2026-10-27T18:53:21.1530749Z 
+2026-10-27T18:53:21.1530835Z running 3 tests
+2026-10-27T18:53:21.1542669Z test nested_scalar_random_intercepts_do_not_claim_crossed_correlation ... ok
+2026-10-27T18:53:21.1543145Z test vector_random_effect_reports_within_block_correlation_parameter ... ok
+2026-10-27T18:53:21.1543589Z test crossed_scalar_random_intercepts_report_absent_cross_block_correlation ... ok
+2026-10-27T18:53:21.1543769Z 
+2026-10-27T18:53:21.1543903Z test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-27T18:53:21.1544086Z 
+2026-10-27T18:53:21.1544510Z [1m[92m     Running[0m tests/dataset_metamorphic.rs (target/debug/deps/dataset_metamorphic-927457aeec9c1274)
+2026-10-27T18:53:21.1552932Z 
+2026-10-27T18:53:21.1553017Z running 5 tests
+2026-10-27T18:53:21.1598129Z test boundary_certificate_is_stable_under_row_permutation ... ok
+2026-10-27T18:53:21.1646103Z test predictor_rescaling_preserves_sleepstudy_fitted_values ... ok
+2026-10-27T18:53:21.1656204Z test row_order_invariance_preserves_sleepstudy_fit_and_levels ... ok
+2026-10-27T18:53:21.1656968Z test double_bar_matches_explicit_independent_random_terms ... ok
+2026-10-27T18:53:21.1661810Z test nested_formula_expansion_matches_explicit_nested_terms ... ok
+2026-10-27T18:53:21.1662045Z 
+2026-10-27T18:53:21.1662256Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-10-27T18:53:21.1662553Z 
+2026-10-27T18:53:21.1665384Z [1m[92m     Running[0m tests/dense_lmm_oracle.rs (target/debug/deps/dense_lmm_oracle-b8ffdf0270492340)
+2026-10-27T18:53:21.1674587Z 
+2026-10-27T18:53:21.1674672Z running 5 tests
+2026-10-27T18:53:21.1689746Z test dense_oracle_matches_scalar_random_intercept_ml ... ok
+2026-10-27T18:53:21.1690318Z test dense_oracle_matches_near_zero_variance_boundary_ml ... ok
+2026-10-27T18:53:21.1699834Z test dense_oracle_rejects_rank_deficient_fixed_effect_design ... ok
+2026-10-27T18:53:21.1700218Z test dense_oracle_matches_random_intercept_slope_ml ... ok
+2026-10-27T18:53:21.1703407Z test dense_oracle_matches_crossed_random_intercepts_ml ... ok
+2026-10-27T18:53:21.1703626Z 
+2026-10-27T18:53:21.1703833Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+2026-10-27T18:53:21.1704120Z 
+2026-10-27T18:53:21.1704556Z [1m[92m     Running[0m tests/difficult_model_scoreboard.rs (target/debug/deps/difficult_model_scoreboard-8fb8b4e455e55717)
+2026-10-27T18:53:21.1711747Z 
+2026-10-27T18:53:21.1711830Z running 4 tests
+2026-10-27T18:53:21.1736151Z test drifted_unit_test_scenario_is_rejected ... ok
+2026-10-27T18:53:21.1760034Z test unit_test_backed_recovery_scenarios_point_to_existing_tests ... ok
+2026-10-27T18:53:21.1785291Z test difficult_scoreboard_covers_required_axes_and_reuses_parity_scorecard ... ok
+2026-10-27T18:53:21.1797982Z test comparison_backed_scenarios_compute_certification_times_and_metrics ... ok
+2026-10-27T18:53:21.1798265Z 
+2026-10-27T18:53:21.1798399Z test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+2026-10-27T18:53:21.1798583Z 
+2026-10-27T18:53:21.1800057Z [1m[92m     Running[0m tests/fitted_state_process.rs (target/debug/deps/fitted_state_process-d53d3dc9c2a81cf0)
+2026-10-27T18:53:21.1810771Z 
+2026-10-27T18:53:21.1810851Z running 2 tests
+2026-10-27T18:53:21.1811935Z test restored_process_child ... ignored, invoked by snapshots_support_post_fit_queries_in_a_fresh_process
+2026-10-27T18:53:21.3012406Z test snapshots_support_post_fit_queries_in_a_fresh_process ... ok
+2026-10-27T18:53:21.3012708Z 
+2026-10-27T18:53:21.3012919Z test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.12s
+2026-10-27T18:53:21.3013217Z 
+2026-10-27T18:53:21.3015938Z [1m[92m     Running[0m tests/fixture_hygiene.rs (target/debug/deps/fixture_hygiene-adeeeedcd350a791)
+2026-10-27T18:53:21.3028846Z 
+2026-10-27T18:53:21.3028959Z running 5 tests
+2026-10-27T18:53:21.3066337Z test every_golden_has_provenance_sibling ... ok
+2026-10-27T18:53:21.3257103Z test comparison_manifest_matches_registry_derived ... ok
+2026-10-27T18:53:21.3266097Z test csv_header_contains_every_declared_column ... ok
+2026-10-27T18:53:21.3274510Z test levels_txt_matches_meta_levels ... ok
+2026-10-27T18:53:21.3274811Z test every_pinned_fit_matches_within_tolerance ... ok
+2026-10-27T18:53:21.3274973Z 
+2026-10-27T18:53:21.3275175Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+2026-10-27T18:53:21.3275368Z 
+2026-10-27T18:53:21.3281618Z [1m[92m     Running[0m tests/glmm_artifact_contract.rs (target/debug/deps/glmm_artifact_contract-5f5eae83e6691243)
+2026-10-27T18:53:21.3294800Z 
+2026-10-27T18:53:21.3294886Z running 7 tests
+2026-10-27T18:53:21.3556777Z test joint_laplace_glmm_boundary_theta_still_certifies_fixed_effect_rows ... FAILED
+2026-10-27T18:53:21.3566264Z test joint_laplace_glmm_wald_rows_match_glmer_on_osf_study1b_correlated_slopes ... ok
+2026-10-27T18:53:21.3686389Z test binomial_separation_keeps_glmm_wald_rows_unavailable_with_reason ... ok
+2026-10-27T18:53:21.3826883Z test profiled_bernoulli_vcov_uses_unit_glmm_dispersion_scale ... ok
+2026-10-27T18:53:21.8013136Z test native_glmm_artifact_records_support_contract_metadata ... ok
+2026-10-27T18:53:22.0585956Z test joint_laplace_glmm_artifact_reports_certified_wald_rows_when_hessian_passes ... FAILED
+2026-10-27T18:53:52.8105166Z test joint_laplace_glmm_wald_rows_match_glmer_on_correlated_random_slopes ... ok
+2026-10-27T18:53:52.8105508Z 
+2026-10-27T18:53:52.8105585Z failures:
+2026-10-27T18:53:52.8105883Z 
+2026-10-27T18:53:52.8106091Z ---- joint_laplace_glmm_boundary_theta_still_certifies_fixed_effect_rows stdout ----
+2026-10-27T18:53:52.8106369Z 
+2026-10-27T18:53:52.8106699Z thread 'joint_laplace_glmm_boundary_theta_still_certifies_fixed_effect_rows' (6260) panicked at tests/glmm_artifact_contract.rs:1047:5:
+2026-10-27T18:53:52.8107268Z assertion failed: covariance.notes.iter().any(|note|
+2026-10-27T18:53:52.8107582Z         note.contains("omitted from the active Hessian") &&
+2026-10-27T18:53:52.8107851Z             note.contains("theta 1"))
+2026-10-27T18:53:52.8108156Z note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+2026-10-27T18:53:52.8108444Z 
+2026-10-27T18:53:52.8108669Z ---- joint_laplace_glmm_artifact_reports_certified_wald_rows_when_hessian_passes stdout ----
+2026-10-27T18:53:52.8108974Z 
+2026-10-27T18:53:52.8109323Z thread 'joint_laplace_glmm_artifact_reports_certified_wald_rows_when_hessian_passes' (6259) panicked at tests/glmm_artifact_contract.rs:545:5:
+2026-10-27T18:53:52.8109843Z assertion failed: covariance.notes.iter().any(|note|
+2026-10-27T18:53:52.8110135Z         note.contains("inverse finite-difference Hessian"))
+2026-10-27T18:53:52.8110334Z 
+2026-10-27T18:53:52.8110336Z 
+2026-10-27T18:53:52.8110406Z failures:
+2026-10-27T18:53:52.8111081Z     joint_laplace_glmm_artifact_reports_certified_wald_rows_when_hessian_passes
+2026-10-27T18:53:52.8111493Z     joint_laplace_glmm_boundary_theta_still_certifies_fixed_effect_rows
+2026-10-27T18:53:52.8111725Z 
+2026-10-27T18:53:52.8111952Z test result: FAILED. 5 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 31.48s
+2026-10-27T18:53:52.8112388Z 
+2026-10-27T18:53:52.8112875Z [1m[91merror[0m: test failed, to rerun pass `--test glmm_artifact_contract`
+2026-10-27T18:53:52.8193125Z ##[error]Process completed with exit code 101.
+2026-10-27T18:53:52.8274342Z Post job cleanup.
+2026-10-27T18:53:52.8834673Z [command]/usr/bin/git version
+2026-10-27T18:53:52.8855085Z git version 2.55.0
+2026-10-27T18:53:52.8876446Z Temporarily overriding HOME='/home/runner/work/_temp/75be6831-b2a5-4d8b-a5e7-417e30e06887' before making global git config changes
+2026-10-27T18:53:52.8877103Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-27T18:53:52.8880028Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/mixeff-rs/mixeff-rs
+2026-10-27T18:53:52.8908783Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-27T18:53:52.8959060Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-27T18:53:52.9168512Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-27T18:53:52.9186391Z http.https://github.com/.extraheader
+2026-10-27T18:53:52.9193158Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-27T18:53:52.9236053Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-27T18:53:52.9436797Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-27T18:53:52.9461515Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-27T18:53:52.9785256Z Cleaning up orphan processes
+2026-10-27T18:53:53.0019132Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+

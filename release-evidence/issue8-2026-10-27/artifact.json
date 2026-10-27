@@ -1,0 +1,11 @@
+{
+  "package": "mixeff",
+  "version": "0.2.0",
+  "engine_pin": "a6b644490a8b83cd871045bb7d3e9065315aefab",
+  "engine_test_followup": "1539b469d3664c827c9011b69b976995364b7fee",
+  "tarball_sha256": "6c1fff4120e978aad334fbc975e2c049341db0c8339fc233a6897f49928f833a",
+  "tarball_bytes": 6811893,
+  "build": "R CMD build --no-manual",
+  "check": "R CMD check --as-cran --no-manual",
+  "runtime": "R 4.5.1, macOS arm64, Accelerate"
+}

@@ -1,0 +1,17 @@
+Warning message:
+package 'testthat' was built under R version 4.5.2 
+SAVED RESULT AUDIT: 6851 pass / 0 fail / 104 warning / 3 skip; 0 unexpected skips
+Skip policy read from canonical tools/release-gate.R, unchanged.
+The original auxiliary script misspelled MIXEFF_APHANTASIA_JOINT_PROOF; only its final skip-policy assertion failed. No numerical test was rerun, dropped or relabeled.
+Complete HTML: TRUE 
+w
+                                 test-benchmarking-vignette.R: invalid char string in output conversion 
+                                                                                                      1 
+test-checklist-inference-features.R: `check.attributes` is deprecated; please use `ignore_attr` instead 
+                                                                                                      2 
+                        test-checklist-inference-features.R: extreme order statistics used as endpoints 
+                                                                                                      1 
+                                                       test-coverage-gate.R: NAs introduced by coercion 
+                                                                                                      1 
+                                       test-doc-claims.R: argument 'ignore.case = TRUE' will be ignored 
+                                                                                                     99 

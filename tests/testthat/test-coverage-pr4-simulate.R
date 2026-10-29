@@ -126,3 +126,13 @@ test_that("the simulate seed attribute initialises an unset RNG", {
   expect_identical(as.integer(seeded), 5L)
   expect_identical(attr(seeded, "kind"), as.list(RNGkind()))
 })
+
+# This legacy internal helper is no longer on the public simulate() path,
+# but its singular fallback must still preserve covariance geometry.
+test_that("singular Gaussian helper draws stay in the covariance support", {
+  set.seed(783)
+  draws <- mixeff:::mm_rmvnorm(1000L, matrix(c(1, 2, 2, 4), 2))
+  expect_equal(draws[, 2], 2 * draws[, 1], tolerance = 1e-12)
+  expect_gt(stats::sd(draws[, 1]), 0.8)
+  expect_lt(stats::sd(draws[, 1]), 1.2)
+})

@@ -113,7 +113,12 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
       input = formula
     )
   }
-  if (!is.null(contrasts)) mm_reject_nontreatment_contrasts(contrasts, data)
+  if (!is.null(contrasts)) {
+    mm_reject_nontreatment_contrasts(contrasts, data)
+    # Explicit supported coding takes precedence over attributes and options,
+    # and travels with the model frame for later reconstruction.
+    for (nm in names(contrasts)) attr(data[[nm]], "contrasts") <- contrasts[[nm]]
+  }
   weights <- mm_lmm_weights(substitute(weights), data, parent.frame())
   offset_arg <- if (is.data.frame(data)) {
     eval(substitute(offset), data, parent.frame())
@@ -187,6 +192,7 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
   )
 
   fit_result <- mm_bridge_fit_result(json, mm_json_parse_lmm_fit)
+  if (!is.null(rust_handle)) attr(rust_handle, "mm_fitted_state") <- fit_result$fitted_state
   fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
   beta <- mm_named_numeric(fit_result$beta, fit_result$beta_names)
@@ -491,6 +497,7 @@ mm_reject_nontreatment_contrasts <- function(contrasts, data = NULL) {
     character(0)
   }
   entry_ok <- function(nm, x) {
+    if (!is.data.frame(data) || !is.factor(data[[nm]])) return(FALSE)
     if (!is.character(x) || length(x) != 1L) return(FALSE)
     if (nm %in% ordered_cols) {
       identical(x, "contr.poly")
@@ -629,6 +636,7 @@ mm_named_numeric <- function(values, names) {
 }
 
 mm_abort_from_bridge <- function(cnd, ...) {
+  if (inherits(cnd, "mm_condition")) stop(cnd)
   parts <- mm_split_tagged_error(conditionMessage(cnd))
   cls <- if (!is.na(parts$tag)) parts$tag else "mm_bridge_error"
   msg <- if (!is.na(parts$tag)) parts$message else conditionMessage(cnd)

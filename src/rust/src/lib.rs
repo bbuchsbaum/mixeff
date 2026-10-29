@@ -319,6 +319,37 @@ fn mm_handle_alive(ptr: Robj) -> bool {
     live_lmm(&ptr).is_some() || live_glmm(&ptr).is_some()
 }
 
+/// Restore a fitted model snapshot into a live bridge handle.
+///
+/// @noRd
+#[extendr]
+fn mm_restore_fit_handle(
+    fitted_state: &str,
+    kind: &str,
+) -> std::result::Result<Robj, MmBridgeError> {
+    (|| -> std::result::Result<Robj, String> {
+        match kind {
+            "lmm" => LinearMixedModel::restore_json(fitted_state)
+                .map(|mut model| {
+                    model.set_progress_callback(Some(r_interrupt_callback()));
+                    ExternalPtr::new(FittedLmmHandle(model)).into()
+                }),
+            "glmm" => GeneralizedLinearMixedModel::restore_json(fitted_state)
+                .map(|mut model| {
+                    model.set_progress_callback(Some(r_interrupt_callback()));
+                    ExternalPtr::new(FittedGlmmHandle(model)).into()
+                }),
+            _ => {
+                return Err(format!(
+                    "mm_inference_unavailable: unknown fitted-state kind `{kind}`"
+                ))
+            }
+        }
+        .map_err(|e| format!("mm_inference_unavailable: fitted-state restoration unavailable: {e}"))
+    })()
+    .map_err(MmBridgeError)
+}
+
 /// Number of follow-on bridge computations served from a live fitted-model
 /// handle since the package was loaded (diagnostic; used by the tests).
 ///
@@ -838,12 +869,18 @@ fn mm_fit_lmm_json(
                     e
                 )
             })?;
+        let (fitted_state, restoration_error) = match model.snapshot_json() {
+            Ok(snapshot) => (Some(snapshot), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
         let payload = json!({
             "schema": {
                 "schema_name": "mixeff.lmm_fit_result",
                 "schema_version": 1
             },
             "artifact_json": artifact_json,
+            "fitted_state": fitted_state,
+            "restoration_error": restoration_error,
             "formula": model.formula().to_string(),
             "reml": reml,
             "beta": beta.iter().copied().collect::<Vec<_>>(),
@@ -1020,12 +1057,18 @@ fn mm_fit_glmm_json(
             )
         })?;
 
+        let (fitted_state, restoration_error) = match model.snapshot_json() {
+            Ok(snapshot) => (Some(snapshot), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
         let payload = json!({
             "schema": {
                 "schema_name": "mixeff.glmm_fit_result",
                 "schema_version": 1
             },
             "artifact_json": artifact_json,
+            "fitted_state": fitted_state,
+            "restoration_error": restoration_error,
             "formula": model.formula_label().unwrap_or_else(|| formula.to_string()),
             "family": glmm_family_label(family),
             "link": glmm_link_label(link),
@@ -1567,19 +1610,22 @@ fn mm_bootstrap_lrt_json(
     control_json: &str,
     bootstrap_options_json: &str,
     #[extendr(default = "NULL")] alternative_handle: Robj,
+    #[extendr(default = "NULL")] reduced_handle: Robj,
 ) -> std::result::Result<String, MmBridgeError> {
     (|| -> std::result::Result<String, String> {
-        let reduced = fit_lmm_from_bridge_data(
-            reduced_formula,
-            false,
-            &column_order,
-            &numeric_columns,
-            &categorical_values,
-            &categorical_levels,
-            &categorical_ordered,
-            &weights,
-            control_json,
-        )?;
+        let reduced = lmm_or_refit(&reduced_handle, || {
+            fit_lmm_from_bridge_data(
+                reduced_formula,
+                false,
+                &column_order,
+                &numeric_columns,
+                &categorical_values,
+                &categorical_levels,
+                &categorical_ordered,
+                &weights,
+                control_json,
+            )
+        })?;
         // The alternative is the caller's ML fit: reuse its live model when
         // the handle is alive (the R side only passes it for an ML fit).
         let alternative = lmm_or_refit(&alternative_handle, || {
@@ -1623,7 +1669,7 @@ fn mm_bootstrap_lrt_json(
             y_sims.push(reduced.simulate(&mut rng));
         }
         let one_replicate = |y_sim: &DVector<f64>| -> (f64, BootstrapReplicate) {
-            let mut work_red = reduced.clone();
+            let mut work_red = LinearMixedModel::clone(&reduced);
             let mut work_alt = LinearMixedModel::clone(&alternative);
             let refit_red = work_red.refit(y_sim.as_slice());
             let refit_alt = work_alt.refit(y_sim.as_slice());
@@ -2049,6 +2095,9 @@ fn mm_glmm_parametric_bootstrap_json(
             "seed": seed,
             "threads": threads,
             "bootstrap": boot_json,
+            "template": model.compiler_artifact().glmm_fit_metadata,
+            "template_objective": model.objective(),
+            "replicate_estimator_policy": "preserve_effective_or_fail",
         }))
         .map_err(|e| {
             format!(
@@ -3404,6 +3453,7 @@ extendr_module! {
     fn mm_compile_model_json;
     fn mm_compile_model_spec;
     fn mm_handle_alive;
+    fn mm_restore_fit_handle;
     fn mm_handle_hits;
     fn mm_fit_lmm_json;
     fn mm_fit_glmm_json;

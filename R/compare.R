@@ -218,8 +218,7 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL,
   }
   mm_assert_bootstrap_lrt_pair(null, alternative)
   bootstrap <- bootstrap_control(nsim = nsim, seed = seed, threads = threads)
-  # The null model is refitted to the alternative's data, so translate it even
-  # when the (ML) alternative is served from its live handle.
+  # Supply data for a cold ML refit if either fitted handle is unavailable.
   bridge <- mm_rust_fit_bridge_payload(alternative, reml = FALSE,
                                        need_data = TRUE)
   bootstrap_json <- jsonlite::toJSON(
@@ -239,7 +238,8 @@ parametric_bootstrap <- function(null, alternative, nsim = 100L, seed = NULL,
       bridge$weights,
       bridge$control_json,
       as.character(bootstrap_json),
-      bridge$handle
+      bridge$handle,
+      mm_lmm_live_handle(null, reml = FALSE)
     ),
     error = function(cnd) cnd
   )
@@ -583,19 +583,19 @@ mm_anova_method_label <- function(table, method) {
 # lmerTest-shaped single-model table; the full provenance table rides along
 # as an attribute (reachable as x$table).
 mm_anova_frame <- function(object, table, type, method, refit_for_comparison) {
-  F <- as.numeric(table$statistic)
-  F[!(table$statistic_name %in% "f")] <- NA_real_
+  f_stat <- as.numeric(table$statistic)
+  f_stat[!(table$statistic_name %in% "f")] <- NA_real_
   num <- as.numeric(table$num_df)
   s2 <- as.numeric(sigma(object))^2
   # lmerTest (Kenward-Roger): `F value` is pbkrtest's scaled Ftest statistic
   # while `Mean Sq` is built from the unscaled FtestU statistic; mirror that.
-  ms <- mm_anova_unscaled_f(table, F) * s2
+  ms <- mm_anova_unscaled_f(table, f_stat) * s2
   out <- data.frame(
     `Sum Sq` = ms * num,
     `Mean Sq` = ms,
     NumDF = num,
     DenDF = as.numeric(table$den_df),
-    `F value` = F,
+    `F value` = f_stat,
     `Pr(>F)` = as.numeric(table$p_value),
     check.names = FALSE
   )
@@ -613,16 +613,16 @@ mm_anova_frame <- function(object, table, type, method, refit_for_comparison) {
   )
 }
 
-# The unscaled F of each row: the Kenward-Roger multi-df rows carry it in
+# The unscaled f_stat of each row: the Kenward-Roger multi-df rows carry it in
 # details$kenward_roger$unscaled_statistic (engine 535132e+); every other
-# row's F is already unscaled.
-mm_anova_unscaled_f <- function(table, F) {
+# row's f_stat is already unscaled.
+mm_anova_unscaled_f <- function(table, f_stat) {
   details <- if ("details" %in% names(table)) table$details else NULL
-  if (is.null(details)) return(F)
-  vapply(seq_along(F), function(i) {
+  if (is.null(details)) return(f_stat)
+  vapply(seq_along(f_stat), function(i) {
     u <- details[[i]]$kenward_roger$unscaled_statistic
-    if (is.na(F[[i]]) || is.null(u) || !is.numeric(u) || !is.finite(u)) {
-      F[[i]]
+    if (is.na(f_stat[[i]]) || is.null(u) || !is.numeric(u) || !is.finite(u)) {
+      f_stat[[i]]
     } else {
       as.numeric(u)
     }

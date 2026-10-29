@@ -233,7 +233,7 @@ mm_prediction_map <- function(res, f) {
   apply_one <- function(x) {
     if (is.null(x)) return(x)
     keep <- attributes(x)[intersect(names(attributes(x)),
-                                    c("mm_reason", "interval", "level"))]
+                                    c("mm_reason", "mm_status", "interval", "level"))]
     out <- f(x)
     for (a in names(keep)) {
       if (identical(a, "mm_reason")) {
@@ -540,7 +540,10 @@ residuals.mm_glmm <- function(object,
 #'
 #' Standard errors and confidence intervals: population (`re.form = NA`)
 #' SEs are the fixed-effect Wald SE mapped through the link by the delta
-#' method; conditional (`re.form = NULL`) SEs and confidence bounds come from
+#' method, subject to the same inference capability as `confint()`. Unavailable
+#' Wald inference yields `NA` uncertainty; explicit working-Hessian opt-in is
+#' identified by the `mm_status` attribute. Conditional (`re.form = NULL`)
+#' SEs and confidence bounds come from
 #' the engine prediction-variance payload. The engine certifies these rows
 #' for `method = "joint_laplace"` fits and for `pirls_profiled` fits
 #' whose post-fit profiled-optimum certificate is issued (per-row status
@@ -705,15 +708,25 @@ mm_glmm_predict_rows <- function(object, data, rf, allow_new_levels, type,
     # Population (fixed-only) Wald SE of the linear predictor; for
     # type = "response" map through the link with the delta method. Confidence
     # intervals are estimate +/- z * SE on the requested scale.
-    se_link <- mm_fixed_prediction_se(object, frame)
+    cap <- mm_glmm_inference_capability(object)
+    status <- mm_glmm_capability_status(cap)
+    se_link <- if (isTRUE(cap$wald)) {
+      mm_fixed_prediction_se(object, frame)
+    } else {
+      rep(NA_real_, length(pred))
+    }
     se <- if (identical(type, "response")) se_link * abs(family$mu.eta(eta)) else se_link
     names(se) <- nm
+    attr(se, "mm_status") <- status
+    if (!isTRUE(cap$wald)) attr(se, "mm_reason") <- cap$reason
     if (!identical(interval, "none")) {
       crit <- stats::qnorm((1 + level) / 2)
       out <- cbind(fit = pred, lwr = pred - crit * se, upr = pred + crit * se)
       rownames(out) <- nm
       attr(out, "interval") <- interval
       attr(out, "level") <- level
+      attr(out, "mm_status") <- status
+      if (!isTRUE(cap$wald)) attr(out, "mm_reason") <- cap$reason
       if (isTRUE(se.fit)) return(list(fit = out, se.fit = se))
       return(out)
     }

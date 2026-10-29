@@ -315,6 +315,9 @@ mm_glmm_lrt_comparison <- function(fits) {
   npar <- vapply(fits, function(f) as.integer(f$dof), integer(1))
   ord <- order(npar)
   fits <- fits[ord]
+  for (i in seq_len(length(fits) - 1L)) {
+    mm_assert_glmm_lrt_pair(fits[[i]], fits[[i + 1L]])
+  }
   npar <- npar[ord]
   loglik <- vapply(fits, function(f) as.numeric(f$logLik), numeric(1))
   # The LRT uses the Laplace objective -2 * logLik (lme4's anova "deviance"
@@ -439,30 +442,22 @@ mm_grid.mm_glmm <- function(fit, specs, ...) {
 ## template's fitted theta. Failed replicates are counted, never silently
 ## dropped. Deterministic given `seed`; when `seed` is NULL one is drawn
 ## from R's RNG so set.seed() governs reproducibility.
+mm_glmm_bootstrap_capability <- function(fit) {
+  state <- tryCatch(mm_fitted_state(fit), mm_inference_unavailable = identity)
+  if (inherits(state, "condition")) {
+    return(list(available = FALSE, reason_code = "fitted_state_unavailable",
+                reason = conditionMessage(state)))
+  }
+  list(available = TRUE, reason_code = NA_character_, reason = NA_character_)
+}
+
 mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
-                                                 nsim = 999L, seed = NULL,
-                                                 threads = 1L) {
+                                                 nsim = 999L, seed = NULL, threads = 1L) {
   threads <- mm_check_threads(threads)
-  if (identical(mm_glmm_effective_method(object), "joint_laplace")) {
-    # Engine limitation at pin f82c646: GeneralizedLinearMixedModel::refit
-    # hardcodes the fast path (generalized/optimizer.rs:19-23) and the
-    # dependency-light build then refuses the joint optimizer left in
-    # optsum, so every replicate refit of a joint template fails
-    # deterministically. Refuse up front with the honest reason instead of
-    # burning nsim doomed refits (upstream bead filed; certified Wald is
-    # available on joint fits anyway).
-    mm_abort(
-      message = paste0(
-        "The parametric bootstrap is not available for joint_laplace fits ",
-        "at this engine pin: replicate refits cannot re-run the joint ",
-        "estimator. Use the certified Wald intervals ",
-        "(confint(fit, method = \"asymptotic\")), or bootstrap the profiled ",
-        "estimator by refitting with the default method."
-      ),
-      class = "mm_inference_unavailable",
-      reason_code = "glmm_bootstrap_joint_laplace_unavailable",
-      input = object$method
-    )
+  capability <- mm_glmm_bootstrap_capability(object)
+  if (!capability$available) {
+    mm_abort(message = capability$reason, class = "mm_inference_unavailable",
+             reason_code = capability$reason_code, input = object$method)
   }
   if (!is.numeric(nsim) || length(nsim) != 1L || is.na(nsim) ||
       nsim < 2 || nsim != as.integer(nsim)) {
@@ -545,13 +540,18 @@ mm_glmm_parametric_bootstrap_confint <- function(object, parm, level,
   mcse <- max(se / sqrt(successful))
 
   attr(ci, "mm_method") <- "glmm_parametric_bootstrap_percentile"
-  attr(ci, "mm_estimator") <- mm_glmm_effective_method(object)
+  estimator <- parsed$template$effective_method %||% parsed$template$estimation_method
+  if (identical(estimator, "fast_pirls_profiled")) estimator <- "pirls_profiled"
+  attr(ci, "mm_estimator") <- estimator
   attr(ci, "mm_bootstrap") <- list(
     requested = length(reps),
     successful = successful,
     failed = failed,
     seed = as.numeric(seed),
     threads = threads,
+    template = parsed$template,
+    template_objective = parsed$template_objective,
+    replicate_estimator_policy = parsed$replicate_estimator_policy,
     std_errors = se,
     mcse = mcse,
     reliability = mm_bootstrap_reliability(TRUE, successful, mcse)

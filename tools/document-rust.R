@@ -37,7 +37,11 @@ args <- c("run", "--bin", "document",
           "--target-dir", shQuote(target_dir))
 
 message("[document-rust.R] regenerating R/extendr-wrappers.R ...")
-status <- system2("cargo", args)
+status <- local({
+  old_wd <- setwd(file.path(pkg_root, "src"))
+  on.exit(setwd(old_wd))
+  system2("cargo", args)
+})
 if (!identical(status, 0L)) {
   stop("[document-rust.R] cargo run --bin document failed (status ", status, ")")
 }

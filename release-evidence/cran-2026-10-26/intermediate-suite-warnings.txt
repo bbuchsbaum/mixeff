@@ -1,0 +1,11 @@
+x
+                                 test-benchmarking-vignette.R: invalid char string in output conversion 
+                                                                                                      1 
+test-checklist-inference-features.R: `check.attributes` is deprecated; please use `ignore_attr` instead 
+                                                                                                      2 
+                        test-checklist-inference-features.R: extreme order statistics used as endpoints 
+                                                                                                      1 
+                                                       test-coverage-gate.R: NAs introduced by coercion 
+                                                                                                      1 
+                                       test-doc-claims.R: argument 'ignore.case = TRUE' will be ignored 
+                                                                                                     99 

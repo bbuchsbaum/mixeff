@@ -1,0 +1,13 @@
+* checking for file '/private/tmp/mixeff-cran-20261026-64ptil/candidate/DESCRIPTION' ... OK
+* preparing 'mixeff':
+* checking DESCRIPTION meta-information ... OK
+* cleaning src
+* running 'cleanup'
+* installing the package to build vignettes
+* creating vignettes ... OK
+* cleaning src
+* running 'cleanup'
+* checking for LF line-endings in source and make files and shell scripts
+* checking for empty or unneeded directories
+* building 'mixeff_0.2.0.tar.gz'
+

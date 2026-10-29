@@ -1,5 +1,16 @@
 # mixeff 0.2.0
 
+## Restored-model cancellation and release checks
+
+* Restoring a fitted snapshot now reattaches the R interrupt callback without
+  refitting. Serial and threaded bootstrap jobs on models reloaded from RDS
+  stop with `mm_interrupted` and preserve the fitted baseline.
+* Nonnumeric and complex contrast specifications are refused at the R boundary
+  with `mm_arg_error`, before coercion can warn or discard imaginary parts.
+* Release checks now fail on unhandled test warnings. Documentation claim
+  checks retain case-insensitive literal matching, and computational article
+  checks use complete portable HTML output under the C locale.
+
 ## Bridge performance: compile once, keep the fitted model (mixeff-rs bridge-perf)
 
 * `lmm()` and `glmm()` now compile the formula and audit the design once per
@@ -18,17 +29,21 @@
   `confint(method = "profile")`, bootstrap contrasts and intervals,
   `parametric_bootstrap()`, `predict()` on new data and with intervals or
   `se.fit` (LMMs and GLMMs), `ranef(condVar = TRUE)`, GLMM bootstrap
-  intervals, and `verify_convergence()`. Results are identical to the cold
-  refit. Profiles and convergence checks work on a copy, so the cached model
-  never changes. These calls stay interruptible. On a 200,000-row crossed
+  intervals, and `verify_convergence()`. Queries preserve the recorded fitted
+  solution. Profiles and convergence checks work on a copy, so the cached
+  model never changes. Live handles retain the R interrupt callback. The
+  following timings are historical bridge-performance measurements, not
+  benchmarks rerun for the merged candidate. On a 200,000-row crossed
   LMM, `contrast()` drops from 0.39 s to 0.002 s, `predict(newdata,
   interval = "prediction")` from 0.70 s to 0.04 s and `summary()` by the
   0.45 s refit. On a 3,000-row binomial GLMM, `predict(newdata, se.fit = TRUE)`
   drops from 0.44 s to 0.006 s.
 * The handle is a process-local cache. It does not survive `saveRDS()` /
-  `readRDS()` or a new R process. Those fits, and fits where the handle does
-  not match the requested refit (for example a profile under ML of a REML
-  fit), fall back to the cold refit automatically, with identical results.
+  `readRDS()` or a new R process. Those fits restore a saved native snapshot
+  without optimization, or refuse the query if restoration is unavailable.
+  An explicitly changed estimand (for example a profile under ML of a REML
+  fit) still requires a refit. Restored handles receive a new R interrupt
+  callback on the calling thread.
   `revive()` keeps a live handle and clears a dead one. Copies of a fit share
   the handle.
 * Memory: the handle keeps the engine model, including a copy of the model
@@ -327,7 +342,8 @@
 * Fits, refits, bootstraps and profiles can be interrupted (Ctrl-C/Esc):
   the engine checks for a pending interrupt between optimizer evaluations
   without longjmp-ing through Rust frames, and stops with a typed
-  `mm_interrupted` error.
+  `mm_interrupted` error. The bridge attaches the host callback to both
+  newly fitted and restored models.
 * New `mm_bootmer()` (`lme4::bootMer()` counterpart; a `boot`-compatible
   result for `boot::boot.ci()`), `rePCA()`, `mm_lmlist()` (`lmList()`),
   `mm_allfit()` (`allFit()`), and `mm_control(optCtrl = )` (lme4-style

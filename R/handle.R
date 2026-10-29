@@ -1,24 +1,8 @@
-# Native fitted-model handles (pre-CRAN checklist §5.2(c)).
-#
-# `lmm()` / `glmm()` keep the fitted engine model alive behind an external
-# pointer stored as `fit$rust_handle`. Follow-on computations (contrasts,
-# summary() term tables, predictions and their variance, ranef(condVar),
-# profiles, bootstraps, model comparison, convergence verification) run on
-# that live model instead of rebuilding and refitting it cold from the stored
-# model frame. The handle is a process-local cache, never the source of
-# truth: the fit object still carries every durable result, and when the
-# handle is absent or dead (after saveRDS()/readRDS(), in another process,
-# or with `options(mixeff.keep_handle = FALSE)`) every verb takes the cold
-# refit path, which produces identical results.
-#
-# Each handle carries a key (attribute `mm_handle_key`): the exact engine
-# arguments it was fitted with (formula string, REML or GLMM family / link /
-# method / nAGQ, and control JSON). A verb uses the handle only when the
-# refit it would otherwise run has the same key -- e.g. a profile under ML of
-# a REML fit, or a GLMM bootstrap of the fallback estimator of a substituted
-# fit, still refits cold. Copies of a fit share the handle; that is safe
-# because the engine only reads the cached model (mutating verbs work on a
-# clone).
+# Native fitted-model handles and durable fitted-state restoration.
+# Live handles are process-local caches. After serialization, native queries
+# restore the engine-owned fitted snapshot without rerunning optimization.
+# A different estimand (for example REML -> ML) still needs an explicit refit.
+# Optimization controls are not part of the identity of a recorded solution.
 
 # Whether lmm()/glmm() keep the fitted engine model. Documented in NEWS:
 # the handle holds a copy of the model data for as long as the fit object
@@ -55,26 +39,38 @@ mm_keyed_handle <- function(handle, key) {
   handle
 }
 
-# The fit's live handle when it was fitted under `key`, else NULL.
+# Reuse a matching cache or restore the recorded fitted solution. Controls
+# cannot change the baseline of a query; only an explicit refit does that.
 mm_live_handle <- function(fit, key) {
+  snapshot <- mm_fitted_state(fit)
   handle <- fit$rust_handle
-  if (is.null(handle) || !identical(typeof(handle), "externalptr")) {
-    return(NULL)
+  cached_key <- attr(handle, "mm_handle_key", exact = TRUE)
+  if (!is.null(cached_key)) {
+    cached_key$control <- key$control <- NULL
+    # A substituted GLMM is queried under its effective estimator.
+    if (identical(key$kind, "glmm")) {
+      cached_key$method <- key$method <- NULL
+    }
   }
-  if (!identical(attr(handle, "mm_handle_key", exact = TRUE), key)) {
-    return(NULL)
+  if (identical(cached_key, key) &&
+      identical(attr(handle, "mm_fitted_state", exact = TRUE), snapshot) &&
+      isTRUE(mm_handle_alive(handle))) {
+    return(handle)
   }
-  if (!isTRUE(mm_handle_alive(handle))) {
-    return(NULL)
-  }
-  handle
+  restored <- tryCatch(
+    mm_restore_fit_handle(snapshot, key$kind),
+    error = function(cnd) cnd
+  )
+  if (inherits(restored, "condition")) mm_abort_from_bridge(restored)
+  attr(restored, "mm_fitted_state") <- snapshot
+  mm_keyed_handle(restored, key)
 }
 
 # Live handle of an LMM for an engine refit under `reml` with the fit's own
 # formula and control.
 mm_lmm_live_handle <- function(fit, reml = isTRUE(fit$REML),
                                formula_string = NULL, control_json = NULL) {
-  if (!inherits(fit, "mm_lmm") || is.null(fit$rust_handle)) return(NULL)
+  if (!inherits(fit, "mm_lmm") || !identical(isTRUE(reml), isTRUE(fit$REML))) return(NULL)
   formula_string <- formula_string %||%
     mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- control_json %||% mm_refit_control_json(fit)
@@ -84,7 +80,9 @@ mm_lmm_live_handle <- function(fit, reml = isTRUE(fit$REML),
 # Live handle of a GLMM for an engine refit with these estimator settings.
 mm_glmm_live_handle <- function(fit, family, link, method, n_agq,
                                 formula_string = NULL, control_json = NULL) {
-  if (!inherits(fit, "mm_glmm") || is.null(fit$rust_handle)) return(NULL)
+  if (!inherits(fit, "mm_glmm")) return(NULL)
+  if (!method %in% c(mm_glmm_requested_method(fit), mm_glmm_effective_method(fit)) ||
+      !identical(as.integer(n_agq), as.integer(fit$nAGQ))) return(NULL)
   formula_string <- formula_string %||%
     mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- control_json %||% mm_refit_control_json(fit)

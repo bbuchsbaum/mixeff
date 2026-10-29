@@ -14,7 +14,7 @@ the declared Rust toolchain requirements only.
 The package changed substantially after the runs listed under "Test
 environments" below: the engine was re-pinned to mixeff-rs `10f1768`
 and the lme4-parity audit (`assessment/2026-10-pre-cran-audit.md`) was
-completed. On the resulting tree:
+completed. The pre-merge audit records the following historical results:
 
 - GitHub Actions on the release-candidate commit: Ubuntu R-release and
   R-devel, macOS R-release, Windows R-release (two jobs), test coverage,
@@ -30,14 +30,31 @@ and R-release) and the R-hub court on the final tarball, and replace the
 "Test environments" and "R-hub court results" sections below with those
 results.
 
-## Test environments
+## Current local candidate
 
-Checked as the built source tarball throughout (never the source
-directory); the acceptance run is `tools/release-gate.R
---release-candidate`, which builds one tarball, records its SHA-256,
-checks that artifact with `--as-cran`, installs that same artifact, and
-runs the full test suite plus the slow parity and real-data
-reproduction tiers against it.
+The current candidate uses engine pin `004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b`
+and combines the current main-branch interface with fitted-state restoration,
+estimator-preserving GLMM bootstrap, and the October vignette remediation.
+Local release qualification is recorded in `release-gate-report.txt` and the
+CRAN-readiness assessment. The historical counts below do not qualify this
+merged candidate; hosted checks and builder submissions must be refreshed.
+
+The 26 October local runtime candidate `bd3091471c9f6a15e8445366f18388b2da2eba8f`
+passed `R CMD check --as-cran --no-manual` on macOS arm64 / R 4.5.1:
+0 errors, 0 warnings, 1 expected incoming note (new submission and tarball size).
+The six vignettes and help examples passed; the separate 76-page PDF manual
+built successfully. Exact tarball identity and raw receipts are recorded under
+`release-evidence/cran-2026-10-26/`. This local result does not supersede the
+need for refreshed builder checks. The cancellation defect was subsequently
+repaired and verified with actual R SIGINT tests; the updated candidate is
+undergoing full release qualification.
+
+The canonical acceptance command is `Rscript tools/release-gate.R
+--release-candidate`. It builds and hashes one source tarball, checks that
+artifact with `--as-cran`, installs it, and runs the suite with slow parity
+and core aphantasia enabled. Manual/PDF validation is separate.
+
+### Historical platform results
 
 - macOS arm64, R 4.5.1 — `--as-cran` on the built tarball with
   vignettes rebuilt: 0 errors, 0 warnings, 1 NOTE (below).
@@ -62,6 +79,10 @@ reproduction tiers against it.
 1. **CRAN incoming feasibility** (all platforms) — "New submission", plus
    the tarball size on some machines. The Rust sources are vendored so
    the package builds fully offline, which accounts for the size.
+
+   Size of tarball: 6805036 bytes
+
+   The release gate refreshes this line from the artifact it builds.
 
 2. **`checking compiled code`, win-builder only** — this check does not
    run there:
@@ -170,9 +191,12 @@ None.
   a session a fit also holds an external pointer to the live engine model
   (`fit$rust_handle`) so follow-on computations (contrasts, prediction
   intervals, bootstraps) skip a refit. The pointer does not survive
-  serialization; after reloading, those computations refit from the
-  stored data and give identical results. `options(mixeff.keep_handle =
-  FALSE)` disables the handle.
+  serialization; after reloading, queries restore the recorded native
+  fitted-state snapshot without optimization. An explicitly different
+  estimand (for example ML instead of REML) still requires a refit.
+  `options(mixeff.keep_handle = FALSE)` disables the live cache.
+  The bridge reattaches the R interrupt callback after restoration. Serial
+  and threaded LMM/GLMM bootstrap cancellation is covered by R SIGINT tests.
 - **Threads**: single-threaded by default. The parametric bootstrap
   uses more threads only when asked (`bootstrap_control(threads =)`);
   results are bit-identical for every thread count

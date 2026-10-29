@@ -103,7 +103,10 @@ In-sample response predictions reuse the engine's certified fitted values.
 
 Standard errors and confidence intervals: population (\code{re.form = NA})
 SEs are the fixed-effect Wald SE mapped through the link by the delta
-method; conditional (\code{re.form = NULL}) SEs and confidence bounds come from
+method, subject to the same inference capability as \code{confint()}. Unavailable
+Wald inference yields \code{NA} uncertainty; explicit working-Hessian opt-in is
+identified by the \code{mm_status} attribute. Conditional (\code{re.form = NULL})
+SEs and confidence bounds come from
 the engine prediction-variance payload. The engine certifies these rows
 for \code{method = "joint_laplace"} fits and for \code{pirls_profiled} fits
 whose post-fit profiled-optimum certificate is issued (per-row status

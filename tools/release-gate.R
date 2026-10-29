@@ -162,6 +162,7 @@ run("R CMD build (release tarball)", {
       c("CMD", "build", shQuote(pkg_root)),
       stdout = TRUE, stderr = TRUE, env = check_env
     )
+    writeLines(build_out, file.path(check_root, "build.log"))
     build_status <- attr(build_out, "status")
     if (!is.null(build_status) && build_status != 0L) {
       stop(paste(tail(build_out, 20L), collapse = "\n"))
@@ -257,6 +258,7 @@ if (fast) {
         c("CMD", "check", "--as-cran", "--no-manual", shQuote(tarball)),
         stdout = TRUE, stderr = TRUE, env = check_env
       )
+      writeLines(check_out, file.path(check_root, "check-console.log"))
       check_status <- attr(check_out, "status")
       if (is.null(check_status)) check_status <- 0L
       log_path <- file.path(check_root, paste0(pkg, ".Rcheck"), "00check.log")
@@ -345,6 +347,7 @@ if (!build_ok) {
                              shQuote(paste0("--library=", gate_lib)),
                              shQuote(tarball)),
                            stdout = TRUE, stderr = TRUE)
+    writeLines(install_out, file.path(check_root, "install.log"))
     st <- attr(install_out, "status")
     install_ok <<- is.null(st) || st == 0L
     record("install built tarball", install_ok,
@@ -364,6 +367,7 @@ if (install_ok) {
 ## 5. lint ---------------------------------------------------------------------
 if (install_ok) run("lint_package == 0", {
   lints <- lintr::lint_package(pkg_root)
+  if (length(lints)) print(lints)
   record("lint_package == 0", length(lints) == 0,
          sprintf("%d lint(s)", length(lints)))
 })
@@ -418,6 +422,7 @@ if (install_ok) run("suite + error-UX + schema/manifest", {
   if (release_candidate) {
     Sys.unsetenv(c("MIXEFF_RUN_SLOW_PARITY", "MIXEFF_RUN_APHANTASIA"))
   }
+  saveRDS(res, file.path(check_root, "suite-results.rds"))
   df <- as.data.frame(res)
   fails <- sum(df$failed) + sum(df$error)
   suite_elapsed <- round(proc.time()["elapsed"] - suite_t)
@@ -432,6 +437,8 @@ if (install_ok) run("suite + error-UX + schema/manifest", {
   record(suite_gate, fails == 0,
          sprintf("%d pass / %d fail / %d skip in %ds",
                  sum(df$passed), fails, sum(df$skipped), suite_elapsed))
+  record("suite has no unhandled warnings", sum(df$warning) == 0L,
+         sprintf("%d warning(s)", sum(df$warning)))
   # Error-UX and schema/manifest are part of that run; assert they were present.
   ux_present <- any(grepl("error-ux", df$file))
   schema_present <- any(grepl("schema|manifest", df$file))
@@ -477,15 +484,18 @@ if (release_candidate) {
       # Restore the env var before re-raising: this block is a top-level
       # promise, so on.exit would not fire (same caveat as the suite step).
       rendered <- tryCatch(
-        rmarkdown::render(vig, output_dir = out_dir,
+        rmarkdown::render(vig, output_format = rmarkdown::html_vignette(),
+                          output_dir = out_dir,
                           envir = new.env(parent = globalenv()), quiet = TRUE),
         error = function(e) e
       )
       if (is.na(old_flag)) Sys.unsetenv("MIXEFF_RUN_APHANTASIA_VIGNETTE") else
         Sys.setenv(MIXEFF_RUN_APHANTASIA_VIGNETTE = old_flag)
       if (inherits(rendered, "error")) stop(conditionMessage(rendered))
-      record("aphantasia vignette (live)", file.exists(rendered),
-             basename(rendered))
+      complete_html <- file.exists(rendered) &&
+        any(grepl("</html>", readLines(rendered, warn = FALSE), fixed = TRUE))
+      record("aphantasia vignette (live)", complete_html,
+             if (complete_html) basename(rendered) else "rendered HTML is incomplete")
     }
   })
 }

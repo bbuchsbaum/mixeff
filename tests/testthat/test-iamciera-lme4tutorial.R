@@ -56,17 +56,8 @@ iamciera_cases <- function() {
   )
 }
 
-# Gate status (2026-07-09 baseline at engine pin 3b6ec69): all fits are fast
-# (0.02-0.07s); the sole opt-in failure is the `drop_tray` LRT (63.75 vs
-# lme4 63.02). Root cause: the reduced model's ML cold start stops
-# non-stationary (certificate free_gradient_norm = 17.7) yet reports
-# converged_interior; the SAME model under REML matches lme4 to 3e-9, and
-# warm-start/cobyla/pattern_search recover lme4's ML optimum exactly. Filed
-# upstream as mixeff-rs bd-01KX33ZEQHHE8CWV5Z1KA7EG5G; reproducer in
-# planning/probes/MINIMAL_case2_iamciera_drop_tray.R. Ungate when it lands.
-iamciera_run_slow_parity <- function() {
-  mm_run_slow_parity()
-}
+# Former engine-defect gates were removed after unchanged parity checks
+# passed at engine pin 977ef11 (2026-10-06).
 
 iamciera_label_key <- function(x) {
   x <- as.character(x)
@@ -190,12 +181,8 @@ test_that("iamciera lme4tutorial models match core lme4 outputs", {
   }
 })
 
-test_that("slow iamciera lme4tutorial models match lme4 when enabled", {
+test_that("iamciera crossed lme4tutorial models match lme4", {
   mm_skip_if_no_lme4()
-  testthat::skip_if_not(
-    iamciera_run_slow_parity(),
-    "Set MIXEFF_RUN_SLOW_PARITY=true to run slow iamciera lme4tutorial parity cases."
-  )
 
   for (label in names(iamciera_cases())) {
     case <- iamciera_cases()[[label]]
@@ -232,10 +219,6 @@ test_that("slow iamciera lme4tutorial models match lme4 when enabled", {
 
 test_that("iamciera backwards-selection model comparisons agree with lme4", {
   mm_skip_if_no_lme4()
-  testthat::skip_if_not(
-    iamciera_run_slow_parity(),
-    "Set MIXEFF_RUN_SLOW_PARITY=true to run slow iamciera model-comparison parity cases."
-  )
   dat <- iamciera_stomata_data()
   cases <- iamciera_cases()
   comparisons <- list(

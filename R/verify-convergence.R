@@ -8,20 +8,15 @@
 #' the verdict (`status`), the per-run deltas, and the wording are all owned
 #' by the Rust contract — R only formats them.
 #'
-#' The verifier refits the model from the stored specification before it
-#' starts, so a call costs roughly `2 + jitter_starts` fits (plus consensus
-#' runs when enabled). GLMM verification uses wider default tolerances than
-#' the LMM route (objective `1e-4`, beta `1e-3`): each objective evaluation
-#' carries inner-PIRLS noise, and the joint path's derivative-free beta
-#' search bounds beta reproducibility at its `ftol` stop. A GLMM whose
-#' requested `joint_laplace` estimator was substituted by the labelled
-#' fast-PIRLS fallback (see `optimizer_certificate()`) re-requests the joint
-#' route; when the verification refit falls back the same way — the expected
-#' case — every run verifies the profiled objective the fitted numbers came
-#' from, with ordinary objective deltas. Runs are only reported as
-#' substitution runs (no objective delta) in the asymmetric case where the
-#' reference refit certifies the joint route but an individual verification
-#' run falls back.
+#' The verifier queries the recorded fitted solution as its baseline, reusing
+#' a live handle or restoring its snapshot without optimization. Only the
+#' requested restart, jitter, and consensus runs perform new fits. A missing
+#' or incompatible snapshot without a usable handle is refused. GLMM
+#' verification uses wider default tolerances than the LMM route (objective
+#' `1e-4`, beta `1e-3`) because its objective carries inner-PIRLS noise.
+#' A substituted fit is verified against its recorded effective estimator;
+#' a verification run that changes estimator is labelled as a substitution,
+#' rather than compared using an objective from a different estimator.
 #'
 #' @param fit A fitted `mm_lmm` from [lmm()] or `mm_glmm` from [glmm()].
 #' @param ... Reserved for future methods.
@@ -232,24 +227,14 @@ verify_convergence.mm_glmm <- function(fit, ...,
   obj
 }
 
-## Bridge payload for the GLMM verification refit. Carries everything the
-## engine needs to rebuild the SAME model: the post-prep model frame and
-## formula (grouped-binomial responses are already proportion + trial
-## weights here), the exact engine family string recorded at fit time
-## (bernoulli/binomial split, NB theta-mode spelling), and the REQUESTED
-## estimator -- for a substituted (fallback) fit the verification re-requests
-## the joint route; when the refit falls back the same way, all runs verify
-## the profiled objective the fitted numbers came from.
+## Preserve the recorded effective-estimator baseline for verification.
 mm_rust_glmm_verify_payload <- function(fit) {
-  mm_rust_glmm_refit_payload(fit, mm_glmm_requested_method(fit))
+  mm_rust_glmm_refit_payload(fit, mm_glmm_effective_method(fit))
 }
 
-## Shared GLMM refit payload for bridge verbs that rebuild the model
-## (verify_convergence, parametric bootstrap). `method` is explicit because
-## the two verbs need different estimators on a substituted fit: verification
-## re-REQUESTS the joint route (checking what the user asked for), while the
-## bootstrap refits the EFFECTIVE estimator (resampling the distribution of
-## the numbers actually returned).
+## Shared payload for verification and bootstrap. Both query the recorded
+## effective estimator via a live or restored handle. A genuinely different
+## estimator request remains an explicit model refit.
 mm_rust_glmm_refit_payload <- function(fit, method) {
   formula_string <- mm_coerce_formula_string(mm_engine_formula(fit))
   control_json <- mm_refit_control_json(fit)
@@ -258,9 +243,7 @@ mm_rust_glmm_refit_payload <- function(fit, method) {
   )
   link <- as.character(fit$family$link)
   n_agq <- as.numeric(fit$nAGQ %||% 1L)
-  # The live model serves the refit only when it was fitted with exactly
-  # these estimator settings (not, e.g., the effective fallback method of a
-  # substituted fit, which the bootstrap refits cold).
+  # Query the recorded effective model, including a labelled substitution.
   handle <- mm_glmm_live_handle(fit, family, link, method, n_agq,
                                 formula_string = formula_string,
                                 control_json = control_json)

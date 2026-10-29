@@ -942,7 +942,9 @@ mm_varcorr_lme4 <- function(vc, fit) {
          correlations = if (ncol(S) > 1L) {
            unlist(lapply(2:ncol(S), function(r) R[r, seq_len(r - 1L)]),
                   use.names = FALSE)
-         } else numeric())
+         } else {
+           numeric()
+         })
   })
   # lme4 >= 2.1-0: useSc is FALSE for every GLMM (no Residual row; the
   # random-effect SDs are absolute, never multiplied by sigma) while `sc`

@@ -82,6 +82,11 @@ mm_compile_model_spec <- function(formula, column_order, numeric_columns, catego
 #' @noRd
 mm_handle_alive <- function(ptr) .Call(wrap__mm_handle_alive, ptr)
 
+#' Restore a fitted model snapshot into a live bridge handle.
+#'
+#' @noRd
+mm_restore_fit_handle <- function(fitted_state, kind) .Call(wrap__mm_restore_fit_handle, fitted_state, kind)
+
 #' Number of follow-on bridge computations served from a live fitted-model
 #' handle since the package was loaded (diagnostic; used by the tests).
 #'
@@ -157,7 +162,7 @@ mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_colum
 #' REML). Returns a serialised `BootstrapLikelihoodRatioTest`.
 #'
 #' @noRd
-mm_bootstrap_lrt_json <- function(reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle = NULL) .Call(wrap__mm_bootstrap_lrt_json, reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle)
+mm_bootstrap_lrt_json <- function(reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle = NULL, reduced_handle = NULL) .Call(wrap__mm_bootstrap_lrt_json, reduced_formula, alternative_formula, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, bootstrap_options_json, alternative_handle, reduced_handle)
 
 #' Build an upstream model-comparison table for fitted LMM payloads.
 #'

@@ -215,6 +215,10 @@ test_that("contrast rejects bad L", {
   fit <- mk_cov_lmm()
   expect_error(contrast(fit, NULL), class = "mm_arg_error")
   expect_error(contrast(fit, "bad"), class = "mm_arg_error")
+  expect_error(contrast(fit, c(1 + 1i, 0)), class = "mm_arg_error")
+  # A wrong-width numeric matrix is also refused at the R boundary.
+  expect_error(contrast(fit, matrix(1, nrow = 1L, ncol = 1L)),
+               class = "mm_arg_error")
   expect_error(contrast(fit, c(1, 0, 0)), class = "mm_arg_error")
 })
 

@@ -298,6 +298,7 @@ glmm <- function(formula,
                        nAGQ, control_json)
   )
   fit_result <- mm_bridge_fit_result(json, mm_json_parse_glmm_fit)
+  if (!is.null(rust_handle)) attr(rust_handle, "mm_fitted_state") <- fit_result$fitted_state
   fit_summary <- mm_json_parse_fit_summary(fit_result$fit_summary)
   artifact <- mm_json_parse_artifact(fit_result$artifact_json)
   beta <- mm_named_numeric(fit_result$beta, fit_result$beta_names)
@@ -332,6 +333,12 @@ glmm <- function(formula,
     nAGQ_requested = if (isTRUE(resolved$nagq0)) 0L else as.integer(nAGQ),
     inference_request = inference,
     control        = control,
+    # Record normalized fit-time dispersion semantics separately from controls.
+    dispersion_policy = list(
+      method = control$disp_method %||% "moment",
+      dof_correction = if (identical(control$disp_method, "old/buggy")) NULL else
+        control$disp_dof_correction %||% TRUE
+    ),
     vars           = spec$vars,
     model_frame    = data,
     weights        = weights,
@@ -799,4 +806,3 @@ mm_json_parse_glmm_fit <- function(json) {
   }
   parsed
 }
-

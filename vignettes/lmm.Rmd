@@ -74,8 +74,10 @@ The key structure: `Subject` appears 10 times in the data — once per
 day. Those 10 observations are *not* independent. They share the
 subject's baseline speed, their individual sensitivity to sleep loss,
 and any other between-person trait that we haven't measured. If you
-fit a plain OLS regression, those correlations inflate your Type I
-error rate and make standard errors too small.
+fit a plain OLS regression with independent-error standard errors, its
+uncertainty calculations ignore that dependence. For within-subject effects
+such as this one, the resulting tests can be anti-conservative; the direction
+and size of the error depend on the design and covariance structure.
 
 A mixed model handles this by giving each subject its own intercept
 *and* its own slope — their personal baseline and their personal rate
@@ -421,8 +423,9 @@ head(study)
 
 A random intercept is the simplest random-effects structure:
 subjects may differ in average score, but the fixed `time` effect
-is the same across subjects. It is often the right choice, and it
-is always a reasonable starting point. `explain_model()` spells
+is the same across subjects. This is appropriate when a shared slope is a
+defensible assumption. If the design permits subjects to differ in their
+response to time, assess a random slope as well. `explain_model()` spells
 out what the model assumes and reports that no random slopes were
 added.
 

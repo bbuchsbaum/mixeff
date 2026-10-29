@@ -205,8 +205,11 @@ test_that("mm_bootmer() is a bootMer()-like parametric bootstrap", {
   b3 <- mm_bootmer(fit, function(m) c(sigma = m$sigma), nsim = 5, use.u = TRUE)
   expect_true(all(is.finite(b3$t)))
   skip_if_not_installed("boot")
-  ci <- boot::boot.ci(mm_bootmer(fit, fixef, nsim = 30, seed = 1),
+  # Percentile endpoints need enough replicates that boot.ci() does not use
+  # extreme order statistics; that warning is substantive, not suppressed.
+  ci <- boot::boot.ci(mm_bootmer(fit, fixef, nsim = 200, seed = 1),
                       type = "perc", index = 2)
+  expect_identical(ci$R, 200L)
   expect_true(all(is.finite(ci$percent[4:5])))
   expect_error(mm_bootmer(fit, fixef, type = "semiparametric"),
                class = "mm_inference_unavailable")
@@ -243,12 +246,11 @@ test_that("mm_lmlist() matches lme4::lmList coefficients and intervals", {
   d <- mm_cif_sleep()
   m <- mm_lmlist(Reaction ~ Days | Subject, d)
   ref <- lme4::lmList(Reaction ~ Days | Subject, d)
-  expect_equal(as.matrix(coef(m)), as.matrix(coef(ref)),
-               check.attributes = FALSE)
+  expect_equal(unname(as.matrix(coef(m))), unname(as.matrix(coef(ref))))
   expect_equal(sigma(m), sigma(ref))
   ci <- confint(m, pool = FALSE)
-  expect_equal(unclass(ci)[, , "Days"], unclass(confint(ref))[, , "Days"],
-               check.attributes = FALSE, tolerance = 1e-8)
+  expect_equal(unname(ci[, , "Days"]), unname(confint(ref)[, , "Days"]),
+               tolerance = 1e-8)
   pooled <- confint(m)
   expect_equal(dim(pooled), c(18L, 2L, 2L))
   expect_true(all(pooled[, 1, ] < pooled[, 2, ]))

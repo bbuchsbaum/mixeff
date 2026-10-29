@@ -13,17 +13,11 @@ factor_contrast_design <- function(seed = 8L) {
   dat$y <- 1.8 + 0.7 * x +
     ifelse(dat$f == "a", b_a[as.integer(dat$g)], b_b[as.integer(dat$g)]) +
     rnorm(nrow(dat), sd = 0.2)
-  contrasts(dat$f) <- matrix(
-    c(-0.5, 0.5),
-    ncol = 1L,
-    dimnames = list(c("a", "b"), "half")
-  )
   dat
 }
 
-# mixeff refuses an attached unordered contrast rather than silently
-# replacing it with treatment coding; the mixeff fits below use the same data
-# with the attribute dropped (the random-effect basis is cell-means either way).
+# Drop attached contrasts for tests that exercise default coding (the
+# random-effect basis is cell-means either way).
 without_attached_contrasts <- function(dat) {
   for (nm in names(dat)) {
     if (is.factor(dat[[nm]])) attr(dat[[nm]], "contrasts") <- NULL
@@ -31,20 +25,23 @@ without_attached_contrasts <- function(dat) {
   dat
 }
 
-test_that("attached unordered contrasts are refused, not silently replaced", {
-  dat <- factor_contrast_design()
-  expect_error(
-    lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
-    class = "mm_arg_error"
-  )
+test_that("explicit treatment coding overrides an unsupported global option", {
+  dat <- without_attached_contrasts(factor_contrast_design())
+  baseline <- lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1))
+  contrasts(dat$f) <- stats::contr.treatment(levels(dat$f))
   old <- options(contrasts = c("contr.sum", "contr.poly"))
   on.exit(options(old), add = TRUE)
+  tagged <- lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1))
+  expect_equal(fixef(tagged), fixef(baseline))
   expect_error(
     lmm(y ~ f + (1 | g), without_attached_contrasts(dat),
         control = mm_control(verbose = -1)),
-    regexp = "contr.sum",
+    regexp = "unsupported unordered-factor options",
     class = "mm_arg_error"
   )
+  contrasts(dat$f) <- stats::contr.sum(levels(dat$f))
+  expect_error(lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
+               class = "mm_arg_error")
 })
 
 test_that("no-intercept factor random slopes use cell-means coding", {
@@ -58,8 +55,6 @@ test_that("no-intercept factor random slopes use cell-means coding", {
   # lme4-concatenated names (mm_apply_lme4_coef_naming strips the separator).
   expect_true(all(c("f: a", "f: b") %in% vc_names))
   expect_true(all(c("fa", "fb") %in% re_names))
-  expect_false(any(grepl("half", vc_names, fixed = TRUE)))
-  expect_false(any(grepl("half", re_names, fixed = TRUE)))
 
   if (requireNamespace("lme4", quietly = TRUE)) {
     ref <- suppressMessages(suppressWarnings(
@@ -170,7 +165,7 @@ test_that("an unset contrasts option is refused for unordered factors too", {
   on.exit(options(old), add = TRUE)
   expect_error(
     lmm(y ~ f + (1 | g), dat, control = mm_control(verbose = -1)),
-    regexp = "not contr.treatment",
+    regexp = "unsupported unordered-factor options",
     class = "mm_arg_error"
   )
 })

@@ -27,7 +27,7 @@ These implement the \pkg{broom} / \pkg{broom.mixed} generics for
 \details{
 \code{tidy()} returns one row per model term. \code{effects = "fixed"} yields the
 fixed-effect coefficients (\code{estimate}, \code{std.error}, \code{statistic}, and, for
-GLMMs, a Wald \code{p.value}); \code{effects = "ran_pars"} yields the variance-
+GLMMs, a Wald \code{p.value} plus \code{method}, \code{status}, \code{reliability}, and \code{reason}); \code{effects = "ran_pars"} yields the variance-
 component standard deviations (\verb{sd__<term>}), correlations
 (\verb{cor__<a>.<b>}), and the residual SD (\code{sd__Observation}); \code{effects = "ran_vals"} yields the conditional modes. \code{glance()} returns a one-row
 model-summary frame; \code{augment()} returns the model frame with \code{.fitted}

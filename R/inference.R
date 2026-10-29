@@ -1095,15 +1095,8 @@ confint.mm_glmm <- function(object, parm, level = 0.95,
   if (identical(method, "profile")) {
     # Advice must be actionable on THIS fit: asymptotic Wald intervals are
     # certified only for joint_laplace fits.
-    advice <- if (identical(object$method, "joint_laplace")) {
-      # The bootstrap cannot refit a joint template at this engine pin, so
-      # it must not be advised here.
-      "Use method = \"asymptotic\"."
-    } else {
-      paste0("Use method = \"bootstrap\", or re-fit with ",
-             "glmm(..., method = \"joint_laplace\") and use ",
-             "method = \"asymptotic\".")
-    }
+    advice <- "Use method = \"bootstrap\", or use method = \"asymptotic\" on a certified joint_laplace fit."
+
     mm_abort(
       message = sprintf(
         paste0("`confint(method = \"profile\")` is not available for GLMM ",
@@ -1238,7 +1231,7 @@ print.mm_confint <- function(x, ...) {
 }
 
 mm_contrast_matrix <- function(L, fit) {
-  if (is.null(L)) {
+  if (!is.numeric(L) || is.complex(L)) {
     mm_abort(
       message = "`L` must be a numeric contrast vector or matrix.",
       class = "mm_arg_error",
@@ -1432,6 +1425,22 @@ mm_fixed_effect_term_type_label <- function(type) {
 # payload carries it as `handle` and the model frame is not translated (the
 # engine reuses the live model); `need_data = TRUE` translates it anyway, for
 # verbs that also fit another model to the same data.
+mm_fitted_state <- function(fit) {
+  snapshot <- fit$fit$fitted_state
+  if (!is.character(snapshot) || length(snapshot) != 1L ||
+      is.na(snapshot) || !nzchar(snapshot)) {
+    reason <- fit$fit$restoration_error %||% "This object predates fitted-state snapshots."
+    mm_abort(
+      message = paste("Native fitted-state restoration is unavailable.", reason,
+                      "Stored extractors remain readable; explicitly refit to create a new fitted state."),
+      class = "mm_inference_unavailable",
+      reason_code = "fitted_state_unavailable"
+    )
+  }
+  snapshot
+}
+
+
 mm_rust_fit_bridge_payload <- function(fit, warm_start = FALSE,
                                        reml = isTRUE(fit$REML),
                                        need_data = FALSE) {

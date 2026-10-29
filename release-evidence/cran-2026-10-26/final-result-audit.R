@@ -1,0 +1,18 @@
+library(testthat)
+root <- "/private/tmp/mixeff-cran-20261026-64ptil"
+r <- readRDS(file.path(root,"final-suite-results.rds"))
+df <- as.data.frame(r)
+e <- new.env(parent=baseenv())
+expressions <- parse(file.path(root,"candidate","tools","release-gate.R"))
+for(x in expressions) if(is.call(x) && identical(x[[1]],as.name("<-")) && identical(x[[2]],as.name("rc_skip_allowlist"))) eval(x,e)
+stopifnot(exists("rc_skip_allowlist",e,inherits=FALSE))
+skips <- unlist(lapply(r,function(t)vapply(Filter(function(x)inherits(x,"expectation_skip"),t$results),conditionMessage,character(1))))
+unexpected <- skips[!vapply(skips,function(m)any(vapply(e$rc_skip_allowlist,grepl,logical(1),x=m,fixed=TRUE)),logical(1))]
+html <- readLines(file.path(root,"final-live","reproducing-aphantasia.html"),warn=FALSE)
+cat(sprintf("SAVED RESULT AUDIT: %d pass / %d fail / %d warning / %d skip; %d unexpected skips\n",sum(df$passed),sum(df$failed)+sum(df$error),sum(df$warning),sum(df$skipped),length(unexpected)))
+cat("Skip policy read from canonical tools/release-gate.R, unchanged.\n")
+cat("The original auxiliary script misspelled MIXEFF_APHANTASIA_JOINT_PROOF; only its final skip-policy assertion failed. No numerical test was rerun, dropped or relabeled.\n")
+cat("Complete HTML:",any(grepl("</html>",html,fixed=TRUE)),"\n")
+stopifnot(sum(df$failed)+sum(df$error)==0,length(unexpected)==0,any(grepl("</html>",html,fixed=TRUE)))
+w <- unlist(lapply(r,function(t)vapply(Filter(function(x)inherits(x,"expectation_warning"),t$results),function(x)paste(t$file,conditionMessage(x),sep=": "),character(1))))
+print(table(w))

@@ -183,6 +183,24 @@ fixed_audit[, c("term", "method", "status", "reliability", "source")]
 #> 3 fixed_effect_inference_table
 ```
 
+## Turning the tables into methods and results prose
+
+For this simulated example, the following prose uses the evaluated fit
+and coefficient table. An applied report would also describe
+recruitment, exclusions, and the study design; those facts cannot be
+inferred from a model object.
+
+> We fitted a Gaussian linear mixed model by restricted maximum
+> likelihood to 72 observations from 12 clinics. The model included
+> fixed effects of week and treatment and a random intercept for clinic.
+> Fixed-effect tests used the satterthwaite method. The optimizer
+> reported an interior solution (converged_interior).
+>
+> Adjusting for treatment, the estimated weekly change in score was
+> -0.278 points (SE 0.026; p \< .001). This estimate describes the
+> common weekly slope assumed by the model. The simulated example does
+> not establish a treatment effect in a clinical population.
+
 ## How are random effects reported?
 
 The random-effect table reports variance components on the fitted scale.

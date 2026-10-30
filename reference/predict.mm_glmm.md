@@ -142,16 +142,20 @@ values.
 
 Standard errors and confidence intervals: population (`re.form = NA`)
 SEs are the fixed-effect Wald SE mapped through the link by the delta
-method; conditional (`re.form = NULL`) SEs and confidence bounds come
-from the engine prediction-variance payload. The engine certifies these
-rows for `method = "joint_laplace"` fits and for `pirls_profiled` fits
-whose post-fit profiled-optimum certificate is issued (per-row status
-`"available"`). Uncertified fits (e.g. singular fits, or fits whose
-certificate fails) keep status `"degraded"`, and their conditional SEs
-and bounds are withheld as `NA` with the engine's reason in the
-`mm_reason` attribute — consistent with the package's "no fake
-certainty" contract. For a fit with an offset, conditional SEs/intervals
-on `newdata` are available on the link scale only.
+method, subject to the same inference capability as
+[`confint()`](https://rdrr.io/r/stats/confint.html). Unavailable Wald
+inference yields `NA` uncertainty; explicit working-Hessian opt-in is
+identified by the `mm_status` attribute. Conditional (`re.form = NULL`)
+SEs and confidence bounds come from the engine prediction-variance
+payload. The engine certifies these rows for `method = "joint_laplace"`
+fits and for `pirls_profiled` fits whose post-fit profiled-optimum
+certificate is issued (per-row status `"available"`). Uncertified fits
+(e.g. singular fits, or fits whose certificate fails) keep status
+`"degraded"`, and their conditional SEs and bounds are withheld as `NA`
+with the engine's reason in the `mm_reason` attribute — consistent with
+the package's "no fake certainty" contract. For a fit with an offset,
+conditional SEs/intervals on `newdata` are available on the link scale
+only.
 
 Known lme4 2.1-0 discrepancy: for GLMMs with a free dispersion parameter
 (Gamma, inverse Gaussian, Gaussian with a non-identity link) lme4 \>=

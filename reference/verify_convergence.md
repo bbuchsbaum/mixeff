@@ -123,21 +123,16 @@ An object of class `mm_convergence_verification` carrying:
 
 ## Details
 
-The verifier refits the model from the stored specification before it
-starts, so a call costs roughly `2 + jitter_starts` fits (plus consensus
-runs when enabled). GLMM verification uses wider default tolerances than
-the LMM route (objective `1e-4`, beta `1e-3`): each objective evaluation
-carries inner-PIRLS noise, and the joint path's derivative-free beta
-search bounds beta reproducibility at its `ftol` stop. A GLMM whose
-requested `joint_laplace` estimator was substituted by the labelled
-fast-PIRLS fallback (see
-[`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md))
-re-requests the joint route; when the verification refit falls back the
-same way — the expected case — every run verifies the profiled objective
-the fitted numbers came from, with ordinary objective deltas. Runs are
-only reported as substitution runs (no objective delta) in the
-asymmetric case where the reference refit certifies the joint route but
-an individual verification run falls back.
+The verifier queries the recorded fitted solution as its baseline,
+reusing a live handle or restoring its snapshot without optimization.
+Only the requested restart, jitter, and consensus runs perform new fits.
+A missing or incompatible snapshot without a usable handle is refused.
+GLMM verification uses wider default tolerances than the LMM route
+(objective `1e-4`, beta `1e-3`) because its objective carries
+inner-PIRLS noise. A substituted fit is verified against its recorded
+effective estimator; a verification run that changes estimator is
+labelled as a substitution, rather than compared using an objective from
+a different estimator.
 
 ## See also
 

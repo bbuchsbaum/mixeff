@@ -197,10 +197,13 @@ compare(reduced, fit)
 #>              FALSE                       FALSE        auto             never
 ```
 
+By default,
 [`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
-records that likelihood-ratio p-values are asymptotic. If you want a
-simulation-based check for a small example, use the bootstrap path. The
-bootstrap p-value is `(b + 1) / (successful + 1)`, where `b` counts
+reports an asymptotic likelihood-ratio test. When fixed-effect models
+fitted by REML are compared, it refits them by ML and records that
+change; it does not apply Satterthwaite degrees of freedom. If you want
+a simulation-based check for a small example, use the bootstrap path.
+The bootstrap p-value is `(b + 1) / (successful + 1)`, where `b` counts
 replicates at or above the observed statistic and `successful` counts
 the refits that completed with a finite statistic — equal to `nsim` only
 when every replicate succeeds, as it does in these seeded runs. So at
@@ -680,8 +683,11 @@ statistical approximation than `glmer()`’s joint Laplace fit — it can be
 less accurate for overdispersed models and models with observation-level
 random effects.
 
-Exactly three routes lead to reportable GLMM inference, and every
-refusal names them:
+Two routes support reporting; a third exposes an uncertified
+approximation for exploration. Refusal messages name the reporting
+routes and point to
+[`inference_options()`](https://bbuchsbaum.github.io/mixeff/reference/inference_options.md)
+for the complete menu:
 
 1.  **Certified joint Wald.** The default `method = "joint_laplace"`;
     standard errors, z tests, and Wald intervals come from a covariance
@@ -689,13 +695,14 @@ refusal names them:
     [`vignette("glmm")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md)
     is the operational quickstart for this route, including its parity
     with `glmer()` and its runtime notice.
-2.  **Parametric bootstrap on profiled fits.**
-    `confint(fit, method = "bootstrap")` simulates from the fitted model
-    and refits the same profiled estimator. It works for every supported
-    family, including negative binomial — which has no joint-Laplace
-    route, so the bootstrap is its only interval path — and costs `nsim`
-    refits. On `joint_laplace` fits the bootstrap is refused at this
-    engine pin; those fits have certified Wald intervals instead.
+2.  **Parametric bootstrap.** `confint(fit, method = "bootstrap")`
+    restores the fitted template, simulates responses and refits the
+    same effective estimator. Both profiled and joint-Laplace fits are
+    supported. A joint replicate that cannot retain its estimator is
+    counted as failed. The route works for every supported family,
+    including negative binomial, and costs `nsim` refits. Inspect the
+    successful/failed counts and Monte Carlo error attached to the
+    result; a finite interval alone does not establish calibration.
 3.  **Working-Hessian approximation, explicit opt-in.** For exploration
     and screening only. Every unlocked row is labeled
     `wald_z_working_hessian` with status `available_noninferential` and
@@ -779,6 +786,50 @@ gci
 #> attr(,"mm_bootstrap")$threads
 #> [1] 1
 #> 
+#> attr(,"mm_bootstrap")$template
+#> attr(,"mm_bootstrap")$template$effective_method
+#> [1] "fast_pirls_profiled"
+#> 
+#> attr(,"mm_bootstrap")$template$estimation_method
+#> [1] "fast_pirls_profiled"
+#> 
+#> attr(,"mm_bootstrap")$template$n_agq
+#> [1] 1
+#> 
+#> attr(,"mm_bootstrap")$template$objective_definition
+#> [1] "profiled_glmm_deviance"
+#> 
+#> attr(,"mm_bootstrap")$template$optimizer
+#> [1] "cobyla"
+#> 
+#> attr(,"mm_bootstrap")$template$optimizer_backend
+#> [1] "native"
+#> 
+#> attr(,"mm_bootstrap")$template$optimizer_convergence_status
+#> [1] "converged"
+#> 
+#> attr(,"mm_bootstrap")$template$optimizer_feval
+#> [1] 20
+#> 
+#> attr(,"mm_bootstrap")$template$optimizer_fit_log_len
+#> [1] 20
+#> 
+#> attr(,"mm_bootstrap")$template$optimizer_status
+#> [1] "FTOL_REACHED"
+#> 
+#> attr(,"mm_bootstrap")$template$requested_method
+#> [1] "fast_pirls_profiled"
+#> 
+#> attr(,"mm_bootstrap")$template$response_constants
+#> [1] "dropped"
+#> 
+#> 
+#> attr(,"mm_bootstrap")$template_objective
+#> [1] 179.4842
+#> 
+#> attr(,"mm_bootstrap")$replicate_estimator_policy
+#> [1] "preserve_effective_or_fail"
+#> 
 #> attr(,"mm_bootstrap")$std_errors
 #> (Intercept)           x 
 #>   0.3686496   0.2926142 
@@ -837,10 +888,11 @@ easy to conflate:
     [`mm_comparisons()`](https://bbuchsbaum.github.io/mixeff/reference/mm_grid.md)
     differences.
 3.  **An empirical-distribution average** — the average of predictions
-    over the observed covariate rows, weighted as the data are weighted.
-    `mixeff` has no dedicated verb for this; it is what you get by
-    averaging [`predict()`](https://rdrr.io/r/stats/predict.html) over
-    the model frame.
+    over observed covariate rows. For a fixed-effect average comparable
+    to the grid summaries, average `predict(fit, re.form = NA)`; supply
+    weights explicitly if rows should not contribute equally. Default
+    predictions include fitted random effects and target a different
+    summary.
 4.  **A causal average treatment effect** — the expected difference in
     potential outcomes under treatment versus control. Only this one is
     a causal quantity, and no mixed-model contrast supplies it by
@@ -1017,11 +1069,12 @@ round(imbalance_pull, 2)
 #> [1] 0.44
 ```
 
-The clinic imbalance pulls each raw mean 0.44 points toward the clinics
-its arm over-samples; the marginal means average over the model’s
-fixed-effect grid instead and are free of that shift. The size of the
-gap depends on how unbalanced the design is and how large the group
-effects are.
+The largest absolute discrepancy between a raw treatment mean and its
+model-adjusted mean is 0.44 points. The adjusted means average
+fixed-effect predictions over the reference grid, rather than over each
+arm’s observed clinic composition. This changes the weighting and uses
+the model’s assumptions about clinic effects; it does not guarantee
+removal of bias from imbalance or model misspecification.
 
 ### Pairwise comparisons with `mm_comparisons()`
 
@@ -1042,10 +1095,11 @@ ctr$table[, c("label", "estimate", "conf_low", "conf_high", "p_value", "method")
 The `active - control` row is the equal-weight reference-grid contrast —
 estimand (2) in the list above, averaged over both timepoints — tested
 with a Satterthwaite *t* and graded `moderate` reliability in the same
-row. In a randomized design you may argue it also estimates the causal
-quantity (4); that argument rests on the design’s identification
-assumptions, and it is yours to make — the fitted model does not certify
-it.
+row. Because it averages pre- and post-treatment outcomes, it is neither
+the post-treatment contrast nor the treatment-by-time contrast. Choose
+that time-specific estimand explicitly when it is the scientific target.
+A causal interpretation also requires assumptions about treatment
+assignment and outcome measurement that the fitted model cannot certify.
 
 ### Conditional comparisons with `by =`
 
@@ -1201,10 +1255,12 @@ On an interior LMM fit,
 [`summary()`](https://rdrr.io/r/base/summary.html),
 [`contrast()`](https://bbuchsbaum.github.io/mixeff/reference/contrast.md),
 [`test_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_effect.md),
-[`anova()`](https://rdrr.io/r/stats/anova.html), and
-[`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
-return labeled finite-sample inference, with `"auto"` resolving to
+and single-model [`anova()`](https://rdrr.io/r/stats/anova.html) return
+labeled finite-sample inference, with `"auto"` resolving to
 Satterthwaite.
+[`compare()`](https://bbuchsbaum.github.io/mixeff/reference/compare.md)
+defaults to an asymptotic likelihood-ratio test and can refit REML
+models by ML.
 
 On the boundary fit in this vignette:
 
@@ -1224,9 +1280,11 @@ On the boundary fit in this vignette:
 - boundary LRTs are available for variance-component tests, not
   fixed-effect tests.
 
-For GLMMs, three routes lead to reportable inference: certified joint
-Wald (`method = "joint_laplace"`), the parametric bootstrap on profiled
-fits, and the labeled working-Hessian opt-in for screening.
+For GLMM reporting, use certified joint Wald
+(`method = "joint_laplace"`) or the parametric bootstrap of the
+effective estimator. The labeled working-Hessian opt-in is for
+exploration and screening; its `moderate` grade does not make it
+certified inference.
 
 Every route either returns a labeled result or refuses with a stable
 reason.

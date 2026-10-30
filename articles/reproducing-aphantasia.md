@@ -88,7 +88,7 @@ variants run under `MIXEFF_RUN_APHANTASIA_STRESS=true`.
 
 # inference = "working_hessian": this vignette DELIBERATELY opts in to the
 # uncertified working-Hessian approximation, because its purpose below is to
-# measure that approximation against the frozen glmer reference. Without
+# compare the fitted workflow against the frozen glmer reference. Without
 # the opt-in, Wald inference is refused on this fit: the profiled
 # covariance is uncertified.
 primary_fit <- glmm(
@@ -197,12 +197,14 @@ rbind(
 ```
 
 The RT sensitivity is a Gaussian LMM over correct trials with finite
-positive reaction times.
+positive reaction times. Re-standardize log SOA within that subset, as
+in the manuscript.
 
 ``` r
 
 rt_dat <- subset(primary_dat, correct == 1 & is.finite(rt) & rt > 0)
 rt_dat$log_rt <- log(rt_dat$rt)
+rt_dat$soa_s <- as.numeric(scale(rt_dat$soa_log))
 
 rt_fit <- lmm(
   log_rt ~ group * mask * soa_s + block +
@@ -224,8 +226,13 @@ through three `mixeff` functions. The chunks below run only when live
 fitting is enabled (`MIXEFF_RUN_APHANTASIA_VIGNETTE=true`); otherwise
 the same calls remain valid against any locally-built fit.
 
-This section is the worked example behind the package’s working-Hessian
-caveat. The fit above passes `inference = "working_hessian"` — the
+The reference comparison depends on the random-effect family, factor
+coding, estimator, and covariance calculation. The `||` factor expansion
+now follows lme4; inspect those choices before attributing any
+difference to a single cause.
+
+This section illustrates the working-Hessian opt-in in that broader
+workflow. The fit above passes `inference = "working_hessian"` — the
 explicit opt-in that unlocks the UNCERTIFIED profiled working-Hessian
 approximation. Without it, a profiled fit withholds standard errors,
 tests, and intervals on every route
@@ -246,12 +253,12 @@ sm$vcov_status
 
 The rows carry `reliability = "moderate"` and status
 `available_noninferential`: the working-Hessian covariance is not the
-same estimator as `lme4::vcov(glmer_fit)`. On this dataset its Wald
-standard errors for the difference-in-differences contrasts come within
-0.1% of glmer’s (0.0807 vs 0.0808 at the centered SOA), and the opt-in
-test suite pins them to ±0.002. That agreement is measured here, not
-certified in general, which is why the approximation stays opt-in rather
-than default.
+same estimator as `lme4::vcov(glmer_fit)`. In the recorded comparison at
+an earlier engine pin, its Wald standard errors for the
+difference-in-differences contrasts come within 0.1% of glmer’s (0.0807
+vs 0.0808 at the centered SOA), and the opt-in test suite pins them to
+±0.002. That agreement is measured here, not certified in general, which
+is why the approximation stays opt-in rather than default.
 
 The manuscript’s primary estimand — the difference-in-differences
 contrast at the centered SOA and at the focal 25 ms SOA — is a linear
@@ -301,7 +308,7 @@ contrasts are pinned.
 
 `emmeans` works on `mm_glmm` via `emm_basis.mm_glmm`. Population-level
 cell means at the centered SOA, on the response (probability) scale,
-recover the same group × mask × group pattern the manuscript reports:
+recover the same group × mask pattern the manuscript reports:
 
 ``` r
 

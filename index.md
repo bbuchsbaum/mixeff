@@ -7,8 +7,8 @@ the [`mixeff-rs`](https://github.com/bbuchsbaum/mixeff-rs) engine. The R
 interface uses familiar formulas and extractors — `fixef`, `ranef`,
 `VarCorr`, `predict`, `anova`, `summary`, `update`,
 [`broom::tidy`](https://generics.r-lib.org/reference/tidy.html), and
-(for LMMs) `simulate` — while keeping the compiled model, optimizer
-result, and inference metadata available for inspection.
+`simulate` — while keeping the compiled model, optimizer result, and
+inference metadata available for inspection.
 
 It is not a drop-in replacement for `lme4`: use
 [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) or
@@ -24,9 +24,9 @@ Documentation: <https://bbuchsbaum.github.io/mixeff/>
 Three parts of the design are useful in practice:
 
 - **Fast repeated fitting.** On the LMM scaling benchmark shipped with
-  the package, `mixeff` was faster than `lme4` at every tested size,
-  with small absolute timings either way; the measured numbers are in
-  the [benchmarking
+  the package (engine `4a2abb3`), `mixeff` was faster than `lme4` at
+  every tested size, with small absolute timings either way; the
+  measured numbers are in the [benchmarking
   article](https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html).
   This matters most for bootstrap, simulation, and sensitivity analyses,
   where the same model may be refit hundreds or thousands of times.
@@ -115,11 +115,10 @@ Here is a compact view of the sleep-study fit:
 ``` r
 
 cert <- optimizer_certificate(fit)$table
-subset(cert, metric %in% c("status", "optimizer", "iterations"))
+subset(cert, metric %in% c("status", "optimizer"))
 #>      metric              value
 #>      status converged_interior
 #>   optimizer           trust_bq
-#>  iterations                457
 ```
 
 Other inspection functions expose different parts of the same fitted
@@ -146,19 +145,20 @@ optimizer_certificate(restored)
 ```
 
 `revive(restored)` resets the object’s process-local cache after
-serialization; it is cheap and safe to call after every
-[`readRDS()`](https://rdrr.io/r/base/readRDS.html). The current bridge
-intentionally leaves the Rust handle absent.
+serialization and clears a dead handle. Native queries reuse a live
+handle when available; after reload they restore a compatible saved
+fitted state without optimization. Stored extractors remain readable if
+restoration is unavailable, while native queries refuse with a reason.
 
 ## Performance
 
 The committed scaling benchmark fits the same LMM with
 [`mixeff::lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
 and [`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) across five
-common random-effects designs. On that benchmark, `mixeff` was faster at
-every tested size, with small absolute timings in every cell — the
-behavior of one harness, not a universal speed guarantee. The measured
-timings live in the [benchmarking
+common random-effects designs. In the historical run (engine `4a2abb3`),
+`mixeff` was faster at every tested size, with small absolute timings in
+every cell — the behavior of one harness, not a universal speed
+guarantee. The measured timings live in the [benchmarking
 article](https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html),
 and the scripts and full CSV are included so the comparison can be rerun
 on a relevant machine and model:
@@ -176,22 +176,7 @@ can support. It does not rank or replace candidate models.
 
 ``` r
 
-explain_model(compile_model(score ~ week + (1 | clinic), df))
-#> Random effects explanation:
-#>   formula: score ~ 1 + week + (1 | clinic)
-#>
-#> Random effects:
-#>   r0:
-#>     wrote:      (1 | clinic)
-#>     canonical:  (1 | clinic)
-#>     named form: re(group = clinic, intercept = TRUE, slopes = NULL, cov = "scalar")
-#>     scope:      `clinic` units may differ in average outcome.
-#>     covariance: scalar; theta parameters: 1
-#>     support:    sufficient; group levels: 8; min rows/group: 6; median rows/group: 6
-#>     variation:  intercept=not_assessed
-#>
-#> Design notes:
-#>   scope_note: `week` varies within `clinic`, so a `clinic`-level slope is structurally possible
+explain_model(compile_model(Reaction ~ Days + (1 | Subject), lme4::sleepstudy))
 ```
 
 Split-block, double-bar, and nested formulas are expanded explicitly and
@@ -206,13 +191,14 @@ datasets, and the family/link table ships as a machine-readable registry
 ([`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)).
 
 [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
-defaults to `method = "joint_laplace"`, glmer’s joint Laplace estimator,
-with certified Wald inference. The opt-in fast profiled PIRLS estimator
-(`method = "pirls_profiled"`, lme4’s `nAGQ = 0`) is not the same
-estimator as `glmer()`, and it returns point estimates only — standard
-errors, z tests, p-values, and confidence intervals are withheld with a
-note naming the alternative. Negative-binomial families, which have no
-joint route yet, use the profiled path (announced). See the [GLMM
+defaults to `method = "joint_laplace"`, glmer’s joint Laplace estimator;
+Wald inference is available when the fitted covariance is certified. The
+opt-in fast profiled PIRLS estimator (`method = "pirls_profiled"`,
+lme4’s `nAGQ = 0`) is not the same estimator as `glmer()`, and it
+returns point estimates only — standard errors, z tests, p-values, and
+confidence intervals are withheld with a note naming the alternative.
+Negative-binomial families, which have no joint route yet, use the
+profiled path (announced). See the [GLMM
 vignette](https://bbuchsbaum.github.io/mixeff/articles/glmm.html) for
 the current boundaries.
 

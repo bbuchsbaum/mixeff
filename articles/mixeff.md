@@ -18,8 +18,7 @@ speaks the same formula language, and the familiar extractors —
 [`summary()`](https://rdrr.io/r/base/summary.html),
 [`update()`](https://rdrr.io/r/stats/update.html) — are there. Where
 their output or coverage differs from lme4 (for example the default
-[`confint()`](https://rdrr.io/r/stats/confint.html) method, or
-[`simulate()`](https://rdrr.io/r/stats/simulate.html) being LMM-only),
+[`confint()`](https://rdrr.io/r/stats/confint.html) method),
 [`vignette("lme4-migration")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md)
 lists it. On the package’s supported envelope, statistical answers agree
 with `lme4` within documented tolerances on the parity datasets shipped
@@ -313,14 +312,27 @@ coefficients.
 A mixed-model fit often outlives the R session that produced it: you fit
 a model today, save it with the analysis, hand the script to a
 collaborator, and reopen the fit six months later for a contrast, a
-revision, or a referee response. `mixeff` stores the fitted values, the
-random-effects design, the convergence record, and the inference labels
-inside the R object, so each of those tasks works after
-[`readRDS()`](https://rdrr.io/r/base/readRDS.html) without recomputing
-the fit.
+revision, or a referee response. Stored coefficients, fitted values,
+variance components, and audit records survive
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html) without a Rust
+handle. The examples above check those stored values.
 
-The round trip above used the singular fit; the same guarantees hold for
-an ordinary interior fit.
+New LMM contrasts and term tests, conditional random-effect variances,
+engine-backed prediction, and prediction uncertainty reuse a live native
+handle. After serialization, native queries restore the recorded fitted
+state without running an optimizer.
+[`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
+resets the R cache and clears a dead handle; restoration rebuilds matrix
+factors at the saved parameters. Derivative calculations required by an
+inference method may still take time.
+
+Restoration requires a matching engine source and build configuration.
+An fit without a live handle and without a compatible snapshot keeps its
+stored extractors but refuses native queries that require restoration.
+Keep the package and engine build with the saved fit when reproducing an
+analysis. Explicit refitting, bootstrap, profile intervals and
+convergence verification still perform the optimization those operations
+request.
 
 ``` r
 
@@ -341,9 +353,9 @@ restored <- revive(restored)
 resets the object’s process-local cache. It is cheap and safe to call
 after every [`readRDS()`](https://rdrr.io/r/base/readRDS.html), but the
 extractors and inference functions shown below also work on the plain
-[`readRDS()`](https://rdrr.io/r/base/readRDS.html) result — the durable
-values live in the object itself, and the Rust handle is deliberately
-absent after reload.
+[`readRDS()`](https://rdrr.io/r/base/readRDS.html) result. Stored
+extractors read durable values; operations requiring a native model
+restore the saved state as described above when no live handle remains.
 
 ``` r
 
@@ -364,9 +376,10 @@ reporting_table(restored, "fixed_effects")
 #>  6.440574e-03 satterthwaite available    moderate
 ```
 
-Conditional variances for random effects also survive the round trip.
-With `condVar = TRUE`, each grouping table carries a finite `postVar`
-array.
+Conditional variances for random effects can also be requested after
+reload. The engine restores the saved fit without optimization. With
+`condVar = TRUE`, each grouping table in this example carries a finite
+`postVar` array.
 
 ``` r
 
@@ -460,5 +473,5 @@ object.
   glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html),
   [reporting
   workflows](https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.html),
-  and a [full published-study
-  reproduction](https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html).
+  and [selected analyses from a submitted
+  manuscript](https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html).

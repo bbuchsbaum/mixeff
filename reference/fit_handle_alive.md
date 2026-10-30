@@ -13,9 +13,9 @@ reuse it instead of refitting. A `FALSE` result does not mean the fit is
 unusable: the handle does not survive
 [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) /
 [`readRDS()`](https://rdrr.io/r/base/readRDS.html) or a new R process,
-and those computations then refit the model from the stored model frame,
-with identical results; extractors read from the durable artifact and
-flat R-side payload, and
+and those computations then restore the fitted snapshot without
+optimization (or refuse if unavailable); extractors read from the
+durable artifact and flat R-side payload, and
 [`revive()`](https://bbuchsbaum.github.io/mixeff/reference/revive.md)
 recreates the lazy cache after serialization. Set
 `options(mixeff.keep_handle = FALSE)` before fitting to not keep handles

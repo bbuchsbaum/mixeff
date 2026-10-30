@@ -6,15 +6,21 @@ library(mixeff)
 ```
 
 [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) fits
-generalized linear mixed models by one of two estimators, and the
-difference between them decides what inference you get:
+mixed models for binary or grouped-binomial outcomes and for counts with
+Poisson or negative-binomial families, and positive continuous outcomes
+with a Gamma family. Choose the family and link for the response, then
+inspect the estimator and inference contract.
+
+Two estimators are available for binomial, Poisson, and Gamma models.
+The requested estimator affects what inference may be available:
 
 - **`method = "joint_laplace"` (the default)** maximizes the same joint
   Laplace objective as
   [`lme4::glmer()`](https://rdrr.io/pkg/lme4/man/glmer.html) (at
-  `nAGQ = 1`). It returns the full inference table — standard errors, z
-  tests, and Wald confidence intervals — from a covariance the engine
-  certifies.
+  `nAGQ = 1`). When the fitted covariance is certified, it supplies
+  standard errors, z tests, and Wald confidence intervals. Inspect the
+  effective estimator and inference status; a joint request alone does
+  not certify a fit.
 - **`method = "pirls_profiled"`** is a fast profiled PIRLS fitter, the
   analogue of lme4’s `nAGQ = 0` (`glmm(..., nAGQ = 0)` selects it). It
   returns point estimates, fitted values, and variance components, but
@@ -29,14 +35,16 @@ difference between them decides what inference you get:
   [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
   selects it for them and says so with an `mm_estimator_notice` message.
 
-Three inference routes exist, and every refusal message names them:
+There are two reporting routes and an exploratory opt-in. Refusal
+messages name the reporting routes and point to the full menu:
 
-1.  **Certified Wald** — the default `method = "joint_laplace"` gives
-    standard errors, z tests, and Wald intervals from an
-    engine-certified covariance.
+1.  **Certified Wald** — `method = "joint_laplace"` supplies standard
+    errors, z tests, and Wald intervals when the covariance is
+    certified.
 2.  **Parametric bootstrap** — `confint(fit, method = "bootstrap")` on
-    profiled-estimator fits, including negative binomial (which has no
-    joint-Laplace route).
+    profiled or joint-Laplace fits. Replicates preserve the fitted
+    estimator; failed refits are counted. Negative binomial uses the
+    profiled route.
 3.  **Working-Hessian approximation (opt-in)** —
     `inference_options(fit)` shows the invocation and its caveat.
 
@@ -45,7 +53,8 @@ accounting the bootstrap reports, and the full availability/refusal
 matrix — is stated once, in
 [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md).
 The practical rule: report with the default (`joint_laplace`); use
-`pirls_profiled` when speed matters or for its parametric bootstrap.
+`pirls_profiled` when its speed or approximation is appropriate. Inspect
+the fit and inference statuses before reporting either route.
 
 The example uses the
 [`lme4::cbpp`](https://rdrr.io/pkg/lme4/man/cbpp.html) data. As in
@@ -274,7 +283,7 @@ round(rbind(
 #>                (Intercept) period2 period3 period4
 #> pirls_profiled     -1.3605 -0.9762 -1.1111 -1.5597
 #> joint_laplace      -1.3985 -0.9923 -1.1287 -1.5803
-#> glmer              -1.3983 -0.9919 -1.1282 -1.5797
+#> glmer              -1.3985 -0.9923 -1.1287 -1.5803
 ```
 
 ## Prediction
@@ -366,7 +375,7 @@ rbind(
                                   has_numbers = any(is.finite(coef_tab[, "Std. Error"]))),
   confint           = glmm_status(confint(glmm_fast)),
   simulate          = glmm_status(stats::simulate(glmm_fit, nsim = 1L, seed = 1L)),
-  refit             = glmm_status(refit(glmm_fit,
+  refit             = glmm_status(lme4::refit(glmm_fit,
                                         stats::simulate(glmm_fit, seed = 1L)))
 )
 #>                                        status                    class
@@ -384,7 +393,8 @@ not certified for Wald intervals); the same request on the default
 joint-Laplace fit succeeds, as shown above. The bootstrap route
 complements it from the other side:
 `confint(glmm_fast, method = "bootstrap")` succeeds on the profiled fit
-(route 2 above) and is refused on joint-Laplace fits at this engine pin.
+(route 2 above); it also supports joint-Laplace fits, retaining the
+effective estimator and counting failed refits.
 [`simulate()`](https://rdrr.io/r/stats/simulate.html) draws family-aware
 responses with lme4’s semantics (new random effects by default,
 `re.form = NULL` to condition on the fitted ones), and

@@ -37,12 +37,12 @@ A data frame.
 
 `tidy()` returns one row per model term. `effects = "fixed"` yields the
 fixed-effect coefficients (`estimate`, `std.error`, `statistic`, and,
-for GLMMs, a Wald `p.value`); `effects = "ran_pars"` yields the
-variance- component standard deviations (`sd__<term>`), correlations
-(`cor__<a>.<b>`), and the residual SD (`sd__Observation`);
-`effects = "ran_vals"` yields the conditional modes. `glance()` returns
-a one-row model-summary frame; `augment()` returns the model frame with
-`.fitted` and `.resid` columns.
+for GLMMs, a Wald `p.value` plus `method`, `status`, `reliability`, and
+`reason`); `effects = "ran_pars"` yields the variance- component
+standard deviations (`sd__<term>`), correlations (`cor__<a>.<b>`), and
+the residual SD (`sd__Observation`); `effects = "ran_vals"` yields the
+conditional modes. `glance()` returns a one-row model-summary frame;
+`augment()` returns the model frame with `.fitted` and `.resid` columns.
 
 These methods are registered with generics when the package is loaded;
 call them via

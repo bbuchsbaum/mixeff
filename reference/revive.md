@@ -10,8 +10,10 @@ a dead one (an external pointer restored by
 [`readRDS()`](https://rdrr.io/r/base/readRDS.html)); it does not refit
 the model. Without a live handle, computations that need the engine
 model (contrasts, [`summary()`](https://rdrr.io/r/base/summary.html)
-tests, predictions with intervals, profiles, bootstraps) refit it from
-the stored model frame, with identical results.
+tests, predictions with intervals, profiles, bootstraps) restore the
+recorded fitted snapshot without optimization. If the snapshot is
+missing or incompatible, native queries refuse while stored extractors
+remain readable.
 
 ## Usage
 

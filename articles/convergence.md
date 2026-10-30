@@ -34,12 +34,12 @@ fit_status(fit)
 #> [1] "converged_interior"
 ```
 
-`converged_interior` means the optimizer returned a finite interior
-solution that passed mixeff’s declared numerical checks, with every
-variance component away from zero. It does not establish global
-optimality, correct model specification, or that the data carry enough
-information — no numerical status can — but it is the status every other
-block of a [`summary()`](https://rdrr.io/r/base/summary.html) assumes.
+`converged_interior` means the engine accepted a finite interior
+solution under its convergence rules, with every variance component away
+from zero. Individual derivative checks can still be unavailable; the
+certificate below records which checks completed. The status does not
+establish global optimality, correct model specification, or that the
+data carry enough information.
 
 The status changes when something needs your attention. The vocabulary
 has three values you will meet in practice:
@@ -81,6 +81,12 @@ optimizer_certificate(fit)
 #>             hessian_rank                    1
 #>         information_rank                    1
 ```
+
+For GLMMs, optimizer evidence and inference covariance are separate
+records. The optimizer’s Hessian check can be unavailable even when the
+later joint-Laplace covariance calculation succeeds. Read the inference
+row’s status and reliability to assess a standard error or interval; the
+convergence label alone does not establish its availability.
 
 ## Boundary and reduced-rank fits are labeled facts
 
@@ -190,7 +196,7 @@ It is a labeled fact about the fit, recorded in the object rather than
 printed once and lost — and it changes which inference routes the
 package will certify (one sentence on that at the end of this vignette).
 
-## How singularity is decided: rank, not θ entries
+## How singularity relates to θ and rank
 
 To read the boundary structure itself, look at the model’s internal
 coordinates. The random-effect covariance Σ is not optimized directly.
@@ -215,12 +221,14 @@ that is the boundary event behind the `converged_reduced_rank` status.
 
 It is tempting to generalize this to “a zero θ entry means the
 covariance is reduced-rank”. That reading is wrong. A zero
-**off-diagonal** entry of Λ only says the corresponding covariance is
-zero; the covariance matrix can keep full rank. Singularity is a
-property of the covariance matrix’s rank — equivalently its
-eigenstructure — and in this parameterization the rank collapses exactly
-when a **diagonal** entry of Λ is zero. A two-by-two example makes the
-difference concrete:
+**off-diagonal** entry of Λ does not by itself imply reduced rank. In
+the two-dimensional example below, it also makes the covariance zero. In
+larger blocks, covariance entries are sums of products of factor
+entries, so one zero off-diagonal factor entry need not make the
+corresponding covariance zero. Singularity is a property of the
+covariance matrix’s rank — equivalently its eigenstructure — and in this
+parameterization the rank collapses exactly when a **diagonal** entry of
+Λ is zero. A two-by-two example makes the difference concrete:
 
 ``` r
 
@@ -246,7 +254,7 @@ Sigma_diag_zero
 #> [1,] 1.44 0.48
 #> [2,] 0.48 0.16
 eigen(Sigma_diag_zero, symmetric = TRUE)$values
-#> [1] 1.600000e+00 5.551115e-17
+#> [1] 1.600000e+00 4.241052e-17
 ```
 
 With the off-diagonal at zero, both eigenvalues are positive: the
@@ -256,12 +264,11 @@ variance — an ordinary full-rank fit (the model `(1 + days || subj)`
 eigenvalue is zero and the two random effects collapse onto a single
 dimension: that is singularity.
 
-Consistent with this,
 [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md)
-does not scan θ for zeros. It reads the covariance status the engine
-recorded on the fit — the fit status plus the per-block
-effective-covariance status — so its answer is the engine’s rank
-verdict, not an R-side reconstruction.
+follows lme4’s tolerance rule: it checks whether a zero-bounded diagonal
+θ is below `tol` (default `1e-4`). For older fits without a theta map,
+it falls back to the recorded engine covariance and fit statuses. A
+tolerance-based result can differ from an exact rank verdict.
 
 ## Verifying an optimum: `verify_convergence()`
 
@@ -273,6 +280,13 @@ restart from the fitted optimum, one or more jittered restarts, and
 (LMM-only, opt-in) an alternate-optimizer consensus pass. The engine
 judges agreement against explicit tolerances on the objective, θ, and
 the fixed effects, and owns the verdict; R only formats it.
+
+The R bridge reuses a live fitted handle or restores the saved fitted
+state before invoking that workflow. Verification compares its
+deliberate searches against the recorded solution, including after
+reload. If neither a valid handle nor a compatible snapshot is
+available, verification refuses rather than optimizing a replacement
+baseline.
 
 ``` r
 
@@ -371,10 +385,9 @@ package’s no-silent-surgery contract:
   fact that a different estimator than requested produced the numbers.
 - **The checking verb.**
   [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
-  on a substituted fit re-requests the joint route; when the
-  verification refit falls back the same way — the expected case — every
-  run verifies the profiled objective the fitted numbers actually came
-  from.
+  on a substituted fit restores the recorded effective estimator and
+  certificate before checking the solution. Its reference is the fit
+  whose numbers were returned, including any labelled substitution.
 
 On an ordinary fit the record is absent, and its absence is meaningful
 (no substitution happened):

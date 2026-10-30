@@ -28,8 +28,10 @@ and the inference contract in
 
 ## The two edits
 
-An `lmer` script becomes an `lmm` script with two changes: the fitting
-verb and the control object.
+For this supported numeric-predictor example, the fitting verb and
+control object are the two changes. When porting another script, check
+the argument map and the factor, missing-data, and GLMM differences
+below first.
 
 ``` r
 
@@ -83,7 +85,7 @@ directly in your own code.)
 | `isSingular` | `is_singular(fit, tol = 1e-4)` | lme4’s rule (a zero-bounded theta below `tol`), LMM and GLMM; [`lme4::isSingular()`](https://rdrr.io/pkg/lme4/man/isSingular.html) is not a generic, so call [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md) |
 | `ngrps` | identical | interaction/nested groups are named as in lme4 (`a:b`; `b:a` for the nested term of `a/b`) with levels `x:y` |
 | `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
-| `emmeans::emmeans(fit, ~ x)` | supported | estimates and SEs agree with lme4’s; mixeff’s status/reliability/reason audit columns do not survive the emmeans trip, and a profiled (`pirls_profiled`) GLMM refuses inference through emmeans |
+| `emmeans::emmeans(fit, ~ x)` | supported | agreement with lme4 depends on the model, estimator and covariance; mixeff’s status/reliability/reason audit columns do not survive the emmeans trip, and a profiled (`pirls_profiled`) GLMM refuses inference through emmeans |
 | `lmerTest` p-values in [`summary()`](https://rdrr.io/r/base/summary.html) | built in | Satterthwaite/Kenward-Roger native, no extra package; `summary()$coefficients` is lmerTest’s matrix (per-row method labels in `summary()$coef_table`); lmerTest’s `ddf = "Satterthwaite"`/`"Kenward-Roger"`/`"lme4"` is accepted by [`summary()`](https://rdrr.io/r/base/summary.html) and [`anova()`](https://rdrr.io/r/stats/anova.html) |
 | `bootMer(m, FUN, nsim)` | `mm_bootmer(fit, FUN, nsim)` | LMM; a `boot`-compatible result for [`boot::boot.ci()`](https://rdrr.io/pkg/boot/man/boot.ci.html); `type = "semiparametric"` refused |
 | `rePCA`, `lmList`, `allFit` | [`rePCA()`](https://bbuchsbaum.github.io/mixeff/reference/rePCA.md), [`mm_lmlist()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmlist.md), [`mm_allfit()`](https://bbuchsbaum.github.io/mixeff/reference/mm_allfit.md) | `mm_*` names avoid masking lme4’s non-generic functions |
@@ -267,7 +269,7 @@ printing a number without comment:
 | Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
 | Satterthwaite df at a boundary | lmerTest prints df anyway | refused with a reason; use bootstrap |
 | Prediction SE for an unseen grouping level | — | `NA` with the reason in `mm_reason` |
-| GLMM [`confint()`](https://rdrr.io/r/stats/confint.html) | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (lowercase; lme4’s `method = "Wald"` spelling is not accepted); parametric-bootstrap intervals via `method = "bootstrap"` on profiled-estimator fits (like `bootMer`; refused on `joint_laplace` fits at this engine pin); Wald routes refused on `pirls_profiled` fits |
+| GLMM [`confint()`](https://rdrr.io/r/stats/confint.html) | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (also accepting lme4’s `method = "Wald"` spelling); parametric-bootstrap intervals via `method = "bootstrap"` on profiled and joint-Laplace fits (preserving the effective estimator and counting failed refits); Wald routes refused on `pirls_profiled` fits |
 
 Use `inference_options(fit)` to see, before you run anything, which
 inference routes are available on a given fit and why.

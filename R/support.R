@@ -3,7 +3,7 @@
 #' `supported_models()` returns the package's machine-readable support
 #' registry: which GLMM family/link/estimator combinations are supported,
 #' which features are supported, refused, or carry mixeff-specific
-#' semantics, and the package's explicit non-goals. The registry ships as
+#' semantics, and the models and features it does not support. The registry ships as
 #' `inst/support/model-support.json` and is the single source of truth for
 #' the migration vignette's support table; the test suite asserts that the
 #' fitting code enforces exactly this envelope (unsupported combinations
@@ -85,7 +85,7 @@ print.mm_model_support <- function(x, ...) {
   cat("\nFeatures:\n")
   print(x$features[, c("feature", "lmm", "glmm")], row.names = FALSE,
         right = FALSE)
-  cat("\nNon-goals:", paste(x$non_goals, collapse = "; "), "\n")
+  cat("\n", paste(x$non_goals, collapse = "\n"), "\n", sep = "")
   cat("\nGaussian LMMs support the common random-intercept, random-slope,\n")
   cat("nested, and crossed structures; see vignette(\"lme4-migration\") for\n")
   cat("the argument-by-argument map and the feature notes column for\n")

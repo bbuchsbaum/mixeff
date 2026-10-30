@@ -16,7 +16,7 @@ A list of class \code{mm_model_support} with elements
 \code{supported_models()} returns the package's machine-readable support
 registry: which GLMM family/link/estimator combinations are supported,
 which features are supported, refused, or carry mixeff-specific
-semantics, and the package's explicit non-goals. The registry ships as
+semantics, and the models and features it does not support. The registry ships as
 \code{inst/support/model-support.json} and is the single source of truth for
 the migration vignette's support table; the test suite asserts that the
 fitting code enforces exactly this envelope (unsupported combinations

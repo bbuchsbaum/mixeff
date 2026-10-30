@@ -2,8 +2,8 @@
 
 ### Get started
 
-- [Introduction and the Supported Model
-  Contract](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md):
+- [Introduction to
+  mixeff](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md):
 - [Migrating from
   lme4](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md):
 

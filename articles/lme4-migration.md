@@ -5,30 +5,23 @@
 library(mixeff)
 ```
 
-`mixeff` fits lme4-style formulas with the familiar extractors and, on
-its supported envelope, gives statistical answers tested against pinned
-lme4 references within documented tolerances. It is not a literal
-drop-in — you call
-[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) /
-[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) rather
-than `lmer()` / `glmer()`, and requests outside the envelope are changed
-or declined with a diagnostic, never silently. This vignette is the
-verb-for-verb, argument-for-argument map; the generated tables below are
-the envelope’s exact boundary. It is the migration entry in the
-package’s six-vignette set: the support contract itself is stated in
-[`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md),
-the fitting workflows in
+To migrate an lme4 analysis, replace `lmer()` and `glmer()` with
+[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) and
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md), then
+check the argument and output differences below. `mixeff` uses
+lme4-style formulas and supports many of the same extractors, but some
+arguments, defaults, and inference methods differ. Tests compare results
+with pinned lme4 references using documented tolerances.
+
+The function and argument tables describe these differences. The support
+registry near the end lists supported models. For worked examples, see
 [`vignette("lmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lmm.md)
 and
-[`vignette("glmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md),
-convergence and boundary semantics in
-[`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md),
-and the inference contract in
-[`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md).
+[`vignette("glmm", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md).
 
-## The two edits
+## A migration example
 
-For this supported numeric-predictor example, the fitting verb and
+For this supported numeric-predictor example, the fitting function and
 control object are the two changes. When porting another script, check
 the argument map and the factor, missing-data, and GLMM differences
 below first.
@@ -56,7 +49,7 @@ lme4 is installed; use
 [`lme4::sleepstudy`](https://rdrr.io/pkg/lme4/man/sleepstudy.html)
 directly in your own code.)
 
-## Verb map
+## Corresponding functions
 
 | lme4 | mixeff | Notes |
 |----|----|----|
@@ -85,7 +78,7 @@ directly in your own code.)
 | `isSingular` | `is_singular(fit, tol = 1e-4)` | lme4’s rule (a zero-bounded theta below `tol`), LMM and GLMM; [`lme4::isSingular()`](https://rdrr.io/pkg/lme4/man/isSingular.html) is not a generic, so call [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md) |
 | `ngrps` | identical | interaction/nested groups are named as in lme4 (`a:b`; `b:a` for the nested term of `a/b`) with levels `x:y` |
 | `broom.mixed::tidy/glance/augment` | supported | registered for `mm_lmm`/`mm_glmm` |
-| `emmeans::emmeans(fit, ~ x)` | supported | agreement with lme4 depends on the model, estimator and covariance; mixeff’s status/reliability/reason audit columns do not survive the emmeans trip, and a profiled (`pirls_profiled`) GLMM refuses inference through emmeans |
+| `emmeans::emmeans(fit, ~ x)` | supported | agreement with lme4 depends on the model, estimator and covariance; mixeff’s status/reliability/reason audit columns are omitted from emmeans output, and a profiled (`pirls_profiled`) GLMM refuses inference through emmeans |
 | `lmerTest` p-values in [`summary()`](https://rdrr.io/r/base/summary.html) | built in | Satterthwaite/Kenward-Roger native, no extra package; `summary()$coefficients` is lmerTest’s matrix (per-row method labels in `summary()$coef_table`); lmerTest’s `ddf = "Satterthwaite"`/`"Kenward-Roger"`/`"lme4"` is accepted by [`summary()`](https://rdrr.io/r/base/summary.html) and [`anova()`](https://rdrr.io/r/stats/anova.html) |
 | `bootMer(m, FUN, nsim)` | `mm_bootmer(fit, FUN, nsim)` | LMM; a `boot`-compatible result for [`boot::boot.ci()`](https://rdrr.io/pkg/boot/man/boot.ci.html); `type = "semiparametric"` refused |
 | `rePCA`, `lmList`, `allFit` | [`rePCA()`](https://bbuchsbaum.github.io/mixeff/reference/rePCA.md), [`mm_lmlist()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmlist.md), [`mm_allfit()`](https://bbuchsbaum.github.io/mixeff/reference/mm_allfit.md) | `mm_*` names avoid masking lme4’s non-generic functions |
@@ -110,7 +103,7 @@ directly in your own code.)
 | `control = lmerControl(optimizer=, optCtrl=)` | `mm_control(optimizer=, max_feval=, optCtrl=, ...)` | the engine picks a default optimizer; [`mm_control()`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md) can override it or cap the evaluation budget |
 | `start` | `mm_control(start=)` | theta warm starts |
 
-## Four differences to check when porting
+## Details to check when porting
 
 **1. Coefficient names match lme4 exactly.** Since 0.2.0,
 [`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
@@ -135,12 +128,13 @@ glmm(cbind(incidence, size - incidence) ~ period + (1 | herd),
 
 **3. The GLMM estimator.**
 [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
-defaults to `method = "joint_laplace"`, glmer’s joint Laplace
-(`nAGQ = 1`) estimator, with certified Wald inference. The fast profiled
-(PIRLS) estimator — lme4’s `nAGQ = 0` — is opt-in; its coefficients do
-**not** match `glmer(nAGQ = 1)` exactly. Negative-binomial families (no
-joint route yet), `nAGQ > 1`, and `inference = "working_hessian"` need
-the profiled path: without an explicit `method`,
+defaults to `method = "joint_laplace"`, which uses glmer’s joint Laplace
+(`nAGQ = 1`) objective. Wald inference is available when the fitted
+covariance passes the engine’s checks. The fast profiled (PIRLS)
+estimator — lme4’s `nAGQ = 0` — is opt-in; its coefficients do **not**
+match `glmer(nAGQ = 1)` exactly. Negative-binomial families (no joint
+route yet), `nAGQ > 1`, and `inference = "working_hessian"` need the
+profiled path: without an explicit `method`,
 [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
 selects it and prints an `mm_estimator_notice` saying so.
 
@@ -218,15 +212,13 @@ an `NA` in its place), and [`vcov()`](https://rdrr.io/r/stats/vcov.html)
 and [`summary()`](https://rdrr.io/r/base/summary.html) cover the
 estimable coefficients only.
 
-## The supported envelope, generated
+## Supported models
 
-The tables below are rendered from the package’s machine-readable
-support registry (`inst/support/model-support.json`, via
-[`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)),
-so this vignette cannot drift from what the code enforces — the test
-suite holds the fitting code, this registry, and the
-[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
-documentation to the same envelope.
+These tables are generated from the package’s support registry
+(`inst/support/model-support.json`, via
+[`supported_models()`](https://bbuchsbaum.github.io/mixeff/reference/supported_models.md)).
+Tests check agreement between the registry, fitting code, and
+documentation.
 
 | family | links | estimators | notes |
 |:---|:---|:---|:---|
@@ -257,19 +249,18 @@ Explicit non-goals: nonlinear mixed models; arbitrary GLM family objects
 or custom links; adaptive Gaussian quadrature as a general estimator
 contract (nAGQ \> 1 is a profiled-path sensitivity mode).
 
-## What is `NA`-with-a-reason (and why)
+## Unavailable results and diagnostics
 
 Where an inference method is unavailable, `mixeff` returns `NA` with a
-machine-readable reason or raises a typed condition, rather than
-printing a number without comment:
+machine-readable reason or raises a typed condition:
 
 | Situation | lme4 (+lmerTest) | mixeff |
 |----|----|----|
 | `NA` in a model variable | silently dropped (`na.omit`) | dropped under the same `na.action`, announced with a typed `mm_rows_dropped` message and recorded in `na.action(fit)` |
 | Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
-| Satterthwaite df at a boundary | lmerTest prints df anyway | refused with a reason; use bootstrap |
+| Satterthwaite df at a boundary | lmerTest computes df | refused with a reason; use bootstrap |
 | Prediction SE for an unseen grouping level | — | `NA` with the reason in `mm_reason` |
 | GLMM [`confint()`](https://rdrr.io/r/stats/confint.html) | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (also accepting lme4’s `method = "Wald"` spelling); parametric-bootstrap intervals via `method = "bootstrap"` on profiled and joint-Laplace fits (preserving the effective estimator and counting failed refits); Wald routes refused on `pirls_profiled` fits |
 
-Use `inference_options(fit)` to see, before you run anything, which
-inference routes are available on a given fit and why.
+Use `inference_options(fit)` to check which inference methods are
+available for a fit and why.

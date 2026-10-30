@@ -82,28 +82,19 @@
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
-<p>You use a linear mixed model when observations are not independent:
-visits within clinics, trials within people, students within classrooms.
-The standard R answer is <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code>.
-<code><a href="../reference/lmm.html">mixeff::lmm()</a></code> accepts the same formula language —
-<code>(1 | group)</code>, <code>(x | group)</code>,
-<code>(1 + x || group)</code>, <code>(1 | a/b)</code>, crossed blocks —
-and the fitted object answers to the common generics:
-<code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">ranef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code>,
-<code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code>,
-<code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>, and friends. The supported surface is documented
-and closed rather than open-ended:
-<code><a href="../articles/mixeff.html">vignette("mixeff", package = "mixeff")</a></code> states the contract,
-and <code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code> gives
-the exact verb-and-argument map.</p>
-<p>What <code><a href="../reference/lmm.html">lmm()</a></code> adds is that the fitted object carries the
-design, the convergence status, and the inference labels with it. You
-can audit, summarize, save, and reload without recomputing.</p>
-<p>This vignette is the LMM walkthrough: reading a random-effects
-formula before you fit, fitting, reading the summary, the standard
-extractors, prediction, and weights — followed by a longer section on
-what the random-effects spellings themselves mean and the compile-time
-design help.</p>
+<p>Linear mixed models account for dependence among observations from
+the same group: visits within clinics, trials within people, or students
+within classrooms. <code><a href="../reference/lmm.html">mixeff::lmm()</a></code> uses lme4-style
+random-effects formulas, including <code>(1 | group)</code>,
+<code>(x | group)</code>, <code>(1 + x || group)</code>, nested groups,
+and crossed groups. Fitted models support the usual R functions for
+summaries, predictions, and extracting estimates.</p>
+<p>This vignette covers fitting and inspecting a model, prediction, case
+weights, and the meaning of random-effects formulas. For supported
+models and persistence, see
+<code><a href="../articles/mixeff.html">vignette("mixeff", package = "mixeff")</a></code>; for differences
+from lme4, see
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code>.</p>
 <div class="section level2">
 <h2 id="the-data">The data<a class="anchor" aria-label="anchor" href="#the-data"></a>
 </h2>
@@ -124,32 +115,26 @@ package.</p>
 <span><span class="co">#&gt;   ..$ dimnames:List of 2</span></span>
 <span><span class="co">#&gt;   .. ..$ Days   : chr [1:10] "Days=0" "Days=1" "Days=2" "Days=3" ...</span></span>
 <span><span class="co">#&gt;   .. ..$ Subject: chr [1:18] "Subject=1" "Subject=2" "Subject=3" "Subject=4" ...</span></span></code></pre></div>
-<p>The key structure: <code>Subject</code> appears 10 times in the data
-— once per day. Those 10 observations are <em>not</em> independent. They
-share the subject’s baseline speed, their individual sensitivity to
-sleep loss, and any other between-person trait that we haven’t measured.
-If you fit a plain OLS regression with independent-error standard
-errors, its uncertainty calculations ignore that dependence. For
-within-subject effects such as this one, the resulting tests can be
-anti-conservative; the direction and size of the error depend on the
-design and covariance structure.</p>
-<p>A mixed model handles this by giving each subject its own intercept
-<em>and</em> its own slope — their personal baseline and their personal
-rate of slowing — and then estimating a population distribution over
-those person-level parameters.</p>
+<p>Each subject contributes ten observations, one per day. Measurements
+from the same subject share a baseline and a response to sleep loss.
+Ordinary least squares with independent-error standard errors ignores
+this dependence. For within-subject effects such as this one, the
+resulting tests can be anti-conservative; the direction and size of the
+error depend on the design and covariance structure.</p>
+<p>A random-intercept-and-slope model estimates a population
+distribution for subjects’ baselines and rates of change.</p>
 <p><img src="lmm_files/figure-html/individual-trajectories-1.png" class="r-plt" alt="" width="576"></p>
 <p>The grey lines are individuals; the blue line is the population
-average. Subjects vary in their starting point <em>and</em> in how fast
-they slow down — which is exactly what a random-intercept-and-slope
-model captures.</p>
+average. Subjects vary in their starting point and in how fast they slow
+down, as allowed by the random-intercept-and-slope model.</p>
 </div>
 <div class="section level2">
 <h2 id="step-1-read-the-formula-before-you-fit">Step 1: Read the formula before you fit<a class="anchor" aria-label="anchor" href="#step-1-read-the-formula-before-you-fit"></a>
 </h2>
 <p>Before fitting, compile the model to see what <code>mixeff</code>
 understands about your formula. This separates formula interpretation
-from optimization; you can catch mis-specified random effects without
-paying the cost of a full fit.</p>
+from optimization; you can catch mis-specified random effects before
+running a full fit.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">Reaction</span> <span class="op">~</span> <span class="va">Days</span> <span class="op">+</span> <span class="op">(</span><span class="va">Days</span> <span class="op">|</span> <span class="va">Subject</span><span class="op">)</span>, <span class="va">sleep</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/explain_model.html">explain_model</a></span><span class="op">(</span><span class="va">spec</span><span class="op">)</span></span>
@@ -190,8 +175,8 @@ forms, and design diagnostics in detail.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lmm.html">lmm</a></span><span class="op">(</span><span class="va">Reaction</span> <span class="op">~</span> <span class="va">Days</span> <span class="op">+</span> <span class="op">(</span><span class="va">Days</span> <span class="op">|</span> <span class="va">Subject</span><span class="op">)</span>, <span class="va">sleep</span><span class="op">)</span></span></code></pre></div>
 <p><code><a href="../reference/lmm.html">lmm()</a></code> returns an <code>mm_lmm</code> object. The bundled
-Rust engine performs the optimization; <code><a href="../reference/lmm.html">lmm()</a></code> is the R entry
-point and result container.</p>
+Rust engine performs the optimization; <code><a href="../reference/lmm.html">lmm()</a></code> constructs the
+R result object.</p>
 <p>Printing the fit gives the formula, convergence status, likelihood
 summary, residual scale, and fixed effects.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
@@ -236,12 +221,11 @@ summary, residual scale, and fixed effects.</p>
 <span><span class="co">#&gt; Notes:</span></span>
 <span><span class="co">#&gt;   Satterthwaite denominator df computed from analytic vcov_beta Jacobian and finite-difference deviance Hessian over varpar</span></span></code></pre></div>
 <p>The summary has four blocks, in print order.</p>
-<p><strong>Fit status.</strong> Check this line first:
-<code>converged_interior</code> is the status every other block of the
-summary assumes. When a fit lands somewhere else — a variance component
-at zero, a reduced-rank covariance — the status says so and the
-available inference methods change with it. What the statuses mean, and
-what a boundary does to the rest of the output, is the subject of
+<p><strong>Fit status.</strong> Check this before interpreting the
+estimates. <code>converged_interior</code> indicates an accepted
+interior solution; other statuses identify reduced-rank solutions or
+runs that did not establish convergence. These distinctions affect which
+inference methods are available. See
 <code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>.</p>
 <p><strong>Variance components.</strong>
 <code>Subject (Intercept)</code> is the estimated between-subject spread
@@ -258,15 +242,15 @@ finite-sample <em>t</em> test whose <code>df</code> column is on the
 scale of the 18 subjects, not the 180 raw rows. Which methods exist,
 when each applies, and how to choose among them is covered in
 <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>.</p>
-<p><strong>Inference status.</strong> One row per coefficient stating
-how much to trust the test: <code>status</code> says whether it was
-computed, <code>reliability</code> grades it, and
-<code>reliability_reason</code> names the engine’s reason for that grade
-— here <code>satterthwaite_finite_difference_approximation</code>, the
-standard route for this method. The Rust engine assigns these grades and
-reasons; the R side passes them through unchanged. The closed
-vocabularies behind these columns are defined in the <a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
-glossary</a> on the package site.</p>
+<p><strong>Inference status.</strong> For each coefficient,
+<code>status</code> records whether the test was computed,
+<code>reliability</code> summarizes the approximation used, and
+<code>reliability_reason</code> gives the basis for that grade. Here the
+reason is <code>satterthwaite_finite_difference_approximation</code>.
+These fields come from the Rust engine; their values are defined in the
+<a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
+glossary</a>. A reliability grade does not assess whether the model is
+appropriate for the data.</p>
 </div>
 <div class="section level2">
 <h2 id="step-4-extract-components">Step 4: Extract components<a class="anchor" aria-label="anchor" href="#step-4-extract-components"></a>
@@ -307,10 +291,10 @@ factor.</p>
 <span><span class="co">#&gt; method: wald_asymptotic_from_stored_standard_errors</span></span>
 <span><span class="co">#&gt; status: Wald (asymptotic) intervals from stored standard errors (engine-certified profile intervals: method = "profile")</span></span></code></pre></div>
 <p><code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> with <code>method = "asymptotic"</code> gives
-Wald intervals. The <code>(Intercept)</code> interval is the population
-mean reaction time on Day 0; the <code>Days</code> interval is the range
-of plausible slopes. The other interval methods, and when each is
-available, are covered in
+Wald intervals. The <code>(Intercept)</code> interval describes
+uncertainty in the population mean reaction time on Day 0; the
+<code>Days</code> interval describes uncertainty in the population
+slope. Other interval methods and their availability are covered in
 <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>.</p>
 <p>Design matrices can be rebuilt from the stored formula and model
 frame — including after a save/reload cycle
@@ -412,12 +396,13 @@ prediction intervals come from the same payload.</p>
 <span><span class="co">#&gt; 4 287.0545 272.0885 302.0205</span></span>
 <span><span class="co">#&gt; 5 300.0030 285.9530 314.0530</span></span>
 <span><span class="co">#&gt; 6 312.9515 298.5048 327.3983</span></span></code></pre></div>
-<p>Rows the engine cannot certify — for example an unseen grouping level
-predicted with <code>allow.new.levels = TRUE</code>, where there is no
-posterior variance for the missing level — return <code>NA</code> with
-the engine’s reason in the <code>mm_reason</code> attribute rather than
-a fabricated number. That refusal vocabulary is part of the inference
-contract (<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>).</p>
+<p>When prediction uncertainty is unavailable, the affected rows return
+<code>NA</code> with a reason in the <code>mm_reason</code> attribute.
+For example, an unseen grouping level predicted with
+<code>allow.new.levels = TRUE</code> has no conditional variance
+estimate from the fitted data. See
+<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code> for the reason
+codes.</p>
 </div>
 </div>
 <div class="section level2">
@@ -439,9 +424,9 @@ trials.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">fit_w</span><span class="op">$</span><span class="va">weights</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1 2 1 2 1 2</span></span></code></pre></div>
 <p>The weights are stored on the fit and reused by <code><a href="../reference/refit.html">refit()</a></code>
-and the inference routines. Invalid weights — wrong length, negative, or
-non-finite — are refused with a typed <code>mm_data_error</code> rather
-than silently recycled.</p>
+and the inference routines. Invalid weights, including a vector of the
+wrong length or non-finite values, raise a typed
+<code>mm_data_error</code>.</p>
 <p>For contrasts, term tests, marginal means, and model comparisons on a
 fit like this one, continue with
 <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>. The rest of this
@@ -450,21 +435,15 @@ vignette turns to the random-effects formulas themselves.</p>
 <div class="section level2">
 <h2 id="random-effects-formulas-in-depth">Random-effects formulas in depth<a class="anchor" aria-label="anchor" href="#random-effects-formulas-in-depth"></a>
 </h2>
-<p>Random-effects formulas are compact, and compactness hides
-assumptions. Seven characters — <code>(x | g)</code> — commit the
-analyst to a specific covariance structure, a specific number of free
-parameters, and a specific identification claim about what the data can
-support. Two formulas that differ by a single character —
-<code>||</code> for <code>|</code>, say — fit different models.</p>
-<p><code>mixeff</code> shares the formula language with
-<code>lme4</code>, so the notation you already read transfers directly.
-What it adds is a way to read the formula <em>before</em> the optimizer
-runs: the named form of every random term, the plain-language scope, the
-parameter count, and the design facts that support or refuse the formula
-on this particular data.</p>
-<p>The goal of this section is not to pick a model for you. It is to
-show what the model you wrote can and cannot express, and to make the
-difference between nearby spellings legible.</p>
+<p>A random-effects formula specifies which coefficients vary across
+groups and how they may covary. Replacing <code>|</code> with
+<code>||</code>, for example, changes the covariance structure. Before
+fitting, <code><a href="../reference/explain_model.html">explain_model()</a></code> shows the grouping factors,
+covariance assumptions, parameter counts, and relevant features of the
+data.</p>
+<p>The examples below compare these structures and the data needed to
+estimate them. Choosing a structure also requires assumptions about the
+study that the formula alone cannot settle.</p>
 <p>We use a second small repeated-measures dataset with one row per
 subject per time point.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
@@ -477,7 +456,7 @@ subject per time point.</p>
 <span><span class="co">#&gt; 5       5    1  1.17848916  0.5130951  1.4401183 2.062263 0.9445929   1</span></span>
 <span><span class="co">#&gt; 6       6    1 -0.93415132 -0.3525909 -1.3062800 3.130125 0.7523965   1</span></span></code></pre></div>
 <div class="section level3">
-<h3 id="what-does-1-subject-say">What does <code>(1 | subject)</code> say?<a class="anchor" aria-label="anchor" href="#what-does-1-subject-say"></a>
+<h3 id="random-intercepts-1-subject">Random intercepts: <code>(1 | subject)</code><a class="anchor" aria-label="anchor" href="#random-intercepts-1-subject"></a>
 </h3>
 <p>A random intercept is the simplest random-effects structure: subjects
 may differ in average score, but the fixed <code>time</code> effect is
@@ -504,34 +483,28 @@ reports that no random slopes were added.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Design notes:</span></span>
 <span><span class="co">#&gt;   scope_note: `time` varies within `subject`, so a `subject`-level slope is structurally possible</span></span></code></pre></div>
-<p>Each random-effects card has two header lines worth pausing on.
-<code>wrote:</code> is the term as you typed it. <code>canonical:</code>
-is what the parser hands downstream — what the optimizer, the audit, and
-the inference contract will actually see. They are identical here
-because <code>(1 | subject)</code> is already in canonical form —
-nothing was rewritten. The two diverge for more elaborate formulas.
-<code>(1 | clinic/site)</code> is rewritten as
-<code>(1 | clinic) + (1 | clinic:site)</code>; implicit intercepts are
-made explicit; double-bar shorthand expands to its split-block form. The
-<code>canonical:</code> line is where you read off the model the engine
-will actually fit.</p>
+<p>Each random-effects card shows the entered term as
+<code>wrote:</code> and its expanded form as <code>canonical:</code>.
+They agree for <code>(1 | subject)</code>. For more complex formulas,
+the expansion makes the model explicit: <code>(1 | clinic/site)</code>
+becomes <code>(1 | clinic) + (1 | clinic:site)</code>, implicit
+intercepts are included, and double-bar shorthand is split into
+blocks.</p>
 <p>The remaining lines decode the term further. <code>named form:</code>
 restates it as a function call that names the grouping factor, the
 intercept, the slopes (if any), and the covariance family.
 <code>scope:</code> is a plain-language sentence.
 <code>covariance</code> and <code>support</code> report parameter cost
 and design sufficiency.</p>
-<p>The <code>Design notes:</code> section at the bottom records facts
-about the data that the fitted formula did not use. Here
-<code>time</code> varies within each subject, so a subject-level
-<code>time</code> slope is structurally possible. That is reported as a
-note, not a correction: whether to add <code>(time | subject)</code> is
-a scientific question about whether subjects plausibly differ in their
-<code>time</code> slopes, not a mechanical one about what the package
-can do.</p>
+<p>The <code>Design notes:</code> section describes features of the data
+that could support additional random effects. Here <code>time</code>
+varies within each subject, so a subject-level <code>time</code> slope
+is structurally possible. Whether to include it depends on the study
+design and the plausibility of differences in subjects’ rates of
+change.</p>
 </div>
 <div class="section level3">
-<h3 id="what-changes-when-you-add-a-random-slope">What changes when you add a random slope?<a class="anchor" aria-label="anchor" href="#what-changes-when-you-add-a-random-slope"></a>
+<h3 id="random-intercepts-and-slopes">Random intercepts and slopes<a class="anchor" aria-label="anchor" href="#random-intercepts-and-slopes"></a>
 </h3>
 <p><code>(1 + time | subject)</code> requests a two-dimensional random
 effect for each subject: one baseline coefficient and one
@@ -572,7 +545,7 @@ matrix directly, and how boundary fits are read off this table are
 covered in <code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>.</p>
 </div>
 <div class="section level3">
-<h3 id="what-do-split-blocks-and-mean">What do split blocks and <code>||</code> mean?<a class="anchor" aria-label="anchor" href="#what-do-split-blocks-and-mean"></a>
+<h3 id="separate-blocks-and">Separate blocks and <code>||</code><a class="anchor" aria-label="anchor" href="#separate-blocks-and"></a>
 </h3>
 <p>The formula <code>(1 | subject) + (0 + time | subject)</code> uses
 two separate blocks for the same grouping factor. That fixes the
@@ -676,13 +649,14 @@ one display difference: <code><a href="../reference/mm_parse_formula.html">mm_pa
 the split blocks the engine fits.</p>
 </div>
 <div class="section level3">
-<h3 id="what-are-the-three-kinds-of-help">What are the three kinds of help?<a class="anchor" aria-label="anchor" href="#what-are-the-three-kinds-of-help"></a>
+<h3 id="design-diagnostics">Design diagnostics<a class="anchor" aria-label="anchor" href="#design-diagnostics"></a>
 </h3>
-<p>The compile-time diagnostics separate three situations that are often
-mixed together in ordinary model output.</p>
-<p>First, a structural impossibility: a requested random slope cannot be
-estimated if that variable does not vary within the group. Here
-<code>dose</code> is constant within each subject.</p>
+<p>The diagnostics distinguish a structurally unidentifiable slope,
+limited information for estimating a covariance, and an omitted but
+estimable slope.</p>
+<p>In the first example, <code>dose</code> is constant within each
+subject, so its random slope cannot be estimated separately from the
+random intercept.</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">impossible</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">score</span> <span class="op">~</span> <span class="va">dose</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">dose</span> <span class="op">|</span> <span class="va">subject</span><span class="op">)</span>, <span class="va">between_study</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/explain_model.html">explain_model</a></span><span class="op">(</span><span class="va">impossible</span><span class="op">)</span></span>
@@ -701,9 +675,9 @@ estimated if that variable does not vary within the group. Here
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Possible repairs, not applied automatically:</span></span>
 <span><span class="co">#&gt;   1. structural_refusal: `dose` does not vary within `subject`, so a `subject`-level `dose` slope cannot be estimated from this design.</span></span></code></pre></div>
-<p>Second, low information budget: a requested full covariance can be
-estimable in principle while still having little grouping-level support.
-The package reports the parameter count and observed levels.</p>
+<p>A full covariance can be estimable in principle even when there are
+few groups to estimate it from. The diagnostic reports the parameter
+count and number of observed levels.</p>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">low_info</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compile_model.html">compile_model</a></span><span class="op">(</span><span class="va">score</span> <span class="op">~</span> <span class="va">time</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">time</span> <span class="op">|</span> <span class="va">subject</span><span class="op">)</span>, <span class="va">low_study</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/diagnostics.html">diagnostics</a></span><span class="op">(</span><span class="va">low_info</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"code"</span>, <span class="st">"severity"</span>, <span class="st">"message"</span><span class="op">)</span><span class="op">]</span></span>
@@ -713,10 +687,9 @@ The package reports the parameter count and observed levels.</p>
 <span><span class="co">#&gt;                                                                              message</span></span>
 <span><span class="co">#&gt; 1 4 levels are below the v0 full-covariance threshold 15 for 3 covariance parameters</span></span>
 <span><span class="co">#&gt; 2 4 levels are below the v0 full-covariance threshold 15 for 3 covariance parameters</span></span></code></pre></div>
-<p>Third, unmodeled-but-possible: a fixed effect varies within group,
-but the random-effects formula does not include the corresponding slope.
-This is the quiet design note you saw for
-<code>(1 | subject)</code>.</p>
+<p>In the third example, <code>time</code> varies within subjects, but
+the formula includes only random intercepts. The diagnostic records that
+a random slope could be included.</p>
 <div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/diagnostics.html">diagnostics</a></span><span class="op">(</span><span class="va">intercept_only</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"code"</span>, <span class="st">"severity"</span>, <span class="st">"message"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;         code severity</span></span>
@@ -727,12 +700,11 @@ This is the quiet design note you saw for
 <span><span class="co">#&gt; 2 `time` varies within `subject`, so a `subject`-level slope is structurally possible</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="how-do-you-inspect-nearby-formulas">How do you inspect nearby formulas?<a class="anchor" aria-label="anchor" href="#how-do-you-inspect-nearby-formulas"></a>
+<h3 id="alternative-random-effects-formulas">Alternative random-effects formulas<a class="anchor" aria-label="anchor" href="#alternative-random-effects-formulas"></a>
 </h3>
-<p><code><a href="../reference/random_options.html">random_options()</a></code> is a map of nearby random-effect
-spellings for one grouping factor. It marks the current spelling and
-reports parameter costs and support facts. It does not rank the
-rows.</p>
+<p><code><a href="../reference/random_options.html">random_options()</a></code> lists alternative random-effects
+formulas for one grouping factor. It marks the current formula and
+reports parameter counts and design support for each option.</p>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/random_options.html">random_options</a></span><span class="op">(</span><span class="va">intercept_only</span>, group <span class="op">=</span> <span class="va">subject</span>, slope <span class="op">=</span> <span class="va">time</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Random-effect options for group: subject</span></span>
@@ -783,16 +755,13 @@ build a custom report.</p>
 <span><span class="co">#&gt; 5                 (1 + time | subject)                3    sufficient   FALSE</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="why-is-there-no-recommendation-row">Why is there no recommendation row?<a class="anchor" aria-label="anchor" href="#why-is-there-no-recommendation-row"></a>
+<h3 id="comparing-covariance-structures">Comparing covariance structures<a class="anchor" aria-label="anchor" href="#comparing-covariance-structures"></a>
 </h3>
-<p><code>mixeff</code> treats formula explanations as an audit problem,
-not a model-selection problem. The package reports the current model,
-nearby spellings, assumptions, and data-support facts. Choosing among
-scientifically different random-effects structures remains part of the
-analysis design.</p>
-<p><code><a href="../reference/compare_covariance.html">compare_covariance()</a></code> gives another view of the same
-principle: full, diagonal, and scalar covariance families are displayed
-side by side, without a preferred row.</p>
+<p><code><a href="../reference/random_options.html">random_options()</a></code> describes alternative formulas without
+ranking them. The choice depends on the study design and the assumptions
+you are prepared to make about variation across groups.</p>
+<p><code><a href="../reference/compare_covariance.html">compare_covariance()</a></code> displays full, diagonal, and scalar
+covariance structures side by side, also without ranking them.</p>
 <div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/compare_covariance.html">compare_covariance</a></span><span class="op">(</span><span class="va">full</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Covariance comparison:</span></span>
@@ -813,21 +782,15 @@ side by side, without a preferred row.</p>
 <span><span class="co">#&gt;     design status:    sufficient</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="where-do-fitted-model-changes-appear">Where do fitted-model changes appear?<a class="anchor" aria-label="anchor" href="#where-do-fitted-model-changes-appear"></a>
+<h3 id="changes-during-fitting">Changes during fitting<a class="anchor" aria-label="anchor" href="#changes-during-fitting"></a>
 </h3>
-<p>After fitting, <code><a href="../reference/changes.html">changes()</a></code> records the journey from the
-formula you wrote to the model the engine actually solved. Each row
-carries the stage at which something happened, the term it affected, the
-status of the change, and three side-by-side renderings: what was
-<em>requested</em>, what was <em>effective</em> (after design parsing
-and identifiability checks), and what was <em>fitted</em> (after the
-optimizer landed). A reduced-rank covariance estimate appears here as a
-labeled fact, not an instruction to rewrite the formula (boundary and
-reduced-rank outcomes are the subject of
-<code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>).</p>
-<p>The full row carries a lot of text. We show it in two passes so
-neither pass wraps awkwardly in the rendered vignette. The first pass
-names the stage of each change and its status:</p>
+<p>After fitting, <code><a href="../reference/changes.html">changes()</a></code> compares the requested formula,
+the effective model after parsing and identifiability checks, and the
+fitted result. Each row identifies the stage, affected term, and change
+status. A reduced-rank covariance estimate is recorded here; its
+interpretation is discussed in
+<code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>.</p>
+<p>The first table shows the stage and status of each change:</p>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/changes.html">changes</a></span><span class="op">(</span><span class="va">full_fit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"stage"</span>, <span class="st">"term_id"</span>, <span class="st">"status"</span>, <span class="st">"detail"</span><span class="op">)</span><span class="op">]</span></span>
@@ -854,8 +817,8 @@ names the stage of each change and its status:</p>
 </tr>
 </tbody>
 </table>
-<p>The second pass shows the requested → effective → fitted arc itself,
-where the three columns are the substance of the report:</p>
+<p>The second table compares the requested, effective, and fitted
+models:</p>
 <div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/changes.html">changes</a></span><span class="op">(</span><span class="va">full_fit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"stage"</span>, <span class="st">"requested"</span>, <span class="st">"effective"</span>, <span class="st">"fitted"</span><span class="op">)</span><span class="op">]</span></span>
@@ -904,8 +867,8 @@ where the three columns are the substance of the report:</p>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td>What is the supported envelope, and how do fits persist across
-sessions?</td>
+<td>Which models are supported, and how do I save and restore a
+fit?</td>
 <td><code><a href="../articles/mixeff.html">vignette("mixeff", package = "mixeff")</a></code></td>
 </tr>
 <tr class="even">

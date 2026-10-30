@@ -5,23 +5,20 @@
 library(mixeff)
 ```
 
-Every fit returned by
+[`fit_status()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
+reports the convergence status of a model fitted by
 [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) or
-[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md)
-carries a labeled convergence status, and the label is a claim with a
-precise scope. This vignette is the reference for that vocabulary: what
-`converged_interior` does and does not establish, how boundary and
-reduced-rank outcomes are recorded, how singularity is actually decided,
-how to check an optimum with
-[`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md),
-and what happens when a requested GLMM estimator does not certify. The
-other vignettes cross-reference these semantics rather than restating
-them.
+[`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md). This
+vignette explains interior and reduced-rank solutions, the test for
+singularity, and the use of
+[`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
+to check a fitted optimum. It also describes what happens when the
+engine substitutes a different GLMM estimator.
 
-## What `converged_interior` establishes — and what it does not
+## Interior solutions
 
-Start with a fit that goes well: a small longitudinal study with twelve
-clinics, a week effect, and a treatment contrast.
+The first example is a small longitudinal study with twelve clinics, a
+week effect, and a treatment contrast.
 
 ``` r
 
@@ -41,18 +38,17 @@ certificate below records which checks completed. The status does not
 establish global optimality, correct model specification, or that the
 data carry enough information.
 
-The status changes when something needs your attention. The vocabulary
-has three values you will meet in practice:
+Three statuses distinguish the main outcomes:
 
-- `converged_interior` — a finite interior optimum, as above.
-- `converged_reduced_rank` — a genuine optimum at which the
-  random-effect covariance has lower rank than the model requested; the
-  next section walks through one.
-- `not_optimized` — the conservative label for a run that stopped in a
-  flat or boundary region *without* certifying a stationary point.
-  Estimates are present but the engine does not call them an optimum,
-  and [`summary()`](https://rdrr.io/r/base/summary.html) repeats that
-  state in a `Notes:` line rather than relying on the header alone.
+- `converged_interior` — the engine accepted a finite interior solution
+  under its convergence rules.
+- `converged_reduced_rank` — the engine accepted a solution whose
+  random-effect covariance has lower rank than requested.
+- `not_optimized` — the run stopped without certifying a stationary
+  point, for example in a flat or boundary region. Estimates are
+  present, but convergence has not been established.
+  [`summary()`](https://rdrr.io/r/base/summary.html) also records this
+  status in a `Notes:` line.
 
 Optimization is silent and runs within one native call under bounded
 evaluation budgets; the
@@ -61,10 +57,9 @@ help pages and
 [`?mm_control`](https://bbuchsbaum.github.io/mixeff/reference/mm_control.md)
 document the budgets and how to cap them.
 
-What the fit ran is recorded on the object.
 [`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md)
-reports the optimizer, the stopping condition, and the certificate-time
-facts the status label summarizes:
+reports the optimizer, stopping condition, and checks used to assign the
+convergence status:
 
 ``` r
 
@@ -110,22 +105,17 @@ Raw gradient norms depend on parameter coordinates and are not measures
 of coefficient precision. Curvature-scaled stationarity evidence, when
 available, is recorded separately in
 `optimizer_certificate(gfit)$raw$stationarity_decrement`. Read both with
-their stated tolerances; a small scaled quantity does not erase an
-approximate raw-gradient certificate.
+their stated tolerances; a small scaled quantity does not change the
+qualification recorded in an approximate raw-gradient certificate.
 
-## Boundary and reduced-rank fits are labeled facts
+## Boundary and reduced-rank fits
 
-Now a fit that does not go well — deliberately. Eighteen subjects, ten
-daily reaction-time measurements each, with subject intercepts and
-slopes that are nearly perfectly correlated by construction. This design
-produces a singular fit in `lme4` and in `mixeff` alike.
+The next example produces a singular fit. We simulate ten daily
+reaction-time measurements for each of eighteen subjects, with nearly
+perfectly correlated subject intercepts and slopes.
 
-[`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) fits this model
-and reports the situation in one short line: `boundary (singular) fit`.
-The fact is correct. What it leaves implicit is *which* variance
-component reached the boundary, what the effective rank of the
-random-effect covariance is, and which downstream inference methods the
-boundary takes off the table.
+[`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html) reports
+`boundary (singular) fit` for this model:
 
 ``` r
 
@@ -152,15 +142,16 @@ lme4::isSingular(m)
 #> [1] TRUE
 ```
 
-`mixeff` reports the same fact, and then unpacks it.
+In `mixeff`,
 [`fit_status()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
-names the convergence outcome,
+reports the convergence outcome and
 [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md)
-answers the yes/no question,
+tests for singularity. For more detail,
 [`diagnostics()`](https://bbuchsbaum.github.io/mixeff/reference/diagnostics.md)
-returns stable codes with severity and stage, and
+returns codes with severity and stage, while
 [`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md)
-shows the requested-to-effective-to-fitted arc.
+compares the requested model with the effective specification and fitted
+result.
 
 ``` r
 
@@ -187,14 +178,11 @@ changes(sfit)
 #> Stage-by-stage records available via $table.
 ```
 
-The requested random-effect covariance for `(1 + days | subj)` has rank
-2: one dimension for the subject intercept and one for the subject
-slope. The fitted covariance has effective rank 1 — the model asked for
-two random-effect dimensions, but the data support only one effective
-dimension. That is recorded as the `covariance_reduced` diagnostic and
-the `converged_reduced_rank` status, and the printed object carries the
-tag in its header every time it prints — where `lme4` warns once at fit
-time and then falls silent.
+The requested random-effect covariance for `(1 + days | subj)` has two
+dimensions: a subject intercept and a subject slope. The fitted
+covariance has effective rank one. This is recorded as the
+`covariance_reduced` diagnostic and the `converged_reduced_rank` status,
+which also appears when the object is printed.
 
 ``` r
 
@@ -216,10 +204,9 @@ print(sfit)
 #> Audit verbs: audit(), diagnostics(), inference_table(), model_report()
 ```
 
-A reduced-rank covariance does not automatically invalidate the model.
-It is a labeled fact about the fit, recorded in the object rather than
-printed once and lost — and it changes which inference routes the
-package will certify (one sentence on that at the end of this vignette).
+A reduced-rank covariance does not automatically invalidate the model,
+but it restricts the inference methods available in `mixeff`. These
+restrictions are described at the end of this vignette.
 
 ## How singularity relates to θ and rank
 
@@ -244,16 +231,16 @@ parameterization(sfit)$table[, c("theta_name", "theta_value", "lambda_value")]
 The *diagonal* entry for the `days` slope is pinned at numerical zero —
 that is the boundary event behind the `converged_reduced_rank` status.
 
-It is tempting to generalize this to “a zero θ entry means the
-covariance is reduced-rank”. That reading is wrong. A zero
-**off-diagonal** entry of Λ does not by itself imply reduced rank. In
-the two-dimensional example below, it also makes the covariance zero. In
-larger blocks, covariance entries are sums of products of factor
-entries, so one zero off-diagonal factor entry need not make the
-corresponding covariance zero. Singularity is a property of the
-covariance matrix’s rank — equivalently its eigenstructure — and in this
-parameterization the rank collapses exactly when a **diagonal** entry of
-Λ is zero. A two-by-two example makes the difference concrete:
+A zero entry in θ does not always imply singularity. A zero
+**off-diagonal** entry of Λ can occur in a full-rank covariance. In the
+two-dimensional example below, it sets the covariance to zero. In larger
+blocks, covariance entries are sums of products, so one zero factor
+entry need not make the corresponding covariance zero.
+
+Singularity depends on the rank of the whole covariance matrix. For this
+square triangular factor, it occurs exactly when at least one
+**diagonal** entry of Λ is zero. The following example contrasts the two
+cases:
 
 ``` r
 
@@ -284,10 +271,10 @@ eigen(Sigma_diag_zero, symmetric = TRUE)$values
 
 With the off-diagonal at zero, both eigenvalues are positive: the
 intercept and slope are uncorrelated, and each still has its own
-variance — an ordinary full-rank fit (the model `(1 + days || subj)`
-*asks* for exactly this shape). With a diagonal entry at zero, one
-eigenvalue is zero and the two random effects collapse onto a single
-dimension: that is singularity.
+variance — a full-rank fit with the covariance structure specified by
+`(1 + days || subj)`. With a diagonal entry at zero, one eigenvalue is
+zero and the two random effects collapse onto a single dimension: that
+is singularity.
 
 [`is_singular()`](https://bbuchsbaum.github.io/mixeff/reference/is_singular.md)
 follows lme4’s tolerance rule: it checks whether a zero-bounded diagonal
@@ -297,14 +284,14 @@ tolerance-based result can differ from an exact rank verdict.
 
 ## Verifying an optimum: `verify_convergence()`
 
-A convergence status describes the run that produced the fit. If you
-want independent evidence,
+A convergence status describes the run that produced the fit. To check
+the stability of that solution,
 [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
 re-runs the fit under the engine’s bounded verification workflow: a
 restart from the fitted optimum, one or more jittered restarts, and
 (LMM-only, opt-in) an alternate-optimizer consensus pass. The engine
 judges agreement against explicit tolerances on the objective, θ, and
-the fixed effects, and owns the verdict; R only formats it.
+the fixed effects, and returns the verdict for R to format.
 
 The R bridge reuses a live fitted handle or restores the saved fitted
 state before invoking that workflow. Verification compares its
@@ -329,20 +316,19 @@ vc
 #> Tolerances: objective 1e-05; theta 0.001; beta 1e-04
 ```
 
-Each run either agrees with the reference optimum within the printed
-tolerances or it does not; the verdict summarizes the runs
-(`restart_agrees`, `optimizer_consensus`, `fragile`, `unstable`, or
-`not_run`). A verdict of `restart_agrees` is evidence of a *stable*
-optimum — the bounded re-runs came back to the same place — not proof of
-a global one. The `consensus` pass defaults to `FALSE` because this
-vendored build compiles without the optional `nlopt` backend; for some
-models the engine’s alternate optimizer choice is an nlopt optimizer,
-and its absence would read as a spurious `fragile` verdict that reflects
-the build, not the fit.
+The verdict summarizes agreement with the reference optimum within the
+printed tolerances (`restart_agrees`, `optimizer_consensus`, `fragile`,
+`unstable`, or `not_run`). A verdict of `restart_agrees` is evidence of
+a *stable* optimum — the bounded re-runs came back to the same place —
+not proof of a global one. The `consensus` pass defaults to `FALSE`
+because this vendored build compiles without the optional `nlopt`
+backend; for some models the engine’s alternate optimizer choice is an
+nlopt optimizer, and its absence would read as a spurious `fragile`
+verdict that reflects the build, not the fit.
 
 Verification and rank are different questions. Running the verifier on
 the singular fit from above also comes back `restart_agrees`: a
-reduced-rank optimum can be a perfectly stable optimum.
+reduced-rank optimum can be stable across restarts.
 
 ``` r
 
@@ -353,10 +339,11 @@ vs$status
 
 The GLMM method uses the same workflow with wider default tolerances —
 objective `1e-4` and beta `1e-3`, against the LMM defaults of `1e-5` and
-`1e-4` — because every GLMM objective evaluation carries inner-PIRLS
-noise and the joint path’s derivative-free beta search bounds beta
-reproducibility at its stopping tolerance. The consensus pass is refused
-for GLMM fits (the GLMM fit drivers own optimizer selection).
+`1e-4` — because GLMM objective evaluations include inner-PIRLS
+numerical error and the joint path’s derivative-free beta search bounds
+beta reproducibility at its stopping tolerance. The consensus pass is
+refused for GLMM fits (the GLMM fitting routines select their own
+optimizers).
 
 ``` r
 
@@ -381,41 +368,29 @@ gv
 #> Tolerances: objective 1e-04; theta 0.001; beta 0.001
 ```
 
-## When the requested estimator does not certify (GLMM)
+## GLMM estimator substitution
 
-`glmm(method = "joint_laplace")` requests the joint-Laplace estimator
-(the route that certifies Wald inference;
-[`vignette("glmm")`](https://bbuchsbaum.github.io/mixeff/articles/glmm.md)
-is the operational quickstart). On some designs the joint route does not
-certify an optimum. The engine then returns a *labelled* fallback fit
-from the fast profiled-PIRLS estimator instead of failing or — worse —
-silently presenting the fallback as the thing you asked for. The
-substitution crosses the boundary as a typed record, in keeping with the
-package’s no-silent-surgery contract:
+`glmm(method = "joint_laplace")` requests the joint-Laplace estimator,
+which supports Wald inference when the fitted covariance passes its
+checks. On some designs, the engine cannot certify a joint-Laplace
+optimum and returns a fit from the profiled-PIRLS estimator instead. The
+substitution is recorded in several places:
 
-- **The typed record.**
-  `optimizer_certificate(fit)$raw$estimator_substitution` carries the
-  requested method, the effective (fallback) method, the requested
-  route’s fit status and return code, and the engine’s reason. It is the
-  machine-readable contract surface; scripts should gate on it, not on
-  message text.
-- **The fit-time notice.** A condition of class
-  `mm_estimator_substitution_notice` announces the substitution when the
-  fit returns (suppressible with `mm_control(verbose = -1)`).
-- **The ungated summary note.**
-  [`summary()`](https://rdrr.io/r/base/summary.html) prints an
-  `estimator substitution:` note naming both estimators regardless of
-  verbosity settings, and independent of the fallback’s own
-  `converged_*` status — a clean-looking status line must not hide the
-  fact that a different estimator than requested produced the numbers.
-- **The checking verb.**
-  [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
-  on a substituted fit restores the recorded effective estimator and
-  certificate before checking the solution. Its reference is the fit
-  whose numbers were returned, including any labelled substitution.
+- `optimizer_certificate(fit)$raw$estimator_substitution` contains the
+  requested and effective methods, the requested method’s fit status and
+  return code, and the reason for substitution. Use this record in
+  scripts.
+- A condition of class `mm_estimator_substitution_notice` reports the
+  change when the fit returns. Suppress it with
+  `mm_control(verbose = -1)`.
+- [`summary()`](https://rdrr.io/r/base/summary.html) prints an
+  `estimator substitution:` note naming both estimators, regardless of
+  verbosity settings or the fallback fit’s convergence status.
+- [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)
+  restores and checks the effective estimator that produced the returned
+  estimates.
 
-On an ordinary fit the record is absent, and its absence is meaningful
-(no substitution happened):
+When no substitution occurred, the record is absent:
 
 ``` r
 
@@ -423,27 +398,23 @@ optimizer_certificate(gfit)$raw$estimator_substitution
 #> NULL
 ```
 
-A real example, from reproducing a published `glmer()` analysis of OSF
-study data (an error-rate model with an open-practice × year
-interaction): requesting `method = "joint_laplace"` with the raw,
-uncentered `Year` predictor hands the engine an ill-scaled design, the
-joint route does not certify, and the result comes back as a labelled
-fast-PIRLS fallback — fit-time notice, summary note, and typed record
-all present, with Wald inference withheld. Centering the year
-(`Year - 2015`) makes the joint route certify and match `glmer()` on the
-same data. mixeff flags this situation at fit time: a scaling advisory
-names the ill-scaled columns, and centering or rescaling the predictor —
-as the year centering does here — is the standard remedy.
+For example, in a reproduction of a published `glmer()` analysis of OSF
+study data, an error-rate model included an open-practice × year
+interaction. With raw, uncentered `Year`, the joint-Laplace fit did not
+certify and the engine returned a profiled-PIRLS fallback with Wald
+inference withheld. Centering the predictor as `Year - 2015` allowed the
+joint fit to certify and agree with `glmer()` on the same data. A
+scaling advisory identifies the poorly scaled columns; centering or
+rescaling them can improve optimization.
 
-## What a boundary refuses
+## Inference at a boundary
 
-A boundary fit also changes which inference routes the package will
-certify: Satterthwaite and Kenward–Roger degrees of freedom, for
-example, are refused on singular fits by mixeff’s validated-support
-policy, with stable reason codes and a bootstrap alternative offered
-under the same labeling rules — the route map, the refusal codes, and
-the alternatives are documented in
-[`vignette("inference")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md).
+On singular fits, `mixeff` withholds Satterthwaite and Kenward–Roger
+degrees of freedom under its validated-support policy. The results
+include reason codes, and parametric bootstrap tests remain available.
+See
+[`vignette("inference")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)
+for the methods, restrictions, and examples.
 
 ## References
 

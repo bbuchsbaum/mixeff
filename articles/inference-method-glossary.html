@@ -80,26 +80,25 @@
 
     
     
-<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p>This page is the reference for the raw enum values that appear in
-<code><a href="../reference/inference_options.html">inference_options()</a></code> and in the inference tables returned by
+<script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><p>This page defines the status, method, and reason codes used by
+<code><a href="../reference/inference_options.html">inference_options()</a></code> and the inference tables returned by
 <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>, <code><a href="../reference/inference_table.html">inference_table()</a></code>,
 <code><a href="../reference/contrast.html">contrast()</a></code>, <code><a href="../reference/test_effect.html">test_effect()</a></code>,
 <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>, <code><a href="../reference/compare.html">compare()</a></code>, and
 <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code>.</p>
 <p>Printed output may use reader-facing display columns such as
 <code>display_status</code>, <code>display_reason</code>, and
-<code>what_to_do_next</code>. The values below are the stable
-machine-readable contract for tests, reports, and downstream
-tooling.</p>
+<code>what_to_do_next</code>. Use the codes below in tests, reports, and
+other software that reads inference results.</p>
 <div class="section level2">
 <h2 id="expected_status">
 <code>expected_status</code><a class="anchor" aria-label="anchor" href="#expected_status"></a>
 </h2>
 <p><code>expected_status</code> is used by
 <code><a href="../reference/inference_options.html">inference_options()</a></code> to say whether a route is expected to
-be usable on the current fit. This is advice before execution; the
-returned result’s <code>status</code> is the authority after the call
-runs.</p>
+be usable on the current fit. This describes availability before the
+call; check the returned result’s <code>status</code> to see whether it
+succeeded.</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -179,10 +178,10 @@ enum depends on the payload type.</td>
 <p><code>expected_reliability_reason</code> is the reason
 <code><a href="../reference/inference_options.html">inference_options()</a></code> attaches to a route on its map.
 <code>reliability_reason</code> is the reason the engine attaches to an
-actual inference row when a verb runs. The vocabularies overlap but are
-not identical, and where the engine has recorded an observed reason for
-a route, <code><a href="../reference/inference_options.html">inference_options()</a></code> reports the observed value in
-preference to its own prediction — so on a fitted LMM the Wald route
+actual inference row when a function runs. The vocabularies overlap but
+are not identical, and where the engine has recorded an observed reason
+for a route, <code><a href="../reference/inference_options.html">inference_options()</a></code> reports the observed value
+in preference to its own prediction — so on a fitted LMM the Wald route
 usually shows the engine’s <code>asymptotic_wald_z_fallback</code>
 rather than the two route-map entries marked <em>(route map)</em>
 below.</p>
@@ -340,9 +339,9 @@ available on an ML fit away from the boundary.</td>
 <td><code>profile_beta_unavailable_under_reml</code></td>
 <td>Fixed-effect beta profile intervals require an ML fit and are not
 certified from REML profile payloads.</td>
-<td>
-<code>confint(fit, method = "profile")</code> on a REML fit records
-beta rows with this reason.</td>
+<td>This code describes raw REML profile payloads.
+<code>confint(fit, method = "profile")</code> obtains fixed-effect
+intervals from an ML profile, including for REML fits.</td>
 </tr>
 <tr class="odd">
 <td><code>profile_ci_unavailable_at_boundary</code></td>
@@ -354,22 +353,22 @@ a singular fit.</td>
 </tr>
 </tbody>
 </table>
-<p>The <code>method</code> column has one value worth listing here as
-well: <code>not_computed</code>, which appears on GLMM rows fitted by
-the default <code>pirls_profiled</code> estimator, whose standard errors
-and p-values are withheld (see <code><a href="../articles/glmm.html">vignette("glmm")</a></code>).</p>
+<p>The <code>method</code> value <code>not_computed</code> appears when
+standard errors and p-values are withheld, for example on a
+<code>pirls_profiled</code> GLMM without the working-Hessian opt-in. The
+default GLMM estimator is <code>joint_laplace</code>; see
+<code><a href="../articles/glmm.html">vignette("glmm")</a></code>.</p>
 </div>
 <div class="section level2">
-<h2 id="reliability-the-grade-rubric">
-<code>reliability</code> — the grade rubric<a class="anchor" aria-label="anchor" href="#reliability-the-grade-rubric"></a>
+<h2 id="reliability-grades">Reliability grades<a class="anchor" aria-label="anchor" href="#reliability-grades"></a>
 </h2>
 <p><code>reliability</code> is a closed four-value scale:
 <code>"high"</code>, <code>"moderate"</code>, <code>"low"</code>, or
 <code>"not_available"</code>. This section is the rubric (rubric version
 1, mixeff 0.2.0): the exact mapping the code implements from observable
-facts to a grade. The grade is a summary of <em>which method produced
-the number and what is known about that method’s approximation</em> —
-nothing more.</p>
+facts to a grade. The grade summarizes the method and its numerical
+approximation. It does not assess model specification or statistical
+calibration.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -416,25 +415,23 @@ defined for the target.</td>
 </tr>
 </tbody>
 </table>
-<p>The 999-replicate bootstrap floor is a grading convention, documented
-rather than asserted: at <code>B = 999</code> bootstrap p-values resolve
-on an exact 1/(B+1) = 0.001 grid, and the Monte Carlo SE of a rate near
-0.05 is about 0.0069. <code>B = 998</code> does not differ materially
-from <code>B = 999</code> — which is why the replicate accounting
-(successful count, Monte Carlo SE) ships alongside the grade, so you can
-judge the evidence directly instead of trusting the label.</p>
-<p>What a grade does <strong>not</strong> mean: no grade asserts that
-the model is correctly specified, that the estimate is unbiased, or that
-a p-value is exactly calibrated. Those are properties of the model and
-the data; mixeff’s measured calibration evidence for its routes lives in
-the benchmarking article’s simulation study, with Wilson intervals and
-replicate accounting.</p>
+<p>The threshold of 999 successful bootstrap replicates is a grading
+convention: at <code>B = 999</code> bootstrap p-values resolve on an
+exact 1/(B+1) = 0.001 grid, and the Monte Carlo SE of a rate near 0.05
+is about 0.0069. There is little numerical difference between
+<code>B = 998</code> and <code>B = 999</code>. Inspect the successful
+replicate count and Monte Carlo SE alongside the grade when assessing
+precision.</p>
+<p>A grade does not establish that the model is correctly specified,
+that the estimate is unbiased, or that a p-value is exactly calibrated.
+Those are properties of the model and the data; mixeff’s measured
+calibration evidence for its routes lives in the benchmarking article’s
+simulation study, with Wilson intervals and replicate accounting.</p>
 </div>
 <div class="section level2">
 <h2 id="what-certified-means">What “certified” means<a class="anchor" aria-label="anchor" href="#what-certified-means"></a>
 </h2>
-<p>Several surfaces use the word <em>certified</em>. It has one
-definition:</p>
+<p>In <code>mixeff</code>, <em>certified</em> means:</p>
 <blockquote>
 <p>The engine’s inference contract marks this estimator/target
 combination available: the required numerical invariants passed, the
@@ -442,11 +439,10 @@ value was produced by the named method, and that method is inside the
 package’s validated support envelope.</p>
 </blockquote>
 <p>“Certified” does <strong>not</strong> mean statistically guaranteed
-correct, and it does not mean the model is well specified. An absent
-certificate is never treated as a certificate: surfaces that cannot see
-a certified inference table withhold rather than assume. The uncertified
-alternatives are always explicitly labelled (for example
-<code>wald_z_working_hessian</code> rows under the
+correct, and it does not mean the model is well specified. When the
+required certificate is missing, inference is withheld. Uncertified
+approximations require an explicit request and have distinct labels (for
+example <code>wald_z_working_hessian</code> rows under the
 <code>inference = "working_hessian"</code> opt-in).</p>
 </div>
 <div class="section level2">
@@ -454,11 +450,11 @@ alternatives are always explicitly labelled (for example
 <code>reason_code</code><a class="anchor" aria-label="anchor" href="#reason_code"></a>
 </h2>
 <p><code>reason_code</code> is attached to actual unavailable or
-not-assessed rows and to typed errors from inference verbs. It may match
-<code>expected_reliability_reason</code>, but the two fields answer
-different questions: <code>expected_reliability_reason</code> predicts
-or grades a route, while <code>reason_code</code> names the concrete
-refusal that actually occurred.</p>
+not-assessed rows and to typed errors from inference functions. It may
+match <code>expected_reliability_reason</code>, but the two fields
+answer different questions: <code>expected_reliability_reason</code>
+predicts or grades a route, while <code>reason_code</code> names the
+concrete refusal that actually occurred.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -555,11 +551,11 @@ supplied.</td>
 </tr>
 <tr class="even">
 <td><code>profile_beta_unavailable_under_reml</code></td>
-<td>Fixed-effect beta profile intervals are absent by contract under
-REML.</td>
-<td>
-<code>confint(fit, method = "profile")</code> on a REML fit adds
-beta rows with <code>NA</code> limits and this code.</td>
+<td>Raw REML profile payloads do not include fixed-effect beta
+intervals.</td>
+<td>Raw REML profile payloads omit beta intervals. The public
+<code>confint(fit, method = "profile")</code> method uses an ML profile
+for these intervals.</td>
 </tr>
 <tr class="odd">
 <td><code>fixed_effect_inference_table_unavailable_legacy_object</code></td>

@@ -82,14 +82,12 @@
     
 <script>(function(b){b.className=b.className.replace(/\b(palette|preset|style)-[a-z]+\b/g,"").trim();b.classList.add("palette-red","preset-homage","style-minimal");document.documentElement.setAttribute("data-albers-marks","");})(document.body);</script><div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
-<p>Speed matters most when a workflow repeats the same fit many times.
-Parametric bootstrap is the canonical case: a 1,000-replicate bootstrap
-means roughly 1,000 refits, plus the original fit and summary work. The
-same logic applies to cluster bootstrap, simulation studies, multi-seed
-reanalysis, and anything whose inner loop is “fit the same model again
-with new data”. A per-refit time saving accumulates across replicates.
-If each refit is twice as fast, the repeated fitting remains about twice
-as fast; the absolute seconds saved grow with the number of refits.</p>
+<p>Bootstrap and simulation studies can require thousands of model fits.
+A 1,000-replicate bootstrap takes roughly 1,000 refits in addition to
+the original analysis, so even a small saving per fit can reduce the
+total runtime. This article reports fitting times and inference results
+from the benchmarks shipped with the package, and shows how to rerun
+them.</p>
 <p>On the LMM scaling benchmark shipped with the package,
 <code>mixeff</code> ran 2.0 to 3.5 times faster than <code>lme4</code>
 at the largest tested scale of each design (1.3 to 3.5 across the whole
@@ -99,7 +97,7 @@ are machine- and model-dependent — all of these fits complete in tens of
 milliseconds — so the scripts also write CSV files that you can re-plot
 and rerun on the designs you actually care about.</p>
 <div class="section level2">
-<h2 id="what-does-the-benchmark-show">What does the benchmark show?<a class="anchor" aria-label="anchor" href="#what-does-the-benchmark-show"></a>
+<h2 id="fitting-times">Fitting times<a class="anchor" aria-label="anchor" href="#fitting-times"></a>
 </h2>
 <p>The benchmark sweeps five mixed-model designs — varying rows, varying
 subject levels, adding random slopes, crossing subject and item, and
@@ -140,9 +138,9 @@ rerun the harness rather than reusing these numbers.</p>
 <span><span class="co">#&gt; 5  crossed          20   lme4      0.011             1.0</span></span>
 <span><span class="co">#&gt; 6  crossed          20 mixeff      0.005             2.2</span></span></code></pre></div>
 <p>The first figure plots the median fit time against design scale, on
-log-log axes, with one panel per scenario. <code>mixeff</code> runs
-below <code>lme4</code> everywhere on this grid. The largest speedup is
-on the one design that combines crossed grouping with a random slope;
+log-log axes, with one panel per scenario. <code>mixeff</code> took less
+time than <code>lme4</code> at every tested setting. The largest speedup
+is on the one design that combines crossed grouping with a random slope;
 the other four designs do not order by structural complexity (the plain
 grouped random intercept ranks second).</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -167,9 +165,9 @@ grouped random intercept ranks second).</p>
 <span>        panel.grid.minor <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_blank</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p><img src="benchmarking_files/figure-html/fit-time-plot-1.png" class="r-plt" alt="Median fit time vs design scale, log-log, by scenario, for mixeff and lme4." width="100%" style="display: block; margin: auto;"></p>
 <p><img class="albers-dark-twin" src="benchmarking_files/figure-html/fit-time-plot-dark-1.png" alt="" aria-hidden="true" hidden></p>
-<p>The second figure folds the same data into one panel: the speedup of
-<code>mixeff</code> over <code>lme4</code> at each cell. The dashed
-reference line at 1× would mean the two engines are equally fast.</p>
+<p>The second figure shows the speedup of <code>mixeff</code> over
+<code>lme4</code> at each cell. The dashed reference line at 1× would
+mean the two engines are equally fast.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">mixeff_rows</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">benchmark</span>, <span class="va">engine</span> <span class="op">==</span> <span class="st">"mixeff"</span><span class="op">)</span></span>
 <span></span>
@@ -199,19 +197,17 @@ milliseconds, so timer resolution alone can move a ratio substantially —
 one millisecond on the 4 ms side of a 12 ms / 4 ms cell moves the ratio
 from 3.0 to 2.4 or 4.0; five replications per cell do little to smooth
 that. Second, within a single design the speedup does not trend reliably
-with scale. What the grid does support: <code>mixeff</code> ran faster
-in every cell, and the single largest speedup is on the design combining
-crossed grouping with a random slope.</p>
+with scale.</p>
 </div>
 <div class="section level2">
-<h2 id="what-should-you-measure">What should you measure?<a class="anchor" aria-label="anchor" href="#what-should-you-measure"></a>
+<h2 id="choosing-what-to-time">Choosing what to time<a class="anchor" aria-label="anchor" href="#choosing-what-to-time"></a>
 </h2>
 <p>There are two separate speed questions.</p>
 <p>First, measure model fitting. This asks how quickly each engine
 solves the same mixed model as the number of rows, groups, slopes, or
 crossed random effects changes.</p>
-<p>Second, measure bootstrap routes. This asks how long the user-facing
-inference verbs take when they repeatedly refit models.</p>
+<p>Second, measure complete bootstrap calculations, including
+simulation, refitting, and the final inference summary.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  bootstrap_replicates <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">50L</span>, <span class="fl">200L</span>, <span class="fl">1000L</span><span class="op">)</span>,</span>
@@ -221,11 +217,9 @@ inference verbs take when they repeatedly refit models.</p>
 <span><span class="co">#&gt; 1                   50                 50</span></span>
 <span><span class="co">#&gt; 2                  200                200</span></span>
 <span><span class="co">#&gt; 3                 1000               1000</span></span></code></pre></div>
-<p>The arithmetic is simple but it decides the workflow: per-refit speed
-differences multiply by <code>nsim</code>.</p>
 </div>
 <div class="section level2">
-<h2 id="how-do-you-benchmark-fitting">How do you benchmark fitting?<a class="anchor" aria-label="anchor" href="#how-do-you-benchmark-fitting"></a>
+<h2 id="running-the-fitting-benchmark">Running the fitting benchmark<a class="anchor" aria-label="anchor" href="#running-the-fitting-benchmark"></a>
 </h2>
 <p>Use the scaling benchmark when you want to compare
 <code><a href="../reference/lmm.html">mixeff::lmm()</a></code> with <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code> over several
@@ -262,7 +256,7 @@ speed relative to <code>lme4</code>.</p>
 <span><span class="co">#&gt; 2 median seconds, fits per second, and relative speed</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="how-do-you-benchmark-bootstrap">How do you benchmark bootstrap?<a class="anchor" aria-label="anchor" href="#how-do-you-benchmark-bootstrap"></a>
+<h2 id="running-the-bootstrap-benchmark">Running the bootstrap benchmark<a class="anchor" aria-label="anchor" href="#running-the-bootstrap-benchmark"></a>
 </h2>
 <p>Use the bootstrap benchmark when you want to time the bootstrap and
 simulation-based inference routes themselves.</p>
@@ -307,12 +301,12 @@ simulation-based inference routes themselves.</p>
 <span><span class="co">#&gt; 5              pbkrtest_PBmodcomp parametric bootstrap model comparison</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="what-does-inference-method-choice-cost">What does inference method choice cost?<a class="anchor" aria-label="anchor" href="#what-does-inference-method-choice-cost"></a>
+<h2 id="inference-accuracy-and-runtime">Inference accuracy and runtime<a class="anchor" aria-label="anchor" href="#inference-accuracy-and-runtime"></a>
 </h2>
-<p>Speed is only one part of the inference decision. The route table
-also needs calibration evidence: how often a method rejects under a
-null, how often it detects a small alternative, and whether interval
-routes cover that small alternative.</p>
+<p>To assess an inference method, measure its Type I error, power, and
+interval coverage as well as its runtime. The simulation study below
+estimates these rates under a null hypothesis and a small
+alternative.</p>
 <p>The shipped artifact was regenerated in <strong>release mode</strong>
 at R candidate <code>00297b3</code> and engine pin <code>977ef11</code>.
 These historical results do not establish calibration at the current
@@ -320,14 +314,13 @@ engine pin. The study used 2,500 replications per analytic route (Monte
 Carlo SE at a true 0.05 rate: about 0.0044), 500 per bootstrap route
 (about 0.0097), and 1,000 for the joint-Laplace GLMM route. Every rate
 below carries a Wilson 95% interval, and every cell records requested,
-evaluated, refused, failed, and boundary replicate counts — nothing is
-silently dropped. The study covers four Gaussian LMM regimes (interior,
-boundary, reduced-rank, small-group) and one binomial GLMM fixture with
-three routes (joint Wald, the opt-in working-Hessian approximation, and
-the parametric bootstrap). That is the scope of the claim: calibration
-evidence <strong>for these regimes</strong>, not a general guarantee — a
-broader condition matrix (crossed effects, rare events, overdispersion)
-is future work.</p>
+evaluated, refused, failed, and boundary replicate counts. The study
+covers four Gaussian LMM regimes (interior, boundary, reduced-rank,
+small-group) and one binomial GLMM fixture with three routes (joint
+Wald, the opt-in working-Hessian approximation, and the parametric
+bootstrap). The results apply to these simulated regimes. Crossed
+effects, rare events, and overdispersed outcomes require further
+study.</p>
 <p>The artifact’s provenance (package commit, engine pin, lockfile
 checksum, exact invocation, seeds) ships next to it as a manifest:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
@@ -452,7 +445,7 @@ Routes that did not run carry an explicit <code>reason</code> —
 <p><img class="albers-dark-twin" src="benchmarking_files/figure-html/inference-simulation-plot-dark-1.png" alt="" aria-hidden="true" hidden></p>
 </div>
 <div class="section level2">
-<h2 id="how-do-you-read-the-result">How do you read the result?<a class="anchor" aria-label="anchor" href="#how-do-you-read-the-result"></a>
+<h2 id="interpreting-timing-ratios">Interpreting timing ratios<a class="anchor" aria-label="anchor" href="#interpreting-timing-ratios"></a>
 </h2>
 <p>For a local speed claim, read the summary CSV and compute ratios from
 elapsed seconds. Values above 1 mean the baseline route took longer than
@@ -466,14 +459,13 @@ the <code>mixeff</code> route.</p>
 <span>  comparison <span class="op">=</span> <span class="st">"lme4 bootMer / mixeff bootstrap CI"</span>,</span>
 <span>  speedup <span class="op">=</span> <span class="va">lme4_boot</span><span class="op">$</span><span class="va">median_sec</span> <span class="op">/</span> <span class="va">mixeff_ci</span><span class="op">$</span><span class="va">median_sec</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>Treat that ratio as local evidence, not a universal constant. It
-depends on the formula, optimizer, random-effects structure,
-<code>nsim</code>, and machine. The point of the benchmark scripts is to
-make the claim reproducible for the model class you are actually
-fitting.</p>
+<p>The ratio applies to the measured conditions. It depends on the
+formula, optimizer, random-effects structure, <code>nsim</code>, and
+machine. The point of the benchmark scripts is to make the claim
+reproducible for the model class you are actually fitting.</p>
 </div>
 <div class="section level2">
-<h2 id="what-should-go-in-a-report">What should go in a report?<a class="anchor" aria-label="anchor" href="#what-should-go-in-a-report"></a>
+<h2 id="reporting-a-benchmark">Reporting a benchmark<a class="anchor" aria-label="anchor" href="#reporting-a-benchmark"></a>
 </h2>
 <p>When you report benchmark results, include the model formula, number
 of rows, number of grouping levels, random-effects structure,

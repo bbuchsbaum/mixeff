@@ -85,8 +85,8 @@
 <p><code><a href="../reference/glmm.html">glmm()</a></code> fits mixed models for binary or grouped-binomial
 outcomes and for counts with Poisson or negative-binomial families, and
 positive continuous outcomes with a Gamma family. Choose the family and
-link for the response, then inspect the estimator and inference
-contract.</p>
+link for the response, then check the fitted estimator and available
+inference.</p>
 <p>Two estimators are available for binomial, Poisson, and Gamma models.
 The requested estimator affects what inference may be available:</p>
 <ul>
@@ -94,49 +94,44 @@ The requested estimator affects what inference may be available:</p>
 <strong><code>method = "joint_laplace"</code> (the default)</strong>
 maximizes the same joint Laplace objective as <code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code>
 (at <code>nAGQ = 1</code>). When the fitted covariance is certified, it
-supplies standard errors, z tests, and Wald confidence intervals.
-Inspect the effective estimator and inference status; a joint request
-alone does not certify a fit.</li>
+supplies standard errors, z tests, and Wald confidence intervals. Check
+the effective estimator and inference status on the returned fit.</li>
 <li>
 <strong><code>method = "pirls_profiled"</code></strong> is a fast
 profiled PIRLS fitter, the analogue of lme4’s <code>nAGQ = 0</code>
 (<code>glmm(..., nAGQ = 0)</code> selects it). It returns point
-estimates, fitted values, and variance components, but <strong>refuses
-Wald standard errors, z statistics, p-values, and confidence
-intervals</strong>: its working-Hessian covariance payload is not
-certified for inference (the full contract, including the engine’s
-accuracy caveats for the profiled approximation, is stated in
+estimates, fitted values, and variance components, but <strong>withholds
+Wald standard errors, z statistics, p-values, and confidence intervals
+unless the working-Hessian approximation is requested</strong>: its
+working-Hessian covariance payload is not certified for inference (the
+full contract, including the engine’s accuracy caveats for the profiled
+approximation, is stated in
 <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>).
 Negative-binomial families, <code>nAGQ &gt; 1</code>, and
 <code>inference = "working_hessian"</code> need this path; when
 <code>method</code> is not given, <code><a href="../reference/glmm.html">glmm()</a></code> selects it for
-them and says so with an <code>mm_estimator_notice</code> message.</li>
+them and reports the choice with an <code>mm_estimator_notice</code>
+message.</li>
 </ul>
-<p>There are two reporting routes and an exploratory opt-in. Refusal
-messages name the reporting routes and point to the full menu:</p>
+<p>For inference, the main options are:</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>Certified Wald</strong> —
-<code>method = "joint_laplace"</code> supplies standard errors, z tests,
-and Wald intervals when the covariance is certified.</li>
+<strong>Wald tests and intervals</strong> from a
+<code>joint_laplace</code> fit whose covariance passes the engine’s
+checks.</li>
 <li>
-<strong>Parametric bootstrap</strong> —
-<code>confint(fit, method = "bootstrap")</code> on profiled or
-joint-Laplace fits. Replicates preserve the fitted estimator; failed
-refits are counted. Negative binomial uses the profiled route.</li>
+<strong>Parametric bootstrap intervals</strong> with
+<code>confint(fit, method = "bootstrap")</code>, for either estimator.
+Replicates preserve the fitted estimator and failed refits are counted.
+Negative-binomial models use the profiled estimator.</li>
 <li>
-<strong>Working-Hessian approximation (opt-in)</strong> —
-<code>inference_options(fit)</code> shows the invocation and its
-caveat.</li>
+<strong>The working-Hessian approximation</strong>, available by
+explicit request for exploration. <code>inference_options(fit)</code>
+shows how to request it and explains its limitations.</li>
 </ol>
-<p>The contract behind these routes — what each one targets, the
-replicate accounting the bootstrap reports, and the full
-availability/refusal matrix — is stated once, in
-<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>. The practical
-rule: report with the default (<code>joint_laplace</code>); use
-<code>pirls_profiled</code> when its speed or approximation is
-appropriate. Inspect the fit and inference statuses before reporting
-either route.</p>
+<p><code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code> describes each
+method and its restrictions. Check the fit and inference statuses before
+reporting results.</p>
 <p>The example uses the <code><a href="https://rdrr.io/pkg/lme4/man/cbpp.html" class="external-link">lme4::cbpp</a></code> data. As in
 <code>lme4</code>, a binomial response with grouped counts can be
 written either as a two-column <code>cbind(successes, failures)</code>
@@ -157,12 +152,11 @@ than two levels are refused with a typed <code>mm_data_error</code>.</p>
 <span><span class="va">cbind_formula</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">incidence</span>, <span class="va">size</span> <span class="op">-</span> <span class="va">incidence</span><span class="op">)</span> <span class="op">~</span> <span class="va">period</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">herd</span><span class="op">)</span></span>
 <span><span class="va">weight_formula</span> <span class="op">&lt;-</span> <span class="va">prop</span> <span class="op">~</span> <span class="va">period</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">herd</span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
-<h2 id="family-and-audit">Family and Audit<a class="anchor" aria-label="anchor" href="#family-and-audit"></a>
+<h2 id="model-specification">Model specification<a class="anchor" aria-label="anchor" href="#model-specification"></a>
 </h2>
-<p>The statistical intent is a binomial-logit GLMM with a herd random
-intercept. Before fitting, the formula can be compiled and explained so
-the fixed- and random-effect structure is visible before optimization
-starts. (<code><a href="../reference/compile_model.html">compile_model()</a></code> requires a plain-column response,
+<p>We specify a binomial-logit GLMM with a random intercept for herd.
+Compile the formula to inspect the fixed and random effects before
+fitting. (<code><a href="../reference/compile_model.html">compile_model()</a></code> requires a plain-column response,
 so the audit uses the proportion form; <code><a href="../reference/glmm.html">glmm()</a></code> itself
 accepts both.)</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -242,7 +236,7 @@ the full Wald inference table:</p>
 <span><span class="co">#&gt; period4     -1.5803138  0.4274366 -3.697189 0.0002180 asymptotic_wald_z</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Wald-z reliability: moderate (asymptotic_wald_z).</span></span></code></pre></div>
-<p>Core extractors read from the durable R object:</p>
+<p>Extractors return the stored estimates:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/fitted.values.html" class="external-link">fitted</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;          1          2          3          4          5          6 </span></span>
@@ -266,10 +260,10 @@ the full Wald inference table:</p>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt;    logLik  deviance       AIC       BIC </span></span>
 <span><span class="co">#&gt; -92.02628  73.47167 194.05256 204.17932</span></span></code></pre></div>
-<p>The joint route prints an up-front runtime notice before iterating —
-the engine chooses its evaluation budget and announces it; cap it with
-<code>mm_control(max_feval = )</code>. (The <code>verbose = -1</code>
-control used here silences the notice for the vignette.)</p>
+<p>Before fitting, the joint-Laplace estimator reports its evaluation
+budget. Set <code>max_feval</code> in <code><a href="../reference/mm_control.html">mm_control()</a></code> to limit
+it. (The <code>verbose = -1</code> control used here silences the notice
+for the vignette.)</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">glmm_fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Confidence intervals:</span></span>
@@ -282,7 +276,7 @@ control used here silences the notice for the vignette.)</p>
 <span><span class="co">#&gt; status: available</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="the-fast-profiled-path">The fast profiled path<a class="anchor" aria-label="anchor" href="#the-fast-profiled-path"></a>
+<h2 id="the-profiled-pirls-estimator">The profiled-PIRLS estimator<a class="anchor" aria-label="anchor" href="#the-profiled-pirls-estimator"></a>
 </h2>
 <p><code>method = "pirls_profiled"</code> fits faster and withholds Wald
 inference; on this fit <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints the estimates with
@@ -316,9 +310,9 @@ a note naming the alternatives:</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Notes:</span></span>
 <span><span class="co">#&gt;   standard errors, z statistics, and p-values are not available from the fast profiled method (pirls_profiled). Re-fit with method = "joint_laplace" for glmer-equivalent Wald inference, or use confint(fit, method = "bootstrap") for parametric-bootstrap intervals. inference_options(fit) lists every route.</span></span></code></pre></div>
-<p>The joint-Laplace estimates differ slightly from the profiled ones —
-different estimators, same model — and match <code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code>
-closely:</p>
+<p>For this model, the joint-Laplace estimates differ slightly from the
+profiled estimates and agree closely with
+<code><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">lme4::glmer()</a></code>:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">glmer_fit</span> <span class="op">&lt;-</span> <span class="fu">lme4</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/lme4/man/glmer.html" class="external-link">glmer</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="va">incidence</span>, <span class="va">size</span> <span class="op">-</span> <span class="va">incidence</span><span class="op">)</span> <span class="op">~</span> <span class="va">period</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">herd</span><span class="op">)</span>,</span>
@@ -346,7 +340,7 @@ engine certificates: where the engine certifies the payload,
 not — an unseen grouping level under
 <code>allow.new.levels = TRUE</code>, for example — the affected rows
 come back <code>NA</code> with the engine’s reason in an
-<code>mm_reason</code> attribute, not a silent zero.</p>
+<code>mm_reason</code> attribute.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">glmm_fit</span>, type <span class="op">=</span> <span class="st">"response"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;          1          2          3          4          5          6 </span></span>
@@ -356,7 +350,7 @@ come back <code>NA</code> with the engine’s reason in an
 <span><span class="co">#&gt; 0.19804905 0.08387193 0.07397291 0.04839072 0.19804905 0.08387193</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="quadrature-sensitivity">Quadrature Sensitivity<a class="anchor" aria-label="anchor" href="#quadrature-sensitivity"></a>
+<h2 id="sensitivity-to-quadrature-order">Sensitivity to quadrature order<a class="anchor" aria-label="anchor" href="#sensitivity-to-quadrature-order"></a>
 </h2>
 <p><code>nAGQ</code> is part of the fit request and is recorded on the
 object. Values above one are a profiled-path sensitivity check: as in
@@ -391,12 +385,11 @@ movement in the objective) — visible, but an order of magnitude below
 the joint-Laplace standard errors shown earlier.</p>
 </div>
 <div class="section level2">
-<h2 id="what-is-refused-where">What is refused where<a class="anchor" aria-label="anchor" href="#what-is-refused-where"></a>
+<h2 id="availability-of-results-by-function">Availability of results by function<a class="anchor" aria-label="anchor" href="#availability-of-results-by-function"></a>
 </h2>
-<p>The table below runs each verb on the profiled fit and reports what
-actually comes back — a result with numbers, a result with the inference
-withheld, or a typed error. A no-error return is not the same thing as
-an answer, so for the coefficient table the harness also checks whether
+<p>The table below calls several functions on the profiled fit and
+checks whether they return numerical results, withhold inference, or
+raise a typed error. For the coefficient table, it also checks whether
 the standard errors are finite.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">glmm_status</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">expr</span>, <span class="va">has_numbers</span> <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">{</span></span>
@@ -433,12 +426,11 @@ the standard errors are finite.</p>
 <p>Wald <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> on the profiled fit raises
 <code>mm_inference_unavailable</code> (the working-Hessian payload is
 not certified for Wald intervals); the same request on the default
-joint-Laplace fit succeeds, as shown above. The bootstrap route
-complements it from the other side:
+joint-Laplace fit succeeds, as shown above. The bootstrap is available
+for both estimators:
 <code>confint(glmm_fast, method = "bootstrap")</code> succeeds on the
-profiled fit (route 2 above); it also supports joint-Laplace fits,
-retaining the effective estimator and counting failed refits.
-<code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> draws family-aware responses with lme4’s
+profiled fit; it retains the effective estimator and counts failed
+refits. <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> draws family-aware responses with lme4’s
 semantics (new random effects by default, <code>re.form = NULL</code> to
 condition on the fitted ones), and <code><a href="../reference/refit.html">refit()</a></code> re-fits the same
 GLMM to a new response such as a simulated one.</p>

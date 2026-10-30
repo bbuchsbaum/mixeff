@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Introduction and the Supported Model Contract • mixeff</title>
+<title>Introduction to mixeff • mixeff</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<script src="../extra.js"></script><meta property="og:title" content="Introduction and the Supported Model Contract">
+<script src="../extra.js"></script><meta property="og:title" content="Introduction to mixeff">
 <link href="../albers.css" rel="stylesheet">
 <script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
@@ -71,7 +71,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>Introduction and the Supported Model Contract</h1>
+      <h1>Introduction to mixeff</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/bbuchsbaum/mixeff/blob/main/vignettes/mixeff.Rmd" class="external-link"><code>vignettes/mixeff.Rmd</code></a></small>
@@ -82,64 +82,32 @@
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
-<p>If you fit mixed-effects models in R, you most likely use
-<code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code>. <code><a href="../reference/lmm.html">mixeff::lmm()</a></code> speaks the same
-formula language, and the familiar extractors — <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>,
-<code><a href="../reference/mm_lmm-methods.html">ranef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code>, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>,
-<code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code>, <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>,
-<code><a href="https://rdrr.io/r/stats/update.html" class="external-link">update()</a></code> — are there. Where their output or coverage
-differs from lme4 (for example the default <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code>
-method), <code><a href="../articles/lme4-migration.html">vignette("lme4-migration")</a></code> lists it. On the
-package’s supported envelope, statistical answers agree with
-<code>lme4</code> within documented tolerances on the parity datasets
-shipped with the package; the envelope itself is documented, closed, and
-machine-readable (<code><a href="../reference/supported_models.html">supported_models()</a></code>). It is not a literal
-<em>drop-in</em>: you call <code><a href="../reference/lmm.html">lmm()</a></code> rather than
-<code>lmer()</code>, results are not bit-exact, and when the package
-changes or declines a request it says so, in a diagnostic you can read
-from the fitted object.</p>
-<p>The reason to switch is what <code>mixeff</code> does around the fit.
-On the scaling benchmark shipped with the package it ran faster than
-<code>lme4</code> at the largest tested scale of each of five common
-designs — all small fits in absolute terms; the benchmarking article on
-the package site, <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html" class="uri">https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html</a>,
-reports the numbers and what they do and do not establish. And it makes
-four things explicit that <code>lme4</code> leaves implicit:</p>
-<ol style="list-style-type: decimal">
-<li>
-<strong>The formula stays familiar.</strong> Anything you would hand
-to <code>lmer()</code> you can hand to <code><a href="../reference/lmm.html">lmm()</a></code>.</li>
-<li>
-<strong>Singular fits become labeled facts.</strong> A reduced-rank
-random-effect covariance is reported on the fitted object, not as a
-single console warning.</li>
-<li>
-<strong>Inference labels its method.</strong> Each p-value carries
-the method that produced it. Where the package declines to compute
-Satterthwaite or Kenward–Roger degrees of freedom — at a boundary fit,
-for example — a parametric bootstrap is offered under the same labeling
-rules.</li>
-<li>
-<strong>The fitted object is a record.</strong> A saved model
-reopens with the same coefficients, the same diagnostics, and the same
-method labels, without depending on the original Rust handle.</li>
-</ol>
-<p>Behind the four is one design habit. In ordinary mixed-model work,
-three questions come up again and again: what does this random-effects
-formula actually mean; are the p-values or tests available, and by what
-method; can the model state be reconstructed after the fit has been
-saved. <code>mixeff</code> makes those questions part of the fitted
-object.</p>
-<p>This page demonstrates each of the four on one small dataset, then
-states the supported-model contract and the persistence guarantees. The
-other vignettes go deeper on every step.</p>
+<p><code>mixeff</code> fits linear and generalized linear mixed models
+in R using the <code>mixeff-rs</code> Rust engine. If you use
+<code>lme4</code>, the formula syntax and functions such as
+<code><a href="../reference/mm_lmm-methods.html">fixef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">ranef()</a></code>, <code><a href="../reference/mm_lmm-methods.html">VarCorr()</a></code>,
+<code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, and <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> will be familiar.
+Supported models are listed by <code><a href="../reference/supported_models.html">supported_models()</a></code>;
+differences in arguments and output are described in
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration")</a></code>.</p>
+<p>The fitted object stores the model specification, convergence
+diagnostics, and the method used for each inference result. You can
+inspect a singular fit, find out which tests are available, and save the
+results for later use. This vignette demonstrates those steps on a small
+repeated-measures dataset, then explains model support and the
+requirements for restoring a saved fit.</p>
+<p>Tests compare <code>mixeff</code> with <code>lme4</code> on the
+datasets shipped with the package, using documented numerical
+tolerances. The <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html">benchmarking
+article</a> reports timing comparisons and simulation results, with the
+package versions and model designs used in each study.</p>
 <div class="section level2">
 <h2 id="the-dataset">The dataset<a class="anchor" aria-label="anchor" href="#the-dataset"></a>
 </h2>
-<p>A small repeated-measures study: 18 subjects, 10 daily reaction-time
-measurements each, intercepts and slopes that are nearly perfectly
-correlated by construction. This design produces a singular fit in
-<code>lme4</code> and in <code>mixeff</code> alike.</p>
+<p>We simulate 10 daily reaction-time measurements for each of 18
+subjects. The subject intercepts and slopes are nearly perfectly
+correlated by construction. This example produces a singular fit in both
+<code>lme4</code> and <code>mixeff</code>.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">3</span><span class="op">)</span></span>
 <span><span class="va">n_subj</span> <span class="op">&lt;-</span> <span class="fl">18L</span></span>
@@ -164,10 +132,10 @@ correlated by construction. This design produces a singular fit in
 <span><span class="co">#&gt; 4    1    3 254.4247</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="a--the-formula-stays-familiar">A. The formula stays familiar<a class="anchor" aria-label="anchor" href="#a--the-formula-stays-familiar"></a>
+<h2 id="fitting-a-model">Fitting a model<a class="anchor" aria-label="anchor" href="#fitting-a-model"></a>
 </h2>
-<p><code>mixeff</code> keeps the lme4 random-effects syntax. If you can
-read <code>(x | g)</code>, you can read <code>mixeff</code>.</p>
+<p>The formula below estimates a population slope for <code>days</code>
+and allows each subject to have a different intercept and slope.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lmm.html">lmm</a></span><span class="op">(</span></span>
 <span>  <span class="va">rt</span> <span class="op">~</span> <span class="va">days</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">days</span> <span class="op">|</span> <span class="va">subj</span><span class="op">)</span>,</span>
@@ -197,34 +165,29 @@ and <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">su
 from lme4’s.</p>
 </div>
 <div class="section level2">
-<h2 id="b--when-a-fit-is-degenerate-the-object-says-so">B. When a fit is degenerate, the object says so<a class="anchor" aria-label="anchor" href="#b--when-a-fit-is-degenerate-the-object-says-so"></a>
+<h2 id="singular-fits">Singular fits<a class="anchor" aria-label="anchor" href="#singular-fits"></a>
 </h2>
-<p>By construction, this design pushes the random-effect covariance to
-reduced rank. <code>mixeff</code> fits the model and records the outcome
-on the object, where you can query it later:</p>
+<p>In this example, the fitted random-effect covariance has reduced
+rank. Use <code><a href="../reference/diagnostics.html">fit_status()</a></code> and <code><a href="../reference/is_singular.html">is_singular()</a></code> to
+inspect the result:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/diagnostics.html">fit_status</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "converged_reduced_rank"</span></span>
 <span><span class="fu"><a href="../reference/is_singular.html">is_singular</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>What this status means, which variance component reached the
-boundary, the diagnostic codes behind the label
-(<code><a href="../reference/diagnostics.html">diagnostics()</a></code>), the requested-to-effective-to-fitted
-record (<code><a href="../reference/changes.html">changes()</a></code>), and what a boundary does to downstream
-inference are the subject of
-<code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>.</p>
+<p><code><a href="../reference/diagnostics.html">diagnostics()</a></code> gives more detail, and
+<code><a href="../reference/changes.html">changes()</a></code> compares the requested model with its effective
+specification and fitted covariance. See
+<code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code> for the meaning
+of each status and the consequences for inference.</p>
 </div>
 <div class="section level2">
-<h2 id="c--inference-labels-its-method">C. Inference labels its method<a class="anchor" aria-label="anchor" href="#c--inference-labels-its-method"></a>
+<h2 id="available-inference-methods">Available inference methods<a class="anchor" aria-label="anchor" href="#available-inference-methods"></a>
 </h2>
-<p>On the inference side, <code>mixeff</code> first reports which
-methods are available on your fit, and then lets you run the one you
-choose under the same labeling rules.</p>
-<p><code><a href="../reference/inference_options.html">inference_options()</a></code> enumerates the inference methods for
-the current fit, gives each one a fixed-vocabulary <em>reason</em> for
-its status (the vocabularies are defined in the <a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
-glossary</a> on the package site), and names the function you would call
-to invoke it.</p>
+<p><code><a href="../reference/inference_options.html">inference_options()</a></code> lists the methods available for a
+fitted model, explains any restrictions, and gives the function call for
+each method. The status and reason codes are defined in the <a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
+glossary</a>.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">opt</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/inference_options.html">inference_options</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"days"</span>, nsim <span class="op">=</span> <span class="fl">200</span><span class="op">)</span></span>
 <span><span class="va">opt</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"method"</span>, <span class="st">"expected_status"</span>,</span>
@@ -245,25 +208,21 @@ to invoke it.</p>
 <span><span class="co">#&gt; 5                      bootstrap_lrt_requires_ml   FALSE</span></span>
 <span><span class="co">#&gt; 6 bootstrap_cluster_resample_p_value_unavailable   FALSE</span></span>
 <span><span class="co">#&gt; 7             profile_ci_unavailable_at_boundary   FALSE</span></span></code></pre></div>
-<p>Some routes are immediately available on this fit; others decline
-with a stable reason code rather than printing a number without comment.
-Why a boundary fit takes some methods off the table is explained in
-<code><a href="../articles/convergence.html">vignette("convergence", package = "mixeff")</a></code>; the routes
-themselves — including the parametric bootstrap that yields a defensible
-p-value on a fit like this one — are walked through in
+<p>For this singular fit, <code>mixeff</code> withholds Satterthwaite
+and Kenward–Roger tests. Parametric bootstrap tests remain available.
+The inference vignette explains these restrictions and demonstrates the
+alternatives:
 <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>.</p>
-<p>Every reported quantity is in one of three states: available, with a
-named method and reason; unavailable, with a stable reason code; or a
-typed error.</p>
+<p>An inference result includes its method and status. If a requested
+quantity is unavailable, the function returns a reason code with the
+result or raises a typed error.</p>
 </div>
 <div class="section level2">
-<h2 id="the-supported-model-contract">The supported model contract<a class="anchor" aria-label="anchor" href="#the-supported-model-contract"></a>
+<h2 id="supported-models">Supported models<a class="anchor" aria-label="anchor" href="#supported-models"></a>
 </h2>
-<p>The envelope is machine-readable. <code><a href="../reference/supported_models.html">supported_models()</a></code>
-returns the same registry the fitting code enforces
-(<code>inst/support/model-support.json</code>); the test suite holds the
-fitting code, the registry, and the documentation to the same
-envelope.</p>
+<p><code><a href="../reference/supported_models.html">supported_models()</a></code> reads the package’s support registry
+(<code>inst/support/model-support.json</code>). Tests check that the
+registry, fitting code, and documentation agree.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/supported_models.html">supported_models</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span><span class="va">sm</span><span class="op">$</span><span class="va">glmm_families</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"family"</span>, <span class="st">"links"</span>, <span class="st">"estimators"</span><span class="op">)</span><span class="op">]</span>,</span>
@@ -383,34 +342,28 @@ mm_grid / mm_predictions / test_effect)</td>
 arbitrary GLM family objects or custom links; adaptive Gaussian
 quadrature as a general estimator contract (nAGQ &gt; 1 is a
 profiled-path sensitivity mode).</p>
-<p>These are the short forms.
-<code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code> renders the
-full registry tables with their notes columns and is the verb-for-verb,
-argument-for-argument map for porting an lme4 script.</p>
-<p>Two boundary conditions of the contract are worth stating up
-front:</p>
+<p>For the full tables, including notes on individual features, see
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code>. When
+comparing results with lme4, keep two qualifications in mind:</p>
 <ul>
 <li>Estimates are not bit-for-bit identical to <code>lme4</code>; the
-bar is statistical agreement within documented tolerances on the parity
+criterion is agreement within documented tolerances on the parity
 datasets shipped with the package. Where results are <em>expected</em>
 to differ, the differences are classified in
 <code>inst/extdata/expected-mismatches.json</code>, with tolerances
 enforced by the test suite.</li>
-<li>Generalized fits carry their own estimator and inference contract;
-see <code><a href="../articles/glmm.html">vignette("glmm", package = "mixeff")</a></code> for the estimators
-and <code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code> for the
-inference routes.</li>
+<li>Generalized fits have estimator-specific inference methods; see
+<code><a href="../articles/glmm.html">vignette("glmm", package = "mixeff")</a></code> for the estimators and
+<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code> for the inference
+routes.</li>
 </ul>
-<p>Each limit is reported by the package itself, as a reason code or a
-typed error, when you hit it.</p>
 </div>
 <div class="section level2">
-<h2 id="d--the-fit-is-the-record">D. The fit is the record<a class="anchor" aria-label="anchor" href="#d--the-fit-is-the-record"></a>
+<h2 id="saving-and-restoring-a-fit">Saving and restoring a fit<a class="anchor" aria-label="anchor" href="#saving-and-restoring-a-fit"></a>
 </h2>
-<p>The fitted object is a serializable record. <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code>
-followed by <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> and <code><a href="../reference/revive.html">revive()</a></code> reproduces
-the audit trail and the extractors without depending on the original
-Rust handle.</p>
+<p>Save a fit with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> and reload it with
+<code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code>. The stored coefficients and diagnostics remain
+available after reloading:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".rds"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">path</span><span class="op">)</span></span>
@@ -422,18 +375,13 @@ Rust handle.</p>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="../reference/diagnostics.html">diagnostics</a></span><span class="op">(</span><span class="va">restored_fit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span>, <span class="fu"><a href="../reference/diagnostics.html">diagnostics</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">$</span><span class="va">table</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>A reviewer reading the <code>.rds</code> later sees the same
-convergence status, the same reduced-rank diagnostic, the same method
-labels on the same coefficients.</p>
 <div class="section level3">
-<h3 id="saving-reloading-and-reviving-in-practice">Saving, reloading, and reviving in practice<a class="anchor" aria-label="anchor" href="#saving-reloading-and-reviving-in-practice"></a>
+<h3 id="operations-on-a-restored-fit">Operations on a restored fit<a class="anchor" aria-label="anchor" href="#operations-on-a-restored-fit"></a>
 </h3>
-<p>A mixed-model fit often outlives the R session that produced it: you
-fit a model today, save it with the analysis, hand the script to a
-collaborator, and reopen the fit six months later for a contrast, a
-revision, or a referee response. Stored coefficients, fitted values,
-variance components, and audit records survive <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code>
-without a Rust handle. The examples above check those stored values.</p>
+<p>Stored coefficients, fitted values, variance components, and audit
+records are available after <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> without a live Rust
+handle. The checks above compare these stored values before and after
+saving.</p>
 <p>New LMM contrasts and term tests, conditional random-effect
 variances, engine-backed prediction, and prediction uncertainty reuse a
 live native handle. After serialization, native queries restore the
@@ -442,7 +390,7 @@ recorded fitted state without running an optimizer.
 restoration rebuilds matrix factors at the saved parameters. Derivative
 calculations required by an inference method may still take time.</p>
 <p>Restoration requires a matching engine source and build
-configuration. An fit without a live handle and without a compatible
+configuration. A fit without a live handle and without a compatible
 snapshot keeps its stored extractors but refuses native queries that
 require restoration. Keep the package and engine build with the saved
 fit when reproducing an analysis. Explicit refitting, bootstrap, profile
@@ -460,9 +408,9 @@ those operations request.</p>
 <span></span>
 <span><span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="va">path2</span><span class="op">)</span></span>
 <span><span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/revive.html">revive</a></span><span class="op">(</span><span class="va">restored</span><span class="op">)</span></span></code></pre></div>
-<p><code><a href="../reference/revive.html">revive()</a></code> resets the object’s process-local cache. It is
-cheap and safe to call after every <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code>, but the
-extractors and inference functions shown below also work on the plain
+<p><code><a href="../reference/revive.html">revive()</a></code> resets the object’s process-local cache. You
+can call it after <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code>, but the extractors and
+inference functions shown below also work on the plain
 <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> result. Stored extractors read durable values;
 operations requiring a native model restore the saved state as described
 above when no live handle remains.</p>
@@ -492,15 +440,14 @@ a finite <code>postVar</code> array.</p>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">re</span><span class="op">$</span><span class="va">clinic</span>, <span class="st">"postVar"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1]  1  1 12</span></span></code></pre></div>
-<p>Two related surfaces are documented elsewhere: the honest-covariance
-contract behind <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> is part of the inference contract
-(<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>), and rebuilding
-design matrices (<code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code>, <code><a href="../reference/getME.html">getME()</a></code>) from
-the stored formula and model frame is shown in
+<p>For details of <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, see
+<code><a href="../articles/inference.html">vignette("inference", package = "mixeff")</a></code>. Rebuilding
+design matrices with <code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code> and
+<code><a href="../reference/getME.html">getME()</a></code> is demonstrated in
 <code><a href="../articles/lmm.html">vignette("lmm", package = "mixeff")</a></code>.</p>
 </div>
 <div class="section level3">
-<h3 id="the-artifact-contract">The artifact contract<a class="anchor" aria-label="anchor" href="#the-artifact-contract"></a>
+<h3 id="stored-records-and-schemas">Stored records and schemas<a class="anchor" aria-label="anchor" href="#stored-records-and-schemas"></a>
 </h3>
 <p>The structured JSON artifacts stored in the fitted object are the
 source of truth; external pointers such as the Rust handle are caches.
@@ -542,9 +489,6 @@ model-state checks.</li>
 <code><a href="../reference/mm_json_known_schemas.html">mm_json_known_schemas()</a></code> lists the structured artifact
 schemas understood by this version of the package.</li>
 </ul>
-<p>The Rust backend does not change how you write R: you fit the model,
-get the numbers, and the status of those numbers stays attached to the
-object.</p>
 </div>
 <div class="section level2">
 <h2 id="where-to-read-next">Where to read next<a class="anchor" aria-label="anchor" href="#where-to-read-next"></a>
@@ -565,8 +509,8 @@ convergence statuses, boundary and singular fits, and verification.</li>
 contrasts, term tests, bootstrap methods, confidence intervals, and
 marginal means.</li>
 <li>
-<code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code> — the
-verb-for-verb map and the generated envelope tables.</li>
+<code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code> —
+corresponding functions, argument differences, and support tables.</li>
 <li>On the package site: the <a href="https://bbuchsbaum.github.io/mixeff/articles/benchmarking.html">benchmarking
 article</a>, the <a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
 glossary</a>, <a href="https://bbuchsbaum.github.io/mixeff/articles/reporting-lmms.html">reporting

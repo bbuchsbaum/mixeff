@@ -82,27 +82,19 @@
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/mixeff/">mixeff</a></span><span class="op">)</span></span></code></pre></div>
-<p>Mixed-model users want p-values. They also want to know what those
-p-values mean: which method produced them, and how trustworthy that
-method is for this particular fit. <code><a href="https://rdrr.io/pkg/lme4/man/lmer.html" class="external-link">lme4::lmer()</a></code> famously
-declines to print LMM p-values at all — the reason <code>lmerTest</code>
-exists. <code>mixeff</code> prints them, and prints the method and a
-reliability grade beside each one.</p>
-<p>When a coefficient, contrast, or term test has an available method,
-the p-value is printed with the method name. When the requested method
-is unavailable on this fit, the row says so, with a stable reason code
-rather than an apologetic substitute. The full vocabulary of reason
-codes, and the grading rubric behind the <code>reliability</code>
-column, live in the inference-method glossary on the package site (<a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html" class="uri">https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html</a>);
-this vignette points there rather than restating them.</p>
-<p>This vignette covers the whole inference surface: coefficient tests,
-contrasts, term tests, and model comparisons on a well-behaved fit; the
-full route map — including what is refused at a boundary fit and why;
-the GLMM three-route contract; and the marginal-means verbs, starting
-with the question every marginal summary should answer first: <em>which
-estimand are you averaging toward?</em></p>
+<p>Mixed-model tests depend on how uncertainty is estimated and which
+reference distribution is used. <code>mixeff</code> reports the method
+beside each p-value, together with its availability and reliability
+grade. If a method is unavailable for a fit, the result includes a
+reason code. The <a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
+glossary</a> defines these fields and explains what the grades mean.</p>
+<p>This vignette begins with coefficient tests, contrasts, term tests,
+and model comparisons for an interior LMM fit. It then covers inference
+at a covariance boundary, GLMM methods, and marginal means and
+comparisons. The final examples distinguish predictions at particular
+covariate values from averages over a reference grid.</p>
 <div class="section level2">
-<h2 id="what-model-are-we-fitting">What model are we fitting?<a class="anchor" aria-label="anchor" href="#what-model-are-we-fitting"></a>
+<h2 id="example-model">Example model<a class="anchor" aria-label="anchor" href="#example-model"></a>
 </h2>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/lmm.html">lmm</a></span><span class="op">(</span></span>
@@ -110,9 +102,8 @@ estimand are you averaging toward?</em></p>
 <span>  <span class="va">clinic_visits</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="../reference/mm_control.html">mm_control</a></span><span class="op">(</span>verbose <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>The fixed effects ask whether scores change across weeks and whether
-the coached program differs from usual care, while clinic baselines are
-allowed to vary.</p>
+<p>The model estimates differences by week and treatment, while allowing
+clinic baselines to vary.</p>
 </div>
 <div class="section level2">
 <h2 id="coefficient-p-values">Coefficient p-values<a class="anchor" aria-label="anchor" href="#coefficient-p-values"></a>
@@ -173,14 +164,13 @@ allowed to vary.</p>
 <p>The last column tells you the method used for each available p-value.
 Here <code>"auto"</code> resolved to Satterthwaite, because the fit is
 interior and the finite-sample route is feasible.</p>
-<p><code><a href="../reference/inference_table.html">inference_table()</a></code> shows a different, lower-level view:
-the inference rows the engine cached at fit time. Those rows use
-asymptotic Wald <em>z</em> — the engine’s always-computable baseline —
-so their p-values are smaller than the Satterthwaite ones above, and
-their <code>reliability</code> column says <code>low</code>. This is the
-raw artifact, useful for audit; for reporting, use
-<code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> or <code><a href="../reference/model_report.html">reporting_table()</a></code>, which resolve
-to the best feasible method and agree with each other row for row.</p>
+<p><code><a href="../reference/inference_table.html">inference_table()</a></code> returns the rows cached by the engine
+at fit time. For this fit, they use asymptotic Wald <em>z</em> tests,
+whose p-values are smaller than the Satterthwaite values above and whose
+reliability is marked <code>low</code>. Use this table to inspect the
+stored results. For reporting, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> and
+<code><a href="../reference/model_report.html">reporting_table()</a></code> apply the method selected by
+<code>"auto"</code> and agree row for row.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/inference_table.html">inference_table</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Inference table:</span></span>
@@ -246,18 +236,17 @@ table.</p>
 (the default) is marginal Type III: a term’s own contrast columns plus
 the equally-weighted average over the levels of every term that contains
 it. That construction makes the test invariant to which factor level is
-the reference — the defining property of Type III, and what SAS,
-<code>car</code>, and <code>lmerTest</code> compute. <code>"II"</code>
-respects marginality; <code>"I"</code> is sequential in
-<code><a href="https://rdrr.io/r/stats/terms.html" class="external-link">terms()</a></code> order.</p>
+the reference. This is the marginal hypothesis used here for Type III
+tests. <code>"II"</code> respects marginality; <code>"I"</code> is
+sequential in <code><a href="https://rdrr.io/r/stats/terms.html" class="external-link">terms()</a></code> order.</p>
 <p>There is a fourth value, <code>"block"</code>, for the raw
 coefficient block of each term. Under treatment coding that is the
 <em>simple effect at the other factors’ reference levels</em> — a
 legitimate quantity, but not Type III. On an unbalanced design the two
 can disagree sharply: on the package’s test fixture the same fit gives F
 = 0.29 for a main effect under <code>"block"</code> and F = 49.95 under
-<code>"III"</code>. If you want simple effects, ask for them by name; if
-you want Type III, the default is Type III.</p>
+<code>"III"</code>. Use <code>"block"</code> for the coefficient-block
+hypothesis and <code>"III"</code> for the marginal hypothesis.</p>
 </div>
 <div class="section level2">
 <h2 id="model-comparisons">Model comparisons<a class="anchor" aria-label="anchor" href="#model-comparisons"></a>
@@ -291,15 +280,16 @@ compare it with the full model.</p>
 <p>By default, <code><a href="../reference/compare.html">compare()</a></code> reports an asymptotic
 likelihood-ratio test. When fixed-effect models fitted by REML are
 compared, it refits them by ML and records that change; it does not
-apply Satterthwaite degrees of freedom. If you want a simulation-based
-check for a small example, use the bootstrap path. The bootstrap p-value
-is <code>(b + 1) / (successful + 1)</code>, where <code>b</code> counts
+apply Satterthwaite degrees of freedom. For a simulation-based
+comparison, request the bootstrap. The bootstrap p-value is
+<code>(b + 1) / (successful + 1)</code>, where <code>b</code> counts
 replicates at or above the observed statistic and
 <code>successful</code> counts the refits that completed with a finite
 statistic — equal to <code>nsim</code> only when every replicate
-succeeds, as it does in these seeded runs. So at <code>nsim = 10</code>
-the smallest reportable value is 1/11 — use hundreds of replicates
-before reading the p-value as a number rather than a bound.</p>
+succeeds, as it does in these seeded runs. At <code>nsim = 10</code>,
+the smallest reportable value is therefore 1/11. Increase
+<code>nsim</code> for an analysis, and inspect the Monte Carlo standard
+error.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/compare.html">compare</a></span><span class="op">(</span><span class="va">reduced</span>, <span class="va">fit</span>, method <span class="op">=</span> <span class="st">"bootstrap"</span>, nsim <span class="op">=</span> <span class="fl">10</span>, seed <span class="op">=</span> <span class="fl">7</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Model comparison:</span></span>
@@ -325,37 +315,30 @@ before reading the p-value as a number rather than a bound.</p>
 <div class="section level2">
 <h2 id="when-standard-p-values-are-not-well-justified">When standard p-values are not well justified<a class="anchor" aria-label="anchor" href="#when-standard-p-values-are-not-well-justified"></a>
 </h2>
-<p>Mixed models sometimes converge but still leave us in a difficult
-inference situation. The fit exists, the estimates are usable, and the
-model may be scientifically reasonable, but some familiar p-values are
-no longer well justified.</p>
-<p>The common case is a boundary or singular fit: a variance component
-estimated at or near zero, or random-effect terms estimated as perfectly
-correlated — equivalently, a fitted random-effect covariance with lower
-effective rank than the model requested. What those labels mean, how
-they are recorded on the object, and how singularity is decided are
-covered in <code><a href="../articles/convergence.html">vignette("convergence")</a></code>; here we take the labels
-as given and ask what they do to inference.</p>
-<p>The statistical background is well known. Self and Liang (1987)
-showed that likelihood-ratio statistics do not necessarily follow their
-usual chi-square reference distributions when a parameter lies on the
-boundary of its parameter space. Stram and Lee (1994) specialized this
-issue to variance components in linear mixed models. Kenward and Roger
-(1997) derived their fixed-effect adjustment from a Taylor expansion of
-the variance estimator; that derivation assumes a regular interior
-solution for the variance parameters, and at a boundary those
-derivatives may not exist or may not behave regularly. Parametric
-bootstrap methods have a long history as the better-supported route in
-this setting; Halekoh and Højsgaard (2014) implemented them in
+<p>Convergence alone does not establish that a test’s reference
+distribution is appropriate. In particular, variance components
+estimated at zero or perfect correlations among random effects can
+produce a singular covariance estimate. These boundary solutions affect
+the assumptions behind some tests.</p>
+<p><code><a href="../articles/convergence.html">vignette("convergence")</a></code> explains boundary and singular
+fits and how to identify them. Here we examine the consequences for
+inference.</p>
+<p>Self and Liang (1987) showed that likelihood-ratio statistics do not
+necessarily follow their usual chi-square reference distributions when a
+parameter lies on the boundary of its parameter space. Stram and Lee
+(1994) specialized this issue to variance components in linear mixed
+models. Kenward and Roger (1997) derived their fixed-effect adjustment
+from a Taylor expansion of the variance estimator; that derivation
+assumes a regular interior solution for the variance parameters, and at
+a boundary those derivatives may not exist or may not behave regularly.
+Parametric bootstrap methods have a long history as the better-supported
+route in this setting; Halekoh and Højsgaard (2014) implemented them in
 <code>pbkrtest</code> for small-sample and boundary cases.</p>
-<p><code>mixeff</code> handles this by making the inference rules
-explicit. Asymptotic rows are labeled with a reliability reason from a
-fixed vocabulary, such as <code>asymptotic_wald_z_fallback</code> or
-<code>*_unavailable_at_boundary</code>, and bootstrap inference is
-exposed as a labeled method rather than an informal workaround. The goal
-is not to say that a singular fit is automatically useless; it is to
-keep the covariance state attached to the inference result, so that
-available numbers and unavailable numbers are both documented.</p>
+<p><code>mixeff</code> records these limitations in the inference
+results. Asymptotic rows include reasons such as
+<code>asymptotic_wald_z_fallback</code>, unavailable methods have
+specific reason codes, and bootstrap results identify their simulation
+method.</p>
 <p>This small repeated-measures example has subject-specific intercepts
 and slopes that are nearly collinear by construction — enough to produce
 a reduced-rank random-effect covariance estimate.</p>
@@ -372,18 +355,15 @@ a reduced-rank random-effect covariance estimate.</p>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="the-route-map">The route map<a class="anchor" aria-label="anchor" href="#the-route-map"></a>
+<h2 id="checking-method-availability">Checking method availability<a class="anchor" aria-label="anchor" href="#checking-method-availability"></a>
 </h2>
-<p>Before testing a term, ask which inference routes are defined for
-this fit. <code><a href="../reference/inference_options.html">inference_options()</a></code> is an audit map, not a
-recommender. Each row describes one method that <code>mixeff</code>
-knows about. The row says whether the method can run, why it can or
-cannot run, and what the rough computational cost is.</p>
-<p>The printed object is the reader-facing map. It keeps the raw enum
-columns in <code>routes$table</code> for scripts, but explains the route
-status with display columns. The complete contract vocabulary is in the
-<a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
-glossary</a>.</p>
+<p>Before testing a term, use <code><a href="../reference/inference_options.html">inference_options()</a></code> to check
+which methods are available, why others are unavailable, and their
+approximate computational cost. The function describes the options
+without ranking them.</p>
+<p>The printed table explains each method’s status. Scripts can use the
+corresponding codes in <code>routes$table</code>; the <a href="https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html">inference-method
+glossary</a> defines their values.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">routes</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/inference_options.html">inference_options</a></span><span class="op">(</span><span class="va">sfit</span>, <span class="st">"days"</span>, nsim <span class="op">=</span> <span class="fl">200</span><span class="op">)</span></span>
 <span><span class="va">routes</span></span>
@@ -422,19 +402,16 @@ glossary</a>.</p>
 <span><span class="co">#&gt;            slow profile refits   FALSE</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Use `&lt;obj&gt;$table` for raw enum columns (`expected_status`, `expected_reliability_reason`) and notes.</span></span></code></pre></div>
-<p>Read this table as follows. The Wald route can run immediately, but
-it is labeled as a low-reliability asymptotic fallback. Satterthwaite
-and Kenward–Roger are refused on this fit by mixeff’s validated-support
-policy: both approximations are derived under asymptotics that assume
-the variance parameters lie in the interior of their parameter space,
-and this fit has a variance parameter on the boundary. Other packages
-will compute degrees of freedom here (<code>lmerTest</code> returns a
-number on this same fit); <code>mixeff</code> declines to, and states
-the refusal as a stable reason code —
-<code>satterthwaite_unavailable_at_boundary</code>,
-<code>kenward_roger_unavailable_at_boundary</code> — you can test for.
-That is a policy about what the package will certify, not a theorem that
-the numbers other packages print are wrong.</p>
+<p>For this fit, the Wald test is available as a low-reliability
+asymptotic fallback. <code>mixeff</code> withholds Satterthwaite and
+Kenward–Roger tests because the variance parameters are on a boundary,
+outside the interior setting assumed by these approximations. The reason
+codes are <code>satterthwaite_unavailable_at_boundary</code> and
+<code>kenward_roger_unavailable_at_boundary</code>.</p>
+<p>This restriction reflects the package’s validated-support policy.
+Other packages, including <code>lmerTest</code>, compute degrees of
+freedom for this example; the restriction alone does not establish that
+their results are wrong.</p>
 <p>The parametric bootstrap route can run and is the documented
 fixed-effect testing route for this fit. The bootstrap LRT route is
 refused here because this model was fit by REML, while that route
@@ -455,25 +432,15 @@ confidence intervals are not certified for this boundary fit
 <p><code>asymptotic_wald_z_fallback</code> on these rows is the engine’s
 reason: a <em>t</em> reference distribution was the target, the degrees
 of freedom could not be computed at this boundary fit, and a standard
-normal was substituted — which is why the row is graded <code>low</code>
-rather than hidden. The <em>z</em> test drops the finite-sample
-correction, so treat its p-values as optimistic rather than
-cautious.</p>
-<p>The important point is that <code>mixeff</code> distinguishes three
-cases:</p>
-<ol style="list-style-type: decimal">
-<li>A method can run and is considered available.</li>
-<li>A method can produce a number, but the number is labeled as low
-reliability.</li>
-<li>A method is refused because the method’s assumptions or target are
-not defined for this fit.</li>
-</ol>
-<p>That distinction is especially useful in scripts and reports, because
-unavailable inference is recorded with stable reason codes rather than
-disappearing as an error message.</p>
+normal was substituted — the row is therefore graded <code>low</code>.
+The <em>z</em> test drops the finite-sample correction, so its p-values
+can be too small in finite samples.</p>
+<p>Availability and reliability are separate fields. A method may return
+a result with low reliability; an unavailable method returns a reason
+code. Check both fields when assembling a report.</p>
 </div>
 <div class="section level2">
-<h2 id="how-do-i-test-the-term-anyway">How do I test the term anyway?<a class="anchor" aria-label="anchor" href="#how-do-i-test-the-term-anyway"></a>
+<h2 id="parametric-bootstrap-tests">Parametric bootstrap tests<a class="anchor" aria-label="anchor" href="#parametric-bootstrap-tests"></a>
 </h2>
 <p>For the fixed-effect term <code>days</code>, request the parametric
 bootstrap route explicitly. Here the bootstrap target is a fixed-effect
@@ -481,14 +448,15 @@ null model. <code>mixeff</code> simulates data under the null hypothesis
 for the tested term, refits the model to each simulated data set, and
 compares the observed test statistic with the bootstrap reference
 distribution.</p>
-<p>The small <code>nsim</code> value below keeps the vignette fast, and
-it earns a <code>low</code> reliability grade: per the package’s grade
-rubric (see the inference-method glossary linked above), a certified
-bootstrap reaches <code>moderate</code> at 999 or more successful
-replicates with a finite Monte Carlo SE, and stays <code>low</code>
-below that floor. The reason to use bootstrap here is not the grade — it
-is that the p-value rests on simulation rather than on asymptotics that
-mixeff refuses to certify at the boundary.</p>
+<p>The small <code>nsim</code> value keeps this example quick, but the
+result receives a <code>low</code> reliability grade because it uses few
+replicates. Under the package’s grading convention, a certified
+bootstrap receives <code>moderate</code> reliability with at least 999
+successful replicates and a finite Monte Carlo standard error. The
+glossary gives the full rubric.</p>
+<p>This bootstrap estimates a null distribution by simulation, avoiding
+the interior-parameter assumptions of the degrees-of-freedom
+approximations withheld for this fit.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">term_boot</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/test_effect.html">test_effect</a></span><span class="op">(</span></span>
 <span>  <span class="va">sfit</span>,</span>
@@ -503,8 +471,7 @@ mixeff refuses to certify at the boundary.</p>
 <span><span class="co">#&gt; 1 days              t 0.01960784 bootstrap available         low</span></span>
 <span><span class="co">#&gt;                 reliability_reason</span></span>
 <span><span class="co">#&gt; 1 parametric_bootstrap_monte_carlo</span></span></code></pre></div>
-<p>The p-value is returned as part of the labeled result row. It is not
-reconstructed by hand in R.</p>
+<p>The result row includes the p-value and method label.</p>
 <p>The result also carries a bootstrap payload in <code>details</code>,
 including the requested number of replicates, the number of successful
 refits, the boundary rate among bootstrap refits, and the Monte Carlo
@@ -519,10 +486,9 @@ standard error.</p>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt;   requested_replicates successful_replicates boundary_rate   mcse</span></span>
 <span><span class="co">#&gt; 1                   50                    50          0.48 0.0196</span></span></code></pre></div>
-<p>The boundary rate is not a failure count. It reports how often the
-bootstrap refits also ended on a covariance boundary. That is useful
-diagnostic information: it tells you that the boundary behavior is not
-just a one-off feature of the observed data set.</p>
+<p>The boundary rate reports how often bootstrap refits ended on a
+covariance boundary. These refits may have succeeded; the rate should be
+read separately from the failure count.</p>
 <p>With <code>nsim = 50</code>, the bootstrap p-value is also
 necessarily coarse. For example, a p-value of about 0.0196 corresponds
 to the smallest non-zero value possible under a common plus-one
@@ -532,7 +498,7 @@ replicates when the p-value itself will be reported or compared with a
 decision threshold.</p>
 </div>
 <div class="section level2">
-<h2 id="what-about-confidence-intervals">What about confidence intervals?<a class="anchor" aria-label="anchor" href="#what-about-confidence-intervals"></a>
+<h2 id="bootstrap-confidence-intervals">Bootstrap confidence intervals<a class="anchor" aria-label="anchor" href="#bootstrap-confidence-intervals"></a>
 </h2>
 <p>For fixed-effect confidence intervals, use
 <code>confint(method = "bootstrap")</code>. This bootstrap has a
@@ -578,27 +544,22 @@ test.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; [[2]]</span></span>
 <span><span class="co">#&gt; [1] "23 successful bootstrap refit(s) ended on a covariance boundary"</span></span></code></pre></div>
-<p>This distinction is central:</p>
-<ul>
-<li>
-<code>test_effect(..., method = "bootstrap")</code> uses a
-fixed-effect null target and returns a p-value.</li>
-<li>
-<code>confint(..., method = "bootstrap")</code> uses a full-model
-estimator-distribution target and returns an interval.</li>
-<li>The second result should not be used to reverse-engineer the
-first.</li>
-</ul>
+<p><code>test_effect(..., method = "bootstrap")</code> simulates under a
+fixed-effect null hypothesis to obtain a p-value.
+<code>confint(..., method = "bootstrap")</code> simulates under the full
+fitted model to obtain an interval. The two procedures use different
+reference distributions, so one result cannot be reconstructed from the
+other.</p>
 </div>
 <div class="section level2">
-<h2 id="where-does-cluster-bootstrap-stand">Where does cluster bootstrap stand?<a class="anchor" aria-label="anchor" href="#where-does-cluster-bootstrap-stand"></a>
+<h2 id="cluster-bootstrap">Cluster bootstrap<a class="anchor" aria-label="anchor" href="#cluster-bootstrap"></a>
 </h2>
 <p>Cluster resampling is available as an estimator-distribution target.
 It resamples grouping levels and summarizes how estimates vary across
 those resamples.</p>
-<p>In the current schema, that target does not certify fixed-effect
-p-values. Therefore a request for a fixed-effect cluster-bootstrap
-p-value refuses cleanly instead of inventing a null distribution.</p>
+<p>The current implementation does not use cluster resampling to test
+fixed-effect null hypotheses. A request for a cluster-bootstrap p-value
+therefore returns an unavailable result with a reason code.</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cluster_row</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/test_effect.html">test_effect</a></span><span class="op">(</span></span>
 <span>  <span class="va">sfit</span>,</span>
@@ -612,10 +573,6 @@ p-value refuses cleanly instead of inventing a null distribution.</p>
 <span><span class="co">#&gt; 1 days cluster_bootstrap not_assessed      NA</span></span>
 <span><span class="co">#&gt;                                      reason_code</span></span>
 <span><span class="co">#&gt; 1 bootstrap_cluster_resample_p_value_unavailable</span></span></code></pre></div>
-<p>That refusal is part of the same inference contract as the available
-bootstrap result. Available numbers are labeled with their method and
-reliability reason. Unavailable numbers are labeled with stable reason
-codes explaining why they are unavailable.</p>
 </div>
 <div class="section level2">
 <h2 id="variance-component-boundary-tests">Variance-component boundary tests<a class="anchor" aria-label="anchor" href="#variance-component-boundary-tests"></a>
@@ -667,11 +624,10 @@ refusal.</p>
 <span><span class="va">fixed_boundary</span><span class="op">$</span><span class="va">table</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"term"</span>, <span class="st">"method"</span>, <span class="st">"status"</span>, <span class="st">"reason_code"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;   term         method      status                                  reason_code</span></span>
 <span><span class="co">#&gt; 1 days not_applicable unsupported boundary_lrt_not_applicable_to_fixed_effects</span></span></code></pre></div>
-<p>Boundary likelihood-ratio theory applies to variance-component tests,
-where the null hypothesis places a variance on the edge of the parameter
-space. A fixed-effect null does not put any parameter on a boundary, so
-the mixture distribution has nothing to correct there — which is why the
-route refuses rather than running.</p>
+<p>The mixture reference distribution applies when the null hypothesis
+places a variance component on a boundary. Testing an ordinary
+fixed-effect coefficient does not impose that restriction, so this
+method is unavailable for fixed-effect tests.</p>
 </div>
 <div class="section level2">
 <h2 id="profile-confidence-intervals">Profile confidence intervals<a class="anchor" aria-label="anchor" href="#profile-confidence-intervals"></a>
@@ -713,35 +669,34 @@ count.</p>
 above showed.</p>
 </div>
 <div class="section level2">
-<h2 id="glmm-inference-the-three-route-contract">GLMM inference: the three-route contract<a class="anchor" aria-label="anchor" href="#glmm-inference-the-three-route-contract"></a>
+<h2 id="glmm-inference">GLMM inference<a class="anchor" aria-label="anchor" href="#glmm-inference"></a>
 </h2>
-<p>For generalized linear mixed models the contract depends on the
-estimator. <code><a href="../reference/glmm.html">glmm()</a></code>’s default
-<code>method = "joint_laplace"</code> is glmer’s joint Laplace estimator
-and its Wald inference is certified. The opt-in
-<code>method = "pirls_profiled"</code> (lme4’s <code>nAGQ = 0</code>
-analogue; also used, with a notice, for negative-binomial families and
-<code>nAGQ &gt; 1</code>) is a fast profiled PIRLS fitter: it returns
-point estimates, fitted values, and variance components, but
-<strong>refuses Wald standard errors, z statistics, p-values, and
-confidence intervals on every route</strong>. Its covariance payload is
-a working Hessian the engine does not certify, and the engine’s own
-documentation warns that the profiled path is a different statistical
-approximation than <code>glmer()</code>’s joint Laplace fit — it can be
-less accurate for overdispersed models and models with observation-level
-random effects.</p>
-<p>Two routes support reporting; a third exposes an uncertified
-approximation for exploration. Refusal messages name the reporting
-routes and point to <code><a href="../reference/inference_options.html">inference_options()</a></code> for the complete
-menu:</p>
+<p>For generalized linear mixed models, the available inference depends
+on the estimator and the fitted covariance. The default,
+<code>method = "joint_laplace"</code>, uses glmer’s joint Laplace
+objective and supports Wald inference when the covariance passes the
+engine’s checks. The opt-in <code>method = "pirls_profiled"</code>
+(lme4’s <code>nAGQ = 0</code> analogue; also used, with a notice, for
+negative-binomial families and <code>nAGQ &gt; 1</code>) is a fast
+profiled PIRLS fitter: it returns point estimates, fitted values, and
+variance components, but <strong>withholds Wald standard errors, z
+statistics, p-values, and confidence intervals unless the
+working-Hessian approximation is explicitly requested</strong>. Its
+covariance payload is a working Hessian the engine does not certify, and
+the engine’s own documentation warns that the profiled path is a
+different statistical approximation than <code>glmer()</code>’s joint
+Laplace fit — it can be less accurate for overdispersed models and
+models with observation-level random effects.</p>
+<p>The following options differ in their assumptions and computational
+cost. Use <code><a href="../reference/inference_options.html">inference_options()</a></code> to check their availability
+for a particular fit:</p>
 <ol style="list-style-type: decimal">
 <li>
 <strong>Certified joint Wald.</strong> The default
 <code>method = "joint_laplace"</code>; standard errors, z tests, and
-Wald intervals come from a covariance the engine certifies.
-<code><a href="../articles/glmm.html">vignette("glmm")</a></code> is the operational quickstart for this
-route, including its parity with <code>glmer()</code> and its runtime
-notice.</li>
+Wald intervals come from a covariance the engine certifies. See
+<code><a href="../articles/glmm.html">vignette("glmm")</a></code> for a worked example and a comparison with
+<code>glmer()</code>.</li>
 <li>
 <strong>Parametric bootstrap.</strong>
 <code>confint(fit, method = "bootstrap")</code> restores the fitted
@@ -754,19 +709,19 @@ Carlo error attached to the result; a finite interval alone does not
 establish calibration.</li>
 <li>
 <strong>Working-Hessian approximation, explicit opt-in.</strong> For
-exploration and screening only. Every unlocked row is labeled
+exploration and screening only. Each result row is labeled
 <code>wald_z_working_hessian</code> with status
 <code>available_noninferential</code> and grade <code>moderate</code>;
 <code>inference_options(fit)</code> states the caveat and the
 invocation, and the aphantasia reproduction article (<a href="https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html" class="uri">https://bbuchsbaum.github.io/mixeff/articles/reproducing-aphantasia.html</a>)
 is the worked example of why this route is opt-in.</li>
 </ol>
-<p>The practical rule: report with the default
-<code>joint_laplace</code> fit or the bootstrap; treat profiled-fit
-point estimates as exploratory.</p>
-<p>Here is the contract on a small simulated binomial GLMM. On a
-profiled fit, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints the estimates and withholds
-the inference columns:</p>
+<p>For reporting, use joint-Laplace Wald inference when available, or
+the parametric bootstrap. The working-Hessian approximation remains
+exploratory.</p>
+<p>For this simulated binomial GLMM fitted by the profiled estimator,
+<code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> prints the estimates and withholds the inference
+columns:</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gfit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/glmm.html">glmm</a></span><span class="op">(</span></span>
 <span>  <span class="va">y</span> <span class="op">~</span> <span class="va">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">g</span><span class="op">)</span>,</span>
@@ -781,8 +736,8 @@ the inference columns:</p>
 <span><span class="co">#&gt;               Estimate Std. Error statistic p.value       method</span></span>
 <span><span class="co">#&gt; (Intercept) -0.3993006         NA        NA      NA not_computed</span></span>
 <span><span class="co">#&gt; x            0.6448091         NA        NA      NA not_computed</span></span></code></pre></div>
-<p>A Wald <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> on the same fit is a typed refusal, not
-an error to guess about:</p>
+<p>A Wald <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> call on the same fit raises a typed
+condition with the reason for withholding the intervals:</p>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">err</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">gfit</span><span class="op">)</span>, error <span class="op">=</span> <span class="va">identity</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">err</span><span class="op">)</span><span class="op">[[</span><span class="fl">1L</span><span class="op">]</span><span class="op">]</span></span>
@@ -907,13 +862,12 @@ with its own notices; see <code><a href="../articles/convergence.html">vignette(
 <div class="section level2">
 <h2 id="estimands-what-are-you-averaging">Estimands: what are you averaging?<a class="anchor" aria-label="anchor" href="#estimands-what-are-you-averaging"></a>
 </h2>
-<p>A fixed-effect coefficient is not a group mean. For a model with
-multiple predictors and interactions,
-<code>fixef(fit)["trtactive"]</code> is the treatment effect <em>at the
-reference level of every other predictor</em> — one cell of the design,
-not a summary over it. Before averaging cells into something more
-interpretable, name the estimand. Four quantities are easy to
-conflate:</p>
+<p>A treatment coefficient need not summarize treatment differences
+across all covariate values. With treatment coding and interactions,
+<code>fixef(fit)["trtactive"]</code> gives the treatment difference at
+the reference levels of interacting factors and at zero for interacting
+numeric predictors. To calculate a broader summary, first specify the
+quantity you want to estimate. Four common choices are:</p>
 <ol style="list-style-type: decimal">
 <li>
 <strong>A prediction at a covariate cell</strong> — the model’s
@@ -940,19 +894,19 @@ by itself: it requires identification assumptions (randomization, or
 conditional ignorability given the model’s covariates) that are
 properties of the study design, not of the fit.</li>
 </ol>
-<p>The first three are model-based summaries that differ only in how
-they weight covariate cells; the marginal verbs below compute (1) and
-(2) with standard errors from the fixed-effect covariance. Whether any
-of them deserves a causal reading is a question about the design, and
-the fitted model does not certify it.</p>
+<p>The first three are model-based summaries with different choices of
+covariate values and weights. The functions below compute (1) and (2)
+with standard errors from the fixed-effect covariance. Whether any of
+them deserves a causal reading is a question about the design, and the
+fitted model does not certify it.</p>
 <p><code>mixeff</code> computes these with four functions —
 <code><a href="../reference/mm_grid.html">mm_grid()</a></code>, <code><a href="../reference/mm_grid.html">mm_predictions()</a></code>,
 <code><a href="../reference/mm_grid.html">mm_means()</a></code>, <code><a href="../reference/mm_grid.html">mm_comparisons()</a></code> — that route all
 inference through the same machinery as <code><a href="../reference/contrast.html">contrast()</a></code>. Each
 row in the returned table carries <code>method</code>,
 <code>status</code>, <code>reliability</code>, and <code>reason</code>
-columns naming how it was computed and how far to trust it (the column
-vocabularies are in the glossary linked above).</p>
+columns identifying the calculation and its qualifications (defined in
+the glossary linked above).</p>
 <div class="section level3">
 <h3 id="the-study">The study<a class="anchor" aria-label="anchor" href="#the-study"></a>
 </h3>
@@ -970,8 +924,8 @@ Patients are grouped within clinics.</p>
 <span><span class="co">#&gt; 6   S3     C1 control post 47.24603</span></span></code></pre></div>
 <p>Clinics are not balanced between treatment arms: clinic C1 has five
 control patients and one active, clinic C3 the reverse. So raw group
-means are confounded with clinic effects — each arm’s mean leans on the
-clinics that arm over-samples, and the clinics differ — and a naive
+means also reflect clinic effects: each arm’s mean gives more weight to
+the clinics that contribute more of its observations. Thus a raw
 <code>tapply(rehab$score, rehab$trt, mean)</code> will not answer the
 treatment question.</p>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
@@ -1018,8 +972,8 @@ treatment question.</p>
 <span><span class="co">#&gt;   Satterthwaite denominator df computed from analytic vcov_beta Jacobian and finite-difference deviance Hessian over varpar</span></span></code></pre></div>
 <p>The interaction coefficient <code>trtactive:timepost</code> tells you
 the <em>additional</em> post-treatment change for the active arm
-relative to control — a cell-specific quantity, estimand (1) territory.
-Summaries over cells are the marginal verbs’ job.</p>
+relative to control. Use the functions below to calculate cell means and
+averages over cells.</p>
 </div>
 <div class="section level3">
 <h3 id="reference-grids-with-mm_grid">Reference grids with <code>mm_grid()</code><a class="anchor" aria-label="anchor" href="#reference-grids-with-mm_grid"></a>
@@ -1054,8 +1008,8 @@ means.</p>
 <span><span class="co">#&gt; 2   trt=active, time=pre 49.89982 48.11197  51.68768 satterthwaite</span></span>
 <span><span class="co">#&gt; 3 trt=control, time=post 47.90862 46.12076  49.69647 satterthwaite</span></span>
 <span><span class="co">#&gt; 4  trt=active, time=post 43.11889 41.33103  44.90674 satterthwaite</span></span></code></pre></div>
-<p>Each row carries its inference method so the provenance is visible
-without digging into model objects.</p>
+<p>The <code>method</code> column identifies the inference used for each
+row.</p>
 </div>
 <div class="section level3">
 <h3 id="marginal-means-with-mm_means">Marginal means with <code>mm_means()</code><a class="anchor" aria-label="anchor" href="#marginal-means-with-mm_means"></a>
@@ -1168,25 +1122,24 @@ interaction effect expressed as a contrast: (active post − active pre) −
 <span><span class="va">lc</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"estimate"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"p_value"</span>, <span class="st">"method"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;    estimate     lower     upper      p_value        method</span></span>
 <span><span class="co">#&gt; 1 -2.818065 -3.296872 -2.339259 2.865068e-11 satterthwaite</span></span></code></pre></div>
-<p><code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code> applies the same contract-preserving
-inference as <code><a href="../reference/contrast.html">contrast()</a></code>, so the method and status fields
-are populated identically. A row whose status is anything other than
+<p><code><a href="../reference/mm_lincomb.html">mm_lincomb()</a></code> uses the same inference methods as
+<code><a href="../reference/contrast.html">contrast()</a></code>, so the method and status fields are populated
+identically. A row whose status is anything other than
 <code>"available"</code> contains <code>NA</code> where the refused
 numbers would go, with a stable <code>reason</code> code saying why; the
 code vocabulary is in the glossary linked above. For the
-<code>emmeans</code> bridge — and the audit columns that do <em>not</em>
-survive the trip through <code>emmeans</code> — see
+<code>emmeans</code> bridge — and the audit columns omitted from
+<code>emmeans</code> output — see
 <code><a href="../articles/lme4-migration.html">vignette("lme4-migration")</a></code>.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="the-covariance-contract">The covariance contract<a class="anchor" aria-label="anchor" href="#the-covariance-contract"></a>
+<h2 id="fixed-effect-covariance">Fixed-effect covariance<a class="anchor" aria-label="anchor" href="#fixed-effect-covariance"></a>
 </h2>
-<p>The quantities above all lean on the fixed-effect covariance, and
-<code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> is explicit about what it returns. For full-rank
-fits it is the model-based covariance from the engine’s
-<code>fixed_effect_covariance_matrix</code> payload, with method and
-status attributes attached:</p>
+<p>These calculations depend on the fixed-effect covariance returned by
+<code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>. For a full-rank LMM, this is the model-based
+covariance from the engine’s <code>fixed_effect_covariance_matrix</code>
+payload, with method and status attributes attached:</p>
 <div class="sourceCode" id="cb35"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">V</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="va">V</span></span>
@@ -1238,9 +1191,8 @@ status attributes attached:</p>
 coefficients only, as lme4’s does (the dropped coefficient is omitted
 from <code><a href="../reference/mm_lmm-methods.html">fixef()</a></code> too). For otherwise uncertified fits,
 <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> returns an <code>NA</code> matrix carrying an
-<code>mm_unavailable_reason</code> attribute instead of fabricated
-numbers — the same available/unavailable/typed-error contract as every
-other surface in this vignette. Prediction standard errors and intervals
+<code>mm_unavailable_reason</code> attribute explaining why the
+covariance is unavailable. Prediction standard errors and intervals
 (population versus conditional, and why the conditional SE can be
 <em>smaller</em>) are documented in <code><a href="../articles/lmm.html">vignette("lmm")</a></code>.</p>
 </div>
@@ -1276,8 +1228,6 @@ fixed-effect tests.</li>
 the effective estimator. The labeled working-Hessian opt-in is for
 exploration and screening; its <code>moderate</code> grade does not make
 it certified inference.</p>
-<p>Every route either returns a labeled result or refuses with a stable
-reason.</p>
 </div>
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>

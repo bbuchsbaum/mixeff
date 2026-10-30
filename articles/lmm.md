@@ -5,37 +5,21 @@
 library(mixeff)
 ```
 
-You use a linear mixed model when observations are not independent:
-visits within clinics, trials within people, students within classrooms.
-The standard R answer is
-[`lme4::lmer()`](https://rdrr.io/pkg/lme4/man/lmer.html).
+Linear mixed models account for dependence among observations from the
+same group: visits within clinics, trials within people, or students
+within classrooms.
 [`mixeff::lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
-accepts the same formula language — `(1 | group)`, `(x | group)`,
-`(1 + x || group)`, `(1 | a/b)`, crossed blocks — and the fitted object
-answers to the common generics:
-[`fixef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
-[`ranef()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
-[`VarCorr()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmm-methods.md),
-[`predict()`](https://rdrr.io/r/stats/predict.html),
-[`summary()`](https://rdrr.io/r/base/summary.html),
-[`confint()`](https://rdrr.io/r/stats/confint.html),
-[`anova()`](https://rdrr.io/r/stats/anova.html), and friends. The
-supported surface is documented and closed rather than open-ended:
-[`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md)
-states the contract, and
-[`vignette("lme4-migration", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md)
-gives the exact verb-and-argument map.
+uses lme4-style random-effects formulas, including `(1 | group)`,
+`(x | group)`, `(1 + x || group)`, nested groups, and crossed groups.
+Fitted models support the usual R functions for summaries, predictions,
+and extracting estimates.
 
-What [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
-adds is that the fitted object carries the design, the convergence
-status, and the inference labels with it. You can audit, summarize,
-save, and reload without recomputing.
-
-This vignette is the LMM walkthrough: reading a random-effects formula
-before you fit, fitting, reading the summary, the standard extractors,
-prediction, and weights — followed by a longer section on what the
-random-effects spellings themselves mean and the compile-time design
-help.
+This vignette covers fitting and inspecting a model, prediction, case
+weights, and the meaning of random-effects formulas. For supported
+models and persistence, see
+[`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md);
+for differences from lme4, see
+[`vignette("lme4-migration", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md).
 
 ## The data
 
@@ -60,33 +44,27 @@ str(sleep)
 #>   .. ..$ Subject: chr [1:18] "Subject=1" "Subject=2" "Subject=3" "Subject=4" ...
 ```
 
-The key structure: `Subject` appears 10 times in the data — once per
-day. Those 10 observations are *not* independent. They share the
-subject’s baseline speed, their individual sensitivity to sleep loss,
-and any other between-person trait that we haven’t measured. If you fit
-a plain OLS regression with independent-error standard errors, its
-uncertainty calculations ignore that dependence. For within-subject
-effects such as this one, the resulting tests can be anti-conservative;
-the direction and size of the error depend on the design and covariance
-structure.
+Each subject contributes ten observations, one per day. Measurements
+from the same subject share a baseline and a response to sleep loss.
+Ordinary least squares with independent-error standard errors ignores
+this dependence. For within-subject effects such as this one, the
+resulting tests can be anti-conservative; the direction and size of the
+error depend on the design and covariance structure.
 
-A mixed model handles this by giving each subject its own intercept
-*and* its own slope — their personal baseline and their personal rate of
-slowing — and then estimating a population distribution over those
-person-level parameters.
+A random-intercept-and-slope model estimates a population distribution
+for subjects’ baselines and rates of change.
 
 ![](lmm_files/figure-html/individual-trajectories-1.png)
 
 The grey lines are individuals; the blue line is the population average.
-Subjects vary in their starting point *and* in how fast they slow down —
-which is exactly what a random-intercept-and-slope model captures.
+Subjects vary in their starting point and in how fast they slow down, as
+allowed by the random-intercept-and-slope model.
 
 ## Step 1: Read the formula before you fit
 
 Before fitting, compile the model to see what `mixeff` understands about
 your formula. This separates formula interpretation from optimization;
-you can catch mis-specified random effects without paying the cost of a
-full fit.
+you can catch mis-specified random effects before running a full fit.
 
 ``` r
 
@@ -133,8 +111,8 @@ fit <- lmm(Reaction ~ Days + (Days | Subject), sleep)
 
 [`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) returns
 an `mm_lmm` object. The bundled Rust engine performs the optimization;
-[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md) is the R
-entry point and result container.
+[`lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
+constructs the R result object.
 
 Printing the fit gives the formula, convergence status, likelihood
 summary, residual scale, and fixed effects.
@@ -186,12 +164,11 @@ summary(fit, tests = "coefficients")
 
 The summary has four blocks, in print order.
 
-**Fit status.** Check this line first: `converged_interior` is the
-status every other block of the summary assumes. When a fit lands
-somewhere else — a variance component at zero, a reduced-rank covariance
-— the status says so and the available inference methods change with it.
-What the statuses mean, and what a boundary does to the rest of the
-output, is the subject of
+**Fit status.** Check this before interpreting the estimates.
+`converged_interior` indicates an accepted interior solution; other
+statuses identify reduced-rank solutions or runs that did not establish
+convergence. These distinctions affect which inference methods are
+available. See
 [`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md).
 
 **Variance components.** `Subject (Intercept)` is the estimated
@@ -209,15 +186,14 @@ subjects, not the 180 raw rows. Which methods exist, when each applies,
 and how to choose among them is covered in
 [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md).
 
-**Inference status.** One row per coefficient stating how much to trust
-the test: `status` says whether it was computed, `reliability` grades
-it, and `reliability_reason` names the engine’s reason for that grade —
-here `satterthwaite_finite_difference_approximation`, the standard route
-for this method. The Rust engine assigns these grades and reasons; the R
-side passes them through unchanged. The closed vocabularies behind these
-columns are defined in the [inference-method
-glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html)
-on the package site.
+**Inference status.** For each coefficient, `status` records whether the
+test was computed, `reliability` summarizes the approximation used, and
+`reliability_reason` gives the basis for that grade. Here the reason is
+`satterthwaite_finite_difference_approximation`. These fields come from
+the Rust engine; their values are defined in the [inference-method
+glossary](https://bbuchsbaum.github.io/mixeff/articles/inference-method-glossary.html).
+A reliability grade does not assess whether the model is appropriate for
+the data.
 
 ## Step 4: Extract components
 
@@ -269,9 +245,9 @@ confint(fit, method = "asymptotic")
 
 [`confint()`](https://rdrr.io/r/stats/confint.html) with
 `method = "asymptotic"` gives Wald intervals. The `(Intercept)` interval
-is the population mean reaction time on Day 0; the `Days` interval is
-the range of plausible slopes. The other interval methods, and when each
-is available, are covered in
+describes uncertainty in the population mean reaction time on Day 0; the
+`Days` interval describes uncertainty in the population slope. Other
+interval methods and their availability are covered in
 [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md).
 
 Design matrices can be rebuilt from the stored formula and model frame —
@@ -388,12 +364,12 @@ head(predict(fit, interval = "confidence"))
 #> 6 312.9515 298.5048 327.3983
 ```
 
-Rows the engine cannot certify — for example an unseen grouping level
-predicted with `allow.new.levels = TRUE`, where there is no posterior
-variance for the missing level — return `NA` with the engine’s reason in
-the `mm_reason` attribute rather than a fabricated number. That refusal
-vocabulary is part of the inference contract
-([`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)).
+When prediction uncertainty is unavailable, the affected rows return
+`NA` with a reason in the `mm_reason` attribute. For example, an unseen
+grouping level predicted with `allow.new.levels = TRUE` has no
+conditional variance estimate from the fitted data. See
+[`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)
+for the reason codes.
 
 ## Step 6: Case weights
 
@@ -418,9 +394,8 @@ head(fit_w$weights)
 
 The weights are stored on the fit and reused by
 [`refit()`](https://bbuchsbaum.github.io/mixeff/reference/refit.md) and
-the inference routines. Invalid weights — wrong length, negative, or
-non-finite — are refused with a typed `mm_data_error` rather than
-silently recycled.
+the inference routines. Invalid weights, including a vector of the wrong
+length or non-finite values, raise a typed `mm_data_error`.
 
 For contrasts, term tests, marginal means, and model comparisons on a
 fit like this one, continue with
@@ -430,22 +405,16 @@ themselves.
 
 ## Random-effects formulas in depth
 
-Random-effects formulas are compact, and compactness hides assumptions.
-Seven characters — `(x | g)` — commit the analyst to a specific
-covariance structure, a specific number of free parameters, and a
-specific identification claim about what the data can support. Two
-formulas that differ by a single character — `||` for `|`, say — fit
-different models.
+A random-effects formula specifies which coefficients vary across groups
+and how they may covary. Replacing `|` with `||`, for example, changes
+the covariance structure. Before fitting,
+[`explain_model()`](https://bbuchsbaum.github.io/mixeff/reference/explain_model.md)
+shows the grouping factors, covariance assumptions, parameter counts,
+and relevant features of the data.
 
-`mixeff` shares the formula language with `lme4`, so the notation you
-already read transfers directly. What it adds is a way to read the
-formula *before* the optimizer runs: the named form of every random
-term, the plain-language scope, the parameter count, and the design
-facts that support or refuse the formula on this particular data.
-
-The goal of this section is not to pick a model for you. It is to show
-what the model you wrote can and cannot express, and to make the
-difference between nearby spellings legible.
+The examples below compare these structures and the data needed to
+estimate them. Choosing a structure also requires assumptions about the
+study that the formula alone cannot settle.
 
 We use a second small repeated-measures dataset with one row per subject
 per time point.
@@ -462,7 +431,7 @@ head(study)
 #> 6       6    1 -0.93415132 -0.3525909 -1.3062800 3.130125 0.7523965   1
 ```
 
-### What does `(1 | subject)` say?
+### Random intercepts: `(1 | subject)`
 
 A random intercept is the simplest random-effects structure: subjects
 may differ in average score, but the fixed `time` effect is the same
@@ -494,16 +463,11 @@ explain_model(intercept_only)
 #>   scope_note: `time` varies within `subject`, so a `subject`-level slope is structurally possible
 ```
 
-Each random-effects card has two header lines worth pausing on. `wrote:`
-is the term as you typed it. `canonical:` is what the parser hands
-downstream — what the optimizer, the audit, and the inference contract
-will actually see. They are identical here because `(1 | subject)` is
-already in canonical form — nothing was rewritten. The two diverge for
-more elaborate formulas. `(1 | clinic/site)` is rewritten as
-`(1 | clinic) + (1 | clinic:site)`; implicit intercepts are made
-explicit; double-bar shorthand expands to its split-block form. The
-`canonical:` line is where you read off the model the engine will
-actually fit.
+Each random-effects card shows the entered term as `wrote:` and its
+expanded form as `canonical:`. They agree for `(1 | subject)`. For more
+complex formulas, the expansion makes the model explicit:
+`(1 | clinic/site)` becomes `(1 | clinic) + (1 | clinic:site)`, implicit
+intercepts are included, and double-bar shorthand is split into blocks.
 
 The remaining lines decode the term further. `named form:` restates it
 as a function call that names the grouping factor, the intercept, the
@@ -511,15 +475,13 @@ slopes (if any), and the covariance family. `scope:` is a plain-language
 sentence. `covariance` and `support` report parameter cost and design
 sufficiency.
 
-The `Design notes:` section at the bottom records facts about the data
-that the fitted formula did not use. Here `time` varies within each
-subject, so a subject-level `time` slope is structurally possible. That
-is reported as a note, not a correction: whether to add
-`(time | subject)` is a scientific question about whether subjects
-plausibly differ in their `time` slopes, not a mechanical one about what
-the package can do.
+The `Design notes:` section describes features of the data that could
+support additional random effects. Here `time` varies within each
+subject, so a subject-level `time` slope is structurally possible.
+Whether to include it depends on the study design and the plausibility
+of differences in subjects’ rates of change.
 
-### What changes when you add a random slope?
+### Random intercepts and slopes
 
 `(1 + time | subject)` requests a two-dimensional random effect for each
 subject: one baseline coefficient and one `time` coefficient, with a
@@ -567,7 +529,7 @@ What θ is, why the engine optimizes it rather than the covariance matrix
 directly, and how boundary fits are read off this table are covered in
 [`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md).
 
-### What do split blocks and `||` mean?
+### Separate blocks and `||`
 
 The formula `(1 | subject) + (0 + time | subject)` uses two separate
 blocks for the same grouping factor. That fixes the intercept-slope
@@ -680,14 +642,14 @@ engine actually fits — with one display difference:
 keeps a `||` term as written, while the cards additionally show it as
 the split blocks the engine fits.
 
-### What are the three kinds of help?
+### Design diagnostics
 
-The compile-time diagnostics separate three situations that are often
-mixed together in ordinary model output.
+The diagnostics distinguish a structurally unidentifiable slope, limited
+information for estimating a covariance, and an omitted but estimable
+slope.
 
-First, a structural impossibility: a requested random slope cannot be
-estimated if that variable does not vary within the group. Here `dose`
-is constant within each subject.
+In the first example, `dose` is constant within each subject, so its
+random slope cannot be estimated separately from the random intercept.
 
 ``` r
 
@@ -710,9 +672,9 @@ explain_model(impossible)
 #>   1. structural_refusal: `dose` does not vary within `subject`, so a `subject`-level `dose` slope cannot be estimated from this design.
 ```
 
-Second, low information budget: a requested full covariance can be
-estimable in principle while still having little grouping-level support.
-The package reports the parameter count and observed levels.
+A full covariance can be estimable in principle even when there are few
+groups to estimate it from. The diagnostic reports the parameter count
+and number of observed levels.
 
 ``` r
 
@@ -726,9 +688,9 @@ diagnostics(low_info)$table[, c("code", "severity", "message")]
 #> 2 4 levels are below the v0 full-covariance threshold 15 for 3 covariance parameters
 ```
 
-Third, unmodeled-but-possible: a fixed effect varies within group, but
-the random-effects formula does not include the corresponding slope.
-This is the quiet design note you saw for `(1 | subject)`.
+In the third example, `time` varies within subjects, but the formula
+includes only random intercepts. The diagnostic records that a random
+slope could be included.
 
 ``` r
 
@@ -741,12 +703,12 @@ diagnostics(intercept_only)$table[, c("code", "severity", "message")]
 #> 2 `time` varies within `subject`, so a `subject`-level slope is structurally possible
 ```
 
-### How do you inspect nearby formulas?
+### Alternative random-effects formulas
 
 [`random_options()`](https://bbuchsbaum.github.io/mixeff/reference/random_options.md)
-is a map of nearby random-effect spellings for one grouping factor. It
-marks the current spelling and reports parameter costs and support
-facts. It does not rank the rows.
+lists alternative random-effects formulas for one grouping factor. It
+marks the current formula and reports parameter counts and design
+support for each option.
 
 ``` r
 
@@ -803,17 +765,16 @@ opts$options[, c("formula", "theta_parameters", "design_status", "current")]
 #> 5                 (1 + time | subject)                3    sufficient   FALSE
 ```
 
-### Why is there no recommendation row?
+### Comparing covariance structures
 
-`mixeff` treats formula explanations as an audit problem, not a
-model-selection problem. The package reports the current model, nearby
-spellings, assumptions, and data-support facts. Choosing among
-scientifically different random-effects structures remains part of the
-analysis design.
+[`random_options()`](https://bbuchsbaum.github.io/mixeff/reference/random_options.md)
+describes alternative formulas without ranking them. The choice depends
+on the study design and the assumptions you are prepared to make about
+variation across groups.
 
 [`compare_covariance()`](https://bbuchsbaum.github.io/mixeff/reference/compare_covariance.md)
-gives another view of the same principle: full, diagonal, and scalar
-covariance families are displayed side by side, without a preferred row.
+displays full, diagonal, and scalar covariance structures side by side,
+also without ranking them.
 
 ``` r
 
@@ -836,23 +797,17 @@ compare_covariance(full)
 #>     design status:    sufficient
 ```
 
-### Where do fitted-model changes appear?
+### Changes during fitting
 
 After fitting,
 [`changes()`](https://bbuchsbaum.github.io/mixeff/reference/changes.md)
-records the journey from the formula you wrote to the model the engine
-actually solved. Each row carries the stage at which something happened,
-the term it affected, the status of the change, and three side-by-side
-renderings: what was *requested*, what was *effective* (after design
-parsing and identifiability checks), and what was *fitted* (after the
-optimizer landed). A reduced-rank covariance estimate appears here as a
-labeled fact, not an instruction to rewrite the formula (boundary and
-reduced-rank outcomes are the subject of
-[`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md)).
+compares the requested formula, the effective model after parsing and
+identifiability checks, and the fitted result. Each row identifies the
+stage, affected term, and change status. A reduced-rank covariance
+estimate is recorded here; its interpretation is discussed in
+[`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md).
 
-The full row carries a lot of text. We show it in two passes so neither
-pass wraps awkwardly in the rendered vignette. The first pass names the
-stage of each change and its status:
+The first table shows the stage and status of each change:
 
 ``` r
 
@@ -866,8 +821,7 @@ knitr::kable(
 | semantic_ir      |         | unchanged | formula display                 |
 | certificate_time | r0      | full_rank | requested rank 2; fitted rank 2 |
 
-The second pass shows the requested → effective → fitted arc itself,
-where the three columns are the substance of the report:
+The second table compares the requested, effective, and fitted models:
 
 ``` r
 
@@ -885,7 +839,7 @@ knitr::kable(
 
 | Question | Where |
 |----|----|
-| What is the supported envelope, and how do fits persist across sessions? | [`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md) |
+| Which models are supported, and how do I save and restore a fit? | [`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md) |
 | How are p-values computed, and which method is right for my fit? | [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md) |
 | How do I compute marginal means and treatment contrasts? | [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md) |
 | What do convergence statuses, boundaries, and singular fits mean? | [`vignette("convergence", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/convergence.md) |

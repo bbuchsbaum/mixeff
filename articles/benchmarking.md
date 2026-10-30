@@ -5,14 +5,11 @@
 library(mixeff)
 ```
 
-Speed matters most when a workflow repeats the same fit many times.
-Parametric bootstrap is the canonical case: a 1,000-replicate bootstrap
-means roughly 1,000 refits, plus the original fit and summary work. The
-same logic applies to cluster bootstrap, simulation studies, multi-seed
-reanalysis, and anything whose inner loop is “fit the same model again
-with new data”. A per-refit time saving accumulates across replicates.
-If each refit is twice as fast, the repeated fitting remains about twice
-as fast; the absolute seconds saved grow with the number of refits.
+Bootstrap and simulation studies can require thousands of model fits. A
+1,000-replicate bootstrap takes roughly 1,000 refits in addition to the
+original analysis, so even a small saving per fit can reduce the total
+runtime. This article reports fitting times and inference results from
+the benchmarks shipped with the package, and shows how to rerun them.
 
 On the LMM scaling benchmark shipped with the package, `mixeff` ran 2.0
 to 3.5 times faster than `lme4` at the largest tested scale of each
@@ -23,7 +20,7 @@ harness used to make them. The numbers are machine- and model-dependent
 also write CSV files that you can re-plot and rerun on the designs you
 actually care about.
 
-## What does the benchmark show?
+## Fitting times
 
 The benchmark sweeps five mixed-model designs — varying rows, varying
 subject levels, adding random slopes, crossing subject and item, and
@@ -69,11 +66,11 @@ head(benchmark[, c("scenario", "scale_value", "engine",
 ```
 
 The first figure plots the median fit time against design scale, on
-log-log axes, with one panel per scenario. `mixeff` runs below `lme4`
-everywhere on this grid. The largest speedup is on the one design that
-combines crossed grouping with a random slope; the other four designs do
-not order by structural complexity (the plain grouped random intercept
-ranks second).
+log-log axes, with one panel per scenario. `mixeff` took less time than
+`lme4` at every tested setting. The largest speedup is on the one design
+that combines crossed grouping with a random slope; the other four
+designs do not order by structural complexity (the plain grouped random
+intercept ranks second).
 
 ``` r
 
@@ -103,9 +100,9 @@ lme4.](benchmarking_files/figure-html/fit-time-plot-1.png)
 
 ![](benchmarking_files/figure-html/fit-time-plot-dark-1.png)
 
-The second figure folds the same data into one panel: the speedup of
-`mixeff` over `lme4` at each cell. The dashed reference line at 1× would
-mean the two engines are equally fast.
+The second figure shows the speedup of `mixeff` over `lme4` at each
+cell. The dashed reference line at 1× would mean the two engines are
+equally fast.
 
 ``` r
 
@@ -142,11 +139,9 @@ milliseconds, so timer resolution alone can move a ratio substantially —
 one millisecond on the 4 ms side of a 12 ms / 4 ms cell moves the ratio
 from 3.0 to 2.4 or 4.0; five replications per cell do little to smooth
 that. Second, within a single design the speedup does not trend reliably
-with scale. What the grid does support: `mixeff` ran faster in every
-cell, and the single largest speedup is on the design combining crossed
-grouping with a random slope.
+with scale.
 
-## What should you measure?
+## Choosing what to time
 
 There are two separate speed questions.
 
@@ -154,8 +149,8 @@ First, measure model fitting. This asks how quickly each engine solves
 the same mixed model as the number of rows, groups, slopes, or crossed
 random effects changes.
 
-Second, measure bootstrap routes. This asks how long the user-facing
-inference verbs take when they repeatedly refit models.
+Second, measure complete bootstrap calculations, including simulation,
+refitting, and the final inference summary.
 
 ``` r
 
@@ -169,10 +164,7 @@ data.frame(
 #> 3                 1000               1000
 ```
 
-The arithmetic is simple but it decides the workflow: per-refit speed
-differences multiply by `nsim`.
-
-## How do you benchmark fitting?
+## Running the fitting benchmark
 
 Use the scaling benchmark when you want to compare
 [`mixeff::lmm()`](https://bbuchsbaum.github.io/mixeff/reference/lmm.md)
@@ -216,7 +208,7 @@ data.frame(
 #> 2 median seconds, fits per second, and relative speed
 ```
 
-## How do you benchmark bootstrap?
+## Running the bootstrap benchmark
 
 Use the bootstrap benchmark when you want to time the bootstrap and
 simulation-based inference routes themselves.
@@ -265,12 +257,11 @@ data.frame(
 #> 5              pbkrtest_PBmodcomp parametric bootstrap model comparison
 ```
 
-## What does inference method choice cost?
+## Inference accuracy and runtime
 
-Speed is only one part of the inference decision. The route table also
-needs calibration evidence: how often a method rejects under a null, how
-often it detects a small alternative, and whether interval routes cover
-that small alternative.
+To assess an inference method, measure its Type I error, power, and
+interval coverage as well as its runtime. The simulation study below
+estimates these rates under a null hypothesis and a small alternative.
 
 The shipped artifact was regenerated in **release mode** at R candidate
 `00297b3` and engine pin `977ef11`. These historical results do not
@@ -279,13 +270,12 @@ replications per analytic route (Monte Carlo SE at a true 0.05 rate:
 about 0.0044), 500 per bootstrap route (about 0.0097), and 1,000 for the
 joint-Laplace GLMM route. Every rate below carries a Wilson 95%
 interval, and every cell records requested, evaluated, refused, failed,
-and boundary replicate counts — nothing is silently dropped. The study
-covers four Gaussian LMM regimes (interior, boundary, reduced-rank,
-small-group) and one binomial GLMM fixture with three routes (joint
-Wald, the opt-in working-Hessian approximation, and the parametric
-bootstrap). That is the scope of the claim: calibration evidence **for
-these regimes**, not a general guarantee — a broader condition matrix
-(crossed effects, rare events, overdispersion) is future work.
+and boundary replicate counts. The study covers four Gaussian LMM
+regimes (interior, boundary, reduced-rank, small-group) and one binomial
+GLMM fixture with three routes (joint Wald, the opt-in working-Hessian
+approximation, and the parametric bootstrap). The results apply to these
+simulated regimes. Crossed effects, rare events, and overdispersed
+outcomes require further study.
 
 The artifact’s provenance (package commit, engine pin, lockfile
 checksum, exact invocation, seeds) ships next to it as a manifest:
@@ -422,7 +412,7 @@ rows.](benchmarking_files/figure-html/inference-simulation-plot-1.png)
 
 ![](benchmarking_files/figure-html/inference-simulation-plot-dark-1.png)
 
-## How do you read the result?
+## Interpreting timing ratios
 
 For a local speed claim, read the summary CSV and compute ratios from
 elapsed seconds. Values above 1 mean the baseline route took longer than
@@ -440,12 +430,12 @@ data.frame(
 )
 ```
 
-Treat that ratio as local evidence, not a universal constant. It depends
-on the formula, optimizer, random-effects structure, `nsim`, and
-machine. The point of the benchmark scripts is to make the claim
-reproducible for the model class you are actually fitting.
+The ratio applies to the measured conditions. It depends on the formula,
+optimizer, random-effects structure, `nsim`, and machine. The point of
+the benchmark scripts is to make the claim reproducible for the model
+class you are actually fitting.
 
-## What should go in a report?
+## Reporting a benchmark
 
 When you report benchmark results, include the model formula, number of
 rows, number of grouping levels, random-effects structure, `nsim`,

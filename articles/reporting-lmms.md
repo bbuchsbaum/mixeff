@@ -5,27 +5,22 @@
 library(mixeff)
 ```
 
-A mixed-model report needs more than coefficient estimates. The reader
-needs to know which observations and grouping units were used, what
-random-effects structure was fitted, which inference method produced
-each row, whether the optimizer reached an interior solution, and which
-quantities were not available. An `lme4` fit stores several of these
-(counts, random-effects structure, optimizer messages); what it does not
-carry is a per-row record of which inference method produced each
-number, or a structured list of what was unavailable and why.
+A mixed-model report should describe the observations and grouping
+units, model specification, estimates, and inference methods. It should
+also record convergence problems and quantities that could not be
+computed.
 
-`mixeff` stores all of the above in the fitted object. This vignette
-follows a structured mixed-model reporting checklist — describe the data
-and design, report the model specification, show fixed and random
-effects, label inference methods, preserve software provenance, and make
-caveats explicit instead of hiding them in prose — drawing each section
-from the same fitted object.
+`mixeff` stores this information in the fitted object.
+[`reporting_table()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
+extracts individual sections, and
+[`model_report()`](https://bbuchsbaum.github.io/mixeff/reference/model_report.md)
+assembles them with software-version information. This article shows how
+to use those tables and turn the results into methods and results prose.
 
-## What model will we report?
+## Example model
 
-Use one dataset and one fitted model all the way through. Here, clinics
-are the grouping units and each clinic contributes repeated weekly
-observations.
+The example uses repeated weekly observations from clinics, with clinic
+as the grouping factor.
 
 ``` r
 
@@ -42,11 +37,11 @@ head(clinic_visits)
 The analysis estimates average changes by week and treatment while
 allowing clinics to have different baselines.
 
-## What did the formula request?
+## Checking the specification
 
 Before fitting, compile the model and read the design audit. This
-separates formula interpretation from optimization and gives you a
-stable place to check the requested random-effects structure.
+separates formula interpretation from optimization and lets you check
+the requested random-effects structure.
 
 ``` r
 
@@ -67,10 +62,9 @@ audit(spec)
 #>   covariance parameter maps [INFO]: 1 map(s)
 ```
 
-## What fit was used?
+## Fitting and summarizing the model
 
-Fit the model once. In reporting work, the fitted object is the source
-for summary output, report sections, and provenance.
+Fit the model and inspect its summary:
 
 ``` r
 
@@ -102,11 +96,10 @@ reporting_table(fit, "overview")
 #>    package_version                                       0.2.0
 ```
 
-## Which design facts belong in the report?
+## Data and random-effects structure
 
-A useful mixed-model report names the grouping units and their
-information budget. The data-design section gives the number of levels
-and rows per group.
+The data-design section gives the grouping factors, their number of
+levels, and rows per group.
 
 ``` r
 
@@ -117,10 +110,8 @@ reporting_table(fit, "data_design")
 #>                   6 sufficient
 ```
 
-The random-term section translates the random-effects formula into
-auditable rows. This is where the report records the grouping factor,
-basis, covariance family, parameter count, and Rust-authored
-plain-language description.
+The random-term section records the grouping factor, basis, covariance
+family, parameter count, and a description of each term.
 
 ``` r
 
@@ -131,7 +122,7 @@ reporting_table(fit, "random_terms")
 #>     sufficient `clinic` units may differ in average outcome.
 ```
 
-## How are estimates and p-values labeled?
+## Fixed effects and inference
 
 [`summary()`](https://rdrr.io/r/base/summary.html) gives a familiar
 coefficient table. Use it for console review.
@@ -201,12 +192,10 @@ inferred from a model object.
 > common weekly slope assumed by the model. The simulated example does
 > not establish a treatment effect in a clinical population.
 
-## How are random effects reported?
+## Fitted variance components
 
-The random-effect table reports variance components on the fitted scale.
-In the current contract, those rows come from the Rust-authored
-`mixedmodels.fit_summary` payload, so the source and availability status
-travel with the report.
+The random-effect table reports fitted variance components, together
+with their source and availability status.
 
 ``` r
 
@@ -216,10 +205,10 @@ reporting_table(fit, "random_effects")
 #>  Residual    Residual residual_variance 0.1414236 0.3760633 available
 ```
 
-## What is unavailable or caveated?
+## Unavailable results and other qualifications
 
 Build the full model report when you want the section map, software
-provenance, and ledger of unavailable or not-applicable fields.
+provenance, and list of unavailable or inapplicable fields.
 
 ``` r
 
@@ -249,9 +238,9 @@ report
 #> Unavailable/caveated fields: 1
 ```
 
-The unavailable ledger is part of the report, not an error condition. It
-is where `mixeff` records schema gaps, not-applicable sections, and
-other caveats with stable reasons and an action taken.
+The `unavailable` section identifies missing or inapplicable fields and
+other qualifications, with reason codes and a record of the action
+taken.
 
 ``` r
 
@@ -262,7 +251,7 @@ reporting_table(report, "unavailable")
 #>  no_model_comparison_recorded_on_this_fit
 ```
 
-## What should go into your written report?
+## Assembling a report
 
 Use the report sections as the source material for prose:
 
@@ -273,13 +262,11 @@ Use the report sections as the source material for prose:
   support.
 - `fixed_effects` records estimates and inference labels.
 - `random_effects` records fitted variance components.
-- `unavailable` records caveats that should not disappear from the
-  analysis record.
+- `unavailable` records unavailable quantities and their reasons.
 
-The important habit is to report from the fitted object rather than from
-memory. Use
+Use
 [`vignette("inference", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/inference.md)
 for term tests, contrasts, and model comparisons. Use the introduction
 vignette’s save-and-revive section
 ([`vignette("mixeff", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/mixeff.md))
-when the report needs to survive an RDS round trip.
+for reports based on saved fits.

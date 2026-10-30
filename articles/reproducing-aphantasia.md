@@ -7,9 +7,8 @@ library(mixeff)
 
 The fixture bundled with `mixeff` is an anonymized copy of the
 trial-level data used by the revision 3 Loo aphantasia manuscript
-analysis. It is intended as a real GLMM reproduction target: large
-enough to expose optimizer and naming drift, but small enough to ship as
-package test data.
+analysis. It provides a test case for comparing estimates, coefficient
+names, and optimizer behavior with the original analysis.
 
 ``` r
 
@@ -218,13 +217,12 @@ c(logLik = as.numeric(logLik(rt_fit)), AIC = AIC(rt_fit))
 fixef(rt_fit)
 ```
 
-## What the manuscript reports, computed three ways
+## Coefficients, contrasts, and marginal means
 
-Since the engine began serializing the GLMM fixed-effect covariance
-artifact, the quantities the manuscript actually reports are available
-through three `mixeff` functions. The chunks below run only when live
-fitting is enabled (`MIXEFF_RUN_APHANTASIA_VIGNETTE=true`); otherwise
-the same calls remain valid against any locally-built fit.
+The following examples extract coefficient tables, compute the
+manuscript contrasts, and estimate marginal means. They run only when
+live fitting is enabled (`MIXEFF_RUN_APHANTASIA_VIGNETTE=true`) and use
+the models fitted above.
 
 The reference comparison depends on the random-effect family, factor
 coding, estimator, and covariance calculation. The `||` factor expansion
@@ -232,17 +230,17 @@ now follows lme4; inspect those choices before attributing any
 difference to a single cause.
 
 This section illustrates the working-Hessian opt-in in that broader
-workflow. The fit above passes `inference = "working_hessian"` — the
-explicit opt-in that unlocks the UNCERTIFIED profiled working-Hessian
-approximation. Without it, a profiled fit withholds standard errors,
-tests, and intervals on every route
-(`confint(fit, method = "bootstrap")` remains available). On this
-dataset the default joint-Laplace fit withholds them too: it matches
-glmer’s coefficients to 5e-5, but its Hessian is not positive definite
-on the active parameter space (the fitted mask block sits near a
-boundary, correlation ~0.98), so the engine does not certify its Wald
-table. With the opt-in, `summary(fit, tests = "coefficients")` returns a
-Wald-z table in which every row is labelled `wald_z_working_hessian`:
+workflow. The fit above passes `inference = "working_hessian"` — an
+explicit request for the uncertified profiled working-Hessian
+approximation. Without it, a profiled fit withholds Wald standard
+errors, tests, and intervals (`confint(fit, method = "bootstrap")`
+remains available). On this dataset the default joint-Laplace fit
+withholds them too: it matches glmer’s coefficients to 5e-5, but its
+Hessian is not positive definite on the active parameter space (the
+fitted mask block sits near a boundary, correlation ~0.98), so the
+engine does not certify its Wald table. With the opt-in,
+`summary(fit, tests = "coefficients")` returns a Wald-z table in which
+every row is labelled `wald_z_working_hessian`:
 
 ``` r
 
@@ -255,10 +253,10 @@ The rows carry `reliability = "moderate"` and status
 `available_noninferential`: the working-Hessian covariance is not the
 same estimator as `lme4::vcov(glmer_fit)`. In the recorded comparison at
 an earlier engine pin, its Wald standard errors for the
-difference-in-differences contrasts come within 0.1% of glmer’s (0.0807
-vs 0.0808 at the centered SOA), and the opt-in test suite pins them to
-±0.002. That agreement is measured here, not certified in general, which
-is why the approximation stays opt-in rather than default.
+difference-in-differences contrasts were within 0.1% of glmer’s (0.0807
+vs 0.0808 at the centered SOA). The opt-in test suite checks agreement
+within ±0.002. This comparison does not establish calibration for other
+data or versions.
 
 The manuscript’s primary estimand — the difference-in-differences
 contrast at the centered SOA and at the focal 25 ms SOA — is a linear
@@ -297,14 +295,13 @@ as.data.frame(reference$inference$primary_dd)
 ```
 
 Both contrasts come out negative (larger masking cost in aphantasia), as
-in the manuscript. Be precise about what is pinned. The opt-in test
-suite enforces agreement with the frozen reference at ±0.02 on the
-estimates and ±0.002 on the SEs; at the worst corner of those bands the
-centered-SOA p-value — .039 in the reference — could reach .077, so the
-significance verdict there is not guaranteed by the tests. In practice
-mixeff lands close: the profiled estimate is −0.163 (reference −0.167)
-with SE 0.0807, giving p ≈ .044. The sign and approximate size of both
-contrasts are pinned.
+in the manuscript. The opt-in test suite enforces agreement with the
+frozen reference at ±0.02 on the estimates and ±0.002 on the SEs; at the
+extremes of those tolerances the centered-SOA p-value — .039 in the
+reference — could reach .077, so the significance verdict there is not
+guaranteed by the tests. In the recorded run, the profiled estimate was
+−0.163 (reference −0.167) with SE 0.0807, giving p ≈ .044. The tests
+check the sign and approximate size of both contrasts.
 
 `emmeans` works on `mm_glmm` via `emm_basis.mm_glmm`. Population-level
 cell means at the centered SOA, on the response (probability) scale,
@@ -332,7 +329,7 @@ emmeans::contrast(
 )
 ```
 
-## Out of scope here
+## Additional reproduction tests
 
 The full sensitivity, intact-stimulus, combined-stimtype, log-RT, S1
 random-effects-spec stability, S7 age-covariate, and S9 folder-based
@@ -343,16 +340,17 @@ sweep, S4 specification curve, and S5 rstanarm posterior are
 intentionally left out of the regular reproduction run: the first two
 are heavy opt-in jobs, and `mixeff` is not a Bayesian engine.
 
-## Caveats
+## Limitations
 
 - The Wald numbers in this article come from the PIRLS/Laplace
   working-Hessian covariance via the explicit
   `inference = "working_hessian"` opt-in (on this dataset neither the
   profiled nor the default joint-Laplace fit certifies Wald inference;
   the parametric bootstrap is the certified alternative). The
-  approximation is graded `reliability = "moderate"`; its DiD standard
-  errors come within 0.1% of `lme4::vcov()` on this dataset, and the
-  opt-in test suite pins them to ±0.002 with no parity-ledger exemption.
+  approximation is graded `reliability = "moderate"`; in the recorded
+  comparison, its DiD standard errors were within 0.1% of `lme4::vcov()`
+  on this dataset, and the opt-in test suite pins them to ±0.002 with no
+  parity-ledger exemption.
 - Population-level GLMM prediction (`re.form = NA`, `type = "link"` or
   `"response"`) is supported and matches `predict(glmer, re.form = NA)`
   on joint-Laplace fits; `emmeans(..., type = "response")` remains the

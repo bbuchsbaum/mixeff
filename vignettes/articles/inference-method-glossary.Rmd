@@ -11,20 +11,21 @@ vignette: >
 library(mixeff)
 ```
 
-This page is the reference for the raw enum values that appear in
-`inference_options()` and in the inference tables returned by `summary()`,
+This page defines the status, method, and reason codes used by
+`inference_options()` and the inference tables returned by `summary()`,
 `inference_table()`, `contrast()`, `test_effect()`, `anova()`, `compare()`,
 and `confint()`.
 
 Printed output may use reader-facing display columns such as `display_status`,
-`display_reason`, and `what_to_do_next`. The values below are the stable
-machine-readable contract for tests, reports, and downstream tooling.
+`display_reason`, and `what_to_do_next`. Use the codes below in tests,
+reports, and other software that reads inference results.
 
 ## `expected_status`
 
 `expected_status` is used by `inference_options()` to say whether a route is
-expected to be usable on the current fit. This is advice before execution;
-the returned result's `status` is the authority after the call runs.
+expected to be usable on the current fit. This describes availability
+before the call;
+check the returned result's `status` to see whether it succeeded.
 
 | Value | Definition |
 |---|---|
@@ -47,7 +48,7 @@ Read this separately from the route map and from `reliability`:
 
 `expected_reliability_reason` is the reason `inference_options()` attaches
 to a route on its map. `reliability_reason` is the reason the engine
-attaches to an actual inference row when a verb runs. The vocabularies
+attaches to an actual inference row when a function runs. The vocabularies
 overlap but are not identical, and where the engine has recorded an
 observed reason for a route, `inference_options()` reports the observed
 value in preference to its own prediction — so on a fitted LMM the Wald
@@ -73,22 +74,22 @@ the two route-map entries marked *(route map)* below.
 | `bootstrap_lrt_requires_ml` | A bootstrap likelihood-ratio test requires ML-fitted models, not REML-fitted models. | `test_effect(fit, term, method = "bootstrap_lrt")` refuses on a REML fit. |
 | `bootstrap_cluster_resample_p_value_unavailable` | Cluster resampling describes estimator distributions and does not certify fixed-effect p-values in the current schema. | `test_effect(fit, term, method = "cluster_bootstrap", group = "subj")` refuses with this reason. |
 | `profile_likelihood_ci` | Profile-likelihood confidence intervals are available for this requested parameter set. | `inference_options()` marks `profile_ci` available on an ML fit away from the boundary. |
-| `profile_beta_unavailable_under_reml` | Fixed-effect beta profile intervals require an ML fit and are not certified from REML profile payloads. | `confint(fit, method = "profile")` on a REML fit records beta rows with this reason. |
+| `profile_beta_unavailable_under_reml` | Fixed-effect beta profile intervals require an ML fit and are not certified from REML profile payloads. | This code describes raw REML profile payloads. `confint(fit, method = "profile")` obtains fixed-effect intervals from an ML profile, including for REML fits. |
 | `profile_ci_unavailable_at_boundary` | Profile intervals are not certified for boundary or reduced-rank fits. | `inference_options()` refuses `profile_ci` on a singular fit. |
 
-The `method` column has one value worth listing here as well:
-`not_computed`, which appears on GLMM rows fitted by the default
-`pirls_profiled` estimator, whose standard errors and p-values are
-withheld (see `vignette("glmm")`).
+The `method` value `not_computed` appears when standard errors and
+p-values are withheld, for example on a `pirls_profiled` GLMM without
+the working-Hessian opt-in. The default GLMM estimator is
+`joint_laplace`; see `vignette("glmm")`.
 
-## `reliability` — the grade rubric
+## Reliability grades
 
 `reliability` is a closed four-value scale: `"high"`, `"moderate"`,
 `"low"`, or `"not_available"`. This section is the rubric (rubric version
 1, mixeff 0.2.0): the exact mapping the code implements from observable
-facts to a grade. The grade is a summary of *which method produced the
-number and what is known about that method's approximation* — nothing
-more.
+facts to a grade. The grade summarizes the method and its numerical
+approximation. It does not assess model specification or statistical
+calibration.
 
 | Grade | Earned by | Where you see it |
 |---|---|---|
@@ -97,15 +98,14 @@ more.
 | `low` | The route ran but with a known weakening: a t target that fell back to standard-normal z (degenerate df), or a bootstrap below the 999-replicate floor. | Boundary-fit Wald rows; small-`nsim` bootstrap results. |
 | `not_available` | No graded quantity: the row is a refusal, or reliability is not defined for the target. | Withheld GLMM rows; refusal rows. |
 
-The 999-replicate bootstrap floor is a grading convention, documented
-rather than asserted: at `B = 999` bootstrap p-values resolve on an exact
+The threshold of 999 successful bootstrap replicates is a grading
+convention: at `B = 999` bootstrap p-values resolve on an exact
 1/(B+1) = 0.001 grid, and the Monte Carlo SE of a rate near 0.05 is about
-0.0069. `B = 998` does not differ materially from `B = 999` — which is
-why the replicate accounting (successful count, Monte Carlo SE) ships
-alongside the grade, so you can judge the evidence directly instead of
-trusting the label.
+0.0069. There is little numerical difference between `B = 998` and
+`B = 999`. Inspect the successful replicate count and Monte Carlo SE
+alongside the grade when assessing precision.
 
-What a grade does **not** mean: no grade asserts that the model is
+A grade does not establish that the model is
 correctly specified, that the estimate is unbiased, or that a p-value is
 exactly calibrated. Those are properties of the model and the data;
 mixeff's measured calibration evidence for its routes lives in the
@@ -114,7 +114,7 @@ replicate accounting.
 
 ## What "certified" means
 
-Several surfaces use the word *certified*. It has one definition:
+In `mixeff`, *certified* means:
 
 > The engine's inference contract marks this estimator/target combination
 > available: the required numerical invariants passed, the value was
@@ -122,16 +122,16 @@ Several surfaces use the word *certified*. It has one definition:
 > validated support envelope.
 
 "Certified" does **not** mean statistically guaranteed correct, and it
-does not mean the model is well specified. An absent certificate is never
-treated as a certificate: surfaces that cannot see a certified inference
-table withhold rather than assume. The uncertified alternatives are
-always explicitly labelled (for example `wald_z_working_hessian` rows
+does not mean the model is well specified. When the required certificate
+is missing,
+inference is withheld. Uncertified approximations require an explicit
+request and have distinct labels (for example `wald_z_working_hessian` rows
 under the `inference = "working_hessian"` opt-in).
 
 ## `reason_code`
 
 `reason_code` is attached to actual unavailable or not-assessed rows and to
-typed errors from inference verbs. It may match `expected_reliability_reason`,
+typed errors from inference functions. It may match `expected_reliability_reason`,
 but the two fields answer different questions: `expected_reliability_reason`
 predicts or grades a route, while `reason_code` names the concrete refusal that
 actually occurred.
@@ -149,5 +149,5 @@ actually occurred.
 | `bootstrap_lrt_requires_same_weights` | The compared fits use different case weights. | A weighted reduced fit compared to an unweighted full fit refuses. |
 | `bootstrap_cluster_resample_p_value_unavailable` | Cluster bootstrap is available as an estimator-distribution target but not as a fixed-effect p-value certificate. | `test_effect(..., method = "cluster_bootstrap", group = "subj")` returns a not-assessed p-value row. |
 | `cluster_bootstrap_multifactor_ambiguous` | A cluster-bootstrap term test needs an explicit grouping factor when the model has multiple random-effect groups. | `test_effect(..., method = "cluster_bootstrap")` on a crossed-random-effect model refuses until `group` is supplied. |
-| `profile_beta_unavailable_under_reml` | Fixed-effect beta profile intervals are absent by contract under REML. | `confint(fit, method = "profile")` on a REML fit adds beta rows with `NA` limits and this code. |
+| `profile_beta_unavailable_under_reml` | Raw REML profile payloads do not include fixed-effect beta intervals. | Raw REML profile payloads omit beta intervals. The public `confint(fit, method = "profile")` method uses an ML profile for these intervals. |
 | `fixed_effect_inference_table_unavailable_legacy_object` | A legacy or revived object lacks the Rust fixed-effect inference artifact. | `inference_table()` on an older saved fit returns not-assessed rows with this code. |

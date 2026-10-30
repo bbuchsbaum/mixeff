@@ -70,23 +70,48 @@ facts the status label summarizes:
 
 optimizer_certificate(fit)
 #> Optimizer certificate:
-#>                   metric                value
-#>                   status   converged_interior
-#>                optimizer       pattern_search
-#>                objective     95.0585066127678
-#>               iterations                   23
-#>       free_gradient_norm 0.000357840060177139
-#>  projected_gradient_norm 0.000357840060177139
-#>        hessian_eigen_min     20.7651381551018
-#>             hessian_rank                    1
-#>         information_rank                    1
+#>                    metric                value
+#>                    status   converged_interior
+#>                 optimizer       pattern_search
+#>                 objective     95.0585066127678
+#>                iterations                   23
+#>        free_gradient_norm 0.000357840060177139
+#>   projected_gradient_norm 0.000357840060177139
+#>         hessian_eigen_min     20.7651381551018
+#>              hessian_rank                    1
+#>          information_rank                    1
+#>         optimizer_hessian          approximate
+#>  derivative_certification          approximate
+#>   optimizer_hessian: active-subspace Hessian from finite differences of the
+#>     analytic gradient is positive semidefinite
+#>   derivative_certification: analytic-gradient KKT check and
+#>     finite-difference-of-gradient Hessian check passed
 ```
 
-For GLMMs, optimizer evidence and inference covariance are separate
-records. The optimizer’s Hessian check can be unavailable even when the
-later joint-Laplace covariance calculation succeeds. Read the inference
-row’s status and reliability to assess a standard error or interval; the
-convergence label alone does not establish its availability.
+For joint-Laplace GLMMs, optimizer evidence and inference covariance are
+separate records. The fit-time optimizer certificate does not include a
+full Hessian assessment over fixed effects (beta) and covariance
+parameters (theta); it labels that check `not_assessed`, with the stage
+in the reason. Optimization may still compute a Hessian for polishing.
+The label does not mean that a Hessian computation failed.
+
+The later inference stage attempts a central finite-difference Hessian
+of minus twice the log likelihood over beta and interior theta
+coordinates. It omits theta coordinates too close to their lower bounds
+for central differences. When this Hessian passes its checks,
+fixed-effect covariance is twice the beta block of its inverse. If that
+route fails, an available RX fallback conditions on theta and carries a
+different method and lower reliability. Inspect
+`attr(vcov(gfit), "mm_method")`, `"mm_status"`, `"mm_reliability"`, and
+`"mm_notes"` for the actual route and its scope. A successful inference
+calculation does not rewrite the fit-time certificate.
+
+Raw gradient norms depend on parameter coordinates and are not measures
+of coefficient precision. Curvature-scaled stationarity evidence, when
+available, is recorded separately in
+`optimizer_certificate(gfit)$raw$stationarity_decrement`. Read both with
+their stated tolerances; a small scaled quantity does not erase an
+approximate raw-gradient certificate.
 
 ## Boundary and reduced-rank fits are labeled facts
 

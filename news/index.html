@@ -51,7 +51,9 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="mixeff-020">mixeff 0.2.0<a class="anchor" aria-label="anchor" href="#mixeff-020"></a></h2>
-<div class="section level3">
+<ul><li>Scalar <code>optCtrl$xtol_abs</code> and <code>rhobeg</code> now broadcast to the theta dimension in the engine; nonscalar mismatches and invalid values remain errors.</li>
+<li>Joint-Laplace diagnostics distinguish the unassessed fit-time Hessian from the later inference Hessian. Optimizer certificates print derivative-evidence quality and reasons; covariance notes identify its parameter block and backend.</li>
+</ul><div class="section level3">
 <h3 id="restored-model-cancellation-and-release-checks-0-2-0">Restored-model cancellation and release checks<a class="anchor" aria-label="anchor" href="#restored-model-cancellation-and-release-checks-0-2-0"></a></h3>
 <ul><li>Restoring a fitted snapshot now reattaches the R interrupt callback without refitting. Serial and threaded bootstrap jobs on models reloaded from RDS stop with <code>mm_interrupted</code> and preserve the fitted baseline.</li>
 <li>Nonnumeric and complex contrast specifications are refused at the R boundary with <code>mm_arg_error</code>, before coercion can warn or discard imaginary parts.</li>

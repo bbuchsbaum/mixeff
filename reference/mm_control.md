@@ -44,7 +44,11 @@ mm_control(
   [`glmm()`](https://bbuchsbaum.github.io/mixeff/reference/glmm.md) with
   `method = "joint_laplace"`, whose native joint optimizer otherwise
   runs to an engine-chosen budget. `NULL` (default) leaves the engine
-  default in place.
+  default in place. Joint-Laplace fitting first runs a profiled
+  initializer; this control is shared by the initializer and joint
+  optimizer, not a total wall-time or whole-fit evaluation cap.
+  Increasing it can therefore lengthen initialization as well as joint
+  fitting.
 
 - optimizer:
 
@@ -53,14 +57,18 @@ mm_control(
   `"pattern_search"`, `"trust_bq"`, or the PRIMA variants
   (`"prima_bobyqa"`, `"prima_cobyla"`, `"prima_lincoa"`,
   `"prima_newuoa"`). An unsupported or not-compiled choice raises a
-  typed error rather than silently falling back. `NULL`/`"auto"` keep
+  typed error rather than silently falling back. The bundled R build
+  excludes NLopt and PRIMA, so their named optimizers (including
+  `"bobyqa"`) are unavailable in that build. `NULL`/`"auto"` keep
   automatic selection.
 
 - start:
 
   Optional numeric warm-start vector for the covariance parameters
   (theta). Its length must match the model's theta dimension (the engine
-  validates this). `NULL` (default) cold-starts.
+  validates this). This is not a full GLMM beta/theta/mode warm start
+  and does not bypass joint-Laplace initialization. `NULL` (default)
+  cold-starts.
 
 - ftol_rel, ftol_abs:
 
@@ -79,10 +87,14 @@ mm_control(
   `max_feval`; `ftol_rel`/`ftol_abs`/`xtol_rel` -\> the arguments of the
   same name; `xtol_abs` (scalar or one per theta) -\> the absolute
   parameter tolerance; `rhobeg` (scalar or one per theta) -\> the
-  optimizer's initial step. Unknown names are refused with an
-  `mm_arg_error` rather than ignored. lme4's `check.conv.*` options have
-  no counterpart: mixeff does not emit post-hoc convergence warnings;
-  the fit's convergence status is the engine's typed certificate
+  optimizer's initial step. Scalars are broadcast once the theta
+  dimension is known; nonscalar vectors must match it exactly. For joint
+  GLMMs these theta controls also apply to the profiled initializer;
+  they do not specify absolute tolerances for the joint beta
+  coordinates. Unknown names are refused with an `mm_arg_error` rather
+  than ignored. lme4's `check.conv.*` options have no counterpart:
+  mixeff does not emit post-hoc convergence warnings; the fit's
+  convergence status is the engine's typed certificate
   ([`optimizer_certificate()`](https://bbuchsbaum.github.io/mixeff/reference/optimizer_certificate.md),
   [`verify_convergence()`](https://bbuchsbaum.github.io/mixeff/reference/verify_convergence.md)).
 

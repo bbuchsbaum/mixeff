@@ -465,8 +465,8 @@ only</td>
 <code>nlmer</code>, <code>devFunOnly = TRUE</code>
 </td>
 <td>not provided</td>
-<td>nonlinear mixed models are a non-goal; the engine owns the
-objective</td>
+<td>nonlinear mixed models are not supported; the engine does not expose
+the objective as an R function</td>
 </tr>
 </tbody>
 </table>
@@ -841,10 +841,11 @@ covariance at zero (MixedModels.jl zerocorr()). Noted at compile time
 </tr>
 </tbody>
 </table>
-<p>Explicit non-goals: nonlinear mixed models; arbitrary GLM family
-objects or custom links; adaptive Gaussian quadrature as a general
-estimator contract (nAGQ &gt; 1 is a profiled-path sensitivity
-mode).</p>
+<p>mixeff does not fit nonlinear mixed models. Only the GLM families and
+links listed above are supported. The nAGQ &gt; 1 option lets you check
+how quadrature order affects a profiled-PIRLS fit. It requires a single
+scalar random effect and is unavailable with the joint-Laplace
+estimator.</p>
 </div>
 <div class="section level2">
 <h2 id="unavailable-results-and-diagnostics">Unavailable results and diagnostics<a class="anchor" aria-label="anchor" href="#unavailable-results-and-diagnostics"></a>

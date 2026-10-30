@@ -3,11 +3,12 @@
 `supported_models()` returns the package's machine-readable support
 registry: which GLMM family/link/estimator combinations are supported,
 which features are supported, refused, or carry mixeff-specific
-semantics, and the package's explicit non-goals. The registry ships as
-`inst/support/model-support.json` and is the single source of truth for
-the migration vignette's support table; the test suite asserts that the
-fitting code enforces exactly this envelope (unsupported combinations
-refuse with the declared condition classes and reason codes).
+semantics, and the models and features it does not support. The registry
+ships as `inst/support/model-support.json` and is the single source of
+truth for the migration vignette's support table; the test suite asserts
+that the fitting code enforces exactly this envelope (unsupported
+combinations refuse with the declared condition classes and reason
+codes).
 
 ## Usage
 
@@ -72,7 +73,9 @@ supported_models()
 #>  supported      refused  
 #>  supported      supported
 #> 
-#> Non-goals: nonlinear mixed models; arbitrary GLM family objects or custom links; adaptive Gaussian quadrature as a general estimator contract (nAGQ > 1 is a profiled-path sensitivity mode) 
+#> mixeff does not fit nonlinear mixed models.
+#> Only the GLM families and links listed above are supported.
+#> The nAGQ > 1 option lets you check how quadrature order affects a profiled-PIRLS fit. It requires a single scalar random effect and is unavailable with the joint-Laplace estimator.
 #> 
 #> Gaussian LMMs support the common random-intercept, random-slope,
 #> nested, and crossed structures; see vignette("lme4-migration") for

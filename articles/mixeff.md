@@ -214,10 +214,11 @@ knitr::kable(sm$features[, c("feature", "lmm", "glmm")],
 
 Feature support, from the registry. {.table}
 
-Explicit non-goals, from the same registry: nonlinear mixed models;
-arbitrary GLM family objects or custom links; adaptive Gaussian
-quadrature as a general estimator contract (nAGQ \> 1 is a profiled-path
-sensitivity mode).
+mixeff does not fit nonlinear mixed models. Only the GLM families and
+links listed above are supported. The nAGQ \> 1 option lets you check
+how quadrature order affects a profiled-PIRLS fit. It requires a single
+scalar random effect and is unavailable with the joint-Laplace
+estimator.
 
 For the full tables, including notes on individual features, see
 [`vignette("lme4-migration", package = "mixeff")`](https://bbuchsbaum.github.io/mixeff/articles/lme4-migration.md).

@@ -84,7 +84,7 @@ directly in your own code.)
 | `rePCA`, `lmList`, `allFit` | [`rePCA()`](https://bbuchsbaum.github.io/mixeff/reference/rePCA.md), [`mm_lmlist()`](https://bbuchsbaum.github.io/mixeff/reference/mm_lmlist.md), [`mm_allfit()`](https://bbuchsbaum.github.io/mixeff/reference/mm_allfit.md) | `mm_*` names avoid masking lme4’s non-generic functions |
 | `pbkrtest::KRmodcomp(big, small)` | `compare(small, big, method = "kenward_roger")` | also `"satterthwaite"` (`SATmodcomp`); KR F is pbkrtest’s scaled `Ftest` row (unscaled `FtestU` in `$fixed_f$unscaled_statistic`) |
 | `lmerTest::step(m)` | `step(fit)` | random terms tested with the boundary-corrected LRT; whole terms only |
-| `nlmer`, `devFunOnly = TRUE` | not provided | nonlinear mixed models are a non-goal; the engine owns the objective |
+| `nlmer`, `devFunOnly = TRUE` | not provided | nonlinear mixed models are not supported; the engine does not expose the objective as an R function |
 
 ## Argument map for `lmm()` / `glmm()`
 
@@ -245,9 +245,11 @@ Supported GLMM family/link/estimator cells. {.table}
 
 Feature support (see notes for mixeff-specific semantics). {.table}
 
-Explicit non-goals: nonlinear mixed models; arbitrary GLM family objects
-or custom links; adaptive Gaussian quadrature as a general estimator
-contract (nAGQ \> 1 is a profiled-path sensitivity mode).
+mixeff does not fit nonlinear mixed models. Only the GLM families and
+links listed above are supported. The nAGQ \> 1 option lets you check
+how quadrature order affects a profiled-PIRLS fit. It requires a single
+scalar random effect and is unavailable with the joint-Laplace
+estimator.
 
 ## Unavailable results and diagnostics
 

@@ -338,10 +338,11 @@ mm_grid / mm_predictions / test_effect)</td>
 </tr>
 </tbody>
 </table>
-<p>Explicit non-goals, from the same registry: nonlinear mixed models;
-arbitrary GLM family objects or custom links; adaptive Gaussian
-quadrature as a general estimator contract (nAGQ &gt; 1 is a
-profiled-path sensitivity mode).</p>
+<p>mixeff does not fit nonlinear mixed models. Only the GLM families and
+links listed above are supported. The nAGQ &gt; 1 option lets you check
+how quadrature order affects a profiled-PIRLS fit. It requires a single
+scalar random effect and is unavailable with the joint-Laplace
+estimator.</p>
 <p>For the full tables, including notes on individual features, see
 <code><a href="../articles/lme4-migration.html">vignette("lme4-migration", package = "mixeff")</a></code>. When
 comparing results with lme4, keep two qualifications in mind:</p>

@@ -1,0 +1,11 @@
+{
+  "head": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+  "job_id": 116404986429,
+  "url": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174/job/116404986429",
+  "scope": "Pre-existing WebAssembly build failure; not a CRAN platform or qualification of new candidate",
+  "failure_lines": [
+    "2026-10-15T11:50:52.4101136Z Error: Could not parse a version from `cargo --version` output: Cross compiling for wasm32-unknown-emscripten...",
+    "2026-10-15T11:50:52.4185414Z ERROR: configuration failed for package ‘mixeff’",
+    "2026-10-15T11:50:52.4277583Z   Building wasm binary for package 'mixeff' failed."
+  ]
+}

@@ -509,6 +509,30 @@ print.mm_random_blocks <- function(x, ...) {
 #' @param object A compiled `mm_spec` or fitted `mm_fit`.
 #' @param ... Reserved for future methods.
 #'
+#' @details
+#' The fit status records acceptance under the engine's convergence rules; it
+#' does not imply global optimality or completion of every derivative check.
+#' The table includes the optimizer Hessian evidence and overall derivative
+#' certification quality, with reasons; `raw` preserves the engine record.
+#'
+#' For joint-Laplace GLMMs, optimizer certification and fixed-effect covariance
+#' are separate stages. The fit-time optimizer certificate does not include a
+#' full Hessian assessment over the joint fixed-effect (beta) and covariance
+#' (theta) parameters, even if optimization computed a Hessian for polishing.
+#' The later inference stage attempts a central finite-difference Hessian of
+#' minus twice the log likelihood over beta and interior theta coordinates.
+#' Theta coordinates too near their bounds for central differences are omitted.
+#' The fixed-effect covariance is twice the beta block of the inverse Hessian.
+#' Read `attr(vcov(fit), "mm_method")`, `"mm_status"`, `"mm_reliability"`,
+#' and `"mm_notes"` for that stage's result and any fallback. A successful
+#' inference Hessian does not retroactively complete the optimizer certificate.
+#'
+#' Gradient norms are expressed in the optimizer's parameter coordinates;
+#' they are not curvature-scaled measures of coefficient precision. Available
+#' Newton-decrement evidence is recorded separately under
+#' `raw$stationarity_decrement`. Neither quantity alone establishes inferential
+#' reliability; inspect the inference method's own status and reliability.
+#'
 #' @return An `mm_optimizer_certificate` object containing the raw certificate
 #'   and a compact table view.
 #'
@@ -558,7 +582,16 @@ print.mm_optimizer_certificate <- function(x, ...) {
     cat("  not assessed\n")
     return(invisible(x))
   }
-  print(x$table, row.names = FALSE)
+  reason_row <- grepl("_reason$", x$table$metric)
+  print(x$table[!reason_row, , drop = FALSE], row.names = FALSE)
+  reasons <- x$table[reason_row & x$table$value != "not_recorded", , drop = FALSE]
+  for (i in seq_len(nrow(reasons))) {
+    label <- sub("_reason$", "", reasons$metric[[i]])
+    lines <- strwrap(paste0(label, ": ", reasons$value[[i]]),
+                     width = max(40L, getOption("width", 80L)),
+                     indent = 2L, exdent = 4L)
+    cat(paste(lines, collapse = "\n"), "\n", sep = "")
+  }
   invisible(x)
 }
 
@@ -1054,7 +1087,21 @@ mm_optimizer_certificate_table <- function(cert) {
       stringsAsFactors = FALSE
     )
   })
-  do.call(rbind, rows)
+  evidence <- cert$evidence %||% list()
+  # Serde unit variants are strings; variants carrying reasons are named lists.
+  quality_rows <- function(metric, value) {
+    status <- if (is.character(value) && length(value) == 1L) value else
+      if (is.list(value) && length(value) == 1L) names(value)[1L] else NULL
+    reason <- if (is.list(value) && length(value) == 1L)
+      value[[1L]]$reason else NULL
+    data.frame(metric = c(metric, paste0(metric, "_reason")),
+               value = c(mm_scalar_text(status, "not_recorded"),
+                         mm_scalar_text(reason, "not_recorded")),
+               stringsAsFactors = FALSE)
+  }
+  rbind(do.call(rbind, rows),
+        quality_rows("optimizer_hessian", evidence$hessian$quality),
+        quality_rows("derivative_certification", evidence$certification_quality))
 }
 
 mm_repro_threshold_table <- function(thresholds) {

@@ -1,0 +1,7 @@
+{
+  "run": 40407299066,
+  "artifact_id": 12692791075,
+  "sha256": "fee92304061682aedf7e9cb8718789bf0620c6ddac089ac7263a044e982b825c",
+  "source": "14aaac6e2461876b525f4d1c2c3ce81b6c95ebea",
+  "result": "Original numerical failure reproduced with fitted pair captured; exact-start tightrefit shows inferior reference endpoint"
+}

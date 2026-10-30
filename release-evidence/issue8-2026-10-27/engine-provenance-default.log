@@ -1,0 +1,9 @@
+   Compiling mixeff-rs v1.0.0-rc.5 (/private/tmp/mixeff-issue8/engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.13s
+     Running tests/joint_hessian_provenance.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/joint_hessian_provenance-393c767747f8df29)
+
+running 1 test
+test available_joint_covariance_does_not_rewrite_optimizer_hessian_scope ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

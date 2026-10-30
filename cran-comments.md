@@ -1,160 +1,116 @@
-# cran-comments.md — mixeff 0.2.0
+# cran-comments.md — mixeff 0.2.0 (draft; not ready to submit)
 
-## Submission target
+## Submission status
 
-First CRAN submission of mixeff (0.2.0), following an R-Universe
-pre-release cycle. The upstream Rust engine (`mixeff-rs`) is bundled as
-a pinned, vendored snapshot (`tools/vendor-rust.R`; provenance in
-`src/rust/upstream/mixeff-rs.lock`), and its optional `nlopt` C-library
-feature is disabled for this build, so the source package builds with
-the declared Rust toolchain requirements only.
+First CRAN submission, following an R-universe pre-release cycle. **Submission
+is on hold:** final artifact checks, Windows builder results and merged-head
+R-universe qualification are outstanding. The MKL mismatch has been reproduced
+and diagnosed as an inferior lme4 reference endpoint; the targeted repair passes its final canonical MKL check.
+The approving-review requirement has been removed; PR 6 still needs to merge.
 
-## Status after the pre-CRAN audit (October 2026)
+## Issue 8 follow-up
 
-The package changed substantially after the runs listed under "Test
-environments" below: the engine was re-pinned to mixeff-rs `10f1768`
-and the lme4-parity audit (`assessment/2026-10-pre-cran-audit.md`) was
-completed. The pre-merge audit records the following historical results:
+The scalar-control and joint-Hessian provenance reports also reproduce on the
+PR candidate. Upstream `a6b644490a8b83cd871045bb7d3e9065315aefab` broadcasts
+scalar absolute theta tolerances and initial steps, labels the intentionally
+unassessed optimizer Hessian accurately, and identifies the separate inference
+Hessian. R tests cover scalar/vector equivalence, refits, serialization and
+unchanged fitted numerical values. `assessment/2026-10-27-issue8.md` records
+this follow-up; older checks below retain their stated source/artifact scope.
+The new tarball (SHA-256
+`6c1fff4120e978aad334fbc975e2c049341db0c8339fc233a6897f49928f833a`,
+6,811,893 bytes) passes local macOS arm64 / R 4.5.1
+`R CMD check --as-cran --no-manual`: 0 errors, 0 warnings, 2 notes (new
+submission/size; current-time verification unavailable). Tests report 6,268
+passes, 0 failures/test warnings and 62 documented skips. Vignettes and
+examples pass. This is not a refreshed full release gate or external-builder
+receipt; hosted results are recorded on PR 6 and upstream PR 14.
+That tarball belongs to `e7a9e45`, before the generated license notice was
+corrected to name the new pin. The follow-up also automates notice regeneration
+on future engine bumps. Regenerate the final submission artifact and receipts.
 
-- GitHub Actions on the release-candidate commit: Ubuntu R-release and
-  R-devel, macOS R-release, Windows R-release (two jobs), test coverage,
-  pkgdown and the vendor-drift check are all green (R CMD check with no
-  errors or warnings).
-- Local `R CMD check --as-cran` (Ubuntu, R 4.3.3, offline): examples,
-  tests and vignettes clean; every other WARNING/NOTE was environmental
-  (no `checkbashisms`/`qpdf`, locale, Suggests unavailable offline,
-  clock, the machine's own compiler flags).
+## Current repair candidate
 
-**To do before submitting:** re-run mac-builder, win-builder (R-devel
-and R-release) and the R-hub court on the final tarball, and replace the
-"Test environments" and "R-hub court results" sections below with those
-results.
+`e7697417017e738eb371098a8332ad475740c9d8` validates Brown reference
+convergence, preserves failed fit pairs, tightens only the affected reference
+fit's optimizer controls and replays the captured inferior endpoint in a
+regression. Production estimation code and existing parity tolerances are
+unchanged. Focused local validation: 128 passes, no failures/test warnings/skips.
+Canonical MKL run 40413879004 passes on d5fdc54: Status OK, 0 errors/warnings/notes;
+6,194 passing assertions, 0 failures/test warnings, 62 documented skips and no
+Brown skips. This source also isolates the MKL dependency cache and requires
+working reference libraries. See
+`assessment/2026-10-26-mkl-reference.md` for the reproduced failure and repair.
 
-## Current local candidate
+## Prior full-release artifact identity
 
-The current candidate uses engine pin `004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b`
-and combines the current main-branch interface with fitted-state restoration,
-estimator-preserving GLMM bootstrap, and the October vignette remediation.
-Local release qualification is recorded in `release-gate-report.txt` and the
-CRAN-readiness assessment. The historical counts below do not qualify this
-merged candidate; hosted checks and builder submissions must be refreshed.
+Source `806528106473594aa7342c6585c2b56be5ed2649`, engine pin
+`004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b`. Later release-document updates
+are excluded from the package. The source tarball SHA-256 is
+`a742c9973c1ed64a04d7d3aad3f1088cf53ff4c37cd14f1758c5539995ec0881`.
 
-The 26 October local runtime candidate `bd3091471c9f6a15e8445366f18388b2da2eba8f`
-passed `R CMD check --as-cran --no-manual` on macOS arm64 / R 4.5.1:
-0 errors, 0 warnings, 1 expected incoming note (new submission and tarball size).
-The six vignettes and help examples passed; the separate 76-page PDF manual
-built successfully. Exact tarball identity and raw receipts are recorded under
-`release-evidence/cran-2026-10-26/`. This local result does not supersede the
-need for refreshed builder checks. The cancellation defect was subsequently
-repaired and verified with actual R SIGINT tests; the updated candidate is
-undergoing full release qualification.
+Size of tarball: 6807157 bytes
 
-The canonical acceptance command is `Rscript tools/release-gate.R
---release-candidate`. It builds and hashes one source tarball, checks that
-artifact with `--as-cran`, installs it, and runs the suite with slow parity
-and core aphantasia enabled. Manual/PDF validation is separate.
+The vendored Rust sources allow offline installation. The expected local
+incoming NOTE concerns a new submission and tarball size.
 
-### Historical platform results
+The size and SHA above describe the prior 8065281 artifact. Packaged tests have
+changed since then; regenerate the final artifact and refresh its submission
+receipts before submitting.
 
-- macOS arm64, R 4.5.1 — `--as-cran` on the built tarball with
-  vignettes rebuilt: 0 errors, 0 warnings, 1 NOTE (below).
-- macOS arm64, R 4.5.1 — the same tarball with
-  `_R_CHECK_DEPENDS_ONLY_=true`: Status OK.
-- mac-builder, macOS arm64, R 4.6.1 — **Status OK** (0 errors,
-  0 warnings, 0 notes), vignettes rebuilt, PDF manual built.
-- win-builder, R-devel (2026-07-30 r90327 ucrt) and R-release — 0
-  errors, 0 warnings, 2 NOTEs (both below).
-- GitHub Actions — Ubuntu R-devel and R-release, macOS, Windows UCRT:
-  all green, including the PDF manual leg.
-- R-hub v2 extra-check court, 18 platforms
-  (`.github/workflows/rhub.yaml`): primary R-devel compilers
-  (`ubuntu-gcc12`, `ubuntu-clang`, `gcc16`), Windows and macOS R-devel,
-  sanitizers (`clang-ubsan`, `m1-san`, `clang-asan`, `gcc-asan`),
-  `valgrind`, `rchk`, `nosuggests`, `nold`, `lto`, `mkl`, `atlas`,
-  `donttest`. Results and the four non-green platforms are itemized
-  below.
+## Executed checks at 8065281 (26 October 2026)
 
-## R CMD check results
+- macOS arm64, R 4.5.1: tarball `R CMD check --as-cran --no-manual`,
+  0 errors, 0 warnings, 1 expected incoming NOTE.
+- Canonical release-candidate gate: 14 passing steps, no failed/skipped
+  steps; installed extended suite 6,881 passes, no failures/warnings,
+  three documented allowlisted skips. Live aphantasia vignette and
+  offline source installation pass. External xz and vendor-tar access
+  were deliberately blocked during this run.
+- GitHub Actions at 8065281: Ubuntu R-release/R-devel, macOS R-release,
+  Windows R-release, PDF manual, release gates, vendor regeneration,
+  pkgdown and coverage pass. R-code coverage: 94.2%.
+- mac-builder job 1793045109-362c7021c79baa3a: Status OK including PDF
+  manual, actual R 4.6.1 Patched. API flavor r-devel does not change
+  the reported runtime version.
+- win-builder: final R-release upload accepted; result pending. Final
+  R-devel upload rejected with FTP550 while an older same-name upload
+  remained queued. The bounded queue wait expired without retry.
 
-1. **CRAN incoming feasibility** (all platforms) — "New submission", plus
-   the tarball size on some machines. The Rust sources are vendored so
-   the package builds fully offline, which accounts for the size.
+## Current R-hub court
 
-   Size of tarball: 6805036 bytes
+Run 40389108548 checked bf612d6; packaging-only 8065281 has identical
+estimation runtime and tests. Ubuntu GCC/Clang, gcc16, Windows, both macOS
+architectures, m1-san, donttest, lto and atlas pass. The four platforms
+that exposed an external xz assumption (clang-asan, clang-ubsan, nold,
+rchk) all pass repaired retry 40390625134. Valgrind remains pending.
 
-   The release gate refreshes this line from the artifact it builds.
+gcc-asan and nosuggests failed before checking mixeff: lmerTest could not
+load lme4 because libRlapack.so was missing. These are environmental gaps,
+not passing package checks.
 
-2. **`checking compiled code`, win-builder only** — this check does not
-   run there:
+MKL job121805238156 originally failed Brown SD parity (mixeff about14.7,
+lme4 about8.2). Run 40407299066 reproduced and captured the failing reference:
+SD 8.175123, criterion 302385.8003502963. Tight optimization from that exact
+covariance improves the criterion by 0.1311357808 and reaches SD 14.719220.
+This identifies an inferior reference endpoint. Default and single-thread MKL
+multistarts agree near 14.719 with full convergence checks. Candidate e769741
+repairs the affected reference and adds the captured-endpoint regression;
+canonical MKL acceptance passes at d5fdc54. No parity tolerance was relaxed.
 
-   ```
-   Error in ccE(lines, flags = new_flags, include = include) :
-     'cc' is not on the path
-   ```
+## Remaining release work
 
-   `tools:::ccE` shells out to `cc -E` to preprocess R's own headers
-   while assembling the list of public R API entry points; win-builder's
-   Rtools provides `gcc` but no `cc`, so the check aborts before any
-   object of ours is examined and reports no finding about the package.
-   The same check returns **OK** wherever `cc` is present: macOS
-   (local and mac-builder), Linux R-devel (R-hub `clang-asan` and
-   `nosuggests` containers), and the Windows UCRT CI leg. The adjacent
-   `checking Rust compilation` is OK on win-builder.
+Merge PR 6; qualify the merged source through
+R-universe; obtain final Windows builder receipts and the remaining court
+results; refresh the final source artifact. The source
+currently on R-universe is older (6e9a62a), so its native successes do not
+qualify this candidate. Its pre-existing wasm failure is tracked separately.
 
-## R-hub court results
-
-The court was run twice: once on the pre-fix tree, which surfaced four
-non-green platforms, and once after the fixes below, which reproduces
-**16 of 18 platforms green**. Green includes R-devel on three compilers
-(`ubuntu-gcc12`, `ubuntu-clang`, `gcc16`), Windows and both macOS
-R-devel builds, the sanitizers `clang-asan`, `clang-ubsan` and `m1-san`,
-plus `rchk`, `nosuggests`, `lto`, `mkl`, `atlas`, `nold` and `donttest`.
-
-Three of the original four were real and are fixed:
-
-- **`rchk`** and the **win-builder installation ERROR** shared one root
-  cause: an install-time `cargo run --bin document` step that
-  regenerated the extendr wrappers. It failed two different ways — on
-  Windows `cargo run` with a `--target` must execute a cross-compiled
-  binary ("%1 is not a valid Win32 application", os error 193), and in
-  the rchk container linking an *executable* against a **static**
-  `libR.a` needs GNU readline symbols that are not on the link line
-  (every undefined symbol referenced by R's own `sys-std.c`, none by
-  mixeff). Installing a package must not rewrite its own R sources in
-  any case; the wrappers are committed and ship in the tarball, and the
-  step is gone. Both platforms now pass, and a guard test keeps the
-  committed wrappers in step with the `#[extendr]` surface.
-
-- **`clang-asan`** — the R process was aborted by the V8 JavaScript
-  engine, reached through the `jsonvalidate` Suggests dependency used by
-  one schema-validation test; no mixeff frame appeared in the trace.
-  Because a fatal abort inside a dependency cannot be trapped, that test
-  is now `skip_on_cran()`; the schema contract is still verified in the
-  release gate, which runs the suite with `NOT_CRAN=true`. `clang-asan`
-  now passes.
-
-- **`nosuggests`** — vignette re-building needed `rmarkdown`, which that
-  container omits. `rmarkdown` genuinely is required to build these
-  vignettes (`rmarkdown::html_vignette`), so it is declared in
-  `VignetteBuilder:` alongside `knitr`; both are in `Suggests`. It now
-  passes, and the same condition reproduced locally with
-  `_R_CHECK_DEPENDS_ONLY_=true` gives Status OK.
-
-The two platforms that are still not green never executed a check
-against the package:
-
-- **`valgrind`** — failed in `r-hub/actions/setup-deps` on both runs, at
-  the same step, before the check started. No check log is produced.
-
-- **`gcc-asan`** — hit the GitHub Actions six-hour job limit on both
-  runs (22:05:14 to 04:05:20 UTC, `run-check` still in progress when the
-  runner terminated it). AddressSanitizer plus a from-source Rust build
-  and the full test suite does not fit the runner budget. Sanitizer
-  coverage is provided by `clang-asan` and `m1-san`, which pass.
-
-## Downstream dependencies
-
-None.
+Exact receipts and the full readiness decision are in
+`assessment/2026-10-26-cancellation-release.md` and
+`release-evidence/cancellation-2026-10-26/`. Historical July/earlier October
+results are retained in prior Git revisions and assessments, not presented
+as current qualification here. No CRAN submission has occurred.
 
 ## CRAN policy notes
 
@@ -173,7 +129,7 @@ None.
   benchmarks, examples, datasets, and CI configuration from the
   vendored crates before they are committed; upstream LICENSE / NOTICE
   files are preserved in `inst/LICENSE.note`.
-- **Installed size**: about 11 MB on Windows (libs 8.7 MB) and up to
+- **Installed size (historical measurements, refresh before submission)**: about 11 MB on Windows (libs 8.7 MB) and up to
   about 18 MB on Linux when the shared library is not stripped (libs
   15.4 MB; 12.2 MB after `strip --strip-debug`). Nearly all of it is the
   statically linked Rust engine, built with `lto = true` and

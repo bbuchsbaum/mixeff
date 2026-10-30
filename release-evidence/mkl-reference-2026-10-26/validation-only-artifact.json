@@ -1,0 +1,6 @@
+{
+  "run": 40408493648,
+  "artifact_id": 12693385800,
+  "sha256": "ee3bd42a453ac1dfb47f71996674a799754f8c4477fde780174c1c5d8ea1d3e4",
+  "result": "Default reference failure reproduced and captured; tight multistarts pass full derivative/convergence checks under both thread settings"
+}

@@ -1,0 +1,23 @@
+{
+  "artifacts": [
+    {
+      "id": 12695008707,
+      "name": "mkl-linux-containers-0-results",
+      "size_in_bytes": 36458526,
+      "url": "https://api.github.com/repos/bbuchsbaum/mixeff/actions/artifacts/12695008707",
+      "archive_download_url": "https://api.github.com/repos/bbuchsbaum/mixeff/actions/artifacts/12695008707/zip",
+      "expired": false,
+      "created_at": "2026-10-26T23:00:41Z",
+      "expires_at": "2027-01-24T22:37:40Z",
+      "updated_at": "2026-10-26T23:00:41Z",
+      "digest": "sha256:d398476f72c900f35acbdb526e01294e13a4576a20fea05d8013e6a68e9de076",
+      "workflow_run": {
+        "id": 40413879004,
+        "repository_id": 1241121418,
+        "head_repository_id": 1241121418,
+        "head_branch": "fix/restored-cancellation",
+        "head_sha": "d5fdc546637848e9fe23314b50532478ba5916fb"
+      }
+    }
+  ]
+}

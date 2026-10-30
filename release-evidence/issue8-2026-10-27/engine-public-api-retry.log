@@ -1,0 +1,15 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests/public_api.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/public_api-85f3062639a20558)
+
+running 8 tests
+test intended_model_barrel_exports_compile_for_downstream_users ... ok
+test intended_stats_barrel_exports_compile_for_downstream_users ... ok
+test intended_types_exports_compile_for_downstream_users ... ok
+test stable_result_and_error_types_are_send_sync ... ok
+test model_and_stats_barrels_do_not_use_glob_reexports ... ok
+test unstable_storage_helpers_are_not_top_level_reexports ... ok
+test downstream_crate_cannot_touch_sealed_model_internals ... ok
+test downstream_crate_cannot_import_internal_barrel_items ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 32.87s
+

@@ -1,0 +1,8 @@
+{
+  "builder": "win-R-release",
+  "submitted_utc": "2026-10-26 20:05:04",
+  "tarball_sha256": "a742c9973c1ed64a04d7d3aad3f1088cf53ff4c37cd14f1758c5539995ec0881",
+  "bytes": 6807157,
+  "destination": "ftp://win-builder.r-project.org/R-release/mixeff_0.2.0.tar.gz",
+  "status_code": 226
+}

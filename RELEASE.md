@@ -6,11 +6,13 @@ The one canonical acceptance command, run from a **clean checkout**:
 Rscript tools/release-gate.R
 ```
 
-It builds ONE tarball and runs everything against that artifact: `R CMD
-check --as-cran` on the tarball (never on the source directory), `R CMD
-INSTALL <tarball>` into a throwaway gate library, then lint, the fast test
-suite + error-UX battery + schema/manifest tests against that installed
-build, and the offline-install gate. It writes `release-gate-report.txt` —
+It builds one release tarball, runs `R CMD check --as-cran` on that
+artifact (never on the source directory), and installs it into a throwaway
+gate library. Lint, the fast test suite, error-UX battery and schema/manifest
+tests run against that installed build. The separate offline-install gate rebuilds a source tarball from the
+same checkout without rebuilding vignettes, then installs it with Cargo
+offline; it is an additional source-build check, not the same tarball bytes.
+The gate writes `release-gate-report.txt` —
 that file is the acceptance artifact to attach to an R-universe / CRAN
 submission. Its header records the evidence identity: mode, git commit (with
 a dirty-tree flag), the mixeff-rs pin, tarball size + sha256, sha256 of
@@ -75,7 +77,7 @@ Pre-submission run (`--release-candidate`, record the report):
 CRAN extra-check court (run the manual **R-hub** workflow with its default
 platform list before submission):
 
-- [ ] Primary R-devel compilers: `ubuntu-gcc16`, `ubuntu-clang`, `windows`,
+- [ ] Primary R-devel compilers: `ubuntu-gcc12`, `ubuntu-clang`, `windows`,
       `macos`, `macos-arm64`
 - [ ] Memory/undefined behavior: `clang-asan`, `clang-ubsan`, `gcc-asan`,
       `m1-san`, `valgrind`
@@ -85,6 +87,11 @@ platform list before submission):
 - [ ] Every job is green, or every non-package failure is linked and
       adjudicated in `cran-comments.md`; a green ordinary three-OS check is
       not a substitute for this court
+
+Use platform identifiers accepted by the configured `r-hub/actions@v1`
+workflow. As checked on 26 October 2026, its Ubuntu GCC identifier remains
+`ubuntu-gcc12`; the container website lists `ubuntu-gcc16`, which the action
+rejects during setup. The separate `gcc16` platform is also in our court.
 
 The default list intentionally mirrors the applicable public extra-check
 classes maintained alongside Brian Ripley's CRAN checks. Some historical

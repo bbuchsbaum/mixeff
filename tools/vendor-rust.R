@@ -53,7 +53,7 @@ options(error = function() {
 # This constant is the committed source of truth for which `mixeff-rs` ships.
 # It must be a full 40-char commit SHA reachable from origin/main of
 # bbuchsbaum/mixeff-rs (or a tag, once the crate starts tagging releases).
-PINNED_REV <- "004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b"
+PINNED_REV <- "a6b644490a8b83cd871045bb7d3e9065315aefab"
 
 rev <- Sys.getenv("MIXEFF_RS_REV", unset = PINNED_REV)
 url <- Sys.getenv(
@@ -347,6 +347,13 @@ if (file.exists(attribution)) {
   if (!identical(status, 0L)) {
     stop("[vendor-rust.R] generate-crate-attribution.R failed; inst/AUTHORS / inst/COPYRIGHTS not refreshed.")
   }
+}
+# The license inventory also records resolved_sha. Refresh it in the same
+# operation so a successful re-pin cannot retain the previous engine revision.
+license_note <- file.path(pkg_root, "tools", "check-license-note.R")
+status <- system2("Rscript", c(shQuote(license_note), "--write"))
+if (!identical(status, 0L)) {
+  stop("[vendor-rust.R] check-license-note.R failed; inst/LICENSE.note not refreshed.")
 }
 cat("[vendor-rust.R] next: devtools::check(document = FALSE)\n")
 cat(paste0(

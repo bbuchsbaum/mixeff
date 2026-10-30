@@ -1,0 +1,5 @@
+#!/bin/sh
+case "$*" in
+  *vendor.tar.xz*) echo "external tar must not read vendor.tar.xz" >&2; exit 97 ;;
+esac
+exec /usr/bin/tar "$@"

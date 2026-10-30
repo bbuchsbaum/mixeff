@@ -1,0 +1,39 @@
+
+Attaching package: ‘mixeff’
+
+The following object is masked from ‘package:stats’:
+
+    step
+
+
+Attaching package: ‘testthat’
+
+The following object is masked from ‘package:mixeff’:
+
+    compare
+
+brown-2021-lme-tutorial: ................................................................................................................................
+
+══ DONE ════════════════════════════════════════════════════════════════════════
+Woot!
+Warning message:
+package ‘testthat’ was built under R version 4.5.2 
+                                                                test passed
+               Brown 2021 OSF fixtures preserve tutorial data shapes     12
+            Brown 2021 LMM tutorial examples match core lme4 outputs     24
+                    Brown 2021 large RT tutorial examples match lme4     53
+             Brown 2021 RT likelihood-ratio example agrees with lme4      2
+ Brown captured lme4 endpoint is improved by a tight validated refit     23
+     Brown reference harness records a real optimizer nonconvergence      5
+   Brown reference harness accepts a converged singular boundary fit      3
+                Brown parity failures save both fits and diagnostics      6
+ failed error warning skipped
+      0 FALSE       0   FALSE
+      0 FALSE       0   FALSE
+      0 FALSE       0   FALSE
+      0 FALSE       0   FALSE
+      0 FALSE       0   FALSE
+      0 FALSE       0   FALSE
+      0 FALSE       0   FALSE
+      0 FALSE       0   FALSE
+TOTAL: 128 passed 0 failed 0 warnings 0 skipped

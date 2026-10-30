@@ -85,3 +85,57 @@ test_that("free-dispersion LRTs require the same recorded estimation policy", {
   legacy$control$disp_method <- "moment"
   expect_error(anova(null, legacy), "dispersion policy", class = "mm_inference_unavailable")
 })
+
+
+test_that("negative-binomial LRTs preserve fixed or estimated theta semantics", {
+  set.seed(914)
+  d <- data.frame(g = factor(rep(seq_len(12), each = 12)), x = rnorm(144))
+  b <- rep(rnorm(12, sd = 0.4), each = 12)
+  d$y <- rnbinom(nrow(d), size = 1.8, mu = exp(0.5 + 0.5 * d$x + b))
+  fit <- function(formula, theta = NULL) {
+    glmm(formula, d, family = mm_negative_binomial(theta),
+         method = "pirls_profiled", control = mm_control(verbose = -1))
+  }
+  fixed_null <- fit(y ~ 1 + (1 | g), 1.8)
+  fixed_alt <- fit(y ~ x + (1 | g), 1.8)
+  changed_theta <- fit(y ~ x + (1 | g), 3)
+  estimated_null <- fit(y ~ 1 + (1 | g))
+  estimated_alt <- fit(y ~ x + (1 | g))
+
+  for (pair in list(list(fixed_null, fixed_alt),
+                    list(estimated_null, estimated_alt))) {
+    comparison <- anova(pair[[1]], pair[[2]])
+    expect_s3_class(comparison, "anova")
+    expect_equal(comparison$Df[2], 1)
+    expected <- max(0, 2 * (as.numeric(logLik(pair[[2]])) -
+                            as.numeric(logLik(pair[[1]]))))
+    expect_equal(comparison$Chisq[2], expected)
+    expect_equal(comparison[["Pr(>Chisq)"]][2],
+                 pchisq(expected, df = 1, lower.tail = FALSE))
+  }
+  expect_true(estimated_null$family$nb_theta_estimated)
+  expect_true(estimated_alt$family$nb_theta_estimated)
+  # Estimated theta is a nuisance parameter refit in each model; its fitted
+  # value need not agree. A different fixed theta changes the likelihood.
+  expect_gt(abs(estimated_null$family$nb_theta - estimated_alt$family$nb_theta),
+            1e-3)
+  for (alternative in list(changed_theta, estimated_alt)) {
+    err <- tryCatch(anova(fixed_null, alternative), error = identity)
+    expect_s3_class(err, "mm_inference_unavailable")
+    expect_identical(err$reason_code, "glmm_lrt_nb_theta_differs")
+  }
+})
+
+test_that("GLMM LRT refuses mixing effective estimators", {
+  set.seed(915)
+  d <- data.frame(g = factor(rep(seq_len(12), each = 12)), x = rnorm(144))
+  b <- rep(rnorm(12, sd = 0.6), each = 12)
+  d$y <- rbinom(nrow(d), 1, plogis(0.2 + 0.5 * d$x + b))
+  null <- glmm(y ~ 1 + (1 | g), d, family = binomial(),
+               method = "pirls_profiled", control = mm_control(verbose = -1))
+  alternative <- glmm(y ~ x + (1 | g), d, family = binomial(),
+                      method = "joint_laplace", control = mm_control(verbose = -1))
+  err <- tryCatch(anova(null, alternative), error = identity)
+  expect_s3_class(err, "mm_inference_unavailable")
+  expect_identical(err$reason_code, "glmm_lrt_estimator_differs")
+})

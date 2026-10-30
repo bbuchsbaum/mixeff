@@ -1,0 +1,52 @@
+    Blocking waiting for file lock on build directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23.87s
+     Running tests/random_factor_coding_lme4.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/random_factor_coding_lme4-57929a4d762a84da)
+
+running 4 tests
+test double_bar_numeric_only_is_unchanged ... ok
+test no_intercept_random_basis_uses_r_model_matrix_coding ... ok
+test double_bar_with_factor_expands_like_lme4 ... ok
+test double_bar_with_numeric_and_factor_expands_like_lme4 ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/restored_interrupt_callback.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/restored_interrupt_callback-7d90a5b0688faa9a)
+
+running 2 tests
+test restored_lmm_reattaches_interrupt_without_changing_fitted_state ... ok
+test restored_glmm_reattaches_interrupt_without_changing_fitted_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running tests/station_season_duration.rs (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine/target/debug/deps/station_season_duration-f9458e6f5edb7ade)
+
+running 2 tests
+test forum_model_is_flagged_as_over_requested_before_fit ... ok
+test forum_model_fit_is_not_reported_as_clean_interior_convergence ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+   Doc-tests mixeff_rs
+
+running 17 tests
+test src/lib.rs - unstable_internal_method (line 123) ... ignored
+test src/guide/mod.rs - guide::what_is_supported (line 100) ... ok
+test src/pathology/transforms.rs - pathology::transforms (line 6) ... ignored
+test src/pathology/transforms.rs - pathology::transforms::pareto_sizes (line 215) ... ignored
+test src/formula/parser.rs - formula::parser::parse_formula (line 1085) ... ok
+test src/formula/mod.rs - formula (line 8) ... ok
+test src/lib.rs - prelude (line 183) ... ok
+test src/guide/mod.rs - guide::when_the_crate_refuses (line 42) ... ok
+test src/lib.rs - (line 36) ... ok
+test src/guide/mod.rs - guide::reading_results (line 31) ... ok
+test src/lib.rs - ReadmeDoctests (line 254) ... ok
+test src/guide/mod.rs - guide::getting_started (line 28) ... ok
+test src/guide/mod.rs - guide::glmms (line 34) ... ok
+test src/model/generalized/mod.rs - model::generalized::GeneralizedLinearMixedModelBuilder (line 295) ... ok
+test src/model/linear/compiled.rs - model::linear::compiled::CompiledModelSpec (line 42) ... ok
+test src/model/linear/mod.rs - model::linear::LinearMixedModelBuilder (line 1152) ... ok
+test src/guide/mod.rs - guide::getting_started (line 82) ... ok
+
+test result: ok. 14 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 3.91s
+

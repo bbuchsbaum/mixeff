@@ -1,0 +1,1395 @@
+{
+  "_id": "6ad0c4339a0ea1f99f78c273",
+  "Package": "mixeff",
+  "Title": "Mixed-Effects Models via the 'mixeff-rs' Rust Crate",
+  "Version": "0.2.0",
+  "Authors@R": "c(\nperson(\"Brad\", \"Buchsbaum\",\nemail = \"brad.buchsbaum@gmail.com\",\nrole = c(\"aut\", \"cre\", \"cph\"),\ncomment = \"author of mixeff and the bundled 'mixeff-rs' crate\"),\nperson(\"Authors of the dependency Rust crates\",\nrole = \"ctb\",\ncomment = \"see inst/AUTHORS for details\"))",
+  "Copyright": "file inst/COPYRIGHTS",
+  "Description": "Fits linear and generalized linear mixed-effects models\nfrom 'lme4'-style formulas, with optimization by the bundled\n'mixeff-rs' Rust crate. A fitted model stores the compiled\nmodel specification, the optimizer certificate, and\nper-coefficient inference metadata (method, status,\nreliability) as data, so a result can be inspected, saved, and\nreloaded without a live handle to the compiled engine. When an\ninference method is unavailable for a fit, the affected value\nis either withheld with a stable reason code or reported under\nthe name of the method actually used, never silently swapped.\nVignettes cover migration from 'lme4' and the meaning of\nrandom-effects formula syntax.",
+  "License": "MIT + file LICENSE",
+  "URL": "https://bbuchsbaum.github.io/mixeff/,\nhttps://github.com/bbuchsbaum/mixeff",
+  "BugReports": "https://github.com/bbuchsbaum/mixeff/issues",
+  "Encoding": "UTF-8",
+  "Language": "en-US",
+  "Roxygen": "list(markdown = TRUE)",
+  "RoxygenNote": "7.3.3",
+  "Config/rextendr/version": "0.5.0",
+  "SystemRequirements": "Cargo (Rust's package manager, >= 1.85.0), rustc\n(>= 1.85.0), GNU make",
+  "VignetteBuilder": "knitr, rmarkdown",
+  "Config/testthat/edition": "3",
+  "Config/Needs/website": "albersdown",
+  "Config/pak/sysreqs": "make libclang-dev",
+  "Repository": "https://bbuchsbaum.r-universe.dev",
+  "Date/Publication": "2026-10-10 15:54:38 UTC",
+  "RemoteUrl": "https://github.com/bbuchsbaum/mixeff",
+  "RemoteRef": "HEAD",
+  "RemoteSha": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+  "NeedsCompilation": "yes",
+  "Packaged": {
+    "Date": "2026-10-15 11:45:55 UTC",
+    "User": "root"
+  },
+  "Author": "Brad Buchsbaum [aut, cre, cph] (author of mixeff and the bundled\n'mixeff-rs' crate),\nAuthors of the dependency Rust crates [ctb] (see inst/AUTHORS for\ndetails)",
+  "Maintainer": "Brad Buchsbaum <brad.buchsbaum@gmail.com>",
+  "_user": "bbuchsbaum",
+  "_type": "src",
+  "_file": "mixeff_0.2.0.tar.gz",
+  "_fileid": "https://r2.ropensci.org/faa658176c729e527f84a9daf92ff9207e9fc5d26ba601296bd8defbf1173e1d",
+  "_filesize": 7263467,
+  "_sha256": "faa658176c729e527f84a9daf92ff9207e9fc5d26ba601296bd8defbf1173e1d",
+  "_expires": "2027-01-23T12:16:47.000Z",
+  "_created": "2026-10-15T11:45:55.000Z",
+  "_published": "2026-10-15T12:16:50.946Z",
+  "_buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174",
+  "_status": "success",
+  "_host": "GitHub-Actions",
+  "_jobs": [
+    {
+      "job": 116404986493,
+      "time": 459,
+      "config": "linux-devel-arm64",
+      "r": "4.7.0",
+      "check": "OK",
+      "artifact": "11970069516"
+    },
+    {
+      "job": 116404986671,
+      "time": 506,
+      "config": "linux-devel-x86_64",
+      "r": "4.7.0",
+      "check": "OK",
+      "artifact": "11970820121"
+    },
+    {
+      "job": 116404986564,
+      "time": 456,
+      "config": "linux-release-arm64",
+      "r": "4.6.1",
+      "check": "OK",
+      "artifact": "11970275144"
+    },
+    {
+      "job": 116404986588,
+      "time": 535,
+      "config": "linux-release-x86_64",
+      "r": "4.6.1",
+      "check": "OK",
+      "artifact": "11970620277"
+    },
+    {
+      "job": 116404986484,
+      "time": 411,
+      "config": "macos-oldrel-arm64",
+      "r": "4.5.3",
+      "check": "OK",
+      "artifact": "11969519745"
+    },
+    {
+      "job": 116404986577,
+      "time": 1682,
+      "config": "macos-oldrel-x86_64",
+      "r": "4.5.3",
+      "check": "OK",
+      "artifact": "11970823829"
+    },
+    {
+      "job": 116404986542,
+      "time": 565,
+      "config": "macos-release-arm64",
+      "r": "4.6.1",
+      "check": "OK",
+      "artifact": "11970485392"
+    },
+    {
+      "job": 116404986521,
+      "time": 1242,
+      "config": "macos-release-x86_64",
+      "r": "4.6.1",
+      "check": "OK",
+      "artifact": "11971586205"
+    },
+    {
+      "job": 116402159116,
+      "time": 423,
+      "config": "source",
+      "r": "4.6.1",
+      "check": "OK",
+      "artifact": "11969133699"
+    },
+    {
+      "job": 116404986429,
+      "time": 153,
+      "config": "wasm-release",
+      "r": "4.6.0",
+      "check": "FAIL",
+      "artifact": ""
+    },
+    {
+      "job": 116404986543,
+      "time": 785,
+      "config": "windows-devel-arm64",
+      "r": "4.7.0",
+      "check": "OK",
+      "artifact": "11971405644"
+    },
+    {
+      "job": 116404986630,
+      "time": 894,
+      "config": "windows-devel-x86_64",
+      "r": "4.7.0",
+      "check": "OK",
+      "artifact": "11971121162"
+    },
+    {
+      "job": 116404986548,
+      "time": 892,
+      "config": "windows-oldrel-x86_64",
+      "r": "4.5.3",
+      "check": "OK",
+      "artifact": "11971026174"
+    },
+    {
+      "job": 116404986606,
+      "time": 893,
+      "config": "windows-release-arm64",
+      "r": "4.6.1",
+      "check": "OK",
+      "artifact": "11970136601"
+    },
+    {
+      "job": 116404986516,
+      "time": 506,
+      "config": "windows-release-x86_64",
+      "r": "4.6.1",
+      "check": "OK",
+      "artifact": "11969874808"
+    }
+  ],
+  "_upstream": "https://github.com/bbuchsbaum/mixeff",
+  "_commit": {
+    "id": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+    "author": "bbuchsbaum <brad.buchsbaum@gmail.com>",
+    "committer": "GitHub <noreply@github.com>",
+    "message": "Refresh cran-comments.md after the pre-CRAN audit (#5)\n\nRecord post-audit CI/local check status and the builder reruns still to\ndo, correct the installed-size note, and describe the in-session engine\nhandle and opt-in bootstrap threads.\n\n\nClaude-Session: https://claude.ai/code/session_01FyHfjXASu3MBP67gwjUuge\n\nCo-authored-by: Claude <noreply@anthropic.com>",
+    "time": 1791647678
+  },
+  "_maintainer": {
+    "name": "Brad Buchsbaum",
+    "email": "brad.buchsbaum@gmail.com",
+    "login": "bbuchsbaum",
+    "description": "",
+    "uuid": 53819
+  },
+  "_distro": "resolute",
+  "_registered": true,
+  "_dependencies": [
+    {
+      "package": "R",
+      "version": ">= 4.2",
+      "role": "Depends"
+    },
+    {
+      "package": "graphics",
+      "role": "Imports"
+    },
+    {
+      "package": "grDevices",
+      "role": "Imports"
+    },
+    {
+      "package": "jsonlite",
+      "role": "Imports"
+    },
+    {
+      "package": "Matrix",
+      "role": "Imports"
+    },
+    {
+      "package": "methods",
+      "role": "Imports"
+    },
+    {
+      "package": "rlang",
+      "role": "Imports"
+    },
+    {
+      "package": "stats",
+      "role": "Imports"
+    },
+    {
+      "package": "utils",
+      "role": "Imports"
+    },
+    {
+      "package": "boot",
+      "role": "Suggests"
+    },
+    {
+      "package": "broom",
+      "role": "Suggests"
+    },
+    {
+      "package": "broom.mixed",
+      "role": "Suggests"
+    },
+    {
+      "package": "generics",
+      "role": "Suggests"
+    },
+    {
+      "package": "insight",
+      "role": "Suggests"
+    },
+    {
+      "package": "ggplot2",
+      "role": "Suggests"
+    },
+    {
+      "package": "emmeans",
+      "version": ">= 1.4",
+      "role": "Suggests"
+    },
+    {
+      "package": "estimability",
+      "role": "Suggests"
+    },
+    {
+      "package": "jsonvalidate",
+      "role": "Suggests"
+    },
+    {
+      "package": "knitr",
+      "role": "Suggests"
+    },
+    {
+      "package": "lattice",
+      "role": "Suggests"
+    },
+    {
+      "package": "lme4",
+      "role": "Suggests"
+    },
+    {
+      "package": "lmerTest",
+      "role": "Suggests"
+    },
+    {
+      "package": "MASS",
+      "role": "Suggests"
+    },
+    {
+      "package": "nlme",
+      "role": "Suggests"
+    },
+    {
+      "package": "parallel",
+      "role": "Suggests"
+    },
+    {
+      "package": "pbkrtest",
+      "role": "Suggests"
+    },
+    {
+      "package": "performance",
+      "role": "Suggests"
+    },
+    {
+      "package": "pkgload",
+      "role": "Suggests"
+    },
+    {
+      "package": "processx",
+      "role": "Suggests"
+    },
+    {
+      "package": "reformulas",
+      "role": "Suggests"
+    },
+    {
+      "package": "rextendr",
+      "role": "Suggests"
+    },
+    {
+      "package": "rmarkdown",
+      "role": "Suggests"
+    },
+    {
+      "package": "statmod",
+      "role": "Suggests"
+    },
+    {
+      "package": "testthat",
+      "version": ">= 3.0.0",
+      "role": "Suggests"
+    }
+  ],
+  "_owner": "bbuchsbaum",
+  "_selfowned": true,
+  "_usedby": 0,
+  "_updates": [
+    {
+      "week": "2026-20",
+      "n": 5
+    },
+    {
+      "week": "2026-21",
+      "n": 10
+    },
+    {
+      "week": "2026-22",
+      "n": 3
+    },
+    {
+      "week": "2026-23",
+      "n": 30
+    },
+    {
+      "week": "2026-24",
+      "n": 10
+    },
+    {
+      "week": "2026-27",
+      "n": 13
+    },
+    {
+      "week": "2026-28",
+      "n": 5
+    },
+    {
+      "week": "2026-29",
+      "n": 1
+    },
+    {
+      "week": "2026-31",
+      "n": 7
+    },
+    {
+      "week": "2026-32",
+      "n": 5
+    },
+    {
+      "week": "2026-39",
+      "n": 2
+    },
+    {
+      "week": "2026-41",
+      "n": 2
+    }
+  ],
+  "_tags": [],
+  "_stars": 0,
+  "_contributors": [
+    {
+      "user": "bbuchsbaum",
+      "count": 134,
+      "uuid": 53819
+    }
+  ],
+  "_userbio": {
+    "uuid": 53819,
+    "type": "user",
+    "name": "bbuchsbaum",
+    "followers": 37
+  },
+  "_downloads": {
+    "count": 0,
+    "source": "https://cranlogs.r-pkg.org/downloads/total/last-month/mixeff"
+  },
+  "_devurl": "https://github.com/bbuchsbaum/mixeff",
+  "_pkgdown": "https://bbuchsbaum.github.io/mixeff/",
+  "_searchresults": 77,
+  "_cargo": true,
+  "_topics": [
+    "rust",
+    "cargo"
+  ],
+  "_rbuild": "4.6.1",
+  "_assets": [
+    "extra/citation.cff",
+    "extra/citation.html",
+    "extra/citation.json",
+    "extra/citation.txt",
+    "extra/contents.json",
+    "extra/manual.pdf",
+    "extra/mixeff.html",
+    "extra/NEWS.html",
+    "extra/NEWS.txt",
+    "extra/readme.html",
+    "extra/readme.md",
+    "LICENSE"
+  ],
+  "_cranurl": false,
+  "_exports": [
+    "as_json",
+    "audit",
+    "audit_design",
+    "bootstrap_control",
+    "changes",
+    "compare",
+    "compare_covariance",
+    "compile_model",
+    "contrast",
+    "df_for_contrast",
+    "diagnostics",
+    "emm_basis.mm_glmm",
+    "emm_basis.mm_lmm",
+    "estimability",
+    "explain_model",
+    "fit_handle_alive",
+    "fit_status",
+    "fixef",
+    "getME",
+    "glmm",
+    "inference_options",
+    "inference_table",
+    "is_singular",
+    "lmm",
+    "mm_allfit",
+    "mm_bootmer",
+    "mm_comparisons",
+    "mm_control",
+    "mm_formula_manifest",
+    "mm_grid",
+    "mm_icc",
+    "mm_json_known_schemas",
+    "mm_json_negotiate",
+    "mm_lincomb",
+    "mm_lmlist",
+    "mm_means",
+    "mm_negative_binomial",
+    "mm_parse_formula",
+    "mm_predictions",
+    "mm_r2",
+    "mm_variance_components",
+    "model_report",
+    "ngrps",
+    "optimizer_certificate",
+    "parameterization",
+    "parametric_bootstrap",
+    "random_blocks",
+    "random_options",
+    "ranef",
+    "recover_data.mm_glmm",
+    "recover_data.mm_lmm",
+    "refit",
+    "REMLcrit",
+    "rePCA",
+    "reporting_table",
+    "reproducibility",
+    "revive",
+    "roles",
+    "step",
+    "supported_models",
+    "test_effect",
+    "test_random_effect",
+    "VarCorr",
+    "verify_convergence"
+  ],
+  "_help": [
+    {
+      "page": "anova.mm_glmm",
+      "title": "Analysis of deviance for GLMMs",
+      "topics": [
+        "anova.mm_glmm"
+      ]
+    },
+    {
+      "page": "anova.mm_lmm",
+      "title": "Analysis of variance for a mixeff LMM",
+      "topics": [
+        "anova.mm_lmm"
+      ]
+    },
+    {
+      "page": "as_json",
+      "title": "Serialize a mixeff spec or fit to JSON",
+      "topics": [
+        "as_json",
+        "as_json.mm_compiled"
+      ]
+    },
+    {
+      "page": "audit",
+      "title": "Audit a compiled model spec or fitted model",
+      "topics": [
+        "audit",
+        "audit.default",
+        "audit.mm_compiled"
+      ]
+    },
+    {
+      "page": "audit_design",
+      "title": "Deprecated alias for 'audit()'",
+      "topics": [
+        "audit_design"
+      ]
+    },
+    {
+      "page": "bootstrap_control",
+      "title": "Fixed-effect bootstrap control",
+      "topics": [
+        "bootstrap_control"
+      ]
+    },
+    {
+      "page": "changes",
+      "title": "Show requested, effective, and fitted model-state changes",
+      "topics": [
+        "changes",
+        "changes.mm_compiled"
+      ]
+    },
+    {
+      "page": "compare",
+      "title": "Compare fitted mixeff models",
+      "topics": [
+        "compare",
+        "compare.mm_lmm"
+      ]
+    },
+    {
+      "page": "compare_covariance",
+      "title": "Compare covariance parameterizations for current random terms",
+      "topics": [
+        "compare_covariance"
+      ]
+    },
+    {
+      "page": "compile_model",
+      "title": "Compile a mixed-effects model spec without fitting",
+      "topics": [
+        "compile_model"
+      ]
+    },
+    {
+      "page": "confint.mm_glmm",
+      "title": "Confidence intervals for fixed effects of a mixeff GLMM",
+      "topics": [
+        "confint.mm_glmm"
+      ]
+    },
+    {
+      "page": "confint.mm_lmm",
+      "title": "Confidence intervals for a mixeff LMM",
+      "topics": [
+        "confint.mm_lmm"
+      ]
+    },
+    {
+      "page": "contrast",
+      "title": "Contrast fixed effects",
+      "topics": [
+        "contrast",
+        "contrast.mm_glmm",
+        "contrast.mm_lmm"
+      ]
+    },
+    {
+      "page": "df_for_contrast",
+      "title": "Degrees of freedom for a contrast",
+      "topics": [
+        "df_for_contrast",
+        "df_for_contrast.mm_lmm"
+      ]
+    },
+    {
+      "page": "diagnostics",
+      "title": "Inspect mixeff diagnostics and fit status",
+      "topics": [
+        "diagnostics",
+        "diagnostics.mm_compiled",
+        "fit_status",
+        "fit_status.mm_compiled",
+        "fit_status.mm_fit"
+      ]
+    },
+    {
+      "page": "drop1.mm_glmm",
+      "title": "Drop one fixed-effect term at a time from a GLMM",
+      "topics": [
+        "drop1.mm_glmm"
+      ]
+    },
+    {
+      "page": "drop1.mm_lmm",
+      "title": "Drop one fixed-effect term at a time",
+      "topics": [
+        "drop1.mm_lmm"
+      ]
+    },
+    {
+      "page": "estimability",
+      "title": "Assess contrast estimability",
+      "topics": [
+        "estimability",
+        "estimability.mm_lmm"
+      ]
+    },
+    {
+      "page": "explain_model",
+      "title": "Explain the random-effects structure of a compiled model",
+      "topics": [
+        "explain_model"
+      ]
+    },
+    {
+      "page": "fit_handle_alive",
+      "title": "Test whether a mixeff fit has a live native handle",
+      "topics": [
+        "fit_handle_alive",
+        "fit_handle_alive.mm_fit"
+      ]
+    },
+    {
+      "page": "getME",
+      "title": "Extract low-level model components",
+      "topics": [
+        "getME",
+        "getME.mm_glmm",
+        "getME.mm_lmm"
+      ]
+    },
+    {
+      "page": "glmm",
+      "title": "Fit a generalized linear mixed model",
+      "topics": [
+        "glmm"
+      ]
+    },
+    {
+      "page": "inference_options",
+      "title": "Inspect inference methods available for this fit",
+      "topics": [
+        "inference_options",
+        "inference_options.mm_glmm",
+        "inference_options.mm_lmm"
+      ]
+    },
+    {
+      "page": "inference_table",
+      "title": "Fixed-effect inference table",
+      "topics": [
+        "inference_table",
+        "inference_table.mm_glmm",
+        "inference_table.mm_lmm"
+      ]
+    },
+    {
+      "page": "is_singular",
+      "title": "Test whether a fit is singular or reduced-rank",
+      "topics": [
+        "is_singular",
+        "is_singular.mm_glmm",
+        "is_singular.mm_lmm"
+      ]
+    },
+    {
+      "page": "lmm",
+      "title": "Fit a linear mixed-effects model",
+      "topics": [
+        "lmm"
+      ]
+    },
+    {
+      "page": "mm_allfit",
+      "title": "Refit a model with every available optimizer",
+      "topics": [
+        "mm_allfit"
+      ]
+    },
+    {
+      "page": "mm_bootmer",
+      "title": "Parametric bootstrap of any statistic of a fitted LMM",
+      "topics": [
+        "mm_bootmer"
+      ]
+    },
+    {
+      "page": "mm_control",
+      "title": "Control mixeff fitting behavior",
+      "topics": [
+        "mm_control"
+      ]
+    },
+    {
+      "page": "mm_family",
+      "title": "Family objects and prior weights for mixeff fits",
+      "topics": [
+        "family.mm_glmm",
+        "family.mm_lmm",
+        "mm_family",
+        "weights.mm_glmm",
+        "weights.mm_lmm"
+      ]
+    },
+    {
+      "page": "mm_formula_manifest",
+      "title": "The wrapper's formula manifest",
+      "topics": [
+        "mm_formula_manifest"
+      ]
+    },
+    {
+      "page": "mm_grid",
+      "title": "Marginal grids, predictions, means, and comparisons",
+      "topics": [
+        "mm_comparisons",
+        "mm_comparisons.mm_lmm",
+        "mm_grid",
+        "mm_grid.mm_lmm",
+        "mm_means",
+        "mm_means.mm_lmm",
+        "mm_predictions",
+        "mm_predictions.mm_lmm"
+      ]
+    },
+    {
+      "page": "mm_influence",
+      "title": "Leverage, Cook's distance and deletion influence for mixeff fits",
+      "topics": [
+        "cooks.distance.mm_glmm",
+        "cooks.distance.mm_influence",
+        "cooks.distance.mm_lmm",
+        "dfbeta.mm_influence",
+        "dfbetas.mm_influence",
+        "hatvalues.mm_glmm",
+        "hatvalues.mm_lmm",
+        "influence.mm_glmm",
+        "influence.mm_lmm",
+        "mm_influence"
+      ]
+    },
+    {
+      "page": "mm_json_known_schemas",
+      "title": "Closed list of schema/version pairs the wrapper understands",
+      "topics": [
+        "mm_json_known_schemas"
+      ]
+    },
+    {
+      "page": "mm_json_negotiate",
+      "title": "Negotiate a JSON schema header against what 'mixeff' supports",
+      "topics": [
+        "mm_json_negotiate"
+      ]
+    },
+    {
+      "page": "mm_lincomb",
+      "title": "Wald inference on a linear combination of fixed effects",
+      "topics": [
+        "mm_lincomb",
+        "mm_lincomb.default",
+        "mm_lincomb.mm_glmm",
+        "mm_lincomb.mm_lmm"
+      ]
+    },
+    {
+      "page": "mm_lmlist",
+      "title": "Per-group linear (or generalized linear) model fits",
+      "topics": [
+        "mm_lmlist"
+      ]
+    },
+    {
+      "page": "mm_lmm-methods",
+      "title": "Extract components from a fitted mixeff LMM",
+      "topics": [
+        "AIC.mm_glmm",
+        "AIC.mm_lmm",
+        "as.data.frame.mm_ranef",
+        "as.data.frame.mm_varcorr",
+        "BIC.mm_glmm",
+        "BIC.mm_lmm",
+        "coef.mm_glmm",
+        "coef.mm_lmm",
+        "deviance.mm_glmm",
+        "deviance.mm_lmm",
+        "df.residual.mm_glmm",
+        "df.residual.mm_lmm",
+        "extractAIC.mm_glmm",
+        "extractAIC.mm_lmm",
+        "fixef",
+        "fixef.default",
+        "fixef.mm_glmm",
+        "fixef.mm_lmm",
+        "formula.mm_glmm",
+        "formula.mm_lmm",
+        "logLik.mm_glmm",
+        "logLik.mm_lmm",
+        "mm_lmm-methods",
+        "model.frame.mm_glmm",
+        "model.frame.mm_lmm",
+        "model.matrix.mm_glmm",
+        "model.matrix.mm_lmm",
+        "ngrps",
+        "ngrps.default",
+        "ngrps.mm_glmm",
+        "ngrps.mm_lmm",
+        "nobs.mm_glmm",
+        "nobs.mm_lmm",
+        "ranef",
+        "ranef.default",
+        "ranef.mm_glmm",
+        "ranef.mm_lmm",
+        "sigma.mm_glmm",
+        "sigma.mm_lmm",
+        "terms.mm_glmm",
+        "terms.mm_lmm",
+        "VarCorr",
+        "VarCorr.default",
+        "VarCorr.mm_glmm",
+        "VarCorr.mm_lmm",
+        "vcov.mm_glmm",
+        "vcov.mm_lmm"
+      ]
+    },
+    {
+      "page": "mm_negative_binomial",
+      "title": "Negative-binomial family for 'glmm()'",
+      "topics": [
+        "mm_negative_binomial"
+      ]
+    },
+    {
+      "page": "mm_parse_formula",
+      "title": "Parse and canonicalize an lme4-style formula",
+      "topics": [
+        "mm_parse_formula"
+      ]
+    },
+    {
+      "page": "mm_variance_components",
+      "title": "Variance decomposition, Nakagawa R2 and ICC for mixeff fits",
+      "topics": [
+        "mm_icc",
+        "mm_r2",
+        "mm_variance_components"
+      ]
+    },
+    {
+      "page": "model_report",
+      "title": "Produce reporting tables for a fitted mixeff model",
+      "topics": [
+        "model_report",
+        "model_report.mm_fit",
+        "reporting_table",
+        "reporting_table.mm_drop1",
+        "reporting_table.mm_fit",
+        "reporting_table.mm_model_comparison",
+        "reporting_table.mm_random_effect_test"
+      ]
+    },
+    {
+      "page": "optimizer_certificate",
+      "title": "Inspect the optimizer certificate",
+      "topics": [
+        "optimizer_certificate",
+        "optimizer_certificate.mm_compiled"
+      ]
+    },
+    {
+      "page": "parameterization",
+      "title": "Inspect covariance parameterization",
+      "topics": [
+        "parameterization",
+        "parameterization.mm_compiled"
+      ]
+    },
+    {
+      "page": "parametric_bootstrap",
+      "title": "Parametric bootstrap likelihood-ratio comparison",
+      "topics": [
+        "parametric_bootstrap"
+      ]
+    },
+    {
+      "page": "plot.mm_fit",
+      "title": "Diagnostic plots for mixeff fits",
+      "topics": [
+        "plot.mm_fit",
+        "plot.mm_glmm",
+        "plot.mm_lmm",
+        "qqnorm.mm_glmm",
+        "qqnorm.mm_lmm"
+      ]
+    },
+    {
+      "page": "plot.mm_ranef",
+      "title": "Caterpillar and Q-Q plots of random effects",
+      "topics": [
+        "plot.mm_ranef",
+        "qqnorm.mm_ranef"
+      ]
+    },
+    {
+      "page": "predict.mm_glmm",
+      "title": "Predict from a fitted mixeff GLMM",
+      "topics": [
+        "predict.mm_glmm"
+      ]
+    },
+    {
+      "page": "predict.mm_lmm",
+      "title": "Predict from a fitted mixeff LMM",
+      "topics": [
+        "fitted.mm_glmm",
+        "fitted.mm_lmm",
+        "predict.mm_lmm",
+        "residuals.mm_glmm",
+        "residuals.mm_lmm"
+      ]
+    },
+    {
+      "page": "profile.mm_lmm",
+      "title": "Profile a fitted linear mixed model",
+      "topics": [
+        "profile.mm_lmm"
+      ]
+    },
+    {
+      "page": "random_blocks",
+      "title": "Inspect random-effect blocks",
+      "topics": [
+        "random_blocks",
+        "random_blocks.mm_compiled"
+      ]
+    },
+    {
+      "page": "random_options",
+      "title": "Inspect nearby random-effect spellings for one grouping factor",
+      "topics": [
+        "random_options"
+      ]
+    },
+    {
+      "page": "refit",
+      "title": "Refit a mixeff model with a new response",
+      "topics": [
+        "refit",
+        "refit.default",
+        "refit.mm_glmm",
+        "refit.mm_lmm"
+      ]
+    },
+    {
+      "page": "REMLcrit",
+      "title": "REML criterion of a linear mixed model",
+      "topics": [
+        "REMLcrit"
+      ]
+    },
+    {
+      "page": "rePCA",
+      "title": "PCA of the random-effects covariance (lme4's 'rePCA()')",
+      "topics": [
+        "rePCA",
+        "rePCA.default",
+        "rePCA.mm_glmm",
+        "rePCA.mm_lmm"
+      ]
+    },
+    {
+      "page": "reproducibility",
+      "title": "Inspect reproducibility metadata",
+      "topics": [
+        "reproducibility",
+        "reproducibility.mm_compiled"
+      ]
+    },
+    {
+      "page": "revive",
+      "title": "Revive a serialized mixeff object",
+      "topics": [
+        "revive",
+        "revive.mm_fit"
+      ]
+    },
+    {
+      "page": "roles",
+      "title": "Declare or inspect design roles",
+      "topics": [
+        "roles"
+      ]
+    },
+    {
+      "page": "simulate.mm_lmm",
+      "title": "Simulate responses from a mixeff fit",
+      "topics": [
+        "simulate.mm_glmm",
+        "simulate.mm_lmm"
+      ]
+    },
+    {
+      "page": "step",
+      "title": "Stepwise model selection",
+      "topics": [
+        "step",
+        "step.default"
+      ]
+    },
+    {
+      "page": "step.mm_lmm",
+      "title": "Backward elimination of random and fixed effects (lmerTest's 'step()')",
+      "topics": [
+        "step.mm_lmm"
+      ]
+    },
+    {
+      "page": "supported_models",
+      "title": "The supported model envelope",
+      "topics": [
+        "supported_models"
+      ]
+    },
+    {
+      "page": "test_effect",
+      "title": "Test a fixed-effect term",
+      "topics": [
+        "test_effect",
+        "test_effect.mm_lmm"
+      ]
+    },
+    {
+      "page": "test_random_effect",
+      "title": "Test a random-effect variance component",
+      "topics": [
+        "test_random_effect",
+        "test_random_effect.mm_lmm"
+      ]
+    },
+    {
+      "page": "update.mm",
+      "title": "Update and re-fit a mixeff model",
+      "topics": [
+        "update.mm",
+        "update.mm_glmm",
+        "update.mm_lmm"
+      ]
+    },
+    {
+      "page": "verify_convergence",
+      "title": "Verify convergence of a fitted mixed model",
+      "topics": [
+        "verify_convergence",
+        "verify_convergence.default",
+        "verify_convergence.mm_glmm",
+        "verify_convergence.mm_lmm"
+      ]
+    }
+  ],
+  "_readme": "https://github.com/bbuchsbaum/mixeff/raw/HEAD/README.md",
+  "_rundeps": [
+    "jsonlite",
+    "lattice",
+    "Matrix",
+    "rlang"
+  ],
+  "_vignettes": [
+    {
+      "source": "convergence.Rmd",
+      "filename": "convergence.html",
+      "title": "Convergence, Boundaries, and Singularity",
+      "engine": "knitr::rmarkdown",
+      "headings": [
+        "What converged_interior establishes — and what it does not",
+        "Boundary and reduced-rank fits are labeled facts",
+        "How singularity is decided: rank, not θ entries",
+        "Verifying an optimum: verify_convergence()",
+        "When the requested estimator does not certify (GLMM)",
+        "What a boundary refuses",
+        "References"
+      ],
+      "created": "2026-08-02 20:24:19",
+      "modified": "2026-08-02 20:24:19",
+      "commits": 1
+    },
+    {
+      "source": "glmm.Rmd",
+      "filename": "glmm.html",
+      "title": "Generalized Linear Mixed Models",
+      "engine": "knitr::rmarkdown",
+      "headings": [
+        "Family and Audit",
+        "Fit",
+        "The fast profiled path",
+        "Prediction",
+        "Quadrature Sensitivity",
+        "What is refused where"
+      ],
+      "created": "2026-05-17 00:06:19",
+      "modified": "2026-10-10 14:48:23",
+      "commits": 9
+    },
+    {
+      "source": "inference.Rmd",
+      "filename": "inference.html",
+      "title": "Inference",
+      "engine": "knitr::rmarkdown",
+      "headings": [
+        "What model are we fitting?",
+        "Coefficient p-values",
+        "Contrasts",
+        "Term tests",
+        "Model comparisons",
+        "When standard p-values are not well justified",
+        "The route map",
+        "How do I test the term anyway?",
+        "What about confidence intervals?",
+        "Where does cluster bootstrap stand?",
+        "Variance-component boundary tests",
+        "Profile confidence intervals",
+        "GLMM inference: the three-route contract",
+        "Estimands: what are you averaging?",
+        "The study",
+        "Reference grids with mm_grid()",
+        "Cell predictions with mm_predictions()",
+        "Marginal means with mm_means()",
+        "Pairwise comparisons with mm_comparisons()",
+        "Conditional comparisons with by =",
+        "Constraining the grid with at =",
+        "Custom contrasts with mm_lincomb()",
+        "The covariance contract",
+        "Summary",
+        "References"
+      ],
+      "created": "2026-05-17 00:06:19",
+      "modified": "2026-10-10 14:48:23",
+      "commits": 8
+    },
+    {
+      "source": "mixeff.Rmd",
+      "filename": "mixeff.html",
+      "title": "Introduction and the Supported Model Contract",
+      "engine": "knitr::rmarkdown",
+      "headings": [
+        "The dataset",
+        "A. The formula stays familiar",
+        "B. When a fit is degenerate, the object says so",
+        "C. Inference labels its method",
+        "The supported model contract",
+        "D. The fit is the record",
+        "Saving, reloading, and reviving in practice",
+        "The artifact contract",
+        "Lower-level tools",
+        "Where to read next"
+      ],
+      "created": "2026-05-17 00:06:19",
+      "modified": "2026-10-10 14:48:23",
+      "commits": 7
+    },
+    {
+      "source": "lmm.Rmd",
+      "filename": "lmm.html",
+      "title": "Linear Mixed Models",
+      "engine": "knitr::rmarkdown",
+      "headings": [
+        "The data",
+        "Step 1: Read the formula before you fit",
+        "Step 2: Fit",
+        "Step 3: Read the summary",
+        "Step 4: Extract components",
+        "Step 5: Prediction and residuals",
+        "Prediction standard errors and intervals",
+        "Step 6: Case weights",
+        "Random-effects formulas in depth",
+        "What does (1 | subject) say?",
+        "What changes when you add a random slope?",
+        "What do split blocks and || mean?",
+        "Nested and crossed grouping",
+        "What are the three kinds of help?",
+        "How do you inspect nearby formulas?",
+        "Why is there no recommendation row?",
+        "Where do fitted-model changes appear?",
+        "Where to go next"
+      ],
+      "created": "2026-08-02 20:24:19",
+      "modified": "2026-10-10 14:48:23",
+      "commits": 2
+    },
+    {
+      "source": "lme4-migration.Rmd",
+      "filename": "lme4-migration.html",
+      "title": "Migrating from lme4",
+      "engine": "knitr::rmarkdown",
+      "headings": [
+        "The two edits",
+        "Verb map",
+        "Argument map for lmm() / glmm()",
+        "Four differences to check when porting",
+        "The supported envelope, generated",
+        "What is NA-with-a-reason (and why)"
+      ],
+      "created": "2026-06-02 10:48:25",
+      "modified": "2026-10-10 14:48:23",
+      "commits": 7
+    }
+  ],
+  "_score": 5.442793225939769,
+  "_indexed": true,
+  "_nocasepkg": "mixeff",
+  "_universes": [
+    "bbuchsbaum"
+  ],
+  "_binaries": [
+    {
+      "r": "4.7.0",
+      "os": "linux",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:50:10.000Z",
+      "distro": "resolute",
+      "arch": "aarch64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/19ae4584acf7589707807cb7c08b3ec2ad2949bb582142b67b93d72c4338c9c3",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.7.0",
+      "os": "linux",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:50:40.000Z",
+      "distro": "resolute",
+      "arch": "x86_64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/abcc0326993fcc4a32977e73efe90ae47c989b08aa6dfebe40531b09f27913ec",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.6.1",
+      "os": "linux",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:50:06.000Z",
+      "distro": "resolute",
+      "arch": "aarch64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/9fc0b101b359f20060ae32b634743a12a2cbafe6ebbc01be575b4a42ec582698",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.6.1",
+      "os": "linux",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:51:12.000Z",
+      "distro": "resolute",
+      "arch": "x86_64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/60493d124f32a2e8caae94235bd0bbc31b4bf0b98fe6977cb1d0a7f7aef0a3de",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.5.3",
+      "os": "mac",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:49:44.000Z",
+      "arch": "aarch64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/9bbd0fa5d2e3dddf2fc11b1d45f3c2c3017be93679a3bc6f95ba0050e5cce5af",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.5.3",
+      "os": "mac",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:51:47.000Z",
+      "arch": "x86_64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/cebc1ecb3ff2e8724f24eba1a2047a6d2b967c1d7dc93f8e2138ee2818d8a435",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.6.1",
+      "os": "mac",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:49:56.000Z",
+      "arch": "aarch64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/ed7fce8c717651c8dc293160dfd153bb01f492a21949e45f1e7704019da03c40",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.6.1",
+      "os": "mac",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:51:47.000Z",
+      "arch": "x86_64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/fbe51a9566e0a6bea2452888f8efc08a14a01a043ff48ca8bf982f0d242c7ffe",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.7.0",
+      "os": "win",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:52:18.000Z",
+      "arch": "aarch64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/ba79866e444ebb21c3edf5b44fe5f4dfc3981a3379860d18de62aea32f251671",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.7.0",
+      "os": "win",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:49:33.000Z",
+      "arch": "x86_64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/bc552989909451a872823e3f1368ccfaed43848ed9eb89290a48b70178e2e5bb",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.5.3",
+      "os": "win",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:49:35.000Z",
+      "arch": "x86_64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/5e6a89974f72d222c85fc731c32bfcefb493c4281db46e73f83b609367f1c13b",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.6.1",
+      "os": "win",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:53:58.000Z",
+      "arch": "aarch64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/62a911b802cb9b2ac26ef09e1df2e3f4b6e2693d4a2cee4636ed73b2decceab3",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    },
+    {
+      "r": "4.6.1",
+      "os": "win",
+      "version": "0.2.0",
+      "date": "2026-10-15T11:49:25.000Z",
+      "arch": "x86_64",
+      "commit": "6e9a62a53f1b06e76ae56c490f1b221aa5a6a786",
+      "fileid": "https://r2.ropensci.org/a4b7f0a19d5e2d74117adf1ac20ac6cf87e084452e082596f2685e607bfed741",
+      "status": "success",
+      "check": "OK",
+      "buildurl": "https://github.com/r-universe/bbuchsbaum/actions/runs/38729050174"
+    }
+  ]
+}

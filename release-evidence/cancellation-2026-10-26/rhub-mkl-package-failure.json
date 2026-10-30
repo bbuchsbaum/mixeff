@@ -1,0 +1,29 @@
+{
+  "head": "bf612d6938b913f0248177bd5748f6c365b303c4",
+  "runtime_unchanged_at": "806528106473594aa7342c6585c2b56be5ed2649",
+  "job_id": 121805238156,
+  "run_id": 40389108548,
+  "classification": "Executed package numerical parity failure, release blocker under investigation",
+  "failure_lines": [
+    "2026-10-26T20:04:05.3987784Z     `actual`: 14.7",
+    "2026-10-26T20:04:05.3988054Z   `expected`:  8.2",
+    "2026-10-26T20:04:05.3988645Z   variance component parity failed for `rt_modality_full`",
+    "2026-10-26T20:04:05.3993710Z   [ FAIL 1 | WARN 0 | SKIP 62 | PASS 6156 ]",
+    "2026-10-26T20:04:17.6243051Z Status: 1 ERROR",
+    "2026-10-26T20:04:17.7817813Z [ FAIL 1 | WARN 0 | SKIP 62 | PASS 6156 ]",
+    "2026-10-26T20:04:17.7852638Z   `actual`: 14.7",
+    "2026-10-26T20:04:17.7852972Z `expected`:  8.2",
+    "2026-10-26T20:04:17.7853418Z variance component parity failed for `rt_modality_full`",
+    "2026-10-26T20:04:17.7856681Z [ FAIL 1 | WARN 0 | SKIP 62 | PASS 6156 ]",
+    "2026-10-26T20:04:17.8763381Z [ FAIL 1 | WARN 0 | SKIP 62 | PASS 6156 ]",
+    "2026-10-26T20:04:17.8785011Z   `actual`: 14.7",
+    "2026-10-26T20:04:17.8785207Z `expected`:  8.2",
+    "2026-10-26T20:04:17.8785474Z variance component parity failed for `rt_modality_full`",
+    "2026-10-26T20:04:17.8787485Z [ FAIL 1 | WARN 0 | SKIP 62 | PASS 6156 ]",
+    "2026-10-26T20:04:18.1550697Z [ FAIL 1 | WARN 0 | SKIP 62 | PASS 6156 ]",
+    "2026-10-26T20:04:18.1559597Z   `actual`: 14.7",
+    "2026-10-26T20:04:18.1559679Z `expected`:  8.2",
+    "2026-10-26T20:04:18.1559826Z variance component parity failed for `rt_modality_full`",
+    "2026-10-26T20:04:18.1560751Z [ FAIL 1 | WARN 0 | SKIP 62 | PASS 6156 ]"
+  ]
+}

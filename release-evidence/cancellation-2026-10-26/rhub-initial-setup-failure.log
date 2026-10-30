@@ -1,0 +1,80 @@
+﻿2026-10-26T19:40:38.9237949Z Current runner version: '2.338.0'
+2026-10-26T19:40:38.9259550Z ##[group]Runner Image Provisioner
+2026-10-26T19:40:38.9260395Z Hosted Compute Agent
+2026-10-26T19:40:38.9260881Z Version: 20261021.618
+2026-10-26T19:40:38.9261448Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-10-26T19:40:38.9262068Z Build Date: 2026-10-21T00:45:21Z
+2026-10-26T19:40:38.9262703Z Worker ID: {a322570e-8aee-4a63-8004-b0cd6cec1ff3}
+2026-10-26T19:40:38.9263303Z Region: centralus
+2026-10-26T19:40:38.9263763Z Cloud: Azure
+2026-10-26T19:40:38.9264240Z ##[endgroup]
+2026-10-26T19:40:38.9265489Z ##[group]Operating System
+2026-10-26T19:40:38.9266011Z Ubuntu
+2026-10-26T19:40:38.9266511Z 26.04.1
+2026-10-26T19:40:38.9266936Z LTS
+2026-10-26T19:40:38.9267419Z ##[endgroup]
+2026-10-26T19:40:38.9267885Z ##[group]Runner Image
+2026-10-26T19:40:38.9268419Z Image: ubuntu-26.04
+2026-10-26T19:40:38.9268928Z Version: 20261012.163.1
+2026-10-26T19:40:38.9270212Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261012.163/images/ubuntu/Ubuntu2604-Readme.md
+2026-10-26T19:40:38.9271530Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261012.163
+2026-10-26T19:40:38.9272345Z ##[endgroup]
+2026-10-26T19:40:38.9273342Z ##[group]GITHUB_TOKEN Permissions
+2026-10-26T19:40:38.9274897Z Contents: read
+2026-10-26T19:40:38.9275457Z Metadata: read
+2026-10-26T19:40:38.9275952Z Packages: read
+2026-10-26T19:40:38.9276437Z ##[endgroup]
+2026-10-26T19:40:38.9278138Z Secret source: Actions
+2026-10-26T19:40:38.9278952Z Cache mode: write
+2026-10-26T19:40:38.9279778Z Prepare workflow directory
+2026-10-26T19:40:38.9556277Z Prepare all required actions
+2026-10-26T19:40:38.9595125Z Getting action download info
+2026-10-26T19:40:39.1816664Z Download action repository 'r-hub/actions@v1' (SHA:02be5ffbeae2b0d553da66acded089da11a1fb8f)
+2026-10-26T19:40:39.5798098Z Complete job name: setup
+2026-10-26T19:40:39.6458868Z ##[group]Run r-hub/actions/setup@v1
+2026-10-26T19:40:39.6459704Z with:
+2026-10-26T19:40:39.6460714Z   config: ubuntu-gcc16,ubuntu-clang,windows,macos,macos-arm64,m1-san,gcc16,clang-asan,clang-ubsan,gcc-asan,valgrind,nosuggests,nold,lto,mkl,atlas,donttest,rchk
+2026-10-26T19:40:39.6461939Z ##[endgroup]
+2026-10-26T19:40:39.6511080Z ##[start-action display=Configure R-hub platforms;id=rhub-setup.config]
+2026-10-26T19:40:39.6565374Z ##[group]Run cd /home/runner/work/_actions/r-hub/actions/v1/setup
+2026-10-26T19:40:39.6566101Z [36;1mcd /home/runner/work/_actions/r-hub/actions/v1/setup[0m
+2026-10-26T19:40:39.6567833Z [36;1mcnt=$(docker run -v `pwd`:/action -w /action ghcr.io/r-hub/r-minimal/r-minimal:latest R -s -f platforms.R --args --containers 'ubuntu-gcc16,ubuntu-clang,windows,macos,macos-arm64,m1-san,gcc16,clang-asan,clang-ubsan,gcc-asan,valgrind,nosuggests,nold,lto,mkl,atlas,donttest,rchk')[0m
+2026-10-26T19:40:39.6569546Z [36;1mecho "Containers:"[0m
+2026-10-26T19:40:39.6570008Z [36;1mecho "$cnt" | jq[0m
+2026-10-26T19:40:39.6570442Z [36;1mecho "containers=$cnt" >> $GITHUB_OUTPUT[0m
+2026-10-26T19:40:39.6572073Z [36;1mplt=$(docker run -v `pwd`:/action -w /action ghcr.io/r-hub/r-minimal/r-minimal:latest R -s -f platforms.R --args --not-containers 'ubuntu-gcc16,ubuntu-clang,windows,macos,macos-arm64,m1-san,gcc16,clang-asan,clang-ubsan,gcc-asan,valgrind,nosuggests,nold,lto,mkl,atlas,donttest,rchk')[0m
+2026-10-26T19:40:39.6573707Z [36;1mecho "Other platforms:"[0m
+2026-10-26T19:40:39.6574128Z [36;1mecho "$plt" | jq[0m
+2026-10-26T19:40:39.6574553Z [36;1mecho "platforms=$plt" >> $GITHUB_OUTPUT[0m
+2026-10-26T19:40:39.6726423Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-26T19:40:39.6726988Z ##[endgroup]
+2026-10-26T19:40:39.7901547Z Unable to find image 'ghcr.io/r-hub/r-minimal/r-minimal:latest' locally
+2026-10-26T19:40:40.2931930Z latest: Pulling from r-hub/r-minimal/r-minimal
+2026-10-26T19:40:40.5159950Z f7ee36c9aa34: Pulling fs layer
+2026-10-26T19:40:40.5160997Z 697beedd92c9: Pulling fs layer
+2026-10-26T19:40:40.5161485Z 6f6c6eee133c: Pulling fs layer
+2026-10-26T19:40:40.5162130Z fa7cfa08de95: Pulling fs layer
+2026-10-26T19:40:40.5163632Z ed54b46dd648: Pulling fs layer
+2026-10-26T19:40:40.5164095Z 4f4fb700ef54: Pulling fs layer
+2026-10-26T19:40:40.5933818Z 4f4fb700ef54: Already exists
+2026-10-26T19:40:40.6918249Z f7ee36c9aa34: Download complete
+2026-10-26T19:40:40.6920345Z 697beedd92c9: Download complete
+2026-10-26T19:40:40.7910754Z 6f6c6eee133c: Download complete
+2026-10-26T19:40:40.7922056Z f7ee36c9aa34: Pull complete
+2026-10-26T19:40:40.9913849Z fa7cfa08de95: Download complete
+2026-10-26T19:40:40.9915392Z ed54b46dd648: Download complete
+2026-10-26T19:40:41.0934356Z 697beedd92c9: Pull complete
+2026-10-26T19:40:41.0976425Z ed54b46dd648: Pull complete
+2026-10-26T19:40:41.1904031Z 4f4fb700ef54: Pull complete
+2026-10-26T19:40:41.1913718Z 6f6c6eee133c: Pull complete
+2026-10-26T19:40:41.1920974Z fa7cfa08de95: Pull complete
+2026-10-26T19:40:41.1921698Z Digest: sha256:081253cb361697f7154fd55a8de5521d652c7a5105aa85530e9b3edd194dc5af
+2026-10-26T19:40:41.1922463Z Status: Downloaded newer image for ghcr.io/r-hub/r-minimal/r-minimal:latest
+2026-10-26T19:40:48.7079562Z Error in match_platforms(args$config) : 
+2026-10-26T19:40:48.7080083Z   Unknown R-hub platform: ubuntu-gcc16
+2026-10-26T19:40:48.7080454Z Calls: main -> match_platforms
+2026-10-26T19:40:48.7080703Z Execution halted
+2026-10-26T19:40:48.8406390Z ##[error]Process completed with exit code 1.
+2026-10-26T19:40:48.8459874Z ##[end-action id=rhub-setup.config;outcome=failure;conclusion=failure;duration_ms=9194]
+2026-10-26T19:40:48.8591408Z Evaluate and set job outputs
+2026-10-26T19:40:48.8597333Z Cleaning up orphan processes

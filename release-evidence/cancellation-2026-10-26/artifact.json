@@ -1,0 +1,77 @@
+{
+  "runtime_commit": "bf612d6938b913f0248177bd5748f6c365b303c4",
+  "engine_pin": "004a5d9b12a5d71f483c6c5fc15dbf93ffdb8b7b",
+  "tarball_sha256": "722f88db7b71561870c7979a7e34e469f7fcbfbc3e51d14166fe3c89dad575c7",
+  "tarball_bytes": 6806958,
+  "R_PR": "https://github.com/bbuchsbaum/mixeff/pull/6",
+  "Rust_PR": "https://github.com/bbuchsbaum/mixeff-rs/pull/13",
+  "local_focused": {
+    "pass": 1041,
+    "fail": 0,
+    "warning": 0,
+    "skip": 0
+  },
+  "full_gate": {
+    "result": "PASS",
+    "passed_steps": 14,
+    "failed_steps": 0,
+    "skipped_steps": 0,
+    "seconds": 2096
+  },
+  "R_CI": [
+    40387177313,
+    40387176916,
+    40387177489,
+    40387177326
+  ],
+  "Rust_CI": 40386105800,
+  "engine_merge_commit": "33c8639d4e4eaf055dfa09ac36794c5b11912332",
+  "local_as_cran": {
+    "errors": 0,
+    "warnings": 0,
+    "notes": 1
+  },
+  "Rust_CI_result": "success",
+  "mac_builder_url": "https://mac.R-project.org/macbuilder/results/1793043689-289e7ae870e19c75/",
+  "R_hub": {
+    "run_id": 40389108548,
+    "state": "running",
+    "setup_failure_run": 40388843891,
+    "setup_failure_reason": "Container website lists ubuntu-gcc16; actions v1 accepts ubuntu-gcc12. Retry setup passed and all 18 jobs started."
+  },
+  "active_jobs": {
+    "local_gate_session": 79618,
+    "R_matrix_watch_session": 59616,
+    "task_directory": "/private/tmp/mixeff-cancellation-20261026-VIY20f"
+  },
+  "mac_builder_result": {
+    "status": "OK",
+    "errors": 0,
+    "warnings": 0,
+    "notes": 0,
+    "actual_R": "4.6.1 Patched (2026-07-27 r90311)",
+    "requested_flavor": "r-devel",
+    "manual": "OK"
+  },
+  "packaging_followup": {
+    "commit": "806528106473594aa7342c6585c2b56be5ed2649",
+    "reason": "remove external tar/xz dependency from vendor validation and extraction",
+    "local_gate_session": 94576,
+    "local_log": "/private/tmp/mixeff-cancellation-20261026-VIY20f/portable-release-gate.log",
+    "hosted_runs": [
+      40390580478,
+      40390580456,
+      40390580762,
+      40390580451
+    ],
+    "R_hub_retry": 40390625134
+  },
+  "extended_suite": {
+    "passed": 6881,
+    "failed": 0,
+    "warnings": 0,
+    "skips": 3,
+    "unexpected_skips": 0,
+    "seconds": 933
+  }
+}

@@ -1,0 +1,15 @@
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling mixeff-rs v1.0.0-rc.5 (/private/tmp/mixeff-cancellation-20261026-VIY20f/engine)
+   Compiling cc v1.2.58
+   Compiling cmake v0.1.58
+   Compiling nlopt v0.8.1
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 21.86s
+     Running tests/restored_interrupt_callback.rs (target/debug/deps/restored_interrupt_callback-8b0bbd8bebb98282)
+
+running 2 tests
+test restored_lmm_reattaches_interrupt_without_changing_fitted_state ... ok
+test restored_glmm_reattaches_interrupt_without_changing_fitted_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+

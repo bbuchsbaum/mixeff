@@ -1,0 +1,16 @@
+Error in `httr2::req_perform()`:
+! HTTP 400 Bad Request.
+Backtrace:
+     x
+  1. \-httr2::req_perform(request)
+  2.   \-httr2:::handle_resp(req, resp, error_call = error_call)
+  3.     \-httr2:::resp_failure_cnd(req, resp, error_call = error_call)
+  4.       +-rlang::catch_cnd(...)
+  5.       | +-rlang::eval_bare(...)
+  6.       | +-base::tryCatch(...)
+  7.       | | \-base (local) tryCatchList(expr, classes, parentenv, handlers)
+  8.       | |   \-base (local) tryCatchOne(expr, names, parentenv, handlers[[1L]])
+  9.       | |     \-base (local) doTryCatch(return(expr), name, parentenv, handler)
+ 10.       | \-base::force(expr)
+ 11.       \-rlang::abort(...)
+Execution halted

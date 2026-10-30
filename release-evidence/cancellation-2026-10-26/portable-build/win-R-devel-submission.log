@@ -1,0 +1,5 @@
+Error in curl::curl_fetch_memory(url, handle = h) : 
+  Upload failed (at start/before it took off) [win-builder.r-project.org]:
+Failed FTP upload: 550
+Calls: <Anonymous> -> <Anonymous> -> raise_libcurl_error
+Execution halted

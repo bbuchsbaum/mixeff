@@ -6,7 +6,7 @@ First CRAN submission, following an R-universe pre-release cycle. **Submission
 is on hold:** final artifact checks, Windows builder results and merged-head
 R-universe qualification are outstanding. The MKL mismatch has been reproduced
 and diagnosed as an inferior lme4 reference endpoint; the targeted repair passes its final canonical MKL check.
-PR 6 also requires an approving reviewer with write access before merge.
+The approving-review requirement has been removed; PR 6 still needs to merge.
 
 ## Issue 8 follow-up
 
@@ -100,7 +100,7 @@ canonical MKL acceptance passes at d5fdc54. No parity tolerance was relaxed.
 
 ## Remaining release work
 
-Obtain the required PR review and merge; qualify the merged source through
+Merge PR 6; qualify the merged source through
 R-universe; obtain final Windows builder receipts and the remaining court
 results; refresh the final source artifact. The source
 currently on R-universe is older (6e9a62a), so its native successes do not

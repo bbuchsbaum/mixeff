@@ -158,8 +158,7 @@ stopifnot(nrow(sm$glmm_families) >= 4L, nrow(sm$features) >= 5L)
 stopifnot(length(sm$non_goals) >= 1L, all(nzchar(sm$non_goals)))
 ```
 
-Explicit non-goals, from the same registry:
-`r paste(sm$non_goals, collapse = "; ")`.
+`r paste(sm$non_goals, collapse = " ")`
 
 For the full tables, including notes on individual features, see
 `vignette("lme4-migration", package = "mixeff")`. When comparing results

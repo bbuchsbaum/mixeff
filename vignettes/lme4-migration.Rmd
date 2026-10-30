@@ -107,7 +107,7 @@ installed; use `lme4::sleepstudy` directly in your own code.)
 | `rePCA`, `lmList`, `allFit` | `rePCA()`, `mm_lmlist()`, `mm_allfit()` | `mm_*` names avoid masking lme4's non-generic functions |
 | `pbkrtest::KRmodcomp(big, small)` | `compare(small, big, method = "kenward_roger")` | also `"satterthwaite"` (`SATmodcomp`); KR F is pbkrtest's scaled `Ftest` row (unscaled `FtestU` in `$fixed_f$unscaled_statistic`) |
 | `lmerTest::step(m)` | `step(fit)` | random terms tested with the boundary-corrected LRT; whole terms only |
-| `nlmer`, `devFunOnly = TRUE` | not provided | nonlinear mixed models are a non-goal; the engine owns the objective |
+| `nlmer`, `devFunOnly = TRUE` | not provided | nonlinear mixed models are not supported; the engine does not expose the objective as an R function |
 
 ## Argument map for `lmm()` / `glmm()`
 
@@ -239,7 +239,7 @@ stopifnot(identical(
 ))
 ```
 
-Explicit non-goals: `r paste(sm$non_goals, collapse = "; ")`.
+`r paste(sm$non_goals, collapse = " ")`
 
 ## Unavailable results and diagnostics
 

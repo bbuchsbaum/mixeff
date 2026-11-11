@@ -9,6 +9,9 @@
   compares against the weighted fixed-effects model. It previously used an
   unweighted linear model, so the statistic was wrong in either direction
   (mixeff-rs #16).
+* Engine re-pinned to mixeff-rs `82527b4`: the engine's own likelihood-ratio
+  paths now refuse models fitted with different case or prior weights, and no
+  longer classify GLMMs as REML fits. No R-visible results change.
 * Scalar `optCtrl$xtol_abs` and `rhobeg` now broadcast to the theta dimension
   in the engine; nonscalar mismatches and invalid values remain errors.
 * Joint-Laplace diagnostics distinguish the unassessed fit-time Hessian from

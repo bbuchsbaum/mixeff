@@ -2,6 +2,18 @@
 
 ## mixeff 0.2.0
 
+- Case-weighted LMMs with a vector theta (for example `(1 + x | g)`) are
+  now optimized. With the default optimizer, a fit whose weights had
+  `sum(log(weights)) > 0` could return the starting theta and still
+  report convergence; results now no longer depend on the overall scale
+  of the weights (mixeff-rs
+  [\#15](https://github.com/bbuchsbaum/mixeff/issues/15), engine
+  re-pinned to `dee2d3f`).
+- [`test_random_effect()`](https://bbuchsbaum.github.io/mixeff/reference/test_random_effect.md)
+  on the only random-effect term of a weighted LMM now compares against
+  the weighted fixed-effects model. It previously used an unweighted
+  linear model, so the statistic was wrong in either direction
+  (mixeff-rs [\#16](https://github.com/bbuchsbaum/mixeff/issues/16)).
 - Scalar `optCtrl$xtol_abs` and `rhobeg` now broadcast to the theta
   dimension in the engine; nonscalar mismatches and invalid values
   remain errors.

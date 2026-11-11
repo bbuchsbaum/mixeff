@@ -51,7 +51,10 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="mixeff-020">mixeff 0.2.0<a class="anchor" aria-label="anchor" href="#mixeff-020"></a></h2>
-<ul><li>Scalar <code>optCtrl$xtol_abs</code> and <code>rhobeg</code> now broadcast to the theta dimension in the engine; nonscalar mismatches and invalid values remain errors.</li>
+<ul><li>Case-weighted LMMs with a vector theta (for example <code>(1 + x | g)</code>) are now optimized. With the default optimizer, a fit whose weights had <code>sum(log(weights)) &gt; 0</code> could return the starting theta and still report convergence; results now no longer depend on the overall scale of the weights (mixeff-rs <a href="https://github.com/bbuchsbaum/mixeff/issues/15" class="external-link">#15</a>, engine re-pinned to <code>dee2d3f</code>).</li>
+<li>
+<code><a href="../reference/test_random_effect.html">test_random_effect()</a></code> on the only random-effect term of a weighted LMM now compares against the weighted fixed-effects model. It previously used an unweighted linear model, so the statistic was wrong in either direction (mixeff-rs <a href="https://github.com/bbuchsbaum/mixeff/issues/16" class="external-link">#16</a>).</li>
+<li>Scalar <code>optCtrl$xtol_abs</code> and <code>rhobeg</code> now broadcast to the theta dimension in the engine; nonscalar mismatches and invalid values remain errors.</li>
 <li>Joint-Laplace diagnostics distinguish the unassessed fit-time Hessian from the later inference Hessian. Optimizer certificates print derivative-evidence quality and reasons; covariance notes identify its parameter block and backend.</li>
 </ul><div class="section level3">
 <h3 id="restored-model-cancellation-and-release-checks-0-2-0">Restored-model cancellation and release checks<a class="anchor" aria-label="anchor" href="#restored-model-cancellation-and-release-checks-0-2-0"></a></h3>

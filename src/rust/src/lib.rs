@@ -1848,12 +1848,11 @@ fn mm_boundary_lrt_json(
         })?;
         let full: &LinearMixedModel = &full;
         let result = if reduced_payload.is_null() {
-            let reduced = LinearModelFit::fit(
-                full.response().clone(),
-                full.model_matrix().clone(),
-                Some(reduced_formula.to_string()),
-            )
-            .map_err(|e| {
+            // Fitted with the full model's case weights, so both likelihoods
+            // are on the same (weighted) scale.
+            let reduced =
+                LinearModelFit::fixed_effects_reference(full, Some(reduced_formula.to_string()))
+                    .map_err(|e| {
                 format!("mm_inference_unavailable: boundary LRT reduced LM failed: {e}")
             })?;
             BoundaryLikelihoodRatioTest::variance_component(&reduced, full)

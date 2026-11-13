@@ -74,9 +74,9 @@ Three statuses distinguish the main outcomes:
   but convergence has not been established. `summary()` also records
   this status in a `Notes:` line.
 
-Optimization is silent and runs within one native call under bounded
-evaluation budgets; the `lmm()`/`glmm()` help pages and `?mm_control`
-document the budgets and how to cap them.
+Optimization runs within a native call under bounded evaluation budgets.
+For GLMMs, `mm_control(verbose = 1)` prints the optimizer phase and evaluation
+count. The `lmm()`/`glmm()` help pages and `?mm_control` explain the budgets.
 
 `optimizer_certificate()` reports the optimizer, stopping condition,
 and checks used to assign the convergence status:
@@ -102,11 +102,27 @@ reliability. Inspect `attr(vcov(gfit), "mm_method")`, `"mm_status"`,
 `"mm_reliability"`, and `"mm_notes"` for the actual route and its scope.
 A successful inference calculation does not rewrite the fit-time certificate.
 
-Raw gradient norms depend on parameter coordinates and are not measures of
-coefficient precision. Curvature-scaled stationarity evidence, when available,
-is recorded separately in `optimizer_certificate(gfit)$raw$stationarity_decrement`.
-Read both with their stated tolerances; a small scaled quantity does not change
-the qualification recorded in an approximate raw-gradient certificate.
+The certificate distinguishes three gradient scales. The largest absolute
+gradient over free parameters, `raw$free_gradient_norm`, is compared with the
+raw KKT tolerance in `raw$checks`. A violation qualifies derivative
+certification even when a curvature-scaled check is small. The field
+`raw$evidence$gradient$scaled_gradient_norm` divides the raw norm by
+`max(1, abs(objective))`; it does **not** scale by the Hessian. Curvature-scaled
+evidence, when available, lives separately in `raw$stationarity_decrement`,
+with its own method, scope, and tolerance.
+
+A raw-gradient warning is not an estimate of coefficient error. A large-data
+fit can agree closely with a tighter restart in coefficients and likelihood
+while retaining an approximate certificate. Compare those quantities using a
+refit or `verify_convergence()`, and inspect the inference method's reliability.
+A small curvature-scaled result does not clear the raw-gradient qualification.
+
+The bundled R engine includes `"cobyla"`, `"pattern_search"`, and `"trust_bq"`;
+`"auto"` selects a backend for the model. NLopt and PRIMA are excluded, so
+`mm_control(optimizer = "bobyqa")` now fails immediately. Method-specific
+restrictions still apply: for example, `"trust_bq"` supports joint-Laplace GLMMs
+but not profiled-PIRLS GLMMs. `mm_allfit()` records an unavailable optimizer as
+a failed attempt and continues with the others.
 
 ```{r interior-checks, include = FALSE}
 stopifnot(inherits(fit, "mm_lmm"))
@@ -344,6 +360,37 @@ stopifnot(identical(gv$status, "restart_agrees"))
 stopifnot(all(gv$table$agrees))
 stopifnot(identical(gv$tolerances$objective, 1e-4))
 stopifnot(identical(gv$tolerances$beta, 1e-3))
+```
+
+### Controlling a long initialization
+
+A joint-Laplace fit first runs a profiled-PIRLS initializer, then optimizes
+beta and theta jointly. By default, `max_feval` applies to both stages.
+Supply `initializer_max_feval` when the joint stage needs a larger budget
+than the initializer. This example allows 50 initializer evaluations and
+5,000 joint evaluations, and prints phase progress:
+
+```{r glmm-phase-budgets}
+bounded <- glmm(
+  y ~ x + (1 | g), trial, family = binomial(),
+  control = mm_control(verbose = 1, initializer_max_feval = 50,
+                       max_feval = 5000)
+)
+bounded$fit$optimizer$initializer
+```
+
+An initializer can stop at its cap and still supply a usable joint start;
+its recorded stop code distinguishes that from convergence. Inspect the final
+fit certificate as usual. Counts describe outer optimizer evaluations, not
+inner PIRLS iterations or later certification. They are not wall-time limits,
+and output may pause during an expensive evaluation. `verbose = 0` keeps the
+pre-fit notices without progress output; `verbose = -1` suppresses both.
+`start` remains a theta-only warm start and does not bypass initialization.
+
+```{r glmm-budget-checks, include = FALSE}
+stopifnot(bounded$fit$optimizer$initializer$function_evaluations <= 50)
+stopifnot(bounded$fit$optimizer$initializer$max_function_evaluations == 50)
+stopifnot(length(bounded$fit$optimizer$initializer$return_value) == 1L)
 ```
 
 ## GLMM estimator substitution

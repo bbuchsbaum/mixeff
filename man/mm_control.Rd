@@ -15,14 +15,17 @@ mm_control(
   optCtrl = NULL,
   disp_method = NULL,
   disp_dof_correction = NULL,
-  max_phi_iter = NULL
+  max_phi_iter = NULL,
+  initializer_max_feval = NULL
 )
 }
 \arguments{
 \item{verbose}{Integer verbosity level. Use \code{-1} to suppress the automatic
 model explanation and the fit notices (the GLMM estimator notice, the
 \code{mm_rows_dropped} missing-value notice, grouping coercion and scaling
-advisories).}
+advisories). Values greater than zero also print GLMM optimizer phases
+and evaluation counts to the console, throttled to about every 25
+evaluations or five seconds at an evaluation boundary.}
 
 \item{max_feval}{Optional positive integer capping the optimizer's objective
 evaluations. Most useful for \code{\link[=glmm]{glmm()}} with \code{method = "joint_laplace"},
@@ -30,14 +33,15 @@ whose native joint optimizer otherwise runs to an engine-chosen budget.
 \code{NULL} (default) leaves the engine default in place. Joint-Laplace fitting
 first runs a profiled initializer; this control is shared by the initializer
 and joint optimizer, not a total wall-time or whole-fit evaluation cap.
-Increasing it can therefore lengthen initialization as well as joint fitting.}
+Increasing it can therefore lengthen initialization as well as joint fitting,
+unless \code{initializer_max_feval} supplies a separate initializer budget.}
 
 \item{optimizer}{Optional optimizer name, overriding the driver's automatic
 choice. One of \code{"auto"} (default behavior), \code{"bobyqa"}, \code{"newuoa"},
 \code{"cobyla"}, \code{"pattern_search"}, \code{"trust_bq"}, or the PRIMA variants
 (\code{"prima_bobyqa"}, \code{"prima_cobyla"}, \code{"prima_lincoa"}, \code{"prima_newuoa"}).
-An unsupported or not-compiled choice raises a typed error rather than
-silently falling back. The bundled R build excludes NLopt and PRIMA, so
+Unknown or not-compiled choices raise an \code{mm_arg_error} immediately in
+\code{mm_control()}. The bundled R build excludes NLopt and PRIMA, so
 their named optimizers (including \code{"bobyqa"}) are unavailable in that build.
 \code{NULL}/\code{"auto"} keep automatic selection.}
 
@@ -85,6 +89,13 @@ dispersion (binomial, Poisson, negative binomial) and for \code{\link[=lmm]{lmm(
 settings have no effect: they are kept on the control, and the fit
 announces that they were ignored with an \code{mm_control_ignored_notice}
 message (silenced by \code{verbose = -1}). lme4 ignores them silently.}
+
+\item{initializer_max_feval}{Optional positive integer giving a joint-Laplace
+GLMM's profiled initializer its own objective-evaluation budget. \code{max_feval}
+then controls only the joint optimizer. \code{NULL} preserves the shared-budget
+behavior. Neither budget caps wall time, inner PIRLS iterations, or later
+certification. Refused for LMMs and profiled-only GLMMs. Inspect
+\code{fit$fit$optimizer$initializer} for the initializer's count and stop code.}
 }
 \value{
 A list of class \code{mm_control}.

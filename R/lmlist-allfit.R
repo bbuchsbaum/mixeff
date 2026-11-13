@@ -238,9 +238,11 @@ mm_allfit <- function(fit, optimizers = mm_allfit_optimizers(),
     if (isTRUE(verbose)) cat(opt, "\n")
     ctl <- base
     ctl$optimizer <- if (identical(opt, "auto")) NULL else opt
-    ctl <- mm_validate_control(ctl)
     t0 <- proc.time()[["elapsed"]]
-    res <- tryCatch(stats::update(fit, control = ctl), error = function(cnd) cnd)
+    res <- tryCatch({
+      ctl <- mm_validate_control(ctl)
+      stats::update(fit, control = ctl)
+    }, error = function(cnd) cnd)
     times[[opt]] <- proc.time()[["elapsed"]] - t0
     out[[opt]] <- res
   }

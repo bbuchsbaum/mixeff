@@ -67,7 +67,8 @@ original rows; \code{na.fail} and \code{na.pass} are refused with a typed
 is the joint Laplace route, matching \code{glmer()}'s default estimator, and
 requires \code{nAGQ = 1}; it certifies Wald standard errors, tests, and
 intervals. Its optimizer cost is higher than the profiled path's; cap it
-with \code{mm_control(max_feval = )}. \code{"pirls_profiled"} is the fast profiled
+with \code{mm_control(max_feval = )}; set \code{initializer_max_feval} separately
+to bound the preceding profiled initialization. \code{"pirls_profiled"} is the fast profiled
 PIRLS path (equivalent to lme4's \code{nAGQ = 0} fast estimate); its
 coefficients do not match \code{glmer(nAGQ = 1)} exactly and Wald inference
 is withheld. When \code{method} is not supplied and the request needs the
@@ -124,14 +125,14 @@ optimizer in this vendored build. \code{method = "pirls_profiled"} is the
 labeled fast-PIRLS profiled path (lme4's \code{nAGQ = 0}).
 }
 \details{
-Optimization runs inside a single native call with no progress output: the
-pre-fit explanation block (when \code{verbose >= 0}) is the last thing printed
-before the fitted result returns. The fit checks for a user interrupt
+Use \code{mm_control(verbose = 1)} to print optimizer phases and evaluation
+counts during a GLMM fit. Inner PIRLS iterations and later certification
+are not included in these counts. The fit checks for a user interrupt
 (Ctrl-C / Esc) between optimizer evaluations and stops with a typed
 \code{mm_interrupted} error (the check happens at evaluation boundaries, so a
 single very expensive evaluation finishes first). Evaluation budgets are bounded (a bounded budget caps optimizer
 iterations; it does not prove every native evaluation terminates); runtime on
-large problems is governed by \code{mm_control(max_feval = )}.
+large problems also depends on the cost of each evaluation and certification.
 }
 \examples{
 set.seed(1)

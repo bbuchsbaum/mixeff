@@ -5,7 +5,8 @@
 # honest answer only where Satterthwaite df are refused (singular /
 # boundary optimum). inference_table(fit, method = "auto") itself keeps
 # the raw artifact view; this helper is the shared routing policy on top.
-mm_auto_resolved_inference_table <- function(object, method = "auto") {
+mm_auto_resolved_inference_table <- function(object, method = "auto", boundary_policy = "default") {
+  boundary_policy <- mm_check_boundary_policy(boundary_policy, method, object)
   if (!method %in% c("auto", "satterthwaite", "kenward_roger",
                      "asymptotic", "none")) {
     # summary.mm_lmm's match.arg also admits "bootstrap"; silently resolving
@@ -28,7 +29,7 @@ mm_auto_resolved_inference_table <- function(object, method = "auto") {
       !mm_boundary_df_method_unavailable(object, "satterthwaite")) {
     inf_method <- "satterthwaite"
   }
-  tbl <- inference_table(object, method = inf_method)
+  tbl <- inference_table(object, method = inf_method, boundary_policy = boundary_policy)
   if (identical(inf_method, "satterthwaite") && identical(method, "auto") &&
       !any(tbl$table$status == "available")) {
     # Satterthwaite was refused for every coefficient (the boundary can be
@@ -47,7 +48,7 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
                            method = c("auto", "satterthwaite",
                                       "kenward_roger", "bootstrap",
                                       "asymptotic", "none"),
-                           ddf = NULL, ...) {
+                           ddf = NULL, ..., boundary_policy = "default") {
   tests <- match.arg(tests)
   lme4_shape <- FALSE
   if (!is.null(ddf)) {
@@ -64,8 +65,13 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
     lme4_shape <- mapped$lme4
   }
   method <- match.arg(method)
+  boundary_policy <- mm_check_boundary_policy(boundary_policy, method, object)
+  if (boundary_policy == "active_set" && tests == "none") {
+    mm_abort("`boundary_policy = \"active_set\"` requires `tests = \"coefficients\"`.",
+             class = "mm_arg_error", reason_code = "boundary_policy_requires_tests")
+  }
   inference <- if (identical(tests, "coefficients")) {
-    mm_auto_resolved_inference_table(object, method)
+    mm_auto_resolved_inference_table(object, method, boundary_policy)
   } else {
     NULL
   }
@@ -89,6 +95,7 @@ summary.mm_lmm <- function(object, tests = c("coefficients", "none"),
     tests = tests,
     inference = inference,
     requested_method = method,
+    boundary_policy = boundary_policy,
     ddf = ddf
   )
   class(out) <- "summary.mm_lmm"
@@ -111,6 +118,7 @@ print.summary.mm_lmm <- function(x, ...) {
   notes <- mm_fit_status_note(x$fit_status)
   if (!is.null(x$inference)) {
     inf <- x$inference$table
+    mm_print_boundary_policy(inf, x$boundary_policy %||% "default")
     cat("\nInference status:\n")
     cols <- intersect(
       c("term", "method", "status", "reliability", "reliability_reason"),
@@ -144,7 +152,9 @@ print.summary.mm_lmm <- function(x, ...) {
 
 #' @method summary mm_glmm
 #' @export
-summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...) {
+summary.mm_glmm <- function(object, tests = c("coefficients", "none"), ...,
+                            boundary_policy = "default") {
+  mm_check_boundary_policy(boundary_policy, "auto", object)
   # Coefficient tests are the default (matching lme4::glmer's summary): the
   # inference rows carry their own status/reliability labels, so when the fit
   # method cannot certify SE/z/p the columns are withheld WITH the reason

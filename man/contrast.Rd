@@ -6,7 +6,14 @@
 \alias{contrast.mm_lmm}
 \title{Contrast fixed effects}
 \usage{
-\method{contrast}{mm_glmm}(fit, L, rhs = 0, method = c("asymptotic", "wald"), ...)
+\method{contrast}{mm_glmm}(
+  fit,
+  L,
+  rhs = 0,
+  method = c("asymptotic", "wald"),
+  ...,
+  boundary_policy = "default"
+)
 
 contrast(
   fit,
@@ -15,6 +22,7 @@ contrast(
   method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic",
     "boundary_lrt", "none"),
   bootstrap = NULL,
+  boundary_policy = "default",
   ...
 )
 
@@ -25,6 +33,7 @@ contrast(
   method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic",
     "boundary_lrt", "none"),
   bootstrap = NULL,
+  boundary_policy = "default",
   ...
 )
 }
@@ -39,6 +48,10 @@ effect.}
 \item{method}{Requested inference method.}
 
 \item{...}{Reserved for future methods.}
+
+\item{boundary_policy}{\code{"default"} preserves existing inference. \code{"active_set"}
+explicitly requests conditional inference with \code{method = "satterthwaite"}
+or \code{"kenward_roger"}. See \link{boundary_policy} for support and interpretation.}
 
 \item{bootstrap}{Optional \code{\link[=bootstrap_control]{bootstrap_control()}} object for
 \code{method = "bootstrap"}.}

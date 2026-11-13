@@ -12,6 +12,7 @@ test_effect(
     "cluster_bootstrap", "asymptotic", "boundary_lrt", "none"),
   bootstrap = NULL,
   group = NULL,
+  boundary_policy = "default",
   ...
 )
 
@@ -22,6 +23,7 @@ test_effect(
     "cluster_bootstrap", "asymptotic", "boundary_lrt", "none"),
   bootstrap = NULL,
   group = NULL,
+  boundary_policy = "default",
   ...
 )
 }
@@ -39,6 +41,10 @@ methods.}
 Required for crossed or multi-grouping-factor models. In schema 1.0.0,
 cluster resampling is an estimator-distribution target and term-level
 p-values return \code{not_assessed} with a stable reason code.}
+
+\item{boundary_policy}{\code{"default"} preserves existing inference. \code{"active_set"}
+explicitly requests conditional inference with \code{method = "satterthwaite"}
+or \code{"kenward_roger"}. See \link{boundary_policy} for support and interpretation.}
 
 \item{...}{Reserved for future methods.}
 }

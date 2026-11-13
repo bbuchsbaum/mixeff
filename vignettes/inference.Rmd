@@ -291,7 +291,8 @@ routes
 
 ```{r route-checks, include = FALSE}
 stopifnot("bootstrap" %in% routes$table$method)
-satt <- routes$table[routes$table$method == "satterthwaite", ]
+satt <- routes$table[routes$table$method == "satterthwaite" &
+                       routes$table$boundary_policy == "default", ]
 stopifnot(identical(satt$expected_status, "not_assessed"))
 stopifnot(identical(satt$expected_reliability_reason,
                     "satterthwaite_unavailable_at_boundary"))
@@ -340,6 +341,62 @@ stopifnot(all(sinf$reliability_reason[sinf$status == "available"] ==
 Availability and reliability are separate fields. A method may return a
 result with low reliability; an unavailable method returns a reason code.
 Check both fields when assembling a report.
+
+### Explicit conditional inference for independent zero variances
+
+`boundary_policy = "active_set"` requests Satterthwaite or Kenward–Roger
+inference conditional on the variance components that the engine certifies
+as zero. It supports unweighted REML LMMs with estimated residual sigma and
+independent scalar or diagonal random effects, such as `(1 + x || subject)`.
+The correlated singular model above is outside this support. ML and weighted
+boundary fits are also refused. The engine checks the optimizer stop,
+covariance scores, and restricted curvature before reporting a p-value.
+
+Here every group has the same centered response pattern, so the fitted
+random-intercept variance is zero. Conditional inference agrees with the
+intercept-only linear model, whose residual degrees of freedom are 39.
+
+```{r active-set}
+zero_data <- data.frame(
+  y = rep(c(-2, -1, 1, 2), 10),
+  group = factor(rep(seq_len(10), each = 4))
+)
+zero_fit <- lmm(y ~ 1 + (1 | group), zero_data,
+                control = mm_control(verbose = -1))
+conditional <- inference_table(zero_fit, method = "satterthwaite",
+                                boundary_policy = "active_set")
+conditional$table[, c("term", "df", "p_value", "boundary_policy",
+                       "conditioning_applied", "fixed_components", "reliability")]
+summary(zero_fit, method = "kenward_roger", boundary_policy = "active_set")
+```
+
+```{r active-set-checks, include = FALSE}
+stopifnot(all(conditional$table$conditioning_applied),
+          all(conditional$table$reliability == "low"),
+          abs(conditional$table$df - df.residual(lm(y ~ 1, zero_data))) < 1e-4)
+```
+
+The same option applies to `contrast(fit, L, method = "satterthwaite",
+boundary_policy = "active_set")` and `test_effect(fit, "term",
+method = "kenward_roger", boundary_policy = "active_set")`, including
+joint tests of multi-coefficient terms. The fitted model is unchanged.
+On an interior fit, the ordinary requested method runs and
+`conditioning_applied` is `FALSE`.
+
+These results treat the selected zero variances as known. They exclude
+uncertainty from selecting that structure using the same data and are graded
+`low`. Agreement with a reduced model checks the calculation; it does not
+establish unconditional Type I error control. Inspect `conditioning_applied`,
+`fixed_components`, `status`, `reason`, and `notes` when reporting results.
+`fixed_theta_indices` retains the engine's zero-based parameter indices.
+The complete engine result is available in each row's `details$boundary`.
+
+The default policy and `method = "auto"` keep their existing behavior.
+Active-set inference requires an explicit finite-sample method; combining
+it with `"auto"`, `"asymptotic"`, or a bootstrap method is an error.
+Unsupported model structures and failed numerical checks return a refusal
+with no p-value, even if ordinary inference would have been available.
+`inference_options()` lists these opt-in routes as requiring engine checks.
 
 ## Parametric bootstrap tests
 

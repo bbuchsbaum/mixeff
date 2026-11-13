@@ -1,5 +1,23 @@
 # mixeff 0.2.0
 
+* Engine updated to mixeff-rs 1.0.0-rc.6 (`bcfeff42`). A zero random-intercept
+  variance no longer causes a supported weak random slope to collapse to zero
+  (mixeff-rs #19). Installed-package regression coverage checks the reported
+  simulated case against the independently evaluated REML criterion.
+* `contrast()`, `test_effect()`, `inference_table()`, and LMM `summary()` now
+  accept `boundary_policy = "active_set"` with an explicit Satterthwaite or
+  Kenward–Roger method. At supported variance boundaries, inference conditions
+  on certified zero covariance components. Results retain the policy, whether
+  conditioning occurred, the fixed components, and refusal reasons. Conditional
+  results have low reliability because covariance-structure selection
+  uncertainty is excluded. `"default"` and `method = "auto"` are unchanged;
+  unsupported explicit requests never silently fall back. See
+  `?boundary_policy` and the inference vignette for limits and examples.
+* `inference_options()` lists active-set routes separately by policy, and
+  printed LMM summaries identify conditioning and its interpretation. Rust
+  timings that omit artifact inspection do not describe `lmm()` performance:
+  the R fit path serializes an artifact and completes deferred certification.
+
 * Case-weighted LMMs with a vector theta (for example `(1 + x | g)`) are now
   optimized. With the default optimizer, a fit whose weights had
   `sum(log(weights)) > 0` could return the starting theta and still report

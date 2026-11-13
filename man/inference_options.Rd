@@ -25,7 +25,8 @@ only to format the \code{approx_cost} column.}
 }
 \value{
 An \code{mm_inference_options} object with a \code{table} data frame of one
-row per candidate method.
+row per candidate method and boundary policy. Active-set rows require
+engine checks; listing them does not certify that conditioning is available.
 }
 \description{
 \code{inference_options()} is the audit verb for fixed-effect inference. It does
@@ -38,4 +39,7 @@ bootstrap.
 \details{
 Like \code{\link[=random_options]{random_options()}}, this function does not rank or recommend. There is
 no "best method" row.
+}
+\seealso{
+\link{boundary_policy}
 }

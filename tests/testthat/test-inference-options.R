@@ -36,8 +36,9 @@ test_that("inference_options marks satterthwaite/kenward_roger as not_assessed a
   expect_true(is_singular(fit))
 
   opt <- inference_options(fit)
-  satt <- opt$table[opt$table$method == "satterthwaite", ]
-  kr   <- opt$table[opt$table$method == "kenward_roger", ]
+  defaults <- opt$table[opt$table$boundary_policy == "default", ]
+  satt <- defaults[defaults$method == "satterthwaite", ]
+  kr   <- defaults[defaults$method == "kenward_roger", ]
   expect_identical(satt$expected_status, "not_assessed")
   expect_identical(kr$expected_status, "not_assessed")
   expect_identical(satt$expected_reliability_reason,

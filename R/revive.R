@@ -607,9 +607,10 @@ print.mm_optimizer_certificate <- function(x, ...) {
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_inference_table`.
+#' @inheritParams contrast
 #'
 #' @export
-inference_table <- function(fit, ...) {
+inference_table <- function(fit, ..., boundary_policy = "default") {
   UseMethod("inference_table")
 }
 
@@ -625,10 +626,11 @@ inference_table.mm_lmm <- function(fit,
                                    method = c("auto", "satterthwaite",
                                               "kenward_roger", "asymptotic",
                                               "none"),
-                                   ...) {
+                                   ..., boundary_policy = "default") {
   method <- match.arg(method)
+  boundary_policy <- mm_check_boundary_policy(boundary_policy, method, fit)
   if (!identical(method, "auto")) {
-    return(mm_inference_table_recompute(fit, method))
+    return(mm_inference_table_recompute(fit, method, boundary_policy))
   }
   parsed <- mm_json_parse_fixed_effect_inference_table(
     fit$artifact$fixed_effect_inference_table %||% NULL
@@ -656,7 +658,7 @@ inference_table.mm_lmm <- function(fit,
         }
       }
     }
-    obj <- list(table = tbl, raw = parsed$raw)
+    obj <- list(table = tbl, raw = parsed$raw, boundary_policy = boundary_policy)
     class(obj) <- "mm_inference_table"
     return(obj)
   }
@@ -683,7 +685,8 @@ inference_table.mm_lmm <- function(fit,
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
-  obj <- list(table = table, raw = NULL)
+  obj <- list(table = mm_boundary_metadata(table, boundary_policy),
+              raw = NULL, boundary_policy = boundary_policy)
   class(obj) <- "mm_inference_table"
   obj
 }
@@ -691,7 +694,8 @@ inference_table.mm_lmm <- function(fit,
 #' @rdname inference_table
 #' @method inference_table mm_glmm
 #' @export
-inference_table.mm_glmm <- function(fit, method = "auto", ...) {
+inference_table.mm_glmm <- function(fit, method = "auto", ..., boundary_policy = "default") {
+  mm_check_boundary_policy(boundary_policy, method, fit)
   if (!identical(method, "auto")) {
     mm_abort(
       message = paste(
@@ -1125,13 +1129,13 @@ mm_repro_threshold_table <- function(thresholds) {
 # an explicit method. Used by inference_table(method != "auto") and,
 # transitively, by summary(method != "auto") so the user's method request is
 # honored instead of silently replaced by the auto-resolved cached row.
-mm_inference_table_recompute <- function(fit, method) {
+mm_inference_table_recompute <- function(fit, method, boundary_policy = "default") {
   terms <- names(fit$beta)
   k <- length(terms)
   if (!k) {
     empty <- mm_fixed_effect_inference_empty_table()
     obj <- list(table = empty, raw = NULL,
-                requested_method = method, recomputed = TRUE)
+                requested_method = method, boundary_policy = boundary_policy, recomputed = TRUE)
     class(obj) <- "mm_inference_table"
     return(obj)
   }
@@ -1140,15 +1144,15 @@ mm_inference_table_recompute <- function(fit, method) {
   # calls while refitting the model once instead of k times.
   L <- diag(k)
   dimnames(L) <- list(terms, terms)
-  ct <- contrast(fit, L, method = method)
+  ct <- contrast(fit, L, method = method, boundary_policy = boundary_policy)
   rows <- lapply(seq_len(k), function(i) {
     mm_inference_row_from_contrast(ct$table[i, , drop = FALSE],
                                    term = terms[[i]])
   })
   tbl <- do.call(rbind, rows)
   rownames(tbl) <- NULL
-  obj <- list(table = tbl, raw = NULL,
-              requested_method = method, recomputed = TRUE)
+  obj <- list(table = tbl, raw = ct$raw,
+              requested_method = method, boundary_policy = boundary_policy, recomputed = TRUE)
   class(obj) <- "mm_inference_table"
   obj
 }
@@ -1179,6 +1183,10 @@ mm_inference_row_from_contrast <- function(ct, term) {
     status = pull("status", "not_assessed"),
     reliability = pull("reliability", "not_available"),
     reliability_reason = pull("reliability_reason", NA_character_),
+    boundary_policy = pull("boundary_policy", "default"),
+    conditioning_applied = pull("conditioning_applied", FALSE),
+    fixed_components = I(pull_list("fixed_components")),
+    fixed_theta_indices = I(pull_list("fixed_theta_indices")),
     reason = pull("reason", NA_character_),
     reason_code = pull("reason_code", NA_character_),
     reason_detail = pull("reason_detail", NA_character_),

@@ -8,7 +8,8 @@ use mixeff_rs::compiler::{
 use mixeff_rs::error::MixedModelError;
 use mixeff_rs::formula::parse_formula;
 use mixeff_rs::model::linear::{
-    parametricbootstrap_with_options, BootstrapExecutionOptions, ConvergenceVerificationOptions,
+    parametricbootstrap_with_options, BootstrapExecutionOptions, BoundaryInferencePolicy,
+    ConvergenceVerificationOptions,
 };
 use mixeff_rs::model::FitProgressCallback;
 use mixeff_rs::model::{
@@ -1131,6 +1132,131 @@ fn mm_fit_glmm_json(
     .map_err(MmBridgeError)
 }
 
+// The engine exposes BoundaryFixedEffectTest, but its table helpers still use
+// the default policy. Adapt the public result without recomputing statistics.
+// Keep the complete engine result alongside the flattened display row.
+fn boundary_inference_table_json(
+    model: &LinearMixedModel,
+    hypotheses: Vec<FixedEffectHypothesis>,
+    method: FixedEffectTestMethod,
+    kind: FixedEffectInferenceRowKind,
+) -> std::result::Result<String, String> {
+    use mixeff_rs::compiler::{InferenceMethod, InferenceStatus, ReliabilityGrade};
+    let rows: Vec<Value> = hypotheses
+        .into_iter()
+        .map(|hypothesis| {
+            let result = model.test_contrast_with_boundary_policy(
+                hypothesis,
+                method,
+                BoundaryInferencePolicy::ActiveSet,
+            );
+            let test = &result.test;
+            let (method_label, warrant) = match test.method {
+                InferenceMethod::Satterthwaite => (
+                    "satterthwaite",
+                    Some("satterthwaite_finite_difference_approximation"),
+                ),
+                InferenceMethod::KenwardRoger => {
+                    ("kenward_roger", Some("kenward_roger_approximation"))
+                }
+                InferenceMethod::AsymptoticWaldZ => {
+                    ("asymptotic_wald_z", Some("asymptotic_wald_z_fallback"))
+                }
+                InferenceMethod::ParametricBootstrap => {
+                    ("bootstrap", Some("parametric_bootstrap_monte_carlo"))
+                }
+                InferenceMethod::NotComputed { .. } => ("not_computed", None),
+            };
+            let status = match test.status {
+                InferenceStatus::Available => "available",
+                InferenceStatus::PValueUnavailable { .. } => "p_value_unavailable",
+                InferenceStatus::NotEstimable { .. } => "not_estimable",
+                InferenceStatus::NotAssessed { .. } => "not_assessed",
+                InferenceStatus::Unsupported { .. } => "unsupported",
+            };
+            let statistic_name = match test.method {
+                InferenceMethod::NotComputed { .. } => None,
+                InferenceMethod::AsymptoticWaldZ => Some("z"),
+                _ if test.hypothesis.n_contrasts() > 1 => Some("f"),
+                _ => Some("t"),
+            };
+            let numerator_df = if statistic_name == Some("f") {
+                test.numerator_df
+            } else {
+                None
+            };
+            let reason = test.p_value_unavailable_reason();
+            let reliability_reason = if test.reliability == ReliabilityGrade::NotAvailable {
+                None
+            } else {
+                warrant
+            };
+            let mut details = json!({
+                "contrast_family": {
+                    "family_id": test.hypothesis.label,
+                    "family_label": test.hypothesis.label,
+                    "restriction_rows": test.hypothesis.n_contrasts(),
+                    "coefficient_count": test.hypothesis.n_coefficients(),
+                    "requested_rank": test.estimability.requested_rank,
+                    "effective_rank": test.estimability.rank,
+                    "numerator_df": numerator_df,
+                },
+                "boundary": result,
+            });
+            if let Some(scaling) = test.kenward_roger_f_scaling {
+                details["kenward_roger"] = json!({
+                    "restriction_rank": test.estimability.rank,
+                    "f_scaling": scaling.f_scaling,
+                    "statistic_scale": "kenward_roger_scaled",
+                    "unscaled_statistic": scaling.unscaled_statistic,
+                    "unscaled_p_value": scaling.unscaled_p_value,
+                });
+            }
+            json!({
+                "label": test.hypothesis.label,
+                "kind": kind,
+                "estimate": test.estimates.first(),
+                "std_error": test.standard_errors.first().copied().flatten(),
+                "numerator_df": numerator_df,
+                "denominator_df": test.denominator_df,
+                "statistic": test.statistics.first().copied().flatten(),
+                "statistic_name": statistic_name,
+                "p_value": test.p_values.first().copied().flatten(),
+                "method": method_label,
+                "covariance_method": test.covariance_method,
+                "status": status,
+                "reliability": test.reliability,
+                "reliability_reason": reliability_reason,
+                "estimability": mixeff_rs::compiler::EstimabilityAssessment::FixedContrast(
+                    test.estimability.clone()
+                ),
+                "reason": reason,
+                "reason_code": reason.map(|_| "boundary_active_set_unavailable"),
+                "reason_detail": reason,
+                "boundary_policy": result.policy,
+                "conditioning_applied": result.conditioning_applied,
+                "fixed_theta_indices": result.fixed_theta_indices,
+                "fixed_components": result.fixed_components,
+                "details": details,
+                "notes": test.notes,
+            })
+        })
+        .collect();
+    let mut table = serde_json::to_value(FixedEffectInferenceTable::new(Vec::new()))
+        .map_err(|e| format!("mm_schema_error: failed to serialize boundary table: {e}"))?;
+    table["rows"] = json!(rows);
+    serde_json::to_string(&table)
+        .map_err(|e| format!("mm_schema_error: failed to serialize boundary table: {e}"))
+}
+
+fn boundary_inference_policy(policy: &str) -> std::result::Result<BoundaryInferencePolicy, String> {
+    match policy {
+        "default" => Ok(BoundaryInferencePolicy::Default),
+        "active_set" => Ok(BoundaryInferencePolicy::ActiveSet),
+        _ => Err(format!("mm_arg_error: unknown boundary policy '{policy}'")),
+    }
+}
+
 /// Evaluate fixed-effect contrast rows through the Rust inference contract.
 ///
 /// @noRd
@@ -1152,6 +1278,7 @@ fn mm_fixed_effect_contrast_json(
     rhs: Doubles,
     method: &str,
     #[extendr(default = "NULL")] handle: Robj,
+    #[extendr(default = "\"default\"")] boundary_policy: &str,
 ) -> std::result::Result<String, MmBridgeError> {
     (|| -> std::result::Result<String, String> {
         let model = lmm_or_refit(&handle, || {
@@ -1169,6 +1296,16 @@ fn mm_fixed_effect_contrast_json(
         })?;
         let hypotheses = fixed_effect_hypotheses(l_values, nrow, ncol, labels, rhs)?;
         let method = fixed_effect_test_method(method)?;
+        let policy = boundary_inference_policy(boundary_policy)?;
+
+        if policy == BoundaryInferencePolicy::ActiveSet {
+            return boundary_inference_table_json(
+                &model,
+                hypotheses,
+                method,
+                FixedEffectInferenceRowKind::Contrast,
+            );
+        }
 
         serde_json::to_string(&model.fixed_effect_contrast_inference_table(hypotheses, method))
             .map_err(|e| format!("mm_schema_error: failed to serialize contrast table: {}", e))
@@ -1566,6 +1703,7 @@ fn mm_fixed_effect_term_json(
     method: &str,
     term_test_type: &str,
     #[extendr(default = "NULL")] handle: Robj,
+    #[extendr(default = "\"default\"")] boundary_policy: &str,
 ) -> std::result::Result<String, MmBridgeError> {
     (|| -> std::result::Result<String, String> {
         let model = lmm_or_refit(&handle, || {
@@ -1582,7 +1720,17 @@ fn mm_fixed_effect_term_json(
             )
         })?;
         let method = fixed_effect_test_method(method)?;
+        let policy = boundary_inference_policy(boundary_policy)?;
         let term_test_type = fixed_effect_term_test_type(term_test_type)?;
+
+        if policy == BoundaryInferencePolicy::ActiveSet {
+            return boundary_inference_table_json(
+                &model,
+                model.fixed_effect_term_hypotheses_for_type(term_test_type),
+                method,
+                FixedEffectInferenceRowKind::Term,
+            );
+        }
 
         serde_json::to_string(
             &model.fixed_effect_term_inference_table_for_type(method, term_test_type),

@@ -5,7 +5,7 @@ mixeff is licensed as MIT + file LICENSE.
 Bundled Rust source
 - crate: mixeff-rs
 - source: https://github.com/bbuchsbaum/mixeff-rs.git
-- pinned commit: bcfeff42ec9c922fbf5fe259eea3abb6a3ec9461
+- pinned commit: a3ca2c6cfb2a85257528fa4c59ae28f63e3dbfc3
 - upstream license: included at src/rust/upstream/mixeff-rs/LICENSE
 
 Vendored Cargo registry crates

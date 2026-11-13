@@ -1,5 +1,17 @@
 # mixeff 0.2.0
 
+* Joint-Laplace GLMMs accept `mm_control(initializer_max_feval = )` to cap
+  the profiled initializer separately from the joint optimizer's `max_feval`.
+  Leaving it unset preserves the shared budget. `verbose = 1` prints GLMM
+  optimizer phases and evaluation counts; initializer counts and stop codes
+  remain available in `fit$fit$optimizer$initializer`. These are evaluation
+  budgets, not whole-fit wall-time limits (#13).
+* `mm_control()` now rejects unknown optimizers and the bundled build's
+  unavailable NLopt/PRIMA optimizers before fitting. `mm_allfit()` retains
+  these failures and continues. Optimizer-certificate documentation explains
+  raw KKT thresholds, objective scaling, and separate curvature-scaled evidence
+  (follow-up to #13).
+
 * Engine updated to mixeff-rs 1.0.0-rc.6 (`bcfeff42`). A zero random-intercept
   variance no longer causes a supported weak random slope to collapse to zero
   (mixeff-rs #19). Installed-package regression coverage checks the reported

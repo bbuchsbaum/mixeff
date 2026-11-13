@@ -11,7 +11,6 @@ use mixeff_rs::model::linear::{
     parametricbootstrap_with_options, BootstrapExecutionOptions, BoundaryInferencePolicy,
     ConvergenceVerificationOptions,
 };
-use mixeff_rs::model::FitProgressCallback;
 use mixeff_rs::model::{
     BootstrapFailedRefitPolicy, BootstrapRefitOptions, BootstrapReplicate, BootstrapSeedRecord,
     BootstrapTarget, CompiledModelSpec, Family, FitOptions, FitToleranceOverrides,
@@ -19,6 +18,7 @@ use mixeff_rs::model::{
     GlmmDispersionMethod, GlmmFitOptions, GlmmPredictionScale, LinearMixedModel, LinkFunction,
     MixedModelBootstrap, MixedModelFit, NewReLevels, OptimizerControl,
 };
+use mixeff_rs::model::{FitProgressCallback, FitProgressPhase};
 use mixeff_rs::stats::profile::{profile_confint_payload_with_options, ProfileOptions};
 use mixeff_rs::stats::{
     BoundaryLikelihoodRatioTest, FitSummaryPayload, LinearModelFit, ModelComparisonMethod,
@@ -197,6 +197,40 @@ fn parse_optimizer_control(control: &Value) -> std::result::Result<OptimizerCont
     Ok(oc)
 }
 
+/// Shared by initial fitting and bridge reconstruction so controls survive refits.
+fn glmm_fit_options(
+    fast: bool,
+    n_agq: usize,
+    control: &Value,
+) -> std::result::Result<GlmmFitOptions, String> {
+    let mut options = if fast {
+        GlmmFitOptions::fast_laplace()
+    } else {
+        GlmmFitOptions::joint_laplace()
+    }
+    .with_n_agq(n_agq)
+    .with_optimizer_control(parse_optimizer_control(control)?)
+    .with_progress_callback(r_fit_callback(
+        control.get("verbose").and_then(Value::as_i64).unwrap_or(0) > 0,
+    ));
+    if let Some(value) = control
+        .get("initializer_max_feval")
+        .filter(|v| !v.is_null())
+    {
+        let budget = value
+            .as_u64()
+            .filter(|v| *v > 0 && *v <= i32::MAX as u64)
+            .ok_or_else(|| {
+                "mm_arg_error: initializer_max_feval must be a positive integer".to_string()
+            })?;
+        if fast {
+            return Err("mm_arg_error: initializer_max_feval requires a joint GLMM".into());
+        }
+        options = options.with_initializer_max_feval(budget as usize);
+    }
+    Ok(options)
+}
+
 mod data;
 
 // ---------------------------------------------------------------------------
@@ -330,16 +364,14 @@ fn mm_restore_fit_handle(
 ) -> std::result::Result<Robj, MmBridgeError> {
     (|| -> std::result::Result<Robj, String> {
         match kind {
-            "lmm" => LinearMixedModel::restore_json(fitted_state)
-                .map(|mut model| {
-                    model.set_progress_callback(Some(r_interrupt_callback()));
-                    ExternalPtr::new(FittedLmmHandle(model)).into()
-                }),
-            "glmm" => GeneralizedLinearMixedModel::restore_json(fitted_state)
-                .map(|mut model| {
-                    model.set_progress_callback(Some(r_interrupt_callback()));
-                    ExternalPtr::new(FittedGlmmHandle(model)).into()
-                }),
+            "lmm" => LinearMixedModel::restore_json(fitted_state).map(|mut model| {
+                model.set_progress_callback(Some(r_interrupt_callback()));
+                ExternalPtr::new(FittedLmmHandle(model)).into()
+            }),
+            "glmm" => GeneralizedLinearMixedModel::restore_json(fitted_state).map(|mut model| {
+                model.set_progress_callback(Some(r_interrupt_callback()));
+                ExternalPtr::new(FittedGlmmHandle(model)).into()
+            }),
             _ => {
                 return Err(format!(
                     "mm_inference_unavailable: unknown fitted-state kind `{kind}`"
@@ -440,6 +472,7 @@ const KNOWN_SCHEMAS: &[(&str, &str)] = &[
 
 extern "C" {
     fn R_CheckUserInterrupt();
+    fn Rprintf(format: *const std::os::raw::c_char, ...);
     fn R_ToplevelExec(
         fun: Option<unsafe extern "C" fn(*mut std::os::raw::c_void)>,
         data: *mut std::os::raw::c_void,
@@ -473,16 +506,66 @@ const INTERRUPT_MESSAGE: &str = "user interrupt (Ctrl-C)";
 /// into R. The engine's threaded bootstrap/profile drivers already keep the
 /// callback on the calling thread; this guard makes that a hard invariant.
 fn r_interrupt_callback() -> FitProgressCallback {
+    r_fit_callback(false)
+}
+
+unsafe extern "C" fn progress_print_trampoline(data: *mut std::os::raw::c_void) {
+    Rprintf(c"%s\n".as_ptr(), data as *const std::os::raw::c_char);
+}
+
+fn r_fit_callback(verbose: bool) -> FitProgressCallback {
     let r_thread = std::thread::current().id();
-    FitProgressCallback::new(move |_progress| {
+    let last = std::sync::Mutex::new((None, 0usize, std::time::Instant::now()));
+    FitProgressCallback::new(move |progress| {
         if std::thread::current().id() != r_thread {
             return Ok(());
         }
         if r_interrupt_pending() {
-            Err(MixedModelError::Interrupted(INTERRUPT_MESSAGE.to_string()))
-        } else {
-            Ok(())
+            return Err(MixedModelError::Interrupted(INTERRUPT_MESSAGE.to_string()));
         }
+        let label = match progress.phase {
+            FitProgressPhase::GlmmInitializer => "joint-Laplace initializer",
+            FitProgressPhase::ProfiledGlmmOptimizer => "profiled-PIRLS optimizer",
+            FitProgressPhase::JointGlmmOptimizer => "joint GLMM optimizer",
+            _ => return Ok(()), // Inner PIRLS callbacks still poll for interrupts.
+        };
+        if verbose {
+            let mut last = last.lock().expect("progress state poisoned");
+            if last.0 != Some(progress.phase)
+                || progress.current <= 1
+                || progress.current.saturating_sub(last.1) >= 25
+                || last.2.elapsed().as_secs() >= 5
+                || progress
+                    .total
+                    .is_some_and(|total| progress.current >= total)
+            {
+                let budget = progress
+                    .total
+                    .map(|n| format!(" / {n}"))
+                    .unwrap_or_default();
+                let text = std::ffi::CString::new(format!(
+                    "mixeff: {label}, evaluation {}{budget}",
+                    progress.current
+                ))
+                .expect("progress text has no NUL");
+                // Keep any R longjmp inside R_ToplevelExec, including one during console output.
+                let printed = unsafe {
+                    R_ToplevelExec(
+                        Some(progress_print_trampoline),
+                        text.as_ptr() as *mut std::os::raw::c_void,
+                    )
+                };
+                if printed == 0 {
+                    return Err(MixedModelError::Interrupted(INTERRUPT_MESSAGE.into()));
+                }
+                *last = (
+                    Some(progress.phase),
+                    progress.current,
+                    std::time::Instant::now(),
+                );
+            }
+        }
+        Ok(())
     })
 }
 
@@ -1010,16 +1093,7 @@ fn mm_fit_glmm_json(
         // driver's automatic selection. max_feval still caps the joint path's
         // otherwise engine-chosen budget, now via OptimizerControl rather than a
         // direct optsum poke.
-        let optimizer_control = parse_optimizer_control(&_control)?;
-        let glmm_options = if fast {
-            GlmmFitOptions::fast_laplace()
-        } else {
-            GlmmFitOptions::joint_laplace()
-        }
-        .with_n_agq(n_agq)
-        .with_verbose(false)
-        .with_optimizer_control(optimizer_control)
-        .with_progress_callback(r_interrupt_callback());
+        let glmm_options = glmm_fit_options(fast, n_agq, &_control)?;
         model
             .fit_with_glmm_options(glmm_options)
             .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;
@@ -1103,6 +1177,13 @@ fn mm_fit_glmm_json(
                 "algorithm": opt.optimizer_name(),
                 "return_value": opt.return_value.as_str(),
                 "function_evaluations": opt.feval,
+                "initializer": opt.initializer_feval.map(|count| serde_json::json!({
+                    "function_evaluations": count,
+                    "max_function_evaluations": opt.initializer_max_feval.unwrap_or_else(|| {
+                        _control.get("max_feval").and_then(Value::as_u64).map(|v| v as usize).unwrap_or(500)
+                    }),
+                    "return_value": opt.initializer_return_value,
+                })),
                 "objective": opt.fmin,
                 "reml": opt.reml
             }
@@ -2001,8 +2082,8 @@ fn mm_boundary_lrt_json(
             let reduced =
                 LinearModelFit::fixed_effects_reference(full, Some(reduced_formula.to_string()))
                     .map_err(|e| {
-                format!("mm_inference_unavailable: boundary LRT reduced LM failed: {e}")
-            })?;
+                        format!("mm_inference_unavailable: boundary LRT reduced LM failed: {e}")
+                    })?;
             BoundaryLikelihoodRatioTest::variance_component(&reduced, full)
         } else {
             let reduced_handle = payload_handle(&reduced_payload);
@@ -3294,16 +3375,7 @@ fn fit_glmm_from_bridge_data(
         offset,
     )?;
     apply_glmm_dispersion_control(&mut model, &_control)?;
-    let optimizer_control = parse_optimizer_control(&_control)?;
-    let glmm_options = if fast {
-        GlmmFitOptions::fast_laplace()
-    } else {
-        GlmmFitOptions::joint_laplace()
-    }
-    .with_n_agq(n_agq)
-    .with_verbose(false)
-    .with_optimizer_control(optimizer_control)
-    .with_progress_callback(r_interrupt_callback());
+    let glmm_options = glmm_fit_options(fast, n_agq, &_control)?;
     model
         .fit_with_glmm_options(glmm_options)
         .map_err(|e| format!("mm_fit_error: failed to fit GLMM: {}", e))?;

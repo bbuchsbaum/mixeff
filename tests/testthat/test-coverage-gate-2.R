@@ -668,7 +668,7 @@ test_that("mm_control validates verbose and max_feval", {
   expect_error(mm_control(ftol_rel = 0), class = "mm_arg_error")
   expect_error(mm_control(ftol_abs = -1), class = "mm_arg_error")
   expect_error(mm_control(xtol_rel = NA_real_), class = "mm_arg_error")
-  ok <- mm_control(verbose = -1, max_feval = 10L, optimizer = "bobyqa",
+  ok <- mm_control(verbose = -1, max_feval = 10L, optimizer = "trust_bq",
                    ftol_rel = 1e-6)
   expect_s3_class(ok, "mm_control")
 })

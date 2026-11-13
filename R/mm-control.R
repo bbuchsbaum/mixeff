@@ -16,20 +16,29 @@
 #' @param verbose Integer verbosity level. Use `-1` to suppress the automatic
 #'   model explanation and the fit notices (the GLMM estimator notice, the
 #'   `mm_rows_dropped` missing-value notice, grouping coercion and scaling
-#'   advisories).
+#'   advisories). Values greater than zero also print GLMM optimizer phases
+#'   and evaluation counts to the console, throttled to about every 25
+#'   evaluations or five seconds at an evaluation boundary.
 #' @param max_feval Optional positive integer capping the optimizer's objective
 #'   evaluations. Most useful for [glmm()] with `method = "joint_laplace"`,
 #'   whose native joint optimizer otherwise runs to an engine-chosen budget.
 #'   `NULL` (default) leaves the engine default in place. Joint-Laplace fitting
 #'   first runs a profiled initializer; this control is shared by the initializer
 #'   and joint optimizer, not a total wall-time or whole-fit evaluation cap.
-#'   Increasing it can therefore lengthen initialization as well as joint fitting.
+#'   Increasing it can therefore lengthen initialization as well as joint fitting,
+#'   unless `initializer_max_feval` supplies a separate initializer budget.
+#' @param initializer_max_feval Optional positive integer giving a joint-Laplace
+#'   GLMM's profiled initializer its own objective-evaluation budget. `max_feval`
+#'   then controls only the joint optimizer. `NULL` preserves the shared-budget
+#'   behavior. Neither budget caps wall time, inner PIRLS iterations, or later
+#'   certification. Refused for LMMs and profiled-only GLMMs. Inspect
+#'   `fit$fit$optimizer$initializer` for the initializer's count and stop code.
 #' @param optimizer Optional optimizer name, overriding the driver's automatic
 #'   choice. One of `"auto"` (default behavior), `"bobyqa"`, `"newuoa"`,
 #'   `"cobyla"`, `"pattern_search"`, `"trust_bq"`, or the PRIMA variants
 #'   (`"prima_bobyqa"`, `"prima_cobyla"`, `"prima_lincoa"`, `"prima_newuoa"`).
-#'   An unsupported or not-compiled choice raises a typed error rather than
-#'   silently falling back. The bundled R build excludes NLopt and PRIMA, so
+#'   Unknown or not-compiled choices raise an `mm_arg_error` immediately in
+#'   `mm_control()`. The bundled R build excludes NLopt and PRIMA, so
 #'   their named optimizers (including `"bobyqa"`) are unavailable in that build.
 #'   `NULL`/`"auto"` keep automatic selection.
 #' @param start Optional numeric warm-start vector for the covariance
@@ -84,7 +93,7 @@ mm_control <- function(verbose = 0L, max_feval = NULL, optimizer = NULL,
                        start = NULL, ftol_rel = NULL, ftol_abs = NULL,
                        xtol_rel = NULL, optCtrl = NULL,
                        disp_method = NULL, disp_dof_correction = NULL,
-                       max_phi_iter = NULL) {
+                       max_phi_iter = NULL, initializer_max_feval = NULL) {
   if (!is.null(optCtrl)) {
     oc <- mm_translate_optctrl(optCtrl)
     if (!is.null(oc$max_feval)) max_feval <- max_feval %||% oc$max_feval
@@ -102,6 +111,17 @@ mm_control <- function(verbose = 0L, max_feval = NULL, optimizer = NULL,
     )
   }
   out <- list(verbose = as.integer(verbose))
+
+  if (!is.null(initializer_max_feval)) {
+    if (!is.numeric(initializer_max_feval) || length(initializer_max_feval) != 1L ||
+        is.na(initializer_max_feval) || !is.finite(initializer_max_feval) ||
+        initializer_max_feval < 1 || initializer_max_feval != round(initializer_max_feval) ||
+        initializer_max_feval > .Machine$integer.max) {
+      mm_abort("`initializer_max_feval` must be `NULL` or a single positive integer.",
+               class = "mm_arg_error", input = initializer_max_feval)
+    }
+    out$initializer_max_feval <- as.integer(initializer_max_feval)
+  }
 
   if (!is.null(max_feval)) {
     if (!is.numeric(max_feval) || length(max_feval) != 1L ||
@@ -123,6 +143,22 @@ mm_control <- function(verbose = 0L, max_feval = NULL, optimizer = NULL,
         class = "mm_arg_error",
         input = optimizer
       )
+    }
+    optimizer <- tolower(trimws(optimizer))
+    known <- c(mm_allfit_optimizers(), "nlopt_bobyqa", "nlopt_newuoa")
+    if (!optimizer %in% known) {
+      mm_abort(sprintf("Unknown optimizer `%s`.", optimizer),
+               class = "mm_arg_error", input = optimizer)
+    }
+    # src/rust/Cargo.toml deliberately builds the engine without nlopt/prima.
+    # Method-specific restrictions remain the fit driver's responsibility.
+    if (!optimizer %in% c("auto", "cobyla", "pattern_search", "trust_bq")) {
+      feature <- if (startsWith(optimizer, "prima_")) "prima" else "nlopt"
+      mm_abort(sprintf(paste0("Optimizer `%s` requires the `%s` feature, which ",
+                              "is unavailable in the bundled R build. Use ",
+                              "auto, cobyla, pattern_search, or trust_bq."),
+                       optimizer, feature),
+               class = "mm_arg_error", input = optimizer)
     }
     out$optimizer <- optimizer
   }
@@ -292,6 +328,7 @@ mm_validate_control <- function(control) {
   mm_control(
     verbose = control$verbose %||% 0L,
     max_feval = control$max_feval,
+    initializer_max_feval = control$initializer_max_feval,
     optimizer = control$optimizer,
     start = control$start,
     ftol_rel = control$ftol_rel,

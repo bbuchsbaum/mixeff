@@ -39,9 +39,26 @@ Read \code{attr(vcov(fit), "mm_method")}, \code{"mm_status"}, \code{"mm_reliabil
 and \code{"mm_notes"} for that stage's result and any fallback. A successful
 inference Hessian does not retroactively complete the optimizer certificate.
 
-Gradient norms are expressed in the optimizer's parameter coordinates;
-they are not curvature-scaled measures of coefficient precision. Available
-Newton-decrement evidence is recorded separately under
-\code{raw$stationarity_decrement}. Neither quantity alone establishes inferential
-reliability; inspect the inference method's own status and reliability.
+Gradient evidence has three distinct scales:
+\itemize{
+\item \code{raw$free_gradient_norm} is the largest absolute gradient component over
+parameters away from their bounds, in the optimizer's coordinates.
+The raw KKT check compares it with the tolerance recorded in \code{raw$checks}.
+Exceeding that tolerance qualifies derivative certification as approximate
+(or unavailable if Hessian evidence is missing); it does not by itself
+measure the error in a coefficient or its standard error.
+\item \code{raw$evidence$gradient$scaled_gradient_norm} divides the raw gradient norm
+by \code{max(1, abs(objective))}. This is objective scaling, not Hessian scaling.
+The engine also uses objective-relative KKT violations when deciding
+whether a fitted point materially fails stationarity.
+\item \code{raw$stationarity_decrement}, when available, records a separate
+curvature-scaled check, including its method, scope, and tolerance.
+A small value does not erase a failed raw-gradient check.
+}
+
+Thus an approximate certificate can coexist with close agreement in
+coefficients and likelihood after a tighter restart. Assess that agreement
+explicitly with \code{\link[=verify_convergence]{verify_convergence()}} or a refit; neither gradient scale
+alone establishes inferential reliability. Inspect the inference method's
+own status and reliability as well.
 }

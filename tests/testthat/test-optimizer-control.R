@@ -52,6 +52,90 @@ test_that("an unknown optimizer raises a typed error", {
   )
 })
 
+test_that("unavailable optimizers are rejected before fitting", {
+  for (optimizer in c("bobyqa", "newuoa", "nlopt_bobyqa", "nlopt_newuoa",
+                      "prima_bobyqa", "prima_cobyla", "prima_lincoa", "prima_newuoa")) {
+    expect_error(mm_control(optimizer = optimizer), "unavailable in the bundled R build",
+                 class = "mm_arg_error")
+  }
+  expect_error(mm_control(optimizer = "nope"), "Unknown optimizer",
+               class = "mm_arg_error")
+  expect_identical(mm_control(optimizer = " TRUST_BQ ")$optimizer, "trust_bq")
+  expect_identical(mm_control(optimizer = "auto")$optimizer, "auto")
+  fit <- lmm(y ~ x + (1 | g), mm_oc_data(), control = mm_control(verbose = -1))
+  results <- mm_allfit(fit, optimizers = c("bobyqa", "auto"))
+  expect_s3_class(results$bobyqa, "mm_arg_error")
+  expect_s3_class(results$auto, "mm_lmm")
+})
+
+test_that("initializer budgets are validated and restricted to joint GLMMs", {
+  for (value in list(0, -1, 1.5, Inf, NA_real_, 2^31, c(2, 3), "8")) {
+    expect_error(mm_control(initializer_max_feval = value), class = "mm_arg_error")
+  }
+  ctl <- mm_control(verbose = -1, initializer_max_feval = 8)
+  expect_identical(ctl$initializer_max_feval, 8L)
+  expect_error(lmm(y ~ x + (1 | g), mm_oc_data(), control = ctl),
+               "requires a joint-Laplace GLMM", class = "mm_arg_error")
+  expect_error(glmm(y ~ x + (1 | g), mm_oc_data(), family = poisson(),
+                    method = "pirls_profiled", control = ctl),
+               "requires a joint-Laplace GLMM", class = "mm_arg_error")
+})
+
+test_that("installed GLMM path separates budgets, reports phases, and retains controls", {
+  set.seed(23013)
+  d <- data.frame(g = factor(rep(1:12, each = 12)), x = rnorm(144))
+  d$y <- rpois(144, exp(0.4 + 0.2 * d$x + rep(rnorm(12, sd = 0.4), each = 12)))
+  fit_with <- function(verbose, initializer = 8) suppressMessages(glmm(
+    y ~ x + (1 | g), d, family = poisson(),
+    control = mm_control(verbose = verbose, max_feval = 1500,
+                         initializer_max_feval = initializer)))
+  output <- capture.output(fit <- fit_with(1))
+  expect_true(any(grepl("joint-Laplace initializer, evaluation 1 / 8", output, fixed = TRUE)))
+  expect_true(any(grepl("joint GLMM optimizer, evaluation", output, fixed = TRUE)))
+  init <- fit$fit$optimizer$initializer
+  expect_lte(init$function_evaluations, 8)
+  expect_equal(init$max_function_evaluations, 8)
+  expect_true(nzchar(init$return_value))
+  expect_equal(optimizer_certificate(fit)$raw$evidence$optimizer_stop$max_function_evaluations,
+               1500)
+  expect_true("initializer_max_feval" %in%
+                optimizer_certificate(fit)$raw$optimizer_control$caller_set_fields)
+  for (verbose in c(0, -1)) {
+    expect_length(capture.output(quiet <- fit_with(verbose)), 0)
+    expect_equal(fixef(quiet), fixef(fit), tolerance = 0)
+    expect_equal(as.numeric(logLik(quiet)), as.numeric(logLik(fit)), tolerance = 0)
+  }
+  restored <- unserialize(serialize(fit, NULL))
+  output <- capture.output(refit <- suppressMessages(update(restored)))
+  expect_identical(refit$control$initializer_max_feval, 8L)
+  expect_lte(refit$fit$optimizer$initializer$function_evaluations, 8)
+  expect_equal(fixef(refit), fixef(fit), tolerance = 1e-10)
+  # Unset preserves the previous shared-budget result exactly.
+  legacy <- fit_with(-1, NULL)
+  shared <- fit_with(-1, 1500)
+  expect_equal(fixef(shared), fixef(legacy), tolerance = 0)
+  expect_equal(shared$theta, legacy$theta, tolerance = 0)
+  expect_equal(as.numeric(logLik(shared)), as.numeric(logLik(legacy)), tolerance = 0)
+})
+
+test_that("a joint fit with an initializer cap can verify its profiled fallback", {
+  set.seed(23013)
+  d <- data.frame(g = factor(rep(1:12, each = 12)), x = rnorm(144))
+  d$y <- rpois(144, exp(0.4 + 0.2 * d$x + rep(rnorm(12, sd = 0.4), each = 12)))
+  fit <- glmm(y ~ x + (1 | g), d, family = poisson(),
+               control = mm_control(verbose = -1, initializer_max_feval = 100,
+                                    max_feval = 1))
+  expect_identical(optimizer_certificate(fit)$raw$estimator_substitution$effective_method,
+                   "fast_pirls_profiled")
+  for (candidate in list(fit, unserialize(serialize(fit, NULL)))) {
+    result <- verify_convergence(candidate, jitter_starts = 0)
+    expect_true(all(nzchar(result$table$return_code)))
+    expect_true(all(is.finite(result$table$objective_value)))
+    expect_identical(result$status, "restart_agrees")
+    expect_identical(candidate$control$initializer_max_feval, 100L)
+  }
+})
+
 test_that("a wrong-length warm start is rejected", {
   df <- mm_oc_data()
   # y ~ x + (1 | g) has a single theta; a length-5 start must be refused.

@@ -46,7 +46,8 @@
 #'   is the joint Laplace route, matching `glmer()`'s default estimator, and
 #'   requires `nAGQ = 1`; it certifies Wald standard errors, tests, and
 #'   intervals. Its optimizer cost is higher than the profiled path's; cap it
-#'   with `mm_control(max_feval = )`. `"pirls_profiled"` is the fast profiled
+#'   with `mm_control(max_feval = )`; set `initializer_max_feval` separately
+#'   to bound the preceding profiled initialization. `"pirls_profiled"` is the fast profiled
 #'   PIRLS path (equivalent to lme4's `nAGQ = 0` fast estimate); its
 #'   coefficients do not match `glmer(nAGQ = 1)` exactly and Wald inference
 #'   is withheld. When `method` is not supplied and the request needs the
@@ -87,14 +88,14 @@
 #'
 #'
 #' @details
-#' Optimization runs inside a single native call with no progress output: the
-#' pre-fit explanation block (when `verbose >= 0`) is the last thing printed
-#' before the fitted result returns. The fit checks for a user interrupt
+#' Use `mm_control(verbose = 1)` to print optimizer phases and evaluation
+#' counts during a GLMM fit. Inner PIRLS iterations and later certification
+#' are not included in these counts. The fit checks for a user interrupt
 #' (Ctrl-C / Esc) between optimizer evaluations and stops with a typed
 #' `mm_interrupted` error (the check happens at evaluation boundaries, so a
 #' single very expensive evaluation finishes first). Evaluation budgets are bounded (a bounded budget caps optimizer
 #' iterations; it does not prove every native evaluation terminates); runtime on
-#' large problems is governed by `mm_control(max_feval = )`.
+#' large problems also depends on the cost of each evaluation and certification.
 #' @return An object of class `mm_glmm`, also inheriting from `mm_fit` and
 #'   `mm_compiled`.
 #'
@@ -148,6 +149,10 @@ glmm <- function(formula,
   resolved <- mm_glmm_resolve_method(method, method_explicit, family_info,
                                      nAGQ, inference)
   method <- resolved$method
+  if (!is.null(control$initializer_max_feval) && !identical(method, "joint_laplace")) {
+    mm_abort("`initializer_max_feval` requires a joint-Laplace GLMM.",
+             class = "mm_arg_error", input = control)
+  }
   nAGQ <- mm_glmm_validate_nagq(resolved$nAGQ, method)
 
   if (identical(family_info$family, "negative_binomial") &&
@@ -234,14 +239,14 @@ glmm <- function(formula,
       mm_inform(resolved$notice, class = "mm_estimator_notice")
     }
     if (identical(method, "joint_laplace")) {
-      # The joint route runs to an engine-chosen evaluation budget inside a
-      # single silent native call (~0.1-0.2s per evaluation on ~20k rows), so
-      # large fits can take minutes with no output. Say so up front.
+      # Explain the two optimizer stages and their controls before large fits.
       mm_inform(
         paste0(
           "method = \"joint_laplace\" optimizes to an engine-chosen budget in ",
-          "a single native call with no progress output; large fits can take ",
-          "minutes. Cap the budget with mm_control(max_feval = ) if needed. ",
+          "a native call; large fits can take minutes. Use mm_control(",
+          "verbose = 1) for phase/evaluation progress, max_feval for the ",
+          "optimizer budget, and initializer_max_feval for a separate ",
+          "initializer budget. ",
           "Silence this message with mm_control(verbose = -1)."
         ),
         class = "mm_runtime_notice"

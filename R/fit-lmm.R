@@ -96,6 +96,10 @@ lmm <- function(formula, data, REML = TRUE, weights = NULL,
                 control = mm_control(), offset = NULL) {
   call <- match.call()
   control <- mm_validate_control(control)
+  if (!is.null(control$initializer_max_feval)) {
+    mm_abort("`initializer_max_feval` requires a joint-Laplace GLMM.",
+             class = "mm_arg_error", input = control)
+  }
   if (inherits(formula, "formula") && length(formula) == 3L &&
       is.call(formula[[2L]]) &&
       identical(as.character(formula[[2L]][[1L]]), "cbind")) {

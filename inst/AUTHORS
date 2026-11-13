@@ -2,7 +2,7 @@ Authors of mixeff and the bundled Rust sources
 ==============================================
 
 mixeff (R package): Bradley Buchsbaum
-mixeff-rs 1.0.0-rc.5 (bundled engine, src/rust/upstream/): Bradley Buchsbaum (MIT)
+mixeff-rs 1.0.0-rc.6 (bundled engine, src/rust/upstream/): Bradley Buchsbaum (MIT)
 
 Vendored Cargo registry dependencies (src/rust/vendor.tar.xz, 76 crates).
 Declared authors come from each crate's Cargo.toml; the manifests are

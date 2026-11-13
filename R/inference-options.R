@@ -18,7 +18,9 @@
 #' @param ... Reserved for future methods.
 #'
 #' @return An `mm_inference_options` object with a `table` data frame of one
-#'   row per candidate method.
+#'   row per candidate method and boundary policy. Active-set rows require
+#'   engine checks; listing them does not certify that conditioning is available.
+#' @seealso [boundary_policy]
 #'
 #' @export
 inference_options <- function(fit, term = NULL, nsim = 1000L, ...) {
@@ -63,7 +65,24 @@ inference_options.mm_lmm <- function(fit, term = NULL, nsim = 1000L, ...) {
     mm_inference_options_row_profile_ci(fit, is_boundary, is_reml)
   )
   tab <- do.call(rbind, lapply(rows, as.data.frame, stringsAsFactors = FALSE))
-  tab$current <- tab$method == current_method
+  tab$boundary_policy <- "default"
+  active <- do.call(rbind, lapply(c("satterthwaite", "kenward_roger"), function(method) {
+    data.frame(
+      method = method,
+      expected_status = "requires_check",
+      expected_reliability_reason = "boundary_active_set_requires_checks",
+      r_verb = sprintf("test_effect(fit, term, method = '%s', boundary_policy = 'active_set')", method),
+      approx_cost = "numerical checks",
+      notes = paste("Boundary conditioning requires an unweighted REML LMM with estimated",
+                    "residual sigma and independent scalar or diagonal covariance components.",
+                    "Successful conditional results have low reliability and exclude",
+                    "covariance-structure selection uncertainty; interior fits use ordinary inference."),
+      boundary_policy = "active_set",
+      stringsAsFactors = FALSE
+    )
+  }))
+  tab <- rbind(tab, active)
+  tab$current <- tab$method == current_method & tab$boundary_policy == "default"
   tab <- mm_inference_options_add_display(tab)
   rownames(tab) <- NULL
 
@@ -235,8 +254,9 @@ inference_options.mm_glmm <- function(fit, term = NULL, nsim = 1000L, ...) {
 print.mm_inference_options <- function(x, ...) {
   cat(sprintf("Inference options (fit_status: %s, REML: %s):\n",
               x$fit_status, x$is_reml))
-  print(x$table[, c("method", "display_status", "display_reason",
-                    "what_to_do_next", "approx_cost", "current")],
+  cols <- intersect(c("method", "boundary_policy", "display_status", "display_reason",
+                      "what_to_do_next", "approx_cost", "current"), names(x$table))
+  print(x$table[, cols, drop = FALSE],
         row.names = FALSE)
   cat("\nUse `<obj>$table` for raw enum columns (`expected_status`, `expected_reliability_reason`) and notes.\n")
   invisible(x)
@@ -430,6 +450,7 @@ mm_inference_options_display_status <- function(status) {
     not_assessed = "refused on this fit",
     not_yet_wired = "available upstream; R bridge pending",
     opt_in = "opt-in (uncertified)",
+    requires_check = "explicit opt-in; engine checks required",
     "check route status"
   )
 }
@@ -440,6 +461,8 @@ mm_inference_options_display_reason <- function(reason, status, method) {
   }
   switch(
     reason,
+    boundary_active_set_requires_checks =
+      "conditional on selected zero variances; low reliability if conditioned",
     asymptotic_wald_z_at_boundary =
       "Wald route runs, but boundary fits can understate uncertainty",
     interior_converged =
@@ -478,7 +501,7 @@ mm_inference_options_display_reason <- function(reason, status, method) {
 }
 
 mm_inference_options_next_step <- function(method, status, reason, r_verb) {
-  if (status %in% c("available", "opt_in")) {
+  if (status %in% c("available", "opt_in", "requires_check")) {
     return(r_verb)
   }
   if (identical(reason, "certified_wald_takes_precedence")) {

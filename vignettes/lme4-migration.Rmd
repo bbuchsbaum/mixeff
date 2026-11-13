@@ -250,7 +250,7 @@ machine-readable reason or raises a typed condition:
 |-----------|------|--------|
 | `NA` in a model variable | silently dropped (`na.omit`) | dropped under the same `na.action`, announced with a typed `mm_rows_dropped` message and recorded in `na.action(fit)` |
 | Boundary (singular) fit | one-time warning | persistent `[boundary]` tag + effective rank |
-| Satterthwaite df at a boundary | lmerTest computes df | refused with a reason; use bootstrap |
+| Satterthwaite df at a boundary | lmerTest computes df | default refuses with a reason; explicit `boundary_policy = "active_set"` allows conditional inference for supported independent zero variances, graded low reliability; bootstrap remains available |
 | Prediction SE for an unseen grouping level | — | `NA` with the reason in `mm_reason` |
 | GLMM `confint()` | computed | Wald intervals on `joint_laplace` fits via `method = "asymptotic"` (also accepting lme4's `method = "Wald"` spelling); parametric-bootstrap intervals via `method = "bootstrap"` on profiled and joint-Laplace fits (preserving the effective estimator and counting failed refits); Wald routes refused on `pirls_profiled` fits |
 

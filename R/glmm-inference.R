@@ -110,7 +110,9 @@ mm_glmm_capability_status <- function(cap) {
 #' @method contrast mm_glmm
 #' @export
 contrast.mm_glmm <- function(fit, L, rhs = 0,
-                             method = c("asymptotic", "wald"), ...) {
+                             method = c("asymptotic", "wald"), ...,
+                             boundary_policy = "default") {
+  mm_check_boundary_policy(boundary_policy, "asymptotic", fit)
   method <- match.arg(method)
   if (identical(method, "wald")) method <- "asymptotic"
   L <- mm_contrast_matrix(L, fit)
@@ -376,7 +378,8 @@ mm_glmm_verb_refusal <- function(verb, alternative) {
 
 #' @method test_effect mm_glmm
 #' @export
-test_effect.mm_glmm <- function(fit, term, ...) {
+test_effect.mm_glmm <- function(fit, term, ..., boundary_policy = "default") {
+  mm_check_boundary_policy(boundary_policy, "auto", fit)
   mm_glmm_verb_refusal(
     "test_effect",
     paste0(

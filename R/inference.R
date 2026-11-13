@@ -10,6 +10,9 @@
 #'   effect.
 #' @param rhs Numeric right-hand side, recycled to the number of contrasts.
 #' @param method Requested inference method.
+#' @param boundary_policy `"default"` preserves existing inference. `"active_set"`
+#'   explicitly requests conditional inference with `method = "satterthwaite"`
+#'   or `"kenward_roger"`. See [boundary_policy] for support and interpretation.
 #' @param bootstrap Optional [bootstrap_control()] object for
 #'   `method = "bootstrap"`.
 #' @param ... Reserved for future methods.
@@ -22,7 +25,7 @@ contrast <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
                                                  "kenward_roger", "bootstrap",
                                                  "asymptotic", "boundary_lrt",
                                                  "none"),
-                     bootstrap = NULL, ...) {
+                     bootstrap = NULL, boundary_policy = "default", ...) {
   UseMethod("contrast")
 }
 
@@ -32,17 +35,19 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
                                                         "kenward_roger", "bootstrap",
                                                         "asymptotic", "boundary_lrt",
                                                         "none"),
-                            bootstrap = NULL, ...) {
+                            bootstrap = NULL, boundary_policy = "default", ...) {
   method <- match.arg(method)
+  boundary_policy <- mm_check_boundary_policy(boundary_policy, method, fit)
   L <- mm_contrast_matrix(L, fit)
   rhs <- rep(as.numeric(rhs), length.out = nrow(L))
   if (identical(method, "boundary_lrt")) {
     table <- mm_boundary_lrt_fixed_effect_contrast_table(L, rhs)
     obj <- list(
-      table = table,
+      table = mm_boundary_metadata(table, boundary_policy),
       L = L,
       rhs = rhs,
       requested_method = method,
+      boundary_policy = boundary_policy,
       raw = NULL
     )
     class(obj) <- "mm_contrast"
@@ -70,25 +75,29 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
-    obj <- list(table = table, L = L, rhs = rhs, requested_method = method, raw = NULL)
+    obj <- list(table = mm_boundary_metadata(table, boundary_policy),
+                L = L, rhs = rhs, requested_method = method,
+                boundary_policy = boundary_policy, raw = NULL)
     class(obj) <- "mm_contrast"
     return(obj)
   }
 
-  if (mm_boundary_df_method_unavailable(fit, method)) {
+  if (mm_boundary_df_method_unavailable(fit, method, boundary_policy)) {
     table <- mm_boundary_df_unavailable_contrast_table(fit, L, rhs, method)
     obj <- list(
-      table = table,
+      table = mm_boundary_metadata(table, boundary_policy),
       L = L,
       rhs = rhs,
       requested_method = method,
+      boundary_policy = boundary_policy,
       raw = NULL
     )
     class(obj) <- "mm_contrast"
     return(obj)
   }
 
-  parsed <- mm_rust_contrast_table(fit, L, rhs, method, bootstrap = bootstrap)
+  parsed <- mm_rust_contrast_table(fit, L, rhs, method, bootstrap = bootstrap,
+                                   boundary_policy = boundary_policy)
   table <- parsed$table
   table$contrast <- table$label
   table$rhs <- rhs
@@ -97,13 +106,16 @@ contrast.mm_lmm <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
                      "statistic", "statistic_name", "p_value", "method",
                      "requested_method", "status", "reliability",
                      "reliability_reason", "estimability", "reason",
-                     "reason_code", "reason_detail", "details", "notes"),
+                     "reason_code", "reason_detail", "boundary_policy",
+                     "conditioning_applied", "fixed_components", "fixed_theta_indices",
+                     "details", "notes"),
                  drop = FALSE]
   obj <- list(
-    table = table,
+    table = mm_boundary_metadata(table, boundary_policy),
     L = L,
     rhs = rhs,
     requested_method = method,
+    boundary_policy = boundary_policy,
     raw = parsed$raw
   )
   class(obj) <- "mm_contrast"
@@ -214,6 +226,7 @@ print.mm_contrast <- function(x, ...) {
 #' @param fit A fitted `mm_lmm`.
 #' @param term A fixed-effect term label.
 #' @param method Requested inference method.
+#' @inheritParams contrast
 #' @param bootstrap Optional [bootstrap_control()] object for bootstrap-backed
 #'   methods.
 #' @param group Optional grouping factor for `method = "cluster_bootstrap"`.
@@ -231,7 +244,8 @@ test_effect <- function(fit, term, method = c("auto", "satterthwaite",
                                              "cluster_bootstrap",
                                              "asymptotic", "boundary_lrt",
                                              "none"),
-                        bootstrap = NULL, group = NULL, ...) {
+                        bootstrap = NULL, group = NULL,
+                        boundary_policy = "default", ...) {
   UseMethod("test_effect")
 }
 
@@ -243,8 +257,10 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
                                                      "cluster_bootstrap",
                                                      "asymptotic", "boundary_lrt",
                                                      "none"),
-                               bootstrap = NULL, group = NULL, ...) {
+                               bootstrap = NULL, group = NULL,
+                               boundary_policy = "default", ...) {
   method <- match.arg(method)
+  boundary_policy <- mm_check_boundary_policy(boundary_policy, method, fit)
   if (!is.character(term) || !length(term)) {
     mm_abort(
       message = "`term` must be a non-empty character vector.",
@@ -294,21 +310,24 @@ test_effect.mm_lmm <- function(fit, term, method = c("auto", "satterthwaite",
     names(table)[names(table) == "denominator_df"] <- "den_df"
   } else if (identical(method, "cluster_bootstrap")) {
     table <- mm_cluster_bootstrap_unavailable_effect_table(fit, term, group)
-  } else if (mm_boundary_df_method_unavailable(fit, method)) {
+  } else if (mm_boundary_df_method_unavailable(fit, method, boundary_policy)) {
     table <- mm_boundary_df_unavailable_effect_table(term, method)
   } else {
-    parsed <- mm_rust_term_table(fit, method)
+    parsed <- mm_rust_term_table(fit, method, boundary_policy = boundary_policy)
     table <- parsed$table[parsed$table$term %in% term, , drop = FALSE]
     table$requested_method <- method
     table <- table[, c("term", "numerator_df", "denominator_df", "statistic",
                        "statistic_name", "p_value", "method", "requested_method",
                        "status", "reliability", "reliability_reason", "reason",
-                       "reason_code", "reason_detail", "details", "notes"),
+                       "reason_code", "reason_detail", "boundary_policy",
+                       "conditioning_applied", "fixed_components", "fixed_theta_indices",
+                       "details", "notes"),
                    drop = FALSE]
     names(table)[names(table) == "numerator_df"] <- "num_df"
     names(table)[names(table) == "denominator_df"] <- "den_df"
   }
-  obj <- list(table = table, requested_method = method)
+  obj <- list(table = mm_boundary_metadata(table, boundary_policy),
+              requested_method = method, boundary_policy = boundary_policy)
   class(obj) <- "mm_effect_test"
   obj
 }
@@ -1284,7 +1303,8 @@ mm_inform_bootstrap_scale <- function(fit, bootstrap) {
   invisible(NULL)
 }
 
-mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
+mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL,
+                                   boundary_policy = "default") {
   bridge <- mm_rust_fit_bridge_payload(fit)
   if (identical(method, "bootstrap") && !is.null(bootstrap)) {
     if (!inherits(bootstrap, "mm_bootstrap_control")) {
@@ -1335,7 +1355,8 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
         as.character(rownames(L)),
         as.numeric(rhs),
         method,
-        bridge$handle
+        bridge$handle,
+        boundary_policy
       ),
       error = function(cnd) cnd
     )
@@ -1358,7 +1379,8 @@ mm_rust_contrast_table <- function(fit, L, rhs, method, bootstrap = NULL) {
   mm_json_parse_fixed_effect_inference_table(table)
 }
 
-mm_rust_term_table <- function(fit, method, type = "III") {
+mm_rust_term_table <- function(fit, method, type = "III",
+                               boundary_policy = "default") {
   bridge <- mm_rust_fit_bridge_payload(fit)
   json <- tryCatch(
     mm_fixed_effect_term_json(
@@ -1373,7 +1395,8 @@ mm_rust_term_table <- function(fit, method, type = "III") {
       bridge$control_json,
       method,
       mm_fixed_effect_term_type_label(type),
-      bridge$handle
+      bridge$handle,
+      boundary_policy
     ),
     error = function(cnd) cnd
   )
@@ -1500,8 +1523,87 @@ mm_unavailable_effect_table <- function(term, method) {
   )
 }
 
-mm_boundary_df_method_unavailable <- function(fit, method) {
-  method %in% c("satterthwaite", "kenward_roger") && isTRUE(is_singular(fit))
+#' Conditional inference at a variance boundary
+#'
+#' `boundary_policy = "active_set"` is an explicit option for [contrast()],
+#' [test_effect()], [inference_table()], and `summary()` on LMMs. It requires
+#' `method = "satterthwaite"` or `"kenward_roger"`; it never changes `"auto"`.
+#' `boundary_policy = "default"` preserves existing behavior.
+#'
+#' @details
+#' At a covariance boundary the engine can condition on certified zero
+#' variance components in unweighted REML LMMs with estimated residual sigma
+#' and independent scalar or diagonal random effects, such as
+#' `(1 | subject) + (0 + x | subject)` or `(1 + x || subject)`.
+#' Interior fits use ordinary inference without conditioning. Correlated
+#' singular blocks, weighted or ML boundary fits, and failed numerical checks
+#' are refused with a reason and no p-value. GLMMs do not support this policy.
+#'
+#' Conditional results hold the selected zero components fixed while retaining
+#' the remaining covariance parameters and residual sigma. They do not account
+#' for uncertainty from selecting the covariance structure using the same data.
+#' Successful conditional results therefore have `reliability = "low"`.
+#' Agreement with a reduced model validates the calculation, not unconditional
+#' Type I error control. The fitted model is unchanged.
+#'
+#' Result tables retain `boundary_policy`, `conditioning_applied`,
+#' `fixed_components`, and `fixed_theta_indices` (zero-based engine indices),
+#' together with method, status, reliability, reasons, and notes. The complete
+#' engine result is retained in each row's `details$boundary`.
+#'
+#' @name boundary_policy
+#' @seealso [inference_options()]
+NULL
+
+mm_check_boundary_policy <- function(boundary_policy, method, fit) {
+  if (!is.character(boundary_policy) || length(boundary_policy) != 1L ||
+      is.na(boundary_policy) || !boundary_policy %in% c("default", "active_set")) {
+    mm_abort("`boundary_policy` must be \"default\" or \"active_set\".",
+             class = "mm_arg_error", input = boundary_policy)
+  }
+  if (boundary_policy == "active_set") {
+    if (!inherits(fit, "mm_lmm") || inherits(fit, "mm_glmm")) {
+      mm_abort("`boundary_policy = \"active_set\"` supports LMMs only.",
+               class = "mm_inference_unavailable",
+               reason_code = "boundary_policy_requires_lmm")
+    }
+    if (!method %in% c("satterthwaite", "kenward_roger")) {
+      mm_abort(paste0("`boundary_policy = \"active_set\"` requires an explicit ",
+                      "`method = \"satterthwaite\"` or `\"kenward_roger\"`."),
+               class = "mm_arg_error",
+               reason_code = "boundary_policy_requires_explicit_method")
+    }
+  }
+  boundary_policy
+}
+
+mm_boundary_metadata <- function(table, policy = "default") {
+  n <- nrow(table)
+  if (is.null(table$boundary_policy)) table$boundary_policy <- rep(policy, n)
+  if (is.null(table$conditioning_applied)) table$conditioning_applied <- rep(FALSE, n)
+  if (is.null(table$fixed_components)) table$fixed_components <- I(rep(list(character()), n))
+  if (is.null(table$fixed_theta_indices)) table$fixed_theta_indices <- I(rep(list(integer()), n))
+  table
+}
+
+mm_print_boundary_policy <- function(table, policy = "default") {
+  if (!identical(policy, "active_set")) return(invisible(NULL))
+  applied <- any(table$conditioning_applied)
+  cat(sprintf("\nBoundary policy: active_set; conditioning applied: %s\n",
+              if (applied) "yes" else "no"))
+  components <- unique(unlist(table$fixed_components, use.names = FALSE))
+  if (length(components)) {
+    cat("Selected zero components: ", paste(components, collapse = ", "), "\n", sep = "")
+  }
+  if (applied) {
+    cat("Conditional on the selected covariance structure; selection uncertainty is not included. Reliability: low.\n")
+  }
+  invisible(NULL)
+}
+
+mm_boundary_df_method_unavailable <- function(fit, method, boundary_policy = "default") {
+  identical(boundary_policy, "default") &&
+    method %in% c("satterthwaite", "kenward_roger") && isTRUE(is_singular(fit))
 }
 
 mm_boundary_df_reason_code <- function(method) {

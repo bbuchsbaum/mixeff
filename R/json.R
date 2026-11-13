@@ -173,6 +173,10 @@ mm_fixed_effect_inference_row <- function(row) {
     # verbatim, and an absent field stays NA rather than being dressed up
     # as a reason string the engine never authored.
     reliability_reason = mm_optional_text(row$reliability_reason),
+    boundary_policy = mm_scalar_text(row$boundary_policy, "default"),
+    conditioning_applied = isTRUE(row$conditioning_applied),
+    fixed_components = I(list(as.character(unlist(row$fixed_components %||% list())))),
+    fixed_theta_indices = I(list(as.integer(unlist(row$fixed_theta_indices %||% list())))),
     reason = mm_optional_text(row$reason),
     reason_code = mm_optional_text(row$reason_code),
     reason_detail = mm_optional_text(row$reason_detail),
@@ -201,6 +205,10 @@ mm_fixed_effect_inference_empty_table <- function() {
     status = character(),
     reliability = character(),
     reliability_reason = character(),
+    boundary_policy = character(),
+    conditioning_applied = logical(),
+    fixed_components = I(list()),
+    fixed_theta_indices = I(list()),
     reason = character(),
     reason_code = character(),
     reason_detail = character(),

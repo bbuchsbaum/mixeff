@@ -119,7 +119,7 @@ mm_fit_glmm_json <- function(formula, family, link, method, n_agq, column_order,
 #' Evaluate fixed-effect contrast rows through the Rust inference contract.
 #'
 #' @noRd
-mm_fixed_effect_contrast_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method, handle = NULL) .Call(wrap__mm_fixed_effect_contrast_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method, handle)
+mm_fixed_effect_contrast_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method, handle = NULL, boundary_policy = "default") .Call(wrap__mm_fixed_effect_contrast_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, l_values, nrow, ncol, labels, rhs, method, handle, boundary_policy)
 
 #' Evaluate ONE joint fixed-effect hypothesis `L beta = rhs` (all rows of
 #' `L` together, an F test for Satterthwaite / Kenward-Roger) through the
@@ -155,7 +155,7 @@ mm_fixed_effect_bootstrap_term_json <- function(formula, reml, column_order, num
 #' Evaluate fixed-effect term rows through Rust-owned term hypotheses.
 #'
 #' @noRd
-mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, method, term_test_type, handle = NULL) .Call(wrap__mm_fixed_effect_term_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, method, term_test_type, handle)
+mm_fixed_effect_term_json <- function(formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, method, term_test_type, handle = NULL, boundary_policy = "default") .Call(wrap__mm_fixed_effect_term_json, formula, reml, column_order, numeric_columns, categorical_values, categorical_levels, categorical_ordered, weights, control_json, method, term_test_type, handle, boundary_policy)
 
 #' Run a parametric bootstrap likelihood-ratio test between two LMMs fitted
 #' to the same data. Both models must be ML (the upstream engine refuses

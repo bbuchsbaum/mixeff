@@ -32,6 +32,7 @@ check the returned result's `status` to see whether it succeeded.
 | `available` | The method can run on this fit and produce the requested quantity. |
 | `not_assessed` | The method is known but refused for this fit, with the reason named in `expected_reliability_reason` or `reason_code`. |
 | `opt_in` | A supported but uncertified approximation requires an explicit request; it is not enabled by default. |
+| `requires_check` | An explicit route is listed, but engine checks must establish whether it can run. Active-set rows use this status; the menu does not run the conditional test. |
 | `not_yet_wired` | The method is part of the inference contract but is not exposed through the current R bridge. |
 
 ## Actual result `status`
@@ -43,6 +44,30 @@ Read this separately from the route map and from `reliability`:
 | `available` | The requested quantity was computed under the named method's contract. It is not a guarantee of calibration for your data. |
 | `available_noninferential` | Numeric output is present but is not certified for inference. The working-Hessian opt-in retains this status even when it supplies Wald columns. |
 | `not_assessed`, `unavailable`, `unsupported` | The quantity was not supplied; inspect the row's reason. The exact enum depends on the payload type. |
+
+## Boundary policy and conditioning
+
+`boundary_policy = "default"` preserves the ordinary route.
+`"active_set"` requires an explicit Satterthwaite or Kenward–Roger request
+through `contrast()`, `test_effect()`, `inference_table()`, or LMM `summary()`.
+At supported boundaries it conditions on certified zero variances in
+unweighted REML LMMs with independent scalar or diagonal covariance components
+and estimated residual sigma. Interior fits use ordinary inference.
+
+`conditioning_applied` reports whether conditioning actually occurred;
+`fixed_components` names the selected zero components and
+`fixed_theta_indices` gives their zero-based engine parameter indices.
+Successful conditional results are graded `low`: covariance-structure
+selection uncertainty is excluded. The method's ordinary
+`reliability_reason` still identifies the numerical approximation; the
+boundary fields and engine notes supply its conditional interpretation.
+
+`boundary_active_set_requires_checks` is the menu's prediction code.
+`boundary_active_set_unavailable` identifies a refused active-set result;
+`reason` and `reason_detail` retain the engine's explanation. No p-value or
+alternative inference method is silently substituted. Invalid method-policy
+combinations raise `boundary_policy_requires_explicit_method`; GLMM requests
+raise `boundary_policy_requires_lmm`.
 
 ## `expected_reliability_reason` and `reliability_reason`
 

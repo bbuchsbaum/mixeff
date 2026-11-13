@@ -6,20 +6,25 @@
 \alias{inference_table.mm_glmm}
 \title{Fixed-effect inference table}
 \usage{
-inference_table(fit, ...)
+inference_table(fit, ..., boundary_policy = "default")
 
 \method{inference_table}{mm_lmm}(
   fit,
   method = c("auto", "satterthwaite", "kenward_roger", "asymptotic", "none"),
-  ...
+  ...,
+  boundary_policy = "default"
 )
 
-\method{inference_table}{mm_glmm}(fit, method = "auto", ...)
+\method{inference_table}{mm_glmm}(fit, method = "auto", ..., boundary_policy = "default")
 }
 \arguments{
 \item{fit}{A fitted \code{mm_lmm}.}
 
 \item{...}{Reserved for future methods.}
+
+\item{boundary_policy}{\code{"default"} preserves existing inference. \code{"active_set"}
+explicitly requests conditional inference with \code{method = "satterthwaite"}
+or \code{"kenward_roger"}. See \link{boundary_policy} for support and interpretation.}
 
 \item{method}{Inference method. \code{"auto"} (the default) returns the
 artifact-cached table that the engine resolved at fit time. Any other

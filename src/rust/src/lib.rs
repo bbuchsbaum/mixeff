@@ -2144,9 +2144,6 @@ fn mm_verify_convergence_json(
         {
             options.max_function_evaluations = v as usize;
         }
-        if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
-            options.objective_tolerance = v;
-        }
         if let Some(v) = overrides.get("theta_tolerance").and_then(Value::as_f64) {
             options.theta_tolerance = v;
         }
@@ -2161,6 +2158,15 @@ fn mm_verify_convergence_json(
             fit_lmm_from_bridge_payload_robj(&fit_payload, 1)
         })?
         .into_owned();
+        if let Some(v) = overrides.get("objective_tolerance").and_then(Value::as_f64) {
+            options.objective_tolerance = v;
+        } else {
+            let objective = model.opt_summary().fmin;
+            if objective.is_finite() {
+                options.objective_tolerance =
+                    options.objective_tolerance.max(1e-9 * objective.abs());
+            }
+        }
         let verification = model
             .verify_convergence_with_options(options)
             .map_err(|e| {

@@ -52,6 +52,22 @@ test_that("a well-behaved fit verifies as agreeing on restart", {
   expect_true(all(v$table$agrees))
 })
 
+test_that("LMM verification scales its default on a large objective", {
+  n <- 4000L
+  set.seed(62)
+  g <- factor(rep(seq_len(100L), each = n / 100L))
+  data <- data.frame(g, y = 100 * (rnorm(100L)[g] + rnorm(n)))
+  fit <- lmm(y ~ 1 + (1 | g), data, control = mm_control(verbose = -1))
+  verification <- verify_convergence(fit, jitter_starts = 0L)
+  expect_gt(verification$reference$objective, 1e4)
+  expect_equal(verification$tolerances$objective,
+               1e-9 * verification$reference$objective)
+  strict <- verify_convergence(fit, jitter_starts = 0L,
+                               objective_tolerance = 1e-6)
+  expect_equal(strict$tolerances$objective, 1e-6)
+  expect_equal(strict$reference$objective, verification$reference$objective)
+})
+
 test_that("verify_convergence() validates its arguments", {
   fit <- mk_verify_fit()
   expect_error(verify_convergence(fit, jitter_starts = -1),
@@ -72,14 +88,14 @@ test_that("verify_convergence() refuses non-mixed-model input with a typed error
                class = "mm_schema_error")
 })
 
-mk_verify_glmm <- function(method = "pirls_profiled") {
+mk_verify_glmm <- function(method = "pirls_profiled", max_feval = NULL) {
   set.seed(7)
   g <- factor(rep(1:12, each = 10))
   x <- rnorm(120)
   eta <- -0.2 + 0.7 * x + rep(rnorm(12, sd = 0.5), each = 10)
   d <- data.frame(y = rbinom(120, 1, plogis(eta)), x = x, g = g)
   glmm(y ~ x + (1 | g), d, family = binomial(), method = method,
-       control = mm_control(verbose = -1))
+       control = mm_control(verbose = -1, max_feval = max_feval))
 }
 
 test_that("verify_convergence() runs on a profiled GLMM fit", {
@@ -94,10 +110,23 @@ test_that("verify_convergence() runs on a profiled GLMM fit", {
 })
 
 test_that("verify_convergence() runs on a joint-Laplace GLMM fit", {
-  fit <- mk_verify_glmm(method = "joint_laplace")
+  fit <- mk_verify_glmm(method = "joint_laplace", max_feval = 20000L)
+  expect_identical(mm_glmm_effective_method(fit), "joint_laplace")
   v <- verify_convergence(fit, jitter_starts = 1L)
   expect_s3_class(v, "mm_convergence_verification")
   expect_true(nrow(v$table) >= 1L)
+  expect_identical(v$max_feval, 20000L)
+
+  restored <- unserialize(serialize(fit, NULL))
+  expect_equal(verify_convergence(restored, jitter_starts = 1L), v)
+  bounded <- verify_convergence(fit, jitter_starts = 0L, max_feval = 1L)
+  expect_identical(bounded$max_feval, 1L)
+  expect_false(all(bounded$table$agrees))
+
+  # A saved fit may lack the engine metadata but still have its fit control.
+  restored$artifact$glmm_fit_metadata$optimizer_max_feval <- NULL
+  expect_identical(verify_convergence(restored, restart = FALSE,
+                                     jitter_starts = 0L)$max_feval, 20000L)
 })
 
 test_that("verify_convergence() GLMM argument validation is typed", {

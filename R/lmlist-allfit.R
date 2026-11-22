@@ -204,7 +204,8 @@ fixef.mm_lmlist <- function(object, ...) {
 #'
 #' @param fit A fitted `mm_lmm` or `mm_glmm`.
 #' @param optimizers Character vector of [mm_control()] optimizer names.
-#'   The default tries every name `mm_control()` accepts.
+#'   The default includes both available and optional optimizers. `"bobyqa"`
+#'   requests the actual NLopt backend in this comparison.
 #' @param verbose Print each optimizer as it runs.
 #'
 #' @return An object of class `mm_allfit`: a named list of fits (or
@@ -238,6 +239,7 @@ mm_allfit <- function(fit, optimizers = mm_allfit_optimizers(),
     if (isTRUE(verbose)) cat(opt, "\n")
     ctl <- base
     ctl$optimizer <- if (identical(opt, "auto")) NULL else opt
+    if (identical(tolower(trimws(opt)), "bobyqa")) ctl$optimizer <- "nlopt_bobyqa"
     t0 <- proc.time()[["elapsed"]]
     res <- tryCatch({
       ctl <- mm_validate_control(ctl)

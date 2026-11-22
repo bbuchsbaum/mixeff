@@ -33,10 +33,13 @@
 #'   build, not the fit. Enable it when you want the consensus pass and will
 #'   read the per-run diagnostics.
 #' @param max_feval Positive integer cap on objective evaluations per
-#'   verification run.
-#' @param objective_tolerance,theta_tolerance,beta_tolerance Positive
-#'   agreement tolerances on the objective value, the covariance parameters,
-#'   and the fixed effects.
+#'   verification run. For GLMMs, `NULL` uses the fitted optimizer's
+#'   recorded cap, then the original fit control or 1000 if unavailable.
+#' @param objective_tolerance Positive absolute tolerance on the objective.
+#'   The LMM default (`NULL`) uses the larger of `1e-5` and `1e-9` times
+#'   the absolute reference objective. The GLMM default is `1e-4`.
+#' @param theta_tolerance,beta_tolerance Positive agreement tolerances on
+#'   the covariance parameters and fixed effects.
 #'
 #' @return An object of class `mm_convergence_verification` carrying:
 #' \describe{
@@ -47,6 +50,7 @@
 #'     optimizer, return code, objective/theta/beta deltas, agreement)}
 #'   \item{`reference`}{the reference optimum the runs were compared to}
 #'   \item{`tolerances`}{the agreement tolerances that were applied}
+#'   \item{`max_feval`}{the objective-evaluation cap for each verification run}
 #'   \item{`raw`}{the parsed engine payload}
 #' }
 #'
@@ -86,7 +90,7 @@ verify_convergence.mm_lmm <- function(fit, ...,
                                       jitter_scale = 1e-4,
                                       consensus = FALSE,
                                       max_feval = 500L,
-                                      objective_tolerance = 1e-5,
+                                      objective_tolerance = NULL,
                                       theta_tolerance = 1e-3,
                                       beta_tolerance = 1e-4) {
   mm_verify_check_flag(restart, "restart")
@@ -94,7 +98,9 @@ verify_convergence.mm_lmm <- function(fit, ...,
   mm_verify_check_count(jitter_starts, "jitter_starts", min = 0)
   mm_verify_check_count(max_feval, "max_feval", min = 1)
   mm_verify_check_positive(jitter_scale, "jitter_scale")
-  mm_verify_check_positive(objective_tolerance, "objective_tolerance")
+  if (!is.null(objective_tolerance)) {
+    mm_verify_check_positive(objective_tolerance, "objective_tolerance")
+  }
   mm_verify_check_positive(theta_tolerance, "theta_tolerance")
   mm_verify_check_positive(beta_tolerance, "beta_tolerance")
 
@@ -107,11 +113,11 @@ verify_convergence.mm_lmm <- function(fit, ...,
       jitter_scale = as.numeric(jitter_scale),
       run_optimizer_consensus = isTRUE(consensus),
       max_function_evaluations = as.integer(max_feval),
-      objective_tolerance = as.numeric(objective_tolerance),
+      objective_tolerance = objective_tolerance,
       theta_tolerance = as.numeric(theta_tolerance),
       beta_tolerance = as.numeric(beta_tolerance)
     ),
-    auto_unbox = TRUE
+    auto_unbox = TRUE, null = "null", digits = NA
   )
 
   json <- tryCatch(
@@ -139,6 +145,7 @@ verify_convergence.mm_lmm <- function(fit, ...,
       theta = parsed$theta_tolerance,
       beta = parsed$beta_tolerance
     ),
+    max_feval = as.integer(max_feval),
     raw = parsed
   )
   class(obj) <- "mm_convergence_verification"
@@ -152,14 +159,12 @@ verify_convergence.mm_glmm <- function(fit, ...,
                                        jitter_starts = 1L,
                                        jitter_scale = 1e-4,
                                        consensus = FALSE,
-                                       max_feval = 1000L,
+                                       max_feval = NULL,
                                        objective_tolerance = 1e-4,
                                        theta_tolerance = 1e-3,
                                        beta_tolerance = 1e-3) {
-  # GLMM defaults mirror the engine's glmm_defaults(): a larger evaluation
-  # budget (each objective evaluation pays for inner PIRLS solves), an
-  # objective tolerance sized to the inner-PIRLS noise floor, and a beta
-  # tolerance sized to the joint path's derivative-free beta search. The
+  # GLMM defaults account for inner-PIRLS objective noise and the joint
+  # path's derivative-free beta search. The
   # optimizer-consensus pass is LMM-only (the GLMM fit drivers own optimizer
   # selection), so consensus = TRUE is refused rather than ignored.
   mm_verify_check_flag(restart, "restart")
@@ -175,6 +180,8 @@ verify_convergence.mm_glmm <- function(fit, ...,
     )
   }
   mm_verify_check_count(jitter_starts, "jitter_starts", min = 0)
+  max_feval <- max_feval %||% fit$artifact$glmm_fit_metadata$optimizer_max_feval %||%
+    fit$control$max_feval %||% 1000L
   mm_verify_check_count(max_feval, "max_feval", min = 1)
   mm_verify_check_positive(jitter_scale, "jitter_scale")
   mm_verify_check_positive(objective_tolerance, "objective_tolerance")
@@ -221,6 +228,7 @@ verify_convergence.mm_glmm <- function(fit, ...,
       theta = parsed$theta_tolerance,
       beta = parsed$beta_tolerance
     ),
+    max_feval = as.integer(max_feval),
     raw = parsed
   )
   class(obj) <- "mm_convergence_verification"
@@ -398,8 +406,8 @@ mm_verify_check_flag <- function(value, name) {
 }
 
 mm_verify_check_count <- function(value, name, min) {
-  if (!is.numeric(value) || length(value) != 1L || is.na(value) ||
-      value < min || value != as.integer(value)) {
+  if (!is.numeric(value) || length(value) != 1L || !is.finite(value) ||
+      value < min || value > .Machine$integer.max || value != trunc(value)) {
     mm_abort(
       message = sprintf("`%s` must be a single integer >= %d.", name, min),
       class = "mm_arg_error",

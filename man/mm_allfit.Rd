@@ -10,7 +10,8 @@ mm_allfit(fit, optimizers = mm_allfit_optimizers(), verbose = FALSE)
 \item{fit}{A fitted \code{mm_lmm} or \code{mm_glmm}.}
 
 \item{optimizers}{Character vector of \code{\link[=mm_control]{mm_control()}} optimizer names.
-The default tries every name \code{mm_control()} accepts.}
+The default includes both available and optional optimizers. \code{"bobyqa"}
+requests the actual NLopt backend in this comparison.}
 
 \item{verbose}{Print each optimizer as it runs.}
 }

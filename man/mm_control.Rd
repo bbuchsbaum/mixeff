@@ -41,8 +41,10 @@ choice. One of \code{"auto"} (default behavior), \code{"bobyqa"}, \code{"newuoa"
 \code{"cobyla"}, \code{"pattern_search"}, \code{"trust_bq"}, or the PRIMA variants
 (\code{"prima_bobyqa"}, \code{"prima_cobyla"}, \code{"prima_lincoa"}, \code{"prima_newuoa"}).
 Unknown or not-compiled choices raise an \code{mm_arg_error} immediately in
-\code{mm_control()}. The bundled R build excludes NLopt and PRIMA, so
-their named optimizers (including \code{"bobyqa"}) are unavailable in that build.
+\code{mm_control()}. For lme4 compatibility, \code{"bobyqa"} selects \code{"auto"}
+with an \code{mm_optimizer_substitution_notice} message. The bundled R build
+excludes NLopt and PRIMA. Explicit backend names such as \code{"nlopt_bobyqa"}
+and \code{"prima_bobyqa"} require their respective backends.
 \code{NULL}/\code{"auto"} keep automatic selection.}
 
 \item{start}{Optional numeric warm-start vector for the covariance

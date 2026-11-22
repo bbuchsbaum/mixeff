@@ -118,17 +118,18 @@ as current qualification here. No CRAN submission has occurred.
   `rustc` (>= 1.85.0), `GNU make`. Documented in `SystemRequirements:`.
 - **Vendoring**: The upstream `mixeff-rs` Rust crate is vendored under
   `src/rust/upstream/`, and its transitive Cargo registry dependencies
-  ship as `src/rust/vendor.tar.xz` (about 4 MB, the largest single item
-  in the tarball). `src/Makevars` unpacks that archive to `src/vendor/`
+  ship as `src/rust/vendor.tar.xz`. The vendoring script writes new archives
+  with level-9 XZ compression. `src/Makevars` unpacks the archive to `src/vendor/`
   at `R CMD INSTALL` time — reconstituting it at install rather than
   shipping it unpacked keeps `R CMD build`'s cleanup from breaking the
   offline build. Compilation runs `cargo build --offline` against the
   vendored registry (`vendor-config.toml`); no network access is needed
   or attempted.
-- **Vendored-crate trimming**: `tools/vendor-rust.R` strips tests,
-  benchmarks, examples, datasets, and CI configuration from the
-  vendored crates before they are committed; upstream LICENSE / NOTICE
-  files are preserved in `inst/LICENSE.note`.
+- **Vendored-crate trimming**: When the locked faer crate is 0.24.4,
+  `tools/vendor-rust.R` omits two matrix files used solely by faer's own
+  sparse-LU regression test. Cargo checksums for the retained files and
+  the original crate checksum are preserved. License files are included
+  in the archive and inventoried in `inst/LICENSE.note`.
 - **Installed size (historical measurements, refresh before submission)**: about 11 MB on Windows (libs 8.7 MB) and up to
   about 18 MB on Linux when the shared library is not stripped (libs
   15.4 MB; 12.2 MB after `strip --strip-debug`). Nearly all of it is the

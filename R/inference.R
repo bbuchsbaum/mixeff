@@ -1,11 +1,10 @@
 #' Contrast fixed effects
 #'
-#' Note: this is not `emmeans::contrast`. `contrast()` is mixeff's fixed-effect
-#' contrast front door. R validates the contrast matrix shape, then asks Rust
-#' to evaluate estimability, method prerequisites, standard errors, degrees of
-#' freedom, statistics, p-values, reliability, and unavailable reasons.
+#' For a mixeff fit, `contrast()` validates the contrast matrix and asks Rust
+#' to evaluate the hypothesis. Calls on `emmGrid` and `emm_list` objects are
+#' forwarded to `emmeans::contrast()`, with the supplied arguments.
 #'
-#' @param fit A fitted `mm_lmm`.
+#' @param fit A fitted `mm_lmm` or `mm_glmm`, or an emmeans grid or list.
 #' @param L A numeric contrast vector or matrix with one column per fixed
 #'   effect.
 #' @param rhs Numeric right-hand side, recycled to the number of contrasts.
@@ -15,17 +14,20 @@
 #'   or `"kenward_roger"`. See [boundary_policy] for support and interpretation.
 #' @param bootstrap Optional [bootstrap_control()] object for
 #'   `method = "bootstrap"`.
-#' @param ... Reserved for future methods.
+#' @param ... Arguments passed to the selected method.
 #'
 #' @return An `mm_contrast` object with a data-frame `table`. The `estimate`
-#'   column is the tested difference, `L beta_hat - rhs`.
+#'   column is the tested difference, `L beta_hat - rhs`. For emmeans objects,
+#'   returns the result of `emmeans::contrast()`.
 #'
 #' @export
-contrast <- function(fit, L, rhs = 0, method = c("auto", "satterthwaite",
-                                                 "kenward_roger", "bootstrap",
-                                                 "asymptotic", "boundary_lrt",
-                                                 "none"),
-                     bootstrap = NULL, boundary_policy = "default", ...) {
+contrast <- function(fit, ...) {
+  if (missing(fit) && "object" %in% ...names()) {
+    return(emmeans::contrast(...))
+  }
+  if (!missing(fit) && inherits(fit, c("emmGrid", "emm_list"))) {
+    return(emmeans::contrast(fit, ...))
+  }
   UseMethod("contrast")
 }
 

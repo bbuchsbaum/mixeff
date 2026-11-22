@@ -38,8 +38,10 @@
 #'   `"cobyla"`, `"pattern_search"`, `"trust_bq"`, or the PRIMA variants
 #'   (`"prima_bobyqa"`, `"prima_cobyla"`, `"prima_lincoa"`, `"prima_newuoa"`).
 #'   Unknown or not-compiled choices raise an `mm_arg_error` immediately in
-#'   `mm_control()`. The bundled R build excludes NLopt and PRIMA, so
-#'   their named optimizers (including `"bobyqa"`) are unavailable in that build.
+#'   `mm_control()`. For lme4 compatibility, `"bobyqa"` selects `"auto"`
+#'   with an `mm_optimizer_substitution_notice` message. The bundled R build
+#'   excludes NLopt and PRIMA. Explicit backend names such as `"nlopt_bobyqa"`
+#'   and `"prima_bobyqa"` require their respective backends.
 #'   `NULL`/`"auto"` keep automatic selection.
 #' @param start Optional numeric warm-start vector for the covariance
 #'   parameters (theta). Its length must match the model's theta dimension
@@ -149,6 +151,14 @@ mm_control <- function(verbose = 0L, max_feval = NULL, optimizer = NULL,
     if (!optimizer %in% known) {
       mm_abort(sprintf("Unknown optimizer `%s`.", optimizer),
                class = "mm_arg_error", input = optimizer)
+    }
+    if (identical(optimizer, "bobyqa")) {
+      mm_inform(
+        "The bundled R build lacks BOBYQA. Using automatic optimizer selection.",
+        class = "mm_optimizer_substitution_notice",
+        requested = "bobyqa", effective = "auto"
+      )
+      optimizer <- "auto"
     }
     # src/rust/Cargo.toml deliberately builds the engine without nlopt/prima.
     # Method-specific restrictions remain the fit driver's responsibility.

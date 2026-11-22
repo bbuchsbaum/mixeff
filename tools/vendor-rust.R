@@ -267,6 +267,30 @@ if (!is.null(attr(res, "status")) && attr(res, "status") != 0L) {
   stop("[vendor-rust.R] cargo vendor failed")
 }
 
+# These two matrices are read only by faer 0.24.4's #[cfg(test)]
+# sparse::solvers::tests::codeberg_301. Match the audited crate checksum
+# so a later faer version keeps its fixtures until reviewed.
+faer_dir <- file.path(dest_vendor, "faer")
+faer_checksums <- file.path(faer_dir, ".cargo-checksum.json")
+if (file.exists(faer_checksums)) {
+  manifest <- jsonlite::read_json(faer_checksums)
+  faer_0244 <- "5ab6df3dd147fe8d702a288b95bcd8fcc499ab572fc80da6828f60cd4d524d67"
+  if (identical(manifest$package, faer_0244)) {
+    fixtures <- c("test_data/sparse_lu/matrix_n15960.txt",
+                  "test_data/sparse_lu/matrix_n19168.txt")
+    fixture_files <- file.path(faer_dir, fixtures)
+    if (!all(fixtures %in% names(manifest$files)) || !all(file.exists(fixture_files))) {
+      stop("[vendor-rust.R] faer 0.24.4 fixture inventory differs from the audited crate")
+    }
+    if (unlink(fixture_files) != 0L) {
+      stop("[vendor-rust.R] failed to remove faer test-only matrices")
+    }
+    manifest$files[fixtures] <- NULL
+    jsonlite::write_json(manifest, faer_checksums, auto_unbox = TRUE)
+    cat("[vendor-rust.R] omitted two faer 0.24.4 sparse-LU test fixtures\n")
+  }
+}
+
 # `cargo vendor` writes a config snippet to stdout, but it embeds whatever
 # vendor path we passed (absolute, in our case). The Makevars copies our
 # vendor-config.toml to src/.cargo/config.toml at build time, and cargo
@@ -290,35 +314,35 @@ cat(sprintf("[vendor-rust.R] wrote %s\n", vendor_config))
 
 # ---- 7. write src/rust/vendor.tar.xz for tarball distribution -------------
 #
-# `R CMD build` runs the package's Makevars `clean` target, which (per the
-# rextendr template) removes src/vendor/ as a build artifact. The directory
-# form is correct for dev workflows (devtools::test), but the *tarball*
-# distributed via R CMD INSTALL needs an immutable form that survives the
-# build cleanup. The Makevars `if [ -d ./vendor ] ... elif [ -f
-# ./rust/vendor.tar.xz ]` block honors either; we ship both:
-#   - src/vendor/                  -> in-place dev (faster: no untar step)
-#   - src/rust/vendor.tar.xz       -> tarball distribution (survives cleanup)
-#
-# The tarball must contain entries with a leading `vendor/` segment because
-# `tar xf` is invoked from src/ at install time.
+# src/vendor/ supports in-place development and is excluded by .Rbuildignore.
+# Source packages ship the XZ archive and unpack it from src/ at installation,
+# so the archive includes the vendor/ root directory. Use tar for the layout
+# and R's xzfile() for level 9 compression on any maintainer platform.
+
+write_vendor_archive <- function(src_dir, destination) {
+  archive <- tempfile(fileext = ".tar")
+  compressed <- tempfile(tmpdir = dirname(destination), fileext = ".tar.xz")
+  on.exit(unlink(c(archive, compressed)), add = TRUE)
+  status <- system2("tar", c("-cf", shQuote(archive), "-C", shQuote(src_dir), "vendor"))
+  if (status != 0L) stop("[vendor-rust.R] failed to archive the vendor directory")
+
+  input <- file(archive, "rb")
+  on.exit(close(input), add = TRUE, after = FALSE)
+  output <- xzfile(compressed, "wb", compression = 9L)
+  tryCatch({
+    repeat {
+      bytes <- readBin(input, "raw", n = 1048576L)
+      if (!length(bytes)) break
+      writeBin(bytes, output)
+    }
+  }, finally = close(output))
+  if (!file.rename(compressed, destination)) {
+    stop("[vendor-rust.R] failed to replace vendor.tar.xz")
+  }
+}
 
 vendor_tarball <- file.path(src_rust, "vendor.tar.xz")
-if (file.exists(vendor_tarball)) unlink(vendor_tarball, force = TRUE)
-src_dir <- file.path(pkg_root, "src")
-old_wd <- setwd(src_dir)
-on.exit(setwd(old_wd), add = TRUE)
-tar_status <- system2(
-  command = "tar",
-  args    = c("-cJf", vendor_tarball, "vendor"),
-  stdout  = TRUE,
-  stderr  = TRUE
-)
-if (!is.null(attr(tar_status, "status")) && attr(tar_status, "status") != 0L) {
-  cat(tar_status, sep = "\n")
-  stop("[vendor-rust.R] failed to create vendor.tar.xz")
-}
-setwd(old_wd)
-on.exit()
+write_vendor_archive(file.path(pkg_root, "src"), vendor_tarball)
 cat(sprintf(
   "[vendor-rust.R] wrote %s (%.1f MB)\n",
   vendor_tarball,

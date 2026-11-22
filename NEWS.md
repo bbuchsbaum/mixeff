@@ -1,5 +1,13 @@
 # mixeff 0.2.0
 
+* `contrast()` forwards emmeans grids and lists to `emmeans::contrast()`.
+  GLMM `verify_convergence()` uses the fitted optimizer's recorded budget when
+  available. LMM verification scales its default objective tolerance with the
+  fitted objective and still accepts an explicit absolute tolerance (#17).
+* `mm_control(optimizer = "bobyqa")` now signals a typed compatibility
+  message and uses automatic optimizer selection. `mm_allfit()` requests
+  the actual backend for each comparison (#17).
+
 * Joint-Laplace GLMMs accept `mm_control(initializer_max_feval = )` to cap
   the profiled initializer separately from the joint optimizer's `max_feval`.
   Leaving it unset preserves the shared budget. `verbose = 1` prints GLMM

@@ -19,7 +19,7 @@ verify_convergence(fit, ...)
   jitter_scale = 1e-04,
   consensus = FALSE,
   max_feval = 500L,
-  objective_tolerance = 1e-05,
+  objective_tolerance = NULL,
   theta_tolerance = 0.001,
   beta_tolerance = 1e-04
 )
@@ -31,7 +31,7 @@ verify_convergence(fit, ...)
   jitter_starts = 1L,
   jitter_scale = 1e-04,
   consensus = FALSE,
-  max_feval = 1000L,
+  max_feval = NULL,
   objective_tolerance = 1e-04,
   theta_tolerance = 0.001,
   beta_tolerance = 0.001
@@ -59,11 +59,15 @@ build, not the fit. Enable it when you want the consensus pass and will
 read the per-run diagnostics.}
 
 \item{max_feval}{Positive integer cap on objective evaluations per
-verification run.}
+verification run. For GLMMs, \code{NULL} uses the fitted optimizer's
+recorded cap, then the original fit control or 1000 if unavailable.}
 
-\item{objective_tolerance, theta_tolerance, beta_tolerance}{Positive
-agreement tolerances on the objective value, the covariance parameters,
-and the fixed effects.}
+\item{objective_tolerance}{Positive absolute tolerance on the objective.
+The LMM default (\code{NULL}) uses the larger of \code{1e-5} and \code{1e-9} times
+the absolute reference objective. The GLMM default is \code{1e-4}.}
+
+\item{theta_tolerance, beta_tolerance}{Positive agreement tolerances on
+the covariance parameters and fixed effects.}
 }
 \value{
 An object of class \code{mm_convergence_verification} carrying:
@@ -75,6 +79,7 @@ An object of class \code{mm_convergence_verification} carrying:
 optimizer, return code, objective/theta/beta deltas, agreement)}
 \item{\code{reference}}{the reference optimum the runs were compared to}
 \item{\code{tolerances}}{the agreement tolerances that were applied}
+\item{\code{max_feval}}{the objective-evaluation cap for each verification run}
 \item{\code{raw}}{the parsed engine payload}
 }
 }

@@ -53,7 +53,7 @@ test_that("an unknown optimizer raises a typed error", {
 })
 
 test_that("unavailable optimizers are rejected before fitting", {
-  for (optimizer in c("bobyqa", "newuoa", "nlopt_bobyqa", "nlopt_newuoa",
+  for (optimizer in c("newuoa", "nlopt_bobyqa", "nlopt_newuoa",
                       "prima_bobyqa", "prima_cobyla", "prima_lincoa", "prima_newuoa")) {
     expect_error(mm_control(optimizer = optimizer), "unavailable in the bundled R build",
                  class = "mm_arg_error")
@@ -66,6 +66,18 @@ test_that("unavailable optimizers are rejected before fitting", {
   results <- mm_allfit(fit, optimizers = c("bobyqa", "auto"))
   expect_s3_class(results$bobyqa, "mm_arg_error")
   expect_s3_class(results$auto, "mm_lmm")
+})
+
+test_that("the lme4 bobyqa spelling selects the automatic optimizer visibly", {
+  expect_message(
+    control <- mm_control(verbose = -1, optimizer = " BOBYQA ",
+                          optCtrl = list(maxfun = 1000)),
+    class = "mm_optimizer_substitution_notice"
+  )
+  expect_identical(control, mm_control(verbose = -1, optimizer = "auto",
+                                      max_feval = 1000L))
+  fit <- lmm(y ~ x + (1 | g), mm_oc_data(), control = control)
+  expect_identical(fit$control$optimizer, "auto")
 })
 
 test_that("initializer budgets are validated and restricted to joint GLMMs", {

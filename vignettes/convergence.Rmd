@@ -117,12 +117,13 @@ while retaining an approximate certificate. Compare those quantities using a
 refit or `verify_convergence()`, and inspect the inference method's reliability.
 A small curvature-scaled result does not clear the raw-gradient qualification.
 
-The bundled R engine includes `"cobyla"`, `"pattern_search"`, and `"trust_bq"`;
-`"auto"` selects a backend for the model. NLopt and PRIMA are excluded, so
-`mm_control(optimizer = "bobyqa")` now fails immediately. Method-specific
-restrictions still apply: for example, `"trust_bq"` supports joint-Laplace GLMMs
-but not profiled-PIRLS GLMMs. `mm_allfit()` records an unavailable optimizer as
-a failed attempt and continues with the others.
+The bundled R engine includes `"cobyla"`, `"pattern_search"`, and `"trust_bq"`.
+`"auto"` selects a backend for the model. For compatibility with lme4 scripts,
+`mm_control(optimizer = "bobyqa")` signals a substitution message and uses
+`"auto"`. `optimizer_certificate()` shows the optimizer that ran.
+`"trust_bq"` supports joint-Laplace GLMMs. `mm_allfit()` requires the actual
+optimizer for each comparison and records unavailable NLopt or PRIMA
+backends as failed attempts.
 
 ```{r interior-checks, include = FALSE}
 stopifnot(inherits(fit, "mm_lmm"))

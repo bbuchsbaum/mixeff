@@ -63,6 +63,21 @@ test_that("optional emmeans pairwise estimates agree with fixed-effect differenc
   expect_true(all(is.finite(pairs$SE)))
 })
 
+test_that("mixeff contrast forwards emmeans calls with positional and named arguments", {
+  skip_if_not_installed("emmeans")
+  fit <- lm(breaks ~ wool + tension, warpbreaks)
+  grid <- emmeans::emmeans(fit, ~ tension | wool)
+  expected <- summary(emmeans::contrast(grid, "trt.vs.ctrl", ref = 2))
+
+  expect_equal(summary(contrast(grid, "trt.vs.ctrl", ref = 2)), expected)
+  expect_equal(summary(contrast(method = "trt.vs.ctrl", object = grid, ref = 2)),
+               expected)
+
+  grids <- emmeans::emmeans(fit, list("tension", "wool"))
+  expect_equal(contrast(grids, "pairwise", which = 1),
+               emmeans::contrast(grids, "pairwise", which = 1))
+})
+
 test_that("marginal means match lme4 on an ordered-factor interaction model", {
   # Regression: the engine codes all factors (incl. ordered) with treatment
   # contrasts, but the R-side basis used contr.poly for ordered factors and a

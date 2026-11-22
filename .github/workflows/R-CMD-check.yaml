@@ -81,6 +81,10 @@ jobs:
       # on that).
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: any::jsonlite
+
       # Preserve the committed archive before regeneration overwrites it:
       # the tarball must be compared by CONTENT, not bytes (bsdtar vs GNU
       # tar headers and fresh mtimes make byte equality impossible).

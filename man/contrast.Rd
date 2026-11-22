@@ -15,16 +15,7 @@
   boundary_policy = "default"
 )
 
-contrast(
-  fit,
-  L,
-  rhs = 0,
-  method = c("auto", "satterthwaite", "kenward_roger", "bootstrap", "asymptotic",
-    "boundary_lrt", "none"),
-  bootstrap = NULL,
-  boundary_policy = "default",
-  ...
-)
+contrast(fit, ...)
 
 \method{contrast}{mm_lmm}(
   fit,
@@ -38,7 +29,7 @@ contrast(
 )
 }
 \arguments{
-\item{fit}{A fitted \code{mm_lmm}.}
+\item{fit}{A fitted \code{mm_lmm} or \code{mm_glmm}, or an emmeans grid or list.}
 
 \item{L}{A numeric contrast vector or matrix with one column per fixed
 effect.}
@@ -47,7 +38,7 @@ effect.}
 
 \item{method}{Requested inference method.}
 
-\item{...}{Reserved for future methods.}
+\item{...}{Arguments passed to the selected method.}
 
 \item{boundary_policy}{\code{"default"} preserves existing inference. \code{"active_set"}
 explicitly requests conditional inference with \code{method = "satterthwaite"}
@@ -58,13 +49,13 @@ or \code{"kenward_roger"}. See \link{boundary_policy} for support and interpreta
 }
 \value{
 An \code{mm_contrast} object with a data-frame \code{table}. The \code{estimate}
-column is the tested difference, \verb{L beta_hat - rhs}.
+column is the tested difference, \verb{L beta_hat - rhs}. For emmeans objects,
+returns the result of \code{emmeans::contrast()}.
 }
 \description{
-Note: this is not \code{emmeans::contrast}. \code{contrast()} is mixeff's fixed-effect
-contrast front door. R validates the contrast matrix shape, then asks Rust
-to evaluate estimability, method prerequisites, standard errors, degrees of
-freedom, statistics, p-values, reliability, and unavailable reasons.
+For a mixeff fit, \code{contrast()} validates the contrast matrix and asks Rust
+to evaluate the hypothesis. Calls on \code{emmGrid} and \code{emm_list} objects are
+forwarded to \code{emmeans::contrast()}, with the supplied arguments.
 }
 \details{
 For \code{mm_glmm} fits, contrasts use an asymptotic Wald z-test built from the
